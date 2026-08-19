@@ -1,0 +1,17 @@
+[n]ode_modules/
+
+.*env*
+config/*env*
+!config/ci-env.template
+
+playwright/.auth/
+playwright-report/
+test-results/
+blob-report/
+artifacts/
+reports/
+*.trace.zip
+*.log
+
+coverage/
+.DS_Store

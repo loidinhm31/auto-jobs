@@ -1,0 +1,23 @@
+# Copy into an ignored local env file or inject these values through CI secrets.
+# The password below is a placeholder, not a usable credential.
+JENKINS_BASE_URL=http://127.0.0.1:8080
+JENKINS_USERNAME=local-admin
+JENKINS_PASSWORD=replace-with-local-secret
+JENKINS_LOGIN_PATH=/login
+JENKINS_JOB_PATH=playwright-vulnerability-report
+
+# Leave unset to trigger one UI build, or set a positive build number to inspect it.
+# JENKINS_BUILD_NUMBER=1
+JENKINS_TRIGGER_MODE=ui
+JENKINS_TRIGGER_SELECTOR='{"kind":"role","value":"button","name":"Build Now","required":true}'
+JENKINS_AUTH_LANDMARK='{"kind":"testId","value":"jenkins-authenticated","required":true}'
+JENKINS_QUEUE_URL_SELECTOR='{"kind":"css","value":"a[href*=\"/queue/item/\"]","required":false}'
+JENKINS_BUILD_STATUS_SELECTOR='{"kind":"testId","value":"jenkins-build-status","required":true}'
+JENKINS_BUILD_URL_SELECTOR='{"kind":"testId","value":"jenkins-build-url","required":true}'
+SONAR_REPORT_SELECTOR='{"kind":"testId","value":"sonarqube-report","required":false}'
+SNYK_REPORT_SELECTOR='{"kind":"testId","value":"snyk-report","required":false}'
+
+JENKINS_TIMEOUT_MS=300000
+JENKINS_POLL_INTERVAL_MS=1000
+PLAYWRIGHT_BROWSER=chromium
+ARTIFACT_DIR=test-results
