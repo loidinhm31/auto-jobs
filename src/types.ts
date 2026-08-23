@@ -1,9 +1,7 @@
 export type ReportState = 'found' | 'not_found' | 'incomplete';
-
+export type SourceName = 'snyk' | 'sonarqube';
 export type SelectorKind = 'role' | 'label' | 'testId' | 'text' | 'css';
-
 export type BrowserName = 'chromium' | 'firefox' | 'webkit';
-
 export type TriggerMode = 'ui';
 
 export interface LocatorSelector {
@@ -23,6 +21,14 @@ export interface SelectorConfig {
   snykReport: LocatorSelector;
 }
 
+export type LocatorSelectorInput = Omit<LocatorSelector, 'required'> & {
+  required?: boolean;
+};
+
+export type SelectorOverrides = Partial<
+  Record<keyof SelectorConfig, LocatorSelectorInput>
+>;
+
 export interface Report {
   state: ReportState;
   urls: string[];
@@ -35,8 +41,12 @@ export interface BuildReference {
   queueUrl?: string;
 }
 
+export type BuildTriggerCapability = 'build_now' | 'unsupported_parameterized';
+
 export interface BuildTriggerResult {
   triggered: boolean;
+  capability?: BuildTriggerCapability;
+  triggerAttempts?: number;
   queueUrl?: string;
   build?: BuildReference;
 }
@@ -45,20 +55,30 @@ export interface BuildTrigger {
   trigger(): Promise<BuildTriggerResult>;
 }
 
-export interface VulnerabilityReportResult {
-  schemaVersion: 1;
-  jenkins: {
-    baseUrl: string;
-    jobPath: string;
-    jobUrl: string;
-    buildNumber: number;
-    buildUrl: string;
-    status: string;
-  };
-  reports: {
-    sonarqube: Report;
-    snyk: Report;
-  };
-  triggered: boolean;
-  observedAt: string;
-}
+export type {
+  NormalizedProjectConfig,
+  NormalizedSourceConfig,
+  ProjectConfigDefaults,
+  ProjectConfigDocumentV1,
+  ProjectConfigInput,
+  ProjectCredentialReferences,
+  ProjectCredentialVariablesInput,
+  ProjectSecrets,
+  ProjectSourceInput,
+} from './config/config-types.js';
+export type {
+  AggregateProjectSummary,
+  AggregateReportResult,
+  CaptureMetadata,
+  NavigationTarget,
+  NavigationTargetKey,
+  SourceEvidence,
+  TriggerCapability,
+  TriggerEvidence,
+  VulnerabilityReportResult,
+  VulnerabilityReportResultV2,
+} from './result-types.js';
+export {
+  hasCompleteNavigationTargets,
+  REQUIRED_NAVIGATION_TARGET_KEYS,
+} from './result-types.js';

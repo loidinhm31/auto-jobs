@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "credentials": {
+      "usernameVariable": "JENKINS_USERNAME",
+      "passwordVariable": "JENKINS_PASSWORD"
+    },
+    "timeoutMs": 300000,
+    "pollIntervalMs": 1000,
+    "browser": "chromium",
+    "artifactDir": "reports"
+  },
+  "projects": [
+    {
+      "id": "service-a",
+      "name": "Service A",
+      "baseUrl": "https://jenkins.example.invalid/jenkins",
+      "jobPath": "Container Platform/service-a/release%252Fsit",
+      "sourceOrigins": {
+        "snyk": ["https://snyk.example.invalid"],
+        "sonarqube": ["https://sonarqube.example.invalid"]
+      },
+      "snyk": {
+        "reportPath": "artifact/snyk-results.html"
+      },
+      "sonarqube": {
+        "homeUrl": "https://sonarqube.example.invalid/dashboard?id=service-a"
+      }
+    },
+    {
+      "id": "service-b",
+      "name": "Service B",
+      "baseUrl": "https://jenkins.example.invalid/jenkins",
+      "jobPath": "Container Platform/service-b/main",
+      "credentials": {
+        "usernameVariable": "SERVICE_B_JENKINS_USERNAME",
+        "passwordVariable": "SERVICE_B_JENKINS_PASSWORD"
+      },
+      "sourceOrigins": {
+        "snyk": ["https://snyk.example.invalid"],
+        "sonarqube": ["https://sonarqube.example.invalid"]
+      },
+      "snyk": {
+        "reportPath": "artifact/snyk-results.html"
+      },
+      "sonarqube": {
+        "homeUrl": "https://sonarqube.example.invalid/dashboard?id=service-b"
+      }
+    }
+  ]
+}

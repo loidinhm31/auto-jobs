@@ -13,6 +13,8 @@ const SELECTOR_KINDS: readonly SelectorKind[] = [
   'text',
   'css',
 ];
+const SELECTOR_FIELDS = new Set(['kind', 'value', 'name', 'required']);
+const MAX_SELECTOR_TEXT_LENGTH = 512;
 
 export const DEFAULT_SELECTORS: SelectorConfig = {
   trigger: {
@@ -24,8 +26,8 @@ export const DEFAULT_SELECTORS: SelectorConfig = {
   authLandmark: {
     kind: 'role',
     value: 'link',
-    name: 'Log out',
-    required: true,
+    name: 'Manage Jenkins',
+    required: false,
   },
   queueUrl: {
     kind: 'css',
@@ -54,7 +56,7 @@ export const DEFAULT_SELECTORS: SelectorConfig = {
   },
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -81,8 +83,22 @@ export function parseSelector(
   } catch {
     throw new ConfigError([`${fieldName} must be valid JSON`]);
   }
+  return parseSelectorValue(parsed, fieldName, defaultRequired);
+}
+
+export function parseSelectorValue(
+  parsed: unknown,
+  fieldName = 'selector',
+  defaultRequired = true,
+): LocatorSelector {
   if (!isRecord(parsed)) {
     throw new ConfigError([`${fieldName} must be a selector object`]);
+  }
+
+  for (const key of Object.keys(parsed)) {
+    if (!SELECTOR_FIELDS.has(key)) {
+      throw new ConfigError([`${fieldName}.${key} is not supported`]);
+    }
   }
 
   const kind = parsed.kind;
@@ -97,13 +113,26 @@ export function parseSelector(
       `${fieldName}.kind must be one of ${SELECTOR_KINDS.join(', ')}`,
     ]);
   }
-  if (typeof selectorValue !== 'string' || selectorValue.trim().length === 0) {
+  if (
+    typeof selectorValue !== 'string' ||
+    selectorValue.trim().length === 0 ||
+    selectorValue.length > MAX_SELECTOR_TEXT_LENGTH ||
+    /[\u0000-\u001f\u007f]/u.test(selectorValue)
+  ) {
     throw new ConfigError([`${fieldName}.value must be a non-empty string`]);
   }
   if (required !== undefined && typeof required !== 'boolean') {
     throw new ConfigError([`${fieldName}.required must be a boolean`]);
   }
-  if (name !== undefined && (typeof name !== 'string' || name.trim() === '')) {
+  if (
+    name !== undefined &&
+    (
+      typeof name !== 'string' ||
+      name.trim() === '' ||
+      name.length > MAX_SELECTOR_TEXT_LENGTH ||
+      /[\u0000-\u001f\u007f]/u.test(name)
+    )
+  ) {
     throw new ConfigError([`${fieldName}.name must be a non-empty string`]);
   }
 
