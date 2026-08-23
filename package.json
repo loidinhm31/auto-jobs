@@ -12,7 +12,7 @@
     "install": "playwright install chromium",
     "typecheck": "tsc --noEmit",
     "test:unit": "playwright test tests/unit --config=playwright.unit.config.ts --pass-with-no-tests",
-    "test:e2e": "playwright test tests/e2e --pass-with-no-tests",
+    "test:e2e": "JENKINS_BASE_URL=${JENKINS_BASE_URL:-http://127.0.0.1:8080} JENKINS_USERNAME=${JENKINS_USERNAME:-local-admin} JENKINS_PASSWORD=${JENKINS_PASSWORD:-local-fixture-password} JENKINS_JOB_PATH=${JENKINS_JOB_PATH:-playwright-vulnerability-report} playwright test tests/e2e --pass-with-no-tests",
     "test": "npm run typecheck && npm run test:unit && npm run test:e2e"
   },
   "devDependencies": {

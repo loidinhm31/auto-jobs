@@ -43,12 +43,41 @@ export interface BuildReference {
 
 export type BuildTriggerCapability = 'build_now' | 'unsupported_parameterized';
 
+export type ProjectTriggerState =
+  | 'capability_unchecked'
+  | 'unsupported_parameterized'
+  | 'build_now_ready'
+  | 'baseline_captured'
+  | 'submitted'
+  | 'queue_correlated'
+  | 'build_correlated';
+
+export interface QueueReference {
+  id: number;
+  url: string;
+}
+
+export interface JenkinsBaseline {
+  capturedAt: string;
+  latestBuildNumber?: number;
+  queueItems: readonly QueueReference[];
+}
+
+export interface TriggerDiagnostics {
+  lastSafeUrl?: string;
+  observationErrors: readonly string[];
+  reloadCount: number;
+}
+
 export interface BuildTriggerResult {
   triggered: boolean;
-  capability?: BuildTriggerCapability;
-  triggerAttempts?: number;
+  capability: BuildTriggerCapability;
+  triggerAttempts: number;
+  state: ProjectTriggerState;
+  baseline?: JenkinsBaseline;
   queueUrl?: string;
   build?: BuildReference;
+  diagnostics: TriggerDiagnostics;
 }
 
 export interface BuildTrigger {
