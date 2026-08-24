@@ -74,7 +74,9 @@ async function assertArtifactBudget(directory: string, manifest: ProjectRunManif
     try {
       handle = await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`referenced artifact is missing: ${filename}`);
+      }
       throw error;
     }
     try {

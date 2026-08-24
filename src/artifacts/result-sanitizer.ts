@@ -18,6 +18,7 @@ import {
   MAX_PERSISTED_WARNING_LENGTH,
   MAX_RUN_ARTIFACT_COUNT,
 } from './result-validation.js';
+import { safeSnykSource } from './snyk-result-sanitizer.js';
 
 const MAX_WARNING_ITEMS = MAX_PERSISTED_WARNING_ITEMS;
 const MAX_WARNING_LENGTH = MAX_PERSISTED_WARNING_LENGTH;
@@ -86,6 +87,7 @@ function safeCapture(value: CaptureMetadata): CaptureMetadata {
     ...(value.title === undefined ? {} : { title: redactText(value.title).slice(0, MAX_CAPTURE_TITLE_LENGTH) }),
     ...(value.selectorStrategy === undefined ? {} : { selectorStrategy: redactText(value.selectorStrategy).slice(0, 256) }),
     ...(value.screenshotPath === undefined ? {} : { screenshotPath: redactText(value.screenshotPath).slice(0, 128) }),
+    ...(value.screenshotSha256 === undefined ? {} : { screenshotSha256: value.screenshotSha256.slice(0, 64) }),
     ...(value.viewport === undefined ? {} : { viewport: { width: value.viewport.width, height: value.viewport.height } }),
   };
 }
@@ -165,7 +167,7 @@ export function safeResult(value: VulnerabilityReportResultV2): VulnerabilityRep
       'sonarqube-issues': safeTarget(value.navigation['sonarqube-issues']),
     },
     reports: {
-      snyk: safeSource(value.reports.snyk),
+      snyk: safeSnykSource(value.reports.snyk, safeSource),
       sonarqube: safeSource(value.reports.sonarqube),
     },
     warnings: safeWarnings(value.warnings),

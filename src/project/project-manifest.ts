@@ -20,6 +20,7 @@ export function createProjectManifest(
   diagnostic?: string,
   status?: string,
   diagnostics?: ProjectDiagnostics,
+  screenshots: readonly string[] = [],
 ): ProjectRunManifest {
   return {
     kind: 'project-run',
@@ -34,7 +35,7 @@ export function createProjectManifest(
         ...(status === undefined ? {} : { status }),
       },
     }),
-    artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
+    artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [...screenshots] },
     warnings: [...warnings],
     ...(diagnostic === undefined ? {} : { diagnostic }),
     ...(diagnostics === undefined ? {} : {

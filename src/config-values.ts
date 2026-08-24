@@ -1,6 +1,11 @@
 import type { BrowserName } from './types.js';
 
 import { ConfigError } from './config-errors.js';
+import {
+  canonicalizeBaseUrl,
+  containsPathTraversal,
+} from './security/url-policy.js';
+import { resolveSafeRelativeUrl } from './security/relative-url-policy.js';
 
 const BROWSER_NAMES: readonly BrowserName[] = [
   'chromium',
@@ -9,6 +14,9 @@ const BROWSER_NAMES: readonly BrowserName[] = [
 ];
 
 function normalizePathSegment(segment: string, fieldName: string): string {
+  if (containsPathTraversal(segment)) {
+    throw new ConfigError([`${fieldName} contains an invalid path segment`]);
+  }
   let decoded: string;
   try {
     decoded = decodeURIComponent(segment);
@@ -19,7 +27,7 @@ function normalizePathSegment(segment: string, fieldName: string): string {
     decoded === '.' ||
     decoded === '..' ||
     decoded.length === 0 ||
-    /[\u0000\r\n]/u.test(decoded)
+    /[\u0000-\u001f\u007f]/u.test(decoded)
   ) {
     throw new ConfigError([`${fieldName} contains an invalid path segment`]);
   }
@@ -27,30 +35,23 @@ function normalizePathSegment(segment: string, fieldName: string): string {
 }
 
 export function normalizeBaseUrl(value: string): string {
-  const input = value.trim();
-  if (input.length === 0) {
-    throw new ConfigError(['JENKINS_BASE_URL is required']);
-  }
+  return canonicalizeBaseUrl(value, 'JENKINS_BASE_URL');
+}
 
-  let url: URL;
-  try {
-    url = new URL(input);
-  } catch {
-    throw new ConfigError(['JENKINS_BASE_URL must be an absolute URL']);
-  }
+export function resolveBasePathUrl(
+  baseUrl: string,
+  relativePath: string,
+): string {
+  return resolveSafeRelativeUrl(baseUrl, relativePath, 'relative path');
+}
 
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new ConfigError(['JENKINS_BASE_URL must use http or https']);
-  }
-  if (url.username || url.password) {
-    throw new ConfigError(['JENKINS_BASE_URL must not contain credentials']);
-  }
-  if (url.search || url.hash) {
-    throw new ConfigError(['JENKINS_BASE_URL must not contain query or fragment']);
-  }
-
-  url.pathname = url.pathname.replace(/\/+$/u, '');
-  return url.toString().replace(/\/$/u, '');
+export function resolveJenkinsJobUrl(baseUrl: string, jobPath: string): string {
+  const jobSegments = jobPath
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map((segment) => `job/${segment}`)
+    .join('/');
+  return resolveBasePathUrl(baseUrl, `/${jobSegments}/`);
 }
 
 export function getOptionalBaseUrl(value: string | undefined): string | undefined {
@@ -62,7 +63,12 @@ export function getOptionalBaseUrl(value: string | undefined): string | undefine
 
 export function normalizeLoginPath(value: string): string {
   const input = value.trim();
-  if (!input.startsWith('/') || input.includes('?') || input.includes('#')) {
+  if (
+    !input.startsWith('/') ||
+    input.startsWith('//') ||
+    input.includes('?') ||
+    input.includes('#')
+  ) {
     throw new ConfigError(['JENKINS_LOGIN_PATH must be a relative path']);
   }
 

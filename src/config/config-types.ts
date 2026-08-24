@@ -20,6 +20,7 @@ export interface ProjectSourceInput {
   allowedOrigins?: readonly string[];
   reportPath?: string;
   homeUrl?: string;
+  projectId?: string;
 }
 
 export interface ProjectConfigInput {
@@ -69,6 +70,7 @@ export interface NormalizedSourceConfig {
   readonly allowedOrigins: readonly string[];
   readonly reportPath?: string;
   readonly homeUrl?: string;
+  readonly projectId?: string;
 }
 
 export interface NormalizedProjectConfig {

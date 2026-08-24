@@ -1,66 +1,252 @@
 # Jenkins Playwright vulnerability-report runner architecture
 
-## Phase 1 / V1 boundary
+## Approved onboarding scope (2026-08-20)
+
+The approved reviewer decision for this handoff covers Phase 1 and Phase 2.
+Phase 1 covers the TypeScript/Playwright bootstrap, shared configuration and
+result contracts, redaction helpers, and unit coverage. Phase 2 covers the
+deterministic local Jenkins fixture, its pinned controller/plugin setup, the
+JCasC-seeded job, and fixture report artifacts.
+
+Phases 1–2 remain the implemented baseline. The original single-project
+Phases 3–5 design is superseded by the replanned target below; this document
+does not claim that the replanned flow is implemented.
+
+## Replanned target scope (2026-08-24)
+
+One validated JSON configuration lists one or more projects. Each enabled
+project identifies its Jenkins base URL and job path, optional existing build,
+non-secret credential-variable names, and explicit allowed SonarQube/Snyk
+origins. The runner processes projects sequentially by default. Every project
+gets a fresh browser context, absolute workflow deadline, run-scoped trigger
+state, artifact directory, normalized evidence model, and static HTML report.
+
+The saved pages under `templates/jenkins-template`, `templates/snyk-template`,
+and `templates/sonarqube-template` are fixture and design evidence. They are
+not copied wholesale into production output. The generated Jenkins/project
+report shell provides links to Jenkins, Snyk, SonarQube home, SonarQube
+overall, and SonarQube issues when validated evidence exists.
+
+Snyk capture includes the visible `Snyk test report` section, a screenshot,
+severity totals, and at most 500 evidence-derived detailed findings with
+explicit truncation metadata.
+SonarQube capture starts at the configured home page, follows a user-visible
+Overview/Overall action, captures the overall page, follows Issues, and
+extracts only Type and Severity facet data. Overall metrics are not normalized
+in V1; the Overall page is screenshot evidence only. Generated CSS class names
+are a diagnostic fallback, never the primary navigation contract.
+
+## Implemented baseline and revised boundary
 
 Phase 1 finalization covers the TypeScript/Playwright bootstrap, shared
 configuration contract, result types, redaction helpers, and configuration
 unit coverage. The Jenkins fixture, page modules, runner, and browser E2E
 specs are later-phase consumers of this contract, not Phase 1 deliverables.
 
-V1 validates one Jenkins UI workflow. It logs in with a fresh Playwright
-browser context, resolves one configured Pipeline job, triggers zero or one
-build, resolves that build, waits for a terminal state, reloads the exact
-build page, and extracts only Jenkins-rendered SonarQube/Snyk links and
-selected text.
+For each configured project, the revised target logs in with a fresh
+Playwright browser context, resolves one exact Pipeline job, selects one
+existing build or submits at most one correlated build, waits for a terminal
+state, then captures Jenkins/Snyk/SonarQube evidence and renders one offline
+report. A lightweight aggregate index links all per-project results.
 
 The local fixture models publisher output with deterministic HTML/JSON
-artifacts. It does not run real SonarQube or Snyk scanners. Real scanners,
-external services, API-token triggering, and cross-tool aggregation are V2
-work and must remain behind explicit opt-in boundaries.
+artifacts. It does not run real SonarQube or Snyk scanners. Live external pages
+are navigated only when their canonical origins are explicitly configured.
+API-token triggering, scanner execution, vendor APIs, and parallel project
+execution remain out of scope.
 
-## State machine
+## Per-project state machine
 
-```text
-config_validated
-      -> authenticated
-      -> job_resolved
-      -> trigger_submitted (or existing_build_selected)
-      -> queue_resolved
-      -> build_running
-      -> terminal
-      -> reloaded
-      -> extracted
-      -> completed
-
-Any state can transition to failed with a redacted diagnostic.
+```mermaid
+stateDiagram-v2
+  [*] --> ConfigValidated
+  ConfigValidated --> Authenticated
+  Authenticated --> JobResolved
+  JobResolved --> ExistingBuildSelected : configured build
+  JobResolved --> TriggerCapabilityChecked : trigger flow
+  TriggerCapabilityChecked --> ParameterizedDeferred : build with parameters
+  TriggerCapabilityChecked --> BaselineCaptured : build now
+  BaselineCaptured --> TriggerSubmitted : build now
+  ParameterizedDeferred --> Failed : unsupported in V1
+  TriggerSubmitted --> QueueCorrelated : new queue item
+  TriggerSubmitted --> BuildCorrelated : direct executable
+  QueueCorrelated --> BuildCorrelated : executable assigned
+  ExistingBuildSelected --> BuildRunning
+  BuildCorrelated --> BuildRunning
+  BuildRunning --> Terminal
+  Terminal --> EvidenceCaptured
+  EvidenceCaptured --> ReportRendered
+  ReportRendered --> [*]
+  Failed --> [*]
 ```
 
-`JENKINS_BUILD_NUMBER` selects an existing build and skips triggering. Without
-it, the run keeps its trigger/queue/build references in memory and never
-re-clicks the trigger after navigation or reload.
+Any state may fail with a redacted diagnostic and failure-focused artifacts.
+The absolute deadline applies to the entire project workflow, not separately
+to each operation. Existing-build selection records zero trigger actions.
+Trigger flow records the pre-submit build/queue baseline and accepts only a
+new same-origin queue item or executable build correlated to this run. A
+`Build with Parameters` control is detected before interaction and returns an
+explicit unsupported result; it is never clicked or submitted in V1.
 
 ## Component and data flow
 
-```text
-validated environment
-        |
-src/config.ts ------------------------------+
-        |                                    |
-src/types.ts -> Jenkins page modules -> runner
-        |                                    |
-        +-> normalized result JSON <---------+
+```mermaid
+flowchart LR
+  ConfigFile[Validated project JSON] --> Orchestrator[Sequential orchestrator]
+  Secrets[Runtime secret variables] --> Orchestrator
+  Orchestrator --> ProjectContext[Fresh project browser context]
+  ProjectContext --> Jenkins[Jenkins auth, job, queue, build]
+  Jenkins --> Links[Validated report links]
+  Links --> Snyk[Snyk capture and normalize]
+  Links --> Sonar[Sonar home, overall, issues capture]
+  Jenkins --> Model[Versioned project evidence]
+  Snyk --> Model
+  Sonar --> Model
+  Model --> ProjectReport[Static project report]
+  ProjectReport --> Aggregate[Aggregate index]
 ```
 
-`src/config.ts` is the only environment parser. It normalizes the Jenkins
-base URL and encoded job path, validates bounded durations and enums, parses a
-small typed locator object, and exposes redaction helpers. Page modules consume
-the resulting contract; they do not read environment variables directly.
+The configuration boundary loads project JSON, normalizes Jenkins job paths,
+validates unique safe project IDs, bounds durations, and compiles per-project
+locator/origin policy. Normalized project config retains only credential
+environment-variable names. Secret values are resolved separately from the
+runtime environment for enabled projects and are never added to normalized
+project config. Page modules consume immutable project config and do not parse
+configuration files or environment variables directly.
 
-`src/types.ts` owns the versioned result, report states, build identity, and
-the narrow `BuildTrigger` boundary. `src/jenkins/locators.ts` will own the
-Playwright locator mapping in Phase 3.
+`src/types.ts` owns versioned config/result contracts, project/run identity,
+report states, build correlation, capture metadata, and the narrow
+`BuildTrigger` boundary. Jenkins, Snyk, SonarQube, and renderer modules remain
+separate so fixture selectors cannot leak into orchestration or output HTML.
 
-## Bootstrap and configuration contract
+## Multi-project configuration contract
+
+`PROJECTS_CONFIG_PATH` selects file mode and points to a regular JSON file under
+1 MiB. The root schema is exactly version 1: `schemaVersion: 1`, one to 50
+`projects` with at least one enabled entry, and optional `defaults`. Every
+project requires a unique lowercase safe `id`, display `name`, one Jenkins
+`baseUrl`/`jenkinsUrl`, and relative `jobPath`. Optional fields cover an
+existing build number, login path, credential-variable names, source-specific
+allowed origins, and selector overrides. Standard `JENKINS_USERNAME` and
+`JENKINS_PASSWORD` references remain the fallback. The file contains variable
+names only; embedded secret values and credential-bearing URLs are rejected.
+
+File mode and legacy mode are mutually exclusive: if `PROJECTS_CONFIG_PATH` is
+set, any legacy project/configuration input is rejected rather than merged or
+silently preferred. When it is unset, the deprecated legacy environment inputs
+are adapted into one schema-v1 project and emit a deprecation diagnostic. New
+orchestration operates only on the normalized list. Sequential execution is
+the only initial scheduling mode; later bounded parallelism requires a separate
+design because it changes Jenkins queue correlation and resource guarantees.
+
+Each project writes immutable evidence under a sanitized stable ID, exact build
+identity, and safe run ID: `reports/<project-id>/<build-number>/<run-id>/`.
+Every run folder contains `index.html`, normalized `data.json`, `manifest.json`,
+and requested Snyk/SonarQube screenshots. Repeated runs never overwrite prior
+evidence. The aggregate `reports/index.html` is rebuilt atomically from run
+manifests, links exact run folders, and reports partial-project failures without
+hiding successful projects.
+
+## Phase 3 orchestration and artifact guarantees
+
+Phase 3 implements the replanned sequential runner. The browser is launched
+once, while each enabled project is executed in order with a new Playwright
+context and a fresh run identity. A project failure is converted to a bounded
+failure outcome so later projects still execute; browser cleanup and aggregate
+writing happen after the project loop. The aggregate includes both outcomes
+from the current invocation and validated historical manifests discovered under
+the report root, while manifests for projects outside the current configuration
+are reported as ignored.
+
+Run directories are allocated beneath a canonical, owner-private report root.
+Project IDs, build numbers, and run IDs are validated before they become path
+segments. Manifest and result writes use temporary files followed by atomic
+renames. Discovery rejects symlinked directories and follows only safe artifact
+names; it opens manifests and referenced files without following symlinks,
+checks file-size/count budgets, and verifies that `manifest.json`, `data.json`,
+the project/run identity, build number, build URL, state, screenshots, and
+trace references agree. Persisted warnings, status, diagnostics, and URLs are
+bounded, redacted, and policy-validated before they are exposed to the
+aggregate report.
+
+The Phase 3 release gate is type-checking, production compilation, the complete
+unit suite, and the Compose-backed Playwright E2E suite. The E2E gate covers
+sequential project isolation, continuation after a project failure, repeat-run
+history, exact build identity, and the existing Jenkins fixture. Later phases
+may add broader vendor-page and report-rendering coverage; this section does
+not claim those later capabilities are complete.
+
+## Phase 04 Snyk evidence pipeline (implemented 2026-08-24)
+
+Phase 04 extends terminal-build capture with a bounded, evidence-only Snyk
+adapter. Capture starts only after the exact terminal Jenkins build has been
+validated. It uses no Snyk API or scanner and returns normalized evidence plus
+a local screenshot reference; HTML rendering remains a later-phase concern.
+
+### Validated artifact classification and canonicalization
+
+- Candidate links are collected only from the exact terminal Jenkins page and
+  are bounded to 256 entries. A configured Snyk report destination is preferred;
+  otherwise only one unambiguous Snyk-shaped report and one summary are eligible.
+- `source-link-classifier.ts` uses accessible text/ARIA/title and URL host/path
+  signals. It accepts `snyk-results.html` and
+  `snyk-sca-results-summary.json`, ignores unrelated artifacts, rejects
+  ambiguous candidates, and rejects links outside the configured Jenkins or
+  explicit Snyk origins.
+- Jenkins artifact variants ending in `/*fingerprint*/` or `/*view*/` are
+  canonicalized to the artifact URL before it is retained. Configured and
+  observed URLs, redirects, the final report URL, and the summary URL are
+  revalidated by the project origin policy. External evidence also requires a
+  configured project identity.
+
+### Script-safe capture and bounded visible extraction
+
+The capture page disables JavaScript through CDP before navigation, falling
+back to a new JavaScript-disabled context when CDP is unavailable. Every page
+request is checked against the origin policy; fonts, images, media, scripts,
+workers, and WebSockets are aborted. Summary JSON is fetched as bounded page
+evidence with at most five redirects and a 1 MiB body limit.
+
+Readiness uses the accessible `Snyk test report` heading first, exact visible
+text second, and the configured selector last; the selected strategy is
+recorded. Extraction reads only visible cards and summary labels. Semantic
+`data-snyk-test` evidence is preferred, with `.card--vuln` as a diagnostic
+fallback. Card extraction is capped at 2,000 visible cards, fields are clipped,
+and paths/references are bounded before normalization. No raw vendor HTML is
+persisted.
+
+### Summary/detail normalization and local provenance
+
+The summary parser accepts only a complete `severity_counts` object with
+bounded non-negative integer totals. Summary-only evidence preserves totals and
+an empty detail list; it never invents findings. HTML findings are normalized to
+bounded text, paths, and safe HTTP(S) references, deduplicated (merging
+complementary fields), deterministically ordered, and capped at the fixed 500
+unique-finding limit. The result records `totalObserved`, `retainedCount`,
+`truncated`, and `omittedCount`. Summary/detail severity mismatches remain
+visible as warnings and make the source `incomplete`.
+
+Each capture records the sanitized source URL, title, timestamp, readiness/card
+selector strategy, and fixed 1,440×900 viewport. A successful report-section
+capture writes `snyk-test-report.png` under the run directory and records its
+safe local path and SHA-256 hash in capture metadata; the safe filename is also
+recorded in the run manifest.
+
+### Partial-state behavior and review boundary
+
+An absent eligible report with no classification warning is `not_found`.
+Ambiguous or unallowlisted links, navigation/identity/parse problems, summary
+mismatches, or screenshot failures produce `incomplete`; valid evidence and
+warnings are retained whenever possible. These typed source outcomes let the
+project continue to other publishers and persist a partial result instead of
+fabricating success. A workflow or persistence failure remains a project
+failure.
+
+Cycle-3 P1/P2 review findings are explicitly deferred, not fixed by this
+section. Their open follow-ups remain tracked in the
+[Phase 04 plan](../plans/260824-0023-jenkins-multi-project-vulnerability-reporting/phase-04-snyk-evidence-capture-and-normalization.md).
+
+## Current single-project configuration baseline
 
 `src/config.ts` is the single environment boundary. Required inputs are
 `JENKINS_BASE_URL`, `JENKINS_USERNAME`, `JENKINS_PASSWORD`, and
@@ -82,32 +268,72 @@ non-empty `value`, optional `name`, and boolean `required`; supported kinds are
 Report selectors may set `required: false`, making absent publisher output a
 normal report state rather than a configuration error.
 
+The authentication and build-page selector overrides
+(`JENKINS_AUTH_LANDMARK`, `JENKINS_BUILD_STATUS_SELECTOR`, and
+`JENKINS_BUILD_URL_SELECTOR`) are intentionally reserved for Phases 3–4.
+Phase 1/2 onboarding should leave these optional overrides unset; the typed
+contract remains available for later Jenkins page-markup differences.
+
 Parsing collects invalid or missing-input issues and throws before a browser is
 launched. Diagnostics are redacted and bounded; raw credentials and
 secret-bearing URL data are not part of the config error contract.
 
+The replanned configuration loader replaces this as the orchestration entry
+point. During migration, these inputs may be normalized into one project; they
+must not remain a second execution path.
+
 ## Configuration invariants
 
 - Configuration is parsed before a browser is launched.
-- `JENKINS_BASE_URL` is an HTTP(S) URL without credentials, query, or fragment.
+- Project configuration has `schemaVersion: 1`, at least one enabled project,
+  unique safe project IDs, and no embedded credential values.
+- Every Jenkins base URL is HTTP(S), canonical, and has no credentials, query,
+  or fragment. Job/login paths cannot escape its configured context path.
+- Snyk/SonarQube navigation is limited to the Jenkins origin or explicit
+  canonical allowed origins for that project; redirects are revalidated.
+- Allowed origins must be bare HTTP(S) origins. Absolute source URLs may carry
+  ordinary application query parameters, but credential-like query keys or
+  nested assignments are rejected without echoing their values. Malformed or
+  repeatedly encoded traversal/query payloads fail closed.
+- Job and login paths reject absolute/network-path forms, queries, fragments,
+  control characters, malformed encoding, and raw or encoded traversal.
+  Relative report paths must remain within the configured Jenkins base context.
 - Credentials are required for UI V1 but are never included in diagnostics,
   traces, screenshots, storage state, or committed files.
 - Job paths are relative and encoded per segment; login paths are relative.
 - Only `ui` trigger mode is accepted in V1.
 - Timeouts, poll intervals, and existing build numbers are positive integers.
+- One absolute deadline and the configured poll interval govern each project;
+  nested operations consume remaining time instead of resetting the timeout.
 - Locator configuration is typed JSON with one of `role`, `label`, `testId`,
   `text`, or `css` kinds. Selector overrides retain default requiredness unless
   explicitly set; report selectors may set `required: false`.
+- Authentication requires a positive configured landmark or exact canonical
+  job identity. Merely leaving known login paths is insufficient.
+- `Build Now` is the only submitted trigger in V1. Parameterized jobs are
+  detected before interaction and fail closed with zero click/submit attempts.
 
 ## Result invariants
 
-- Every successful result has `schemaVersion: 1` and one exact build number/URL.
+- Replanned project evidence has `schemaVersion: 2`, a stable project ID, and
+  one exact validated build number/URL. The aggregate links project results;
+  it does not merge their mutable run state.
+- Its `navigation` member is an object with exactly five keyed targets:
+  `jenkins-build`, `snyk-report`, `sonarqube-home`, `sonarqube-overall`, and
+  `sonarqube-issues`. Each target repeats its key, provides a non-empty local
+  anchor and a `found`, `not_found`, or `incomplete` state, and may include a
+  policy-validated live URL. Missing, extra, or array-shaped targets violate
+  the schema-v2 contract.
 - Report states are `found`, `not_found`, or `incomplete`.
-- Report URLs/text are normalized, deduplicated, trimmed, and capped by the
-  extraction layer.
-- V1 only reports DOM content observed on Jenkins pages; it does not fetch
-  SonarQube or Snyk hosts.
-- A terminal build is explicitly reloaded before report extraction.
+- Report URLs/text/issue data are normalized, deduplicated, trimmed, capped,
+  escaped at render time, and tied to capture source/timestamp metadata.
+- The Jenkins template is a fixture/reference. Generated project HTML is a
+  compact offline shell with no executable script or third-party resources.
+- A terminal exact build is validated before report-link extraction. Snyk and
+  SonarQube pages are captured only through the project's origin policy.
+- Snyk detail is evidence-derived and capped at 500; summary-only input never
+  creates invented findings. SonarQube Overall is screenshot-only, and Issues
+  extraction contains only Type and Severity.
 - Authentication state is ephemeral and no `storageState` is persisted.
 
 ## Test, report, and artifact policy
@@ -123,18 +349,124 @@ gate added in later phases. CI can run deterministic type/unit checks without
 Docker.
 
 Local runs use the HTML reporter; CI uses the blob reporter. Both configs use
-failure-oriented browser artifacts: traces and video are retained on failure,
-screenshots are captured only on failure, and CI allows one retry. The
+the validated core artifact policy: requested report screenshots, normalized
+data, and manifests are retained; a trace is retained only on failure or first
+retry. Raw vendor HTML and video are not retained. CI allows one retry. The
 configured `ARTIFACT_DIR` controls the main runner output directory; unit
 artifacts remain under `test-results/unit`.
 
 Vulnerability reports are separate from Playwright test reports. V1 records
-only Jenkins-rendered SonarQube/Snyk links and selected text, normalizing,
-deduplicating, trimming, and capping extracted values. It does not download or
-publish data from SonarQube or Snyk hosts.
+Jenkins build identity plus normalized Snyk/SonarQube evidence, screenshots,
+and source links. Static output HTML escapes all values, validates link schemes,
+uses `noopener noreferrer` for external navigation, and applies a restrictive
+Content Security Policy. Missing optional publisher output produces a partial
+report with warnings, not a fabricated successful section.
+
+Browser gates cover two-project isolation, existing-build zero-trigger proof,
+new queue/build correlation, parameterized detection with zero interaction,
+stale/concurrent queue entries, external/cross-origin redirects, exact job identity, Snyk title
+and detail capture, SonarQube home-to-overall navigation, and Type/Severity
+issues capture despite generated-class changes. Generated reports receive
+fixed-data visual regression, keyboard/accessibility checks, and local-link
+integrity checks.
+
+Failure evidence is never globally disabled. Keep normalized data, manifest,
+last safe URL/status, and trace on failure/first retry. Requested report
+screenshots are retained when capture succeeded; raw HTML, extra failure
+screenshots, and video are not retained. Redact credentials, cookies, query
+secrets, and sensitive headers before persistence.
 
 Sensitive output directories (`playwright/.auth`, `playwright-report`,
 `test-results`, `blob-report`, `artifacts`, `reports`, traces, and logs) are
 ignored by Git. Authentication state is ephemeral; no `storageState` is
 persisted. The local Jenkins volume is reset only when a developer explicitly
 runs `docker compose down -v`.
+
+## Local Jenkins fixture (Phase 2)
+
+The deterministic local fixture uses the official
+`jenkins/jenkins:2.568.1-lts-jdk21`
+image pinned by digest in `docker/jenkins/Dockerfile`. The custom layer adds
+only `curl` for the healthcheck and the pinned Configuration as Code, Job DSL,
+and Pipeline plugin set required to create one job from source-controlled
+configuration. It does not install SonarQube/Snyk scanner plugins or contact
+external scanner services.
+
+Compose uses `docker/jenkins` as its build context, so local env files,
+credentials, and test output outside that fixture directory cannot enter the
+image build context. The Dockerfile copies only source-controlled Jenkins
+fixture files, and `docker/jenkins/.dockerignore` filters accidental local
+secrets or output placed inside the fixture context.
+
+`plugins.txt` pins the direct plugins and resolved dependency closure, and the
+Dockerfile disables latest-version resolution. Docker artifact resolution is
+pinned but network-dependent: an image build must reach the image registry,
+Debian package repository, and Jenkins plugin repository to fetch those exact
+artifacts. The fixture is deterministic once built, but it is intentionally not
+an offline image build and does not require external scanner services at
+runtime.
+
+Compose injects `JENKINS_USERNAME` and `JENKINS_PASSWORD`; its loopback-bound,
+disposable development defaults are `local-admin` and
+`local-fixture-password`. CI and non-local runs override both through the
+environment. JCasC creates the local admin,
+disables the setup wizard for this disposable controller, and seeds
+`playwright-vulnerability-report`. The controller healthcheck probes the
+unauthenticated `/login` endpoint so a password is not exposed in a process
+argument. The fixture-readiness E2E then performs a bounded readiness poll,
+browser login, and seeded-job assertion.
+
+Start and inspect the fixture with:
+
+```sh
+export JENKINS_USERNAME=local-admin
+export JENKINS_PASSWORD='replace-with-a-local-secret'
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 jenkins
+```
+
+The named `jenkins_home` volume is intentionally preserved by `docker compose
+down`, allowing restart/repeated-build checks. Use `docker compose down -v`
+only when an explicit clean reset is required; it removes Jenkins history and
+forces JCasC to recreate the controller and job from the checked-in fixture.
+
+The seeded Pipeline accepts `FIXTURE_VARIANT` values `pass`, `failed`, `empty`,
+and `malformed`. It always archives `reports/manifest.json` and, when the
+variant provides them, deterministic SonarQube/Snyk HTML and JSON artifacts.
+The `failed` variant archives reports before returning a failed build, which
+lets later phases test report extraction independently from build success.
+
+For Docker-backed development, `npm run test:e2e` supplies loopback defaults
+for the disposable fixture: `JENKINS_BASE_URL=http://127.0.0.1:8080`,
+`JENKINS_USERNAME=local-admin`, `JENKINS_PASSWORD=local-fixture-password`,
+and `JENKINS_JOB_PATH=playwright-vulnerability-report`. These defaults are
+development-only and are overridden by the process environment in CI or when
+targeting a non-local controller. The Compose service injects the same
+development-only credentials into the fixture; production and CI credential
+values remain environment-provided.
+
+`npm run install` provisions Chromium. If `PLAYWRIGHT_BROWSER=firefox` or
+`PLAYWRIGHT_BROWSER=webkit` is selected, install that browser explicitly with
+`npx playwright install firefox` or `npx playwright install webkit` before the
+test run. `JENKINS_BASE_URL` may include a context path; the readiness flow
+resolves login and job URLs beneath that path, including Jenkins folder-style
+job paths such as `folder/job-name`.
+
+## Phase 2 implementation guarantees and review boundary
+
+The Phase 2 workflow uses one immutable `WorkflowDeadline` per project. Page
+navigation, trigger submission, queue/build correlation, terminal-state
+polling, and report capture consume the same remaining budget and configured
+poll interval; nested operations must not reset the timeout. It validates the
+configured origin/context path, exact job heading, numeric queue/build paths,
+and captures a pre-submit queue/latest-build baseline. Trigger results include
+typed state and bounded, redacted diagnostics.
+
+Phase 2 was approved with noted issues after review cycle 3. It is not a
+production-security sign-off: correlation can still be ambiguous after an
+unrelated navigation, login/job navigation does not yet reject every HTTP error
+response, some locator reads are not independently deadline-bounded, and
+path-based secret redaction/canonical URL rules need follow-up coverage.
+Phase 7 must resolve those gaps before release; they must not be described as
+closed fail-closed guarantees.

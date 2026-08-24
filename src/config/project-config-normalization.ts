@@ -3,7 +3,8 @@ import * as path from 'node:path';
 
 import { ConfigError } from '../config-errors.js';
 import { DEFAULT_SELECTORS, parseSelectorValue } from '../config-selectors.js';
-import { assertAllowedUrl, canonicalizeOrigin, resolveSafeRelativeUrl } from '../security/url-policy.js';
+import { assertAllowedUrl, canonicalizeOrigin } from '../security/url-policy.js';
+import { resolveSafeRelativeUrl } from '../security/relative-url-policy.js';
 import type { LocatorSelector, SelectorConfig, SelectorOverrides, SourceName } from '../types.js';
 import type {
   NormalizedSourceConfig,
@@ -102,11 +103,14 @@ export function normalizedSource(
 ): NormalizedSourceConfig {
   let reportPath: string | undefined;
   let homeUrl: string | undefined;
+  let projectId: string | undefined;
   if (input?.reportPath !== undefined) reportPath = safe(fieldName, undefined, () => resolveSafeRelativeUrl(baseUrl, input.reportPath as string, fieldName), issues);
   if (input?.homeUrl !== undefined) homeUrl = safe(fieldName, undefined, () => assertAllowedUrl(input.homeUrl as string, baseUrl, origins, fieldName), issues);
+  if (input?.projectId !== undefined) projectId = input.projectId.trim();
   return Object.freeze({
     allowedOrigins: Object.freeze([...origins]),
     ...(reportPath === undefined ? {} : { reportPath }),
     ...(homeUrl === undefined ? {} : { homeUrl }),
+    ...(projectId === undefined ? {} : { projectId }),
   });
 }

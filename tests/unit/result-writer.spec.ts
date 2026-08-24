@@ -83,3 +83,43 @@ test('failure manifest writer rejects a run with too many artifact references', 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('failure manifest writer rejects a missing referenced screenshot', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-03-writer-missing-'));
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    const runId = createRunId(new Date('2026-08-24T04:00:00.000Z'), '0000000000000008');
+    const directory = await paths.allocateReport('service-a', 14, runId);
+    fs.writeFileSync(path.join(directory, 'data.json'), '{}');
+    const manifest = {
+      ...validManifest(runId, 14),
+      state: 'failed' as const,
+      artifacts: { manifest: 'manifest.json' as const, data: 'data.json' as const, screenshots: ['missing.png'] },
+    };
+    await expect(writeFailureManifest(directory, manifest)).rejects.toThrow(/missing\.png/u);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('writes and reads a complete screenshot artifact reference', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-03-writer-screenshot-'));
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    const runId = createRunId(new Date('2026-08-24T04:00:00.000Z'), '0000000000000009');
+    const directory = await paths.allocateReport('service-a', 15, runId);
+    fs.writeFileSync(path.join(directory, 'data.json'), '{}');
+    fs.writeFileSync(path.join(directory, 'snyk-test-report.png'), Buffer.from('png-fixture'));
+    const manifest = {
+      ...validManifest(runId, 15),
+      artifacts: { manifest: 'manifest.json' as const, data: 'data.json' as const, screenshots: ['snyk-test-report.png'] },
+    };
+    await writeFailureManifest(directory, manifest);
+    const saved = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8')) as typeof manifest;
+    expect(saved.artifacts.screenshots).toEqual(['snyk-test-report.png']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

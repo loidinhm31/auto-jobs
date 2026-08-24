@@ -97,6 +97,7 @@ test('loads the committed two-project example with runtime-only secret values', 
   expect(projects[0]?.sources.snyk.reportPath).toBe(
     'https://jenkins.example.invalid/jenkins/artifact/snyk-results.html',
   );
+  expect(projects[0]?.sources.snyk.projectId).toBe('service-a');
 });
 
 test('uses per-project credential variable overrides and keeps values ephemeral', () => {

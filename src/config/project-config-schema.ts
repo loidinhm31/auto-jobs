@@ -30,7 +30,7 @@ const SELECTOR_KEYS = new Set([
   'trigger', 'authLandmark', 'queueUrl', 'buildStatus', 'buildUrl',
   'sonarqubeReport', 'snykReport',
 ]);
-const SOURCE_KEYS = new Set(['allowedOrigins', 'reportPath', 'homeUrl']);
+const SOURCE_KEYS = new Set(['allowedOrigins', 'reportPath', 'homeUrl', 'projectId']);
 function addUnknownKeys(
   value: Record<string, unknown>,
   allowed: Set<string>,
@@ -139,6 +139,7 @@ function sources(value: unknown, fieldName: string, issues: string[]): void {
   if ('allowedOrigins' in value) originList(value.allowedOrigins, `${fieldName}.allowedOrigins`, issues);
   optionalString(value.reportPath, `${fieldName}.reportPath`, issues);
   optionalString(value.homeUrl, `${fieldName}.homeUrl`, issues);
+  optionalString(value.projectId, `${fieldName}.projectId`, issues);
 }
 function commonOptions(value: Record<string, unknown>, fieldName: string, issues: string[]): void {
   optionalString(value.loginPath, `${fieldName}.loginPath`, issues);

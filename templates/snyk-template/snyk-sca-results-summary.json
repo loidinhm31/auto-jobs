@@ -1,0 +1,14 @@
+{
+  "source": {
+    "com.example-domain.package-name:com.example-domain.package-name.service": {
+      "organization_name": "domain-name",
+      "project_id": "fes1x3bb-9e77-5c0f-b1cf-b10s2138ffb2"
+    }
+  },
+  "severity_counts": {
+    "critical": 3,
+    "high": 17,
+    "medium": 0,
+    "low": 0
+  }
+}

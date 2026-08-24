@@ -127,7 +127,7 @@ export async function runProject(
   };
   const runManifest = createProjectManifest(
     project, state, resultState, result.run.observedAt, result.warnings, undefined,
-    result.jenkins.status, diagnostics,
+    result.jenkins.status, diagnostics, captureResult.artifacts?.screenshots,
   );
   try {
     const manifestPath = await writeProjectResult(outputDirectory, result, runManifest);
@@ -140,7 +140,7 @@ export async function runProject(
     state.fail(diagnostic);
     const failedManifest = createProjectManifest(
       project, state, 'failed', now().toISOString(), result.warnings, diagnostic,
-      result.jenkins.status, diagnostics,
+      result.jenkins.status, diagnostics, captureResult.artifacts?.screenshots,
     );
     const manifestPath = await writeFailureManifest(outputDirectory, failedManifest);
     return { projectId: project.id, name: project.name, state: 'failed', runId,

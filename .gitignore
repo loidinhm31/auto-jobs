@@ -10,6 +10,16 @@ test-results/
 blob-report/
 artifacts/
 reports/
+!src/artifacts/
+!src/artifacts/**
+!src/reports/
+!src/reports/**
+.runner-build/
+!docker/
+!docker/jenkins/
+!docker/jenkins/fixtures/
+!docker/jenkins/fixtures/reports/
+!docker/jenkins/fixtures/reports/**
 *.trace.zip
 *.log
 

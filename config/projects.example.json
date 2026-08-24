@@ -21,7 +21,8 @@
         "sonarqube": ["https://sonarqube.example.invalid"]
       },
       "snyk": {
-        "reportPath": "artifact/snyk-results.html"
+        "reportPath": "artifact/snyk-results.html",
+        "projectId": "service-a"
       },
       "sonarqube": {
         "homeUrl": "https://sonarqube.example.invalid/dashboard?id=service-a"
@@ -41,7 +42,8 @@
         "sonarqube": ["https://sonarqube.example.invalid"]
       },
       "snyk": {
-        "reportPath": "artifact/snyk-results.html"
+        "reportPath": "artifact/snyk-results.html",
+        "projectId": "service-b"
       },
       "sonarqube": {
         "homeUrl": "https://sonarqube.example.invalid/dashboard?id=service-b"

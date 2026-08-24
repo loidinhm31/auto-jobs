@@ -6,6 +6,7 @@ import type {
   VulnerabilityReportResultV2,
 } from '../result-types.js';
 import type { ProjectFailureResultV2 } from './artifact-manifest.js';
+import { isSafeReferenceUrl } from '../security/url-policy.js';
 
 export const MAX_PERSISTED_WARNING_ITEMS = 32;
 export const MAX_PERSISTED_WARNING_LENGTH = 500;
@@ -18,6 +19,10 @@ export const MAX_SELECTOR_STRATEGY_LENGTH = 256;
 export const MAX_ARTIFACT_REFERENCE_LENGTH = 128;
 export const MAX_RUN_ARTIFACT_COUNT = 16;
 export const MAX_RUN_ARTIFACT_BYTES = 50 * 1_048_576;
+export const MAX_SNYK_FINDINGS = 500;
+export const MAX_SNYK_PATHS = 64;
+export const MAX_SNYK_REFERENCES = 64;
+export const MAX_SNYK_TEXT_LENGTH = 8_192;
 
 const SAFE_ARTIFACT = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 const NAVIGATION_KEYS = ['jenkins-build', 'snyk-report', 'sonarqube-home', 'sonarqube-overall', 'sonarqube-issues'] as const;
@@ -50,6 +55,10 @@ export function isSafePersistedUrl(value: unknown): value is string {
   } catch {
     return false;
   }
+}
+
+function isSafeReference(value: unknown): value is string {
+  return boundedString(value, MAX_CAPTURE_URL_LENGTH) && isSafeReferenceUrl(value);
 }
 
 function validWarnings(value: unknown): value is string[] {
@@ -86,6 +95,7 @@ function validNavigation(value: unknown): boolean {
 function validCapture(value: unknown): value is CaptureMetadata {
   if (!isRecord(value) || !isSafePersistedUrl(value.url) || !boundedString(value.capturedAt, 128) ||
     !optionalString(value.title, MAX_CAPTURE_TITLE_LENGTH) || !optionalString(value.selectorStrategy, MAX_SELECTOR_STRATEGY_LENGTH) ||
+    (value.screenshotSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(String(value.screenshotSha256))) ||
     (value.screenshotPath !== undefined && (typeof value.screenshotPath !== 'string' || !isSafeArtifactReference(value.screenshotPath)))) return false;
   if (value.viewport === undefined) return true;
   const viewport = value.viewport;
@@ -100,6 +110,42 @@ function validSource(value: unknown): value is SourceEvidence {
     !value.navigation.every((item) => isRecord(item) && typeof item.key === 'string' && NAVIGATION_KEYS.includes(item.key as typeof NAVIGATION_KEYS[number]) && validNavigationTarget(item, item.key)) ||
     !validWarnings(value.warnings)) return false;
   return true;
+}
+
+function validSnykSummary(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.counts) || !isRecord(value.detail)) return false;
+  for (const severity of ['critical', 'high', 'medium', 'low']) {
+    const count = value.counts[severity];
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0 || count > 10_000_000) return false;
+  }
+  const detail = value.detail;
+  if (typeof detail.totalObserved !== 'number' || !Number.isSafeInteger(detail.totalObserved) || detail.totalObserved < 0 ||
+    typeof detail.retainedCount !== 'number' || !Number.isSafeInteger(detail.retainedCount) || detail.retainedCount < 0 || detail.retainedCount > MAX_SNYK_FINDINGS ||
+    typeof detail.omittedCount !== 'number' || !Number.isSafeInteger(detail.omittedCount) || detail.omittedCount < 0 ||
+    typeof detail.truncated !== 'boolean' || detail.retainedCount + detail.omittedCount !== detail.totalObserved ||
+    detail.truncated !== (detail.omittedCount > 0)) return false;
+  if (value.metadata === undefined) return true;
+  if (!isRecord(value.metadata)) return false;
+  return optionalString(value.metadata.scannedPath, MAX_SNYK_TEXT_LENGTH) &&
+    optionalString(value.metadata.packageManager, MAX_CAPTURE_TITLE_LENGTH) &&
+    (value.metadata.dependencyCount === undefined || positiveInteger(value.metadata.dependencyCount) || value.metadata.dependencyCount === 0) &&
+    (value.metadata.dependencyPathCount === undefined || positiveInteger(value.metadata.dependencyPathCount) || value.metadata.dependencyPathCount === 0);
+}
+
+function validSnykFinding(value: unknown): boolean {
+  if (!isRecord(value) || !['critical', 'high', 'medium', 'low'].includes(String(value.severity))) return false;
+  if (!optionalString(value.id, 256) || !optionalString(value.title, MAX_CAPTURE_TITLE_LENGTH) ||
+    !optionalString(value.module, MAX_CAPTURE_TITLE_LENGTH) || !optionalString(value.description, MAX_SNYK_TEXT_LENGTH) ||
+    !optionalString(value.remediation, MAX_SNYK_TEXT_LENGTH)) return false;
+  if (value.paths !== undefined && (!Array.isArray(value.paths) || value.paths.length > MAX_SNYK_PATHS || !value.paths.every((item) => boundedString(item, MAX_SNYK_TEXT_LENGTH)))) return false;
+  if (value.references !== undefined && (!Array.isArray(value.references) || value.references.length > MAX_SNYK_REFERENCES || !value.references.every(isSafeReference))) return false;
+  return true;
+}
+
+function validSnyk(value: unknown): boolean {
+  if (!validSource(value) || !isRecord(value)) return false;
+  if (value.summary !== undefined && !validSnykSummary(value.summary)) return false;
+  return value.findings === undefined || (Array.isArray(value.findings) && value.findings.length <= MAX_SNYK_FINDINGS && value.findings.every(validSnykFinding));
 }
 
 function validProject(value: unknown): value is { id: string; name: string } {
@@ -128,7 +174,7 @@ export function isValidProjectResult(value: unknown): value is VulnerabilityRepo
     !isRecord(value.jenkins) || !isSafePersistedUrl(value.jenkins.baseUrl) || !boundedString(value.jenkins.jobPath, 256) ||
     !isSafePersistedUrl(value.jenkins.jobUrl) || !positiveInteger(value.jenkins.buildNumber) ||
     !isSafePersistedUrl(value.jenkins.buildUrl) || !boundedString(value.jenkins.status, 256) || !validTrigger(value.jenkins.trigger) ||
-    !validNavigation(value.navigation) || !isRecord(value.reports) || !validSource(value.reports.snyk) ||
+    !validNavigation(value.navigation) || !isRecord(value.reports) || !validSnyk(value.reports.snyk) ||
     !validSource(value.reports.sonarqube)) return false;
   return true;
 }

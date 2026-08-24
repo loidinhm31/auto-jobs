@@ -178,26 +178,18 @@ export function assertAllowedUrl(
   return url.toString();
 }
 
-export function resolveSafeRelativeUrl(
-  baseUrl: string,
-  relativePath: string,
-  fieldName = 'relative path',
-): string {
-  const input = relativePath.trim();
-  if (
-    input.length === 0 ||
-    CONTROL_CHARS.test(input) ||
-    input.startsWith('//') ||
-    /^[a-z][a-z\d+.-]*:/iu.test(input) ||
-    hasTraversal(input.split(/[?#]/u, 1)[0] ?? '')
-  ) {
-    throw new ConfigError([`${fieldName} must stay within the base context`]);
+export function assertSafeReferenceUrl(value: string, fieldName = 'reference URL'): string {
+  const url = assertHttpUrl(value, fieldName);
+  url.hash = '';
+  return url.toString();
+}
+
+export function isSafeReferenceUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  try {
+    assertSafeReferenceUrl(value);
+    return true;
+  } catch {
+    return false;
   }
-  const canonicalBase = canonicalizeBaseUrl(baseUrl);
-  const resolved = new URL(input.replace(/^\/+/, ''), `${canonicalBase}/`);
-  const result = resolved.toString();
-  if (!isWithinBasePath(result, canonicalBase)) {
-    throw new ConfigError([`${fieldName} escapes the base context`]);
-  }
-  return result;
 }

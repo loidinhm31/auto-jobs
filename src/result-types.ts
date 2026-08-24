@@ -28,9 +28,49 @@ export interface CaptureMetadata {
   capturedAt: string;
   selectorStrategy?: string;
   screenshotPath?: string;
+  screenshotSha256?: string;
   viewport?: { width: number; height: number };
 }
+export type SnykSeverity = 'critical' | 'high' | 'medium' | 'low';
 
+export interface SnykSeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface SnykDetailMetadata {
+  totalObserved: number;
+  retainedCount: number;
+  truncated: boolean;
+  omittedCount: number;
+}
+
+export interface SnykScanMetadata {
+  scannedPath?: string;
+  packageManager?: string;
+  project?: string;
+  dependencyCount?: number;
+  dependencyPathCount?: number;
+}
+
+export interface SnykSummary {
+  counts: SnykSeverityCounts;
+  detail: SnykDetailMetadata;
+  metadata?: SnykScanMetadata;
+}
+
+export interface SnykFinding {
+  id?: string;
+  title?: string;
+  severity: SnykSeverity;
+  module?: string;
+  description?: string;
+  remediation?: string;
+  paths?: string[];
+  references?: string[];
+}
 export type NavigationTargetKey =
   | 'jenkins-build'
   | 'snyk-report'
@@ -87,12 +127,16 @@ export function hasCompleteNavigationTargets(value: unknown): value is Navigatio
     );
   });
 }
-
 export interface SourceEvidence {
   state: ReportState;
   captures: CaptureMetadata[];
   navigation: NavigationTarget[];
   warnings: string[];
+}
+
+export interface SnykSourceEvidence extends SourceEvidence {
+  summary?: SnykSummary;
+  findings?: SnykFinding[];
 }
 
 export interface VulnerabilityReportResult {
@@ -125,7 +169,7 @@ export interface VulnerabilityReportResultV2 {
     trigger: TriggerEvidence;
   };
   navigation: NavigationTargets;
-  reports: { sonarqube: SourceEvidence; snyk: SourceEvidence };
+  reports: { sonarqube: SourceEvidence; snyk: SnykSourceEvidence };
   warnings: string[];
 }
 
