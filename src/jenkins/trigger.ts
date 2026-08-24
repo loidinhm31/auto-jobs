@@ -3,6 +3,7 @@ import { expect, type Locator, type Page, type Response } from '@playwright/test
 import { sanitizeUrl, type RunnerConfig } from '../config.js';
 import type { BuildTrigger, BuildTriggerResult, ProjectTriggerState, QueueReference } from '../types.js';
 import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
+import { pushDiagnostic } from '../workflow/diagnostics.js';
 import { pollUntil } from '../workflow/poll-until.js';
 import { captureJenkinsBaseline, isNewQueue } from './baseline.js';
 import { formatJenkinsFailure, formatJenkinsObservation, JenkinsFlowError } from './errors.js';
@@ -130,7 +131,7 @@ export class UiBuildTrigger implements BuildTrigger {
             }
             return undefined;
           } catch (error) {
-            diagnostics.observationErrors.push(formatJenkinsObservation(error, this.config));
+            pushDiagnostic(diagnostics.observationErrors, formatJenkinsObservation(error, this.config));
             if (diagnostics.reloadCount === 0) {
               diagnostics.reloadCount += 1;
               acceptsClickNavigation = false;

@@ -112,6 +112,7 @@ export interface VulnerabilityReportResult {
 
 export interface VulnerabilityReportResultV2 {
   schemaVersion: 2;
+  state: 'success' | 'partial';
   project: { id: string; name: string };
   run: { runId: string; observedAt: string };
   jenkins: {
@@ -135,6 +136,15 @@ export interface AggregateProjectSummary {
   buildNumber?: number;
   runId?: string;
   reportPath?: string;
+  runs: AggregateRunSummary[];
+  warnings: string[];
+}
+
+export interface AggregateRunSummary {
+  buildNumber: number;
+  runId: string;
+  state: 'success' | 'partial' | 'failed';
+  manifestPath: string;
   warnings: string[];
 }
 

@@ -4,6 +4,8 @@ import { type RunnerConfig } from '../config.js';
 import type { BuildReference, QueueReference } from '../types.js';
 import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import { pollUntil } from '../workflow/poll-until.js';
+import { pushDiagnostic } from '../workflow/diagnostics.js';
+import { redactText } from '../config-errors.js';
 import { formatJenkinsFailure, formatJenkinsObservation, JenkinsFlowError } from './errors.js';
 import { type JenkinsJobReference } from './job.js';
 import { locatorFor, readAllHrefs, readFirstHref } from './locators.js';
@@ -123,7 +125,7 @@ export async function resolveQueuedBuild(
           }
           return undefined;
         } catch (error) {
-          observationErrors.push(formatJenkinsObservation(error, config));
+          pushDiagnostic(observationErrors, formatJenkinsObservation(error, config));
           throw error;
         }
       },
@@ -168,7 +170,7 @@ export async function waitForTerminalBuild(
           }
           return status.trim();
         } catch (error) {
-          observationErrors.push(formatJenkinsObservation(error, config));
+          pushDiagnostic(observationErrors, formatJenkinsObservation(error, config));
           if (reloadCount === 0) {
             reloadCount += 1;
             await reloadSuccessful(page, deadline);
@@ -178,7 +180,11 @@ export async function waitForTerminalBuild(
       },
       accept: isTerminalStatus,
     });
-    return { build, status: result.value, observedAt: new Date().toISOString(), observationErrors, reloadCount };
+    return {
+      build,
+      status: redactText(result.value, [config.username, config.password]).slice(0, 256),
+      observedAt: new Date().toISOString(), observationErrors, reloadCount,
+    };
   } catch (error) {
     throw new JenkinsFlowError(formatJenkinsFailure(
       'Jenkins build did not reach a terminal state', error, config, page, build.url, observationErrors,

@@ -111,3 +111,9 @@ export {
   hasCompleteNavigationTargets,
   REQUIRED_NAVIGATION_TARGET_KEYS,
 } from './result-types.js';
+export type {
+  ProjectOutcome,
+  ProjectOutcomeState,
+  ProjectRunIdentity,
+  RunnerExecutionResult,
+} from './project/project-types.js';

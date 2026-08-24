@@ -40,9 +40,9 @@ export default defineConfig({
     baseURL: runnerConfig?.baseUrl,
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
-    trace: 'retain-on-failure',
+    trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: 'off',
     headless: true,
   },
   projects: [

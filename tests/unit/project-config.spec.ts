@@ -94,6 +94,9 @@ test('loads the committed two-project example with runtime-only secret values', 
   });
   expect(projects.map((project) => project.id)).toEqual(['service-a', 'service-b']);
   expect(projects.every((project) => Object.isFrozen(project))).toBe(true);
+  expect(projects[0]?.sources.snyk.reportPath).toBe(
+    'https://jenkins.example.invalid/jenkins/artifact/snyk-results.html',
+  );
 });
 
 test('uses per-project credential variable overrides and keeps values ephemeral', () => {

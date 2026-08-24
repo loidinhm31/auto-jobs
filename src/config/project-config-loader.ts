@@ -1,8 +1,6 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { ConfigError } from '../config-errors.js';
-import { DEFAULT_SELECTORS, parseSelectorValue } from '../config-selectors.js';
 import {
   normalizeBaseUrl,
   normalizeJobPath,
@@ -11,30 +9,25 @@ import {
   parsePositiveInteger,
   resolveJenkinsJobUrl,
 } from '../config-values.js';
-import {
-  assertAllowedUrl,
-  canonicalizeOrigin,
-  resolveSafeRelativeUrl,
-} from '../security/url-policy.js';
-import type {
-  BrowserName,
-  LocatorSelector,
-  SelectorConfig,
-  SelectorOverrides,
-  SourceName,
-} from '../types.js';
+import type { BrowserName } from '../types.js';
+import { canonicalizeOrigin } from '../security/url-policy.js';
 import type {
   NormalizedProjectConfig,
-  NormalizedSourceConfig,
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
-  ProjectConfigInput,
-  ProjectCredentialReferences,
   ProjectSecrets,
-  ProjectSourceInput,
 } from './config-types.js';
 import { legacyProjectConfigDocument, hasLegacyProjectInputs } from './legacy-project-config.js';
 import { assertProjectConfigDocument, PROJECT_CONFIG_LIMITS } from './project-config-schema.js';
+import {
+  credentials,
+  envValue,
+  normalizedSource,
+  readDocument,
+  safe,
+  selectors,
+  sourceOrigins,
+} from './project-config-normalization.js';
 export type ProjectConfigLoadMode = 'file' | 'legacy';
 export interface ProjectConfigLoadResult {
   readonly mode: ProjectConfigLoadMode;
@@ -45,111 +38,11 @@ export interface ProjectConfigLoadResult {
 const DEFAULT_TIMEOUT_MS = 300_000;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_ARTIFACT_DIR = 'reports';
-function envValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
-  const value = env[key]?.trim();
-  return value && value.length > 0 ? value : undefined;
-}
-function safe<T>(field: string, fallback: T, fn: () => T, issues: string[]): T {
-  try { return fn(); } catch { issues.push(`${field} is invalid`); return fallback; }
-}
-function readDocument(filePath: string): ProjectConfigDocumentV1 {
-  const absolute = path.resolve(filePath);
-  let stat: fs.Stats;
-  try { stat = fs.statSync(absolute); } catch { throw new ConfigError(['PROJECTS_CONFIG_PATH could not be read']); }
-  if (!stat.isFile() || stat.size > 1_048_576) throw new ConfigError(['PROJECTS_CONFIG_PATH must be a regular JSON file under 1 MiB']);
-  let text: string;
-  try { text = fs.readFileSync(absolute, 'utf8'); } catch { throw new ConfigError(['PROJECTS_CONFIG_PATH could not be read']); }
-  let value: unknown;
-  try { value = JSON.parse(text) as unknown; } catch { throw new ConfigError(['PROJECTS_CONFIG_PATH must contain valid JSON']); }
-  return assertProjectConfigDocument(value);
-}
-function sourceOrigins(
-  project: ProjectConfigInput,
-  defaults: ProjectConfigDefaults,
-  source: SourceName,
-  fallback: readonly string[],
-  issues: string[],
-): string[] {
-  const projectOrigins = project.sourceOrigins?.[source];
-  const sourceInput = project[source] as ProjectSourceInput | undefined;
-  const defaultOrigins = defaults.sourceOrigins?.[source];
-  const configured = sourceInput?.allowedOrigins ?? projectOrigins ?? defaultOrigins ?? project.allowedOrigins ?? defaults.allowedOrigins ?? fallback;
-  return configured.map((origin, index) => safe(`${source} origin ${index + 1}`, '', () => canonicalizeOrigin(origin, `${source} origin`), issues)).filter(Boolean);
-}
-function credentials(
-  project: ProjectConfigInput,
-  defaults: ProjectConfigDefaults,
-): ProjectCredentialReferences {
-  if (project.credentials !== undefined) {
-    return {
-      usernameVariable: project.credentials.usernameVariable.trim(),
-      passwordVariable: project.credentials.passwordVariable.trim(),
-    };
-  }
-  if (project.credentialVariables !== undefined) {
-    return {
-      usernameVariable: project.credentialVariables.username.trim(),
-      passwordVariable: project.credentialVariables.password.trim(),
-    };
-  }
-  if (defaults.credentials !== undefined) {
-    return {
-      usernameVariable: defaults.credentials.usernameVariable.trim(),
-      passwordVariable: defaults.credentials.passwordVariable.trim(),
-    };
-  }
-  if (defaults.credentialVariables !== undefined) {
-    return {
-      usernameVariable: defaults.credentialVariables.username.trim(),
-      passwordVariable: defaults.credentialVariables.password.trim(),
-    };
-  }
-  return { usernameVariable: 'JENKINS_USERNAME', passwordVariable: 'JENKINS_PASSWORD' };
-}
-function cloneSelector(value: LocatorSelector): LocatorSelector {
-  return { kind: value.kind, value: value.value, required: value.required, ...(value.name === undefined ? {} : { name: value.name }) };
-}
-function selectors(project: ProjectConfigInput, defaults: ProjectConfigDefaults): SelectorConfig {
-  const overrides = {
-    ...((defaults.selectors as SelectorOverrides | undefined) ?? {}),
-    ...(project.selectors ?? {}),
-  };
-  const result = {} as SelectorConfig;
-  for (const key of Object.keys(DEFAULT_SELECTORS) as (keyof SelectorConfig)[]) {
-    const override = overrides[key];
-    const selector = override === undefined
-      ? DEFAULT_SELECTORS[key]
-      : parseSelectorValue(override, `selectors.${key}`, DEFAULT_SELECTORS[key].required);
-    result[key] = Object.freeze(cloneSelector(selector));
-  }
-  return Object.freeze(result);
-}
-function normalizedSource(
-  input: ProjectSourceInput | undefined,
-  baseUrl: string,
-  origins: readonly string[],
-  fieldName: string,
-  issues: string[],
-): NormalizedSourceConfig {
-  let reportPath: string | undefined;
-  let homeUrl: string | undefined;
-  if (input?.reportPath !== undefined) {
-    safe(fieldName, undefined, () => resolveSafeRelativeUrl(baseUrl, input.reportPath as string, fieldName), issues);
-    reportPath = input.reportPath.trim();
-  }
-  if (input?.homeUrl !== undefined) {
-    homeUrl = safe(fieldName, undefined, () => assertAllowedUrl(input.homeUrl as string, baseUrl, origins, fieldName), issues);
-  }
-  return Object.freeze({
-    allowedOrigins: Object.freeze([...origins]),
-    ...(reportPath === undefined ? {} : { reportPath }),
-    ...(homeUrl === undefined ? {} : { homeUrl }),
-  });
-}
 
 function normalizeDocument(
   document: ProjectConfigDocumentV1,
   env: NodeJS.ProcessEnv,
+  validateSecrets = true,
 ): readonly NormalizedProjectConfig[] {
   const issues: string[] = [];
   const defaults: ProjectConfigDefaults = document.defaults ?? {};
@@ -183,7 +76,7 @@ function normalizeDocument(
     };
     return Object.freeze(normalized);
   });
-  for (const project of normalized) {
+  if (validateSecrets) for (const project of normalized) {
     if (!project.enabled) continue;
     try { resolveProjectSecrets(project, env); } catch (error) { if (error instanceof ConfigError) issues.push(...error.issues); else issues.push('project credentials are invalid'); }
   }
@@ -201,9 +94,9 @@ export function parseProjectsConfig(env: NodeJS.ProcessEnv = process.env): Proje
   const configPath = envValue(env, 'PROJECTS_CONFIG_PATH');
   if (configPath !== undefined) {
     if (hasLegacyProjectInputs(env)) throw new ConfigError(['PROJECTS_CONFIG_PATH cannot be combined with legacy Jenkins project inputs']);
-    return { mode: 'file', projects: loadProjectConfig(configPath, env), diagnostics: [] };
+    return { mode: 'file', projects: normalizeDocument(readDocument(configPath), env, false), diagnostics: [] };
   }
-  const projects = normalizeDocument(assertProjectConfigDocument(legacyProjectConfigDocument(env)), env);
+  const projects = normalizeDocument(assertProjectConfigDocument(legacyProjectConfigDocument(env)), env, false);
   return { mode: 'legacy', projects, diagnostics: ['legacy single-project environment inputs are deprecated'] };
 }
 
