@@ -13,7 +13,7 @@ export interface PageLinkCandidate {
 export interface ClassifiedSourceLink {
   href: string;
   publisher: Exclude<SourcePublisher, 'unknown'>;
-  kind: 'report' | 'summary' | 'other';
+  kind: 'report' | 'summary' | 'home' | 'other';
   signal: 'configured' | 'accessible-name' | 'path';
 }
 
@@ -159,3 +159,6 @@ export function classifySnykLinks(
     warnings,
   };
 }
+
+export type { SonarLinkClassification } from './sonarqube/sonarqube-source-link-classifier.js';
+export { classifySonarLinks } from './sonarqube/sonarqube-source-link-classifier.js';

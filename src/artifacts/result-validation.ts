@@ -2,6 +2,7 @@ import type {
   CaptureMetadata,
   NavigationTarget,
   SourceEvidence,
+  SonarIssueFacets,
   TriggerEvidence,
   VulnerabilityReportResultV2,
 } from '../result-types.js';
@@ -51,7 +52,7 @@ export function isSafePersistedUrl(value: unknown): value is string {
   if (!boundedString(value, MAX_CAPTURE_URL_LENGTH)) return false;
   try {
     const url = new URL(value);
-    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.hash && isSafeReferenceUrl(value);
   } catch {
     return false;
   }
@@ -110,6 +111,19 @@ function validSource(value: unknown): value is SourceEvidence {
     !value.navigation.every((item) => isRecord(item) && typeof item.key === 'string' && NAVIGATION_KEYS.includes(item.key as typeof NAVIGATION_KEYS[number]) && validNavigationTarget(item, item.key)) ||
     !validWarnings(value.warnings)) return false;
   return true;
+}
+
+function validSonarFacets(value: unknown): value is SonarIssueFacets {
+  if (!isRecord(value) || Object.keys(value).length !== 2 || !Array.isArray(value.types) || !Array.isArray(value.severities)) return false;
+  const validGroup = (group: unknown): boolean => Array.isArray(group) && group.length <= 64 && group.every((item) =>
+    isRecord(item) && boundedString(item.label, 128) && typeof item.count === 'number' &&
+    Number.isSafeInteger(item.count) && item.count >= 0 && item.count <= 10_000_000);
+  return validGroup(value.types) && validGroup(value.severities);
+}
+
+function validSonar(value: unknown): boolean {
+  if (!validSource(value) || !isRecord(value)) return false;
+  return value.facets === undefined || validSonarFacets(value.facets);
 }
 
 function validSnykSummary(value: unknown): boolean {
@@ -175,7 +189,7 @@ export function isValidProjectResult(value: unknown): value is VulnerabilityRepo
     !isSafePersistedUrl(value.jenkins.jobUrl) || !positiveInteger(value.jenkins.buildNumber) ||
     !isSafePersistedUrl(value.jenkins.buildUrl) || !boundedString(value.jenkins.status, 256) || !validTrigger(value.jenkins.trigger) ||
     !validNavigation(value.navigation) || !isRecord(value.reports) || !validSnyk(value.reports.snyk) ||
-    !validSource(value.reports.sonarqube)) return false;
+    !validSonar(value.reports.sonarqube)) return false;
   return true;
 }
 

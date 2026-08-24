@@ -134,6 +134,20 @@ export interface SourceEvidence {
   warnings: string[];
 }
 
+export interface SonarFacetValue {
+  label: string;
+  count: number;
+}
+
+export interface SonarIssueFacets {
+  types: SonarFacetValue[];
+  severities: SonarFacetValue[];
+}
+
+export interface SonarSourceEvidence extends SourceEvidence {
+  facets?: SonarIssueFacets;
+}
+
 export interface SnykSourceEvidence extends SourceEvidence {
   summary?: SnykSummary;
   findings?: SnykFinding[];
@@ -169,7 +183,7 @@ export interface VulnerabilityReportResultV2 {
     trigger: TriggerEvidence;
   };
   navigation: NavigationTargets;
-  reports: { sonarqube: SourceEvidence; snyk: SnykSourceEvidence };
+  reports: { sonarqube: SonarSourceEvidence; snyk: SnykSourceEvidence };
   warnings: string[];
 }
 

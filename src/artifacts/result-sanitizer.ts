@@ -3,6 +3,7 @@ import type {
   CaptureMetadata,
   NavigationTarget,
   SourceEvidence,
+  SonarSourceEvidence,
   TriggerEvidence,
   VulnerabilityReportResultV2,
 } from '../result-types.js';
@@ -19,6 +20,8 @@ import {
   MAX_RUN_ARTIFACT_COUNT,
 } from './result-validation.js';
 import { safeSnykSource } from './snyk-result-sanitizer.js';
+import { sanitizeSonarIssueFacets } from '../reports/sonarqube/sonarqube-issue-facets.js';
+import { assertSafeReferenceUrl } from '../security/url-policy.js';
 
 const MAX_WARNING_ITEMS = MAX_PERSISTED_WARNING_ITEMS;
 const MAX_WARNING_LENGTH = MAX_PERSISTED_WARNING_LENGTH;
@@ -75,14 +78,16 @@ function safeWarnings(values: readonly string[]): string[] {
 
 function safeOptionalUrl(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  const candidate = sanitizeUrl(value).slice(0, MAX_CAPTURE_URL_LENGTH);
+  let candidate: string;
+  try { candidate = assertSafeReferenceUrl(value).slice(0, MAX_CAPTURE_URL_LENGTH); }
+  catch { candidate = sanitizeUrl(value).slice(0, MAX_CAPTURE_URL_LENGTH); }
   return isSafePersistedUrl(candidate) ? candidate : undefined;
 }
 
 function safeCapture(value: CaptureMetadata): CaptureMetadata {
   return {
     ...value,
-    url: sanitizeUrl(redactText(value.url)).slice(0, MAX_CAPTURE_URL_LENGTH),
+    url: safeOptionalUrl(redactText(value.url)) ?? sanitizeUrl(redactText(value.url)).slice(0, MAX_CAPTURE_URL_LENGTH),
     capturedAt: redactText(value.capturedAt).slice(0, 128),
     ...(value.title === undefined ? {} : { title: redactText(value.title).slice(0, MAX_CAPTURE_TITLE_LENGTH) }),
     ...(value.selectorStrategy === undefined ? {} : { selectorStrategy: redactText(value.selectorStrategy).slice(0, 256) }),
@@ -107,6 +112,13 @@ function safeSource(value: SourceEvidence): SourceEvidence {
     captures: value.captures.slice(-128).map(safeCapture),
     navigation: value.navigation.slice(-32).map(safeTarget),
     warnings: safeWarnings(value.warnings),
+  };
+}
+
+function safeSonarSource(value: SonarSourceEvidence): SonarSourceEvidence {
+  return {
+    ...safeSource(value),
+    ...(value.facets === undefined ? {} : { facets: sanitizeSonarIssueFacets(value.facets, (item) => redactText(item)) }),
   };
 }
 
@@ -168,7 +180,7 @@ export function safeResult(value: VulnerabilityReportResultV2): VulnerabilityRep
     },
     reports: {
       snyk: safeSnykSource(value.reports.snyk, safeSource),
-      sonarqube: safeSource(value.reports.sonarqube),
+      sonarqube: safeSonarSource(value.reports.sonarqube),
     },
     warnings: safeWarnings(value.warnings),
   };
