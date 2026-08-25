@@ -2,23 +2,41 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
+import { acquireReportRootLock, type ReportRootLock, type ReportRootLockOptions } from './report-root-lock.js';
+import { cleanupOrphans, type OrphanCleanupOptions, type OrphanCleanupResult } from './orphan-cleanup.js';
+import { createStagingLease, releaseStagingLease } from './staging-lease.js';
+
+export const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
 
 function assertSafeId(value: string, fieldName: string): void {
   if (!SAFE_ID.test(value)) throw new Error(`${fieldName} is not filesystem-safe`);
 }
 
 async function ensureCanonicalDirectory(directory: string): Promise<void> {
-  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
-  const stat = await fs.lstat(directory);
-  const currentUid = typeof process.getuid === 'function' ? process.getuid() : undefined;
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 ||
-    (currentUid !== undefined && stat.uid !== currentUid)) {
-    throw new Error('Output root must be a real directory');
+  const resolved = path.resolve(directory);
+  const root = path.parse(resolved).root;
+  if (resolved === root) throw new Error('Output root must not be the filesystem root');
+  let current = root;
+  for (const segment of path.relative(root, resolved).split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    try {
+      await fs.mkdir(current, { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    const stat = await fs.lstat(current);
+    const currentUid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+    const isFinal = current === resolved;
+    if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(current) !== current ||
+      (isFinal && ((stat.mode & 0o077) !== 0 || (currentUid !== undefined && stat.uid !== currentUid)))) {
+      throw new Error('Output root must be a real directory without symbolic-link components');
+    }
   }
-  if (await fs.realpath(directory) !== directory) {
-    throw new Error('Output root must not contain symbolic-link components');
-  }
+}
+
+function rootsOverlap(left: string, right: string): boolean {
+  const relative = path.relative(left, right);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
 async function ensureChildDirectory(parent: string, segment: string): Promise<string> {
@@ -92,9 +110,7 @@ export class ArtifactPaths {
   }
 
   public async initialize(): Promise<void> {
-    if (this.reportRoot === this.stagingRoot) {
-      throw new Error('Report and staging roots must be distinct');
-    }
+    if (rootsOverlap(this.reportRoot, this.stagingRoot) || rootsOverlap(this.stagingRoot, this.reportRoot)) throw new Error('Report and staging roots must not overlap');
     await ensureCanonicalDirectory(this.reportRoot);
     await ensureCanonicalDirectory(this.stagingRoot);
   }
@@ -103,7 +119,9 @@ export class ArtifactPaths {
     assertSafeId(projectId, 'project ID');
     assertSafeId(runId, 'run ID');
     const projectDirectory = await ensureChildDirectory(this.stagingRoot, projectId);
-    return allocateLeaf(projectDirectory, runId);
+    const directory = await allocateLeaf(projectDirectory, runId);
+    await createStagingLease(this.stagingRoot, projectId, runId);
+    return directory;
   }
 
   public async allocateReport(
@@ -120,6 +138,7 @@ export class ArtifactPaths {
     const buildDirectory = await ensureChildDirectory(projectDirectory, String(buildNumber));
     const destination = path.join(buildDirectory, runId);
     const stagingSource = path.join(this.stagingRoot, projectId, runId);
+    await releaseStagingLease(this.stagingRoot, projectId, runId);
     return await moveEmptyStagingDirectory(stagingSource, destination) ?? allocateLeaf(buildDirectory, runId);
   }
 
@@ -134,6 +153,7 @@ export class ArtifactPaths {
     const preBuildDirectory = await ensureChildDirectory(projectDirectory, 'pre-build');
     const destination = path.join(preBuildDirectory, runId);
     await assertDestinationAbsent(destination);
+    await releaseStagingLease(this.stagingRoot, projectId, runId);
     const sourceStat = await fs.lstat(source);
     if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) throw new Error('Pre-build staging directory is unsafe');
     await fs.rename(source, destination);
@@ -146,5 +166,17 @@ export class ArtifactPaths {
       throw new Error('Artifact directory is outside the report root');
     }
     return relative.split(path.sep).join('/');
+  }
+
+  public async cleanupOrphans(options?: OrphanCleanupOptions): Promise<OrphanCleanupResult> {
+    return cleanupOrphans(this.reportRoot, this.stagingRoot, options);
+  }
+
+  public async releaseStagingLease(projectId: string, runId: string): Promise<void> {
+    await releaseStagingLease(this.stagingRoot, projectId, runId);
+  }
+
+  public async acquireReportRootLock(options?: ReportRootLockOptions): Promise<ReportRootLock> {
+    return acquireReportRootLock(this.reportRoot, options);
   }
 }

@@ -13,8 +13,10 @@ function parsePositiveSafeInteger(value: string): number | undefined {
 
 export function isExactJobUrl(candidateUrl: string, jobUrl: string): boolean {
   try {
-    return new URL(candidateUrl).origin === new URL(jobUrl).origin &&
-      pathname(candidateUrl) === pathname(jobUrl);
+    const candidate = new URL(candidateUrl);
+    const expected = new URL(jobUrl);
+    return candidate.origin === expected.origin && candidate.search === '' && candidate.hash === '' &&
+      expected.search === '' && expected.hash === '' && pathname(candidateUrl) === pathname(jobUrl);
   } catch {
     return false;
   }
@@ -34,6 +36,8 @@ export function parseQueueReference(
   } catch {
     return undefined;
   }
+  const parsed = new URL(safeUrl);
+  if (parsed.search || parsed.hash) return undefined;
   const contextPath = new URL(baseUrl).pathname.replace(/\/+$/u, '');
   const match = new RegExp(`^${escapeRegex(contextPath)}/queue/item/(\\d+)$`).exec(pathname(safeUrl));
   const id = match === null ? undefined : parsePositiveSafeInteger(match[1]!);
@@ -51,6 +55,8 @@ export function parseBuildReference(
   } catch {
     return undefined;
   }
+  const parsed = new URL(safeUrl);
+  if (parsed.search || parsed.hash) return undefined;
   if (!isWithinBasePath(safeUrl, baseUrl)) return undefined;
   const match = new RegExp(`^${escapeRegex(pathname(jobUrl))}/(\\d+)$`).exec(pathname(safeUrl));
   const number = match === null ? undefined : parsePositiveSafeInteger(match[1]!);

@@ -73,7 +73,10 @@ export async function resolveJenkinsJob(
   const jobUrl = resolveJenkinsJobUrl(config.baseUrl, config.jobPath);
   const name = configuredJobName(config.jobPath);
   try {
-    await page.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: deadline.requireRemaining() });
+    const response = await page.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: deadline.requireRemaining() });
+    if (response === null || (response !== undefined && !response.ok())) {
+      throw new JenkinsFlowError(`Jenkins job navigation returned HTTP ${response?.status() ?? 'no response'}`);
+    }
     validateJenkinsUrl(page.url(), config.baseUrl);
     if (!isExactJobUrl(page.url(), jobUrl)) {
       throw new JenkinsFlowError('Jenkins navigation did not resolve the configured exact job URL');

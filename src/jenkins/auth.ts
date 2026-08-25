@@ -54,7 +54,10 @@ export async function loginToJenkins(
   const loginUrl = resolveBasePathUrl(config.baseUrl, config.loginPath);
 
   try {
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: deadline.requireRemaining() });
+    const response = await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: deadline.requireRemaining() });
+    if (response === null || (response !== undefined && !response.ok())) {
+      throw new JenkinsFlowError(`Jenkins login navigation returned HTTP ${response?.status() ?? 'no response'}`);
+    }
     validateJenkinsUrl(page.url(), config.baseUrl);
     await expect(page.getByLabel('Username')).toBeVisible({ timeout: deadline.requireRemaining() });
     await page.getByLabel('Username').fill(config.username, { timeout: deadline.requireRemaining() });

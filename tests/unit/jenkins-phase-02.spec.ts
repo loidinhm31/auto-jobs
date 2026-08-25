@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { parseConfig } from '../../src/config.js';
+import { formatJenkinsFailure } from '../../src/jenkins/errors.js';
+import { loginToJenkins } from '../../src/jenkins/auth.js';
 import { openExistingBuild, resolveQueuedBuild } from '../../src/jenkins/build.js';
 import { resolveJenkinsJob, type JenkinsJobReference } from '../../src/jenkins/job.js';
 import { UiBuildTrigger } from '../../src/jenkins/trigger.js';
@@ -60,6 +62,32 @@ test('parses only exact same-context queue and build references', () => {
     .toBeUndefined();
   expect(parseBuildReference('https://evil.example/jenkins/job/service-a/8/', config().baseUrl, job().url))
     .toBeUndefined();
+  expect(parseQueueReference('https://jenkins.example/jenkins/queue/item/7/?view=1', config().baseUrl)).toBeUndefined();
+  expect(parseBuildReference('https://jenkins.example/jenkins/job/service-a/8/#details', config().baseUrl, job().url))
+    .toBeUndefined();
+});
+
+test('rejects login and job navigation responses with HTTP errors', async ({ page }) => {
+  await page.route('https://jenkins.example/jenkins/login', (route) => route.fulfill({ status: 404, body: '<label>Username</label>' }));
+  await expect(loginToJenkins(page, config(), new WorkflowDeadline(500))).rejects.toThrow(/login failed/u);
+
+  await page.unrouteAll();
+  await page.route(job().url, (route) => route.fulfill({ status: 403, body: '<h1>service-a</h1>' }));
+  await expect(resolveJenkinsJob(page, config(), new WorkflowDeadline(500))).rejects.toThrow(/job resolution failed/u);
+});
+
+test('redacts configured secrets that appear in diagnostic URL paths', async ({ page }) => {
+  await page.route('https://jenkins.example/jenkins/password/', (route) => route.fulfill({ body: '<h1>failure</h1>' }));
+  await page.goto('https://jenkins.example/jenkins/password/');
+  const message = formatJenkinsFailure('Jenkins failure', new Error('request failed'), config(), page);
+  expect(message).not.toContain('password');
+  expect(message).toContain('[REDACTED]');
+
+  await page.unrouteAll();
+  await page.route('https://jenkins.example/jenkins/**', (route) => route.fulfill({ body: '<h1>failure</h1>' }));
+  await page.goto('https://jenkins.example/jenkins/pass%77ord/');
+  const encodedMessage = formatJenkinsFailure('Jenkins failure', new Error('request failed'), config(), page);
+  expect(encodedMessage).not.toContain('password');
 });
 
 test('rejects a similar Jenkins heading rather than accepting a substring', async ({ page }) => {

@@ -93,6 +93,11 @@ export async function runProject(
       }
     }
     if (secrets !== undefined) { secrets.username = ''; secrets.password = ''; secrets = undefined; }
+    try {
+      await dependencies.artifacts.releaseStagingLease?.(project.id, runId);
+    } catch (error) {
+      failure ??= formatDiagnostic(error);
+    }
   }
 
   if (failure !== undefined || workflowResult === undefined || captureResult === undefined) {

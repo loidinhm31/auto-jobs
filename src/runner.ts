@@ -4,6 +4,7 @@ import { formatDiagnostic } from './config-errors.js';
 import { ArtifactPaths } from './artifacts/artifact-paths.js';
 import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
 import { writeAggregateData } from './artifacts/result-writer.js';
+import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
 import { parseProjectsConfig } from './config.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
 import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from './result-types.js';
@@ -110,64 +111,76 @@ export async function runConfiguredProjects(
   const config = enabledConfiguration(projects);
   const artifacts = new ArtifactPaths(config.reportRoot);
   await artifacts.initialize();
-  const browser = await (dependencies.launchBrowser ?? defaultLaunch)(config.browserName);
+  const reportLock = await artifacts.acquireReportRootLock();
   const outcomes: ProjectOutcome[] = [];
   const runtimeWarnings: string[] = [];
   try {
-    for (const project of config.projects) {
-      try {
-        const outcome = await (dependencies.executeProject ?? runProject)(project, {
-          browser,
-          artifacts,
-          ...(dependencies.runtimeEnvironment === undefined ? {} : { ['env']: dependencies.runtimeEnvironment }),
-          ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
-          ...(dependencies.runIdSuffix === undefined ? {} : { runIdSuffix: dependencies.runIdSuffix }),
-        });
-        outcomes.push(await publishPreBuildOutcome(project, outcome, artifacts));
-      } catch (error) {
-        outcomes.push({
-          projectId: project.id,
-          name: project.name,
-          state: 'failed',
-          runId: 'unallocated',
-          warnings: [],
-          error: 'project execution failed before a run artifact was allocated',
-        });
+    await recoverAggregatePublication(config.reportRoot);
+    const initialCleanup = await artifacts.cleanupOrphans();
+    runtimeWarnings.push(...initialCleanup.warnings);
+    const browser = await (dependencies.launchBrowser ?? defaultLaunch)(config.browserName);
+    try {
+      for (const project of config.projects) {
+        try {
+          const outcome = await (dependencies.executeProject ?? runProject)(project, {
+            browser,
+            artifacts,
+            ...(dependencies.runtimeEnvironment === undefined ? {} : { ['env']: dependencies.runtimeEnvironment }),
+            ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
+            ...(dependencies.runIdSuffix === undefined ? {} : { runIdSuffix: dependencies.runIdSuffix }),
+          });
+          outcomes.push(await publishPreBuildOutcome(project, outcome, artifacts));
+        } catch (error) {
+          outcomes.push({
+            projectId: project.id,
+            name: project.name,
+            state: 'failed',
+            runId: 'unallocated',
+            warnings: [],
+            error: 'project execution failed before a run artifact was allocated',
+          });
+        }
       }
+    } finally {
+      try {
+        await browser.close();
+      } catch { runtimeWarnings.push('browser close failed after project execution'); }
     }
-  } finally {
-    try { await browser.close(); } catch { runtimeWarnings.push('browser close failed after project execution'); }
-  }
 
-  const discovery = await discoverRunManifests(config.reportRoot);
-  const historical = discovery.manifests.map((item) => ({
-    relativeDirectory: item.relativeDirectory,
-    projectId: item.manifest.project.id,
-    buildNumber: item.manifest.jenkins?.buildNumber ?? 'pre-build' as const,
-    runId: item.manifest.run.runId,
-    state: item.manifest.state,
-    warnings: item.manifest.warnings,
-    ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
-  }));
-  const configuredIds = new Set(config.projects.map((project) => project.id));
-  const orphanWarnings = historical.some((item) => !configuredIds.has(item.projectId))
-    ? ['ignored historical manifests for unconfigured projects']
-    : [];
-  const warnings = [...initialWarnings, ...runtimeWarnings, ...discovery.warnings, ...orphanWarnings];
-  const aggregate: AggregateReportResult = {
-    schemaVersion: 2,
-    generatedAt: (dependencies.now ?? (() => new Date()))().toISOString(),
-    projects: outcomes.map((outcome) => aggregateSummary(outcome, historical)),
-    warnings,
-  };
-  await writeAggregateData(config.reportRoot, aggregate);
-  return {
-    outcomes,
-    aggregate,
-    manifests: discovery.manifests,
-    warnings,
-    exitCode: outcomes.some((outcome) => outcome.state === 'failed') ? 1 : 0,
-  };
+    const finalCleanup = await artifacts.cleanupOrphans();
+    runtimeWarnings.push(...finalCleanup.warnings);
+    const discovery = await discoverRunManifests(config.reportRoot);
+    const historical = discovery.manifests.map((item) => ({
+      relativeDirectory: item.relativeDirectory,
+      projectId: item.manifest.project.id,
+      buildNumber: item.manifest.jenkins?.buildNumber ?? 'pre-build' as const,
+      runId: item.manifest.run.runId,
+      state: item.manifest.state,
+      warnings: item.manifest.warnings,
+      ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
+    }));
+    const configuredIds = new Set(config.projects.map((project) => project.id));
+    const orphanWarnings = historical.some((item) => !configuredIds.has(item.projectId))
+      ? ['ignored historical manifests for unconfigured projects']
+      : [];
+    const warnings = [...initialWarnings, ...runtimeWarnings, ...discovery.warnings, ...orphanWarnings];
+    const aggregate: AggregateReportResult = {
+      schemaVersion: 2,
+      generatedAt: (dependencies.now ?? (() => new Date()))().toISOString(),
+      projects: outcomes.map((outcome) => aggregateSummary(outcome, historical)),
+      warnings,
+    };
+    await writeAggregateData(config.reportRoot, aggregate);
+    return {
+      outcomes,
+      aggregate,
+      manifests: discovery.manifests,
+      warnings,
+      exitCode: outcomes.some((outcome) => outcome.state === 'failed') ? 1 : 0,
+    };
+  } finally {
+    await reportLock.release();
+  }
 }
 
 export async function runFromEnvironment(

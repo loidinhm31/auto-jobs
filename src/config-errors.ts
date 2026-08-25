@@ -22,6 +22,11 @@ export function redactText(
     .filter((candidate) => candidate.length > 0)
     .sort((left, right) => right.length - left.length)) {
     redacted = redacted.split(secret).join('[REDACTED]');
+    redacted = redacted.split(encodeURIComponent(secret)).join('[REDACTED]');
+    try {
+      const decoded = decodeURIComponent(redacted);
+      if (decoded !== redacted) redacted = decoded.split(secret).join('[REDACTED]');
+    } catch { /* preserve malformed diagnostics without decoding them */ }
   }
 
   return redacted

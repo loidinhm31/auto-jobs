@@ -34,5 +34,6 @@ export function formatJenkinsFailure(
   const suffix = lastObservation === undefined
     ? ''
     : `; last observation: ${formatJenkinsObservation(lastObservation, config)}`;
-  return `${action} at ${sanitizeUrl(currentUrl)}: ${formatJenkinsObservation(error, config)}${suffix}`;
+  const safeUrl = formatDiagnostic(sanitizeUrl(currentUrl), [config.username, config.password]);
+  return `${action} at ${safeUrl}: ${formatJenkinsObservation(error, config)}${suffix}`;
 }

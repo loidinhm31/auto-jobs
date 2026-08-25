@@ -10,10 +10,10 @@ JCasC-seeded job, and fixture report artifacts.
 
 Phases 1–2 remain the approved onboarding baseline. The original single-project
 Phases 3–5 design is superseded by the replanned target below; later implemented
-boundaries are called out by phase. Phase 7 deterministic fixture/report and
-local Compose gates have final evidence below; broader live-vendor,
-remote-contract, direct-host WebKit, and artifact-lifecycle gates are not
-claimed complete here.
+boundaries are called out by phase. At the initial Phase 7 handoff, broader
+live-vendor, remote-contract, direct-host WebKit, and artifact-lifecycle work
+was not claimed complete. The current continuation below supersedes that local
+lifecycle/lock boundary; remote/live and direct-host WebKit remain out of scope.
 
 ## Replanned target scope (2026-08-24)
 
@@ -151,18 +151,23 @@ evidence. The aggregate `reports/index.html` is rebuilt atomically from run
 manifests, links exact run folders, and reports partial-project failures without
 hiding successful projects.
 
-The accepted V1 scheduling invariant is sequential, single-process execution:
-enabled projects run in configuration order through one runner/browser process,
-with a fresh context per project. Aggregate publication stages and renames its
-files atomically within that invocation, but it is not cross-process locked.
-Deployments that point concurrent runner invocations at the same report root
-must serialize those invocations; parallel aggregate writers are unsupported.
+The accepted V1 scheduling invariant is sequential project execution within one
+runner/browser process, with a fresh context per project. After canonical report
+and staging roots are initialized, a private `reportRoot/.report-root-lock`
+lease serializes concurrent same-host, same-UID invocations through browser
+close, discovery, and aggregate publication. The lock has bounded
+wait/heartbeat leases, crash-safe owner publication, and stale recovery for
+expired same-host dead-PID or incomplete initial claims; foreign-host,
+malformed, and symlinked locks fail closed. Distributed filesystems and
+uncoordinated multi-host writers remain outside V1.
 
 A failure before Jenkins returns a build identity is published under an
 explicit `pre-build` run location with a sanitized diagnostic and no fabricated
 Jenkins identity. Complete-run publication stages and replaces the whole run
-directory; cross-process locking and crash-time staging-root enumeration remain
-accepted V1 residuals.
+directory. Startup and post-run cleanup inventory only the exact configured
+report/staging roots, removes old bounded orphan staging/publication temporary
+directories without following symlinks, and preserves ambiguous publication
+backups.
 
 ## Phase 3 orchestration and artifact guarantees
 
@@ -175,9 +180,10 @@ from the current invocation and validated historical manifests discovered under
 the report root, while manifests for projects outside the current configuration
 are reported as ignored.
 
-The sequential/single-process runner invariant remains accepted for V1. Atomic
-aggregate staging and rollback do not provide a cross-process lock, so a
-deployment must serialize concurrent invocations that share one report root.
+The sequential project runner remains the V1 execution model. Atomic aggregate
+staging and rollback are now paired with the report-root lease, so concurrent
+same-host invocations sharing a report root wait or fail closed instead of
+publishing concurrently. Multi-host/distributed locking is not claimed.
 
 Run directories are allocated beneath a canonical, owner-private report root.
 Project IDs, build numbers, and run IDs are validated before they become path
@@ -263,8 +269,9 @@ project continue to other publishers and persist a partial result instead of
 fabricating success. A workflow or persistence failure remains a project
 failure.
 
-Cycle-3 P1/P2 review findings are explicitly deferred, not fixed by this
-section. Their open follow-ups remain tracked in the
+At Phase 04 implementation time, Cycle-3 P1/P2 review findings were explicitly
+deferred; the later Phase 7 audit and V1 acceptance below supersede that
+historical boundary. Their implementation follow-ups remain tracked in the
 [Phase 04 plan](../plans/260824-0023-jenkins-multi-project-vulnerability-reporting/phase-04-snyk-evidence-capture-and-normalization.md).
 
 ## Phase 05 SonarQube navigation and bounded facets (implemented 2026-08-25)
@@ -453,9 +460,12 @@ Docker.
 Local runs use the HTML reporter; CI uses the blob reporter. Both configs use
 the validated core artifact policy: requested report screenshots, normalized
 data, and manifests are retained; a trace is retained only on failure or first
-retry. Raw vendor HTML and video are not retained. CI allows one retry. The
-configured `ARTIFACT_DIR` controls the main runner output directory; unit
-artifacts remain under `test-results/unit`.
+retry. Raw vendor HTML and video are not retained. Local runs use zero retries;
+CI allows one retry. The configured `ARTIFACT_DIR` controls the main runner
+output directory; unit artifacts remain under `test-results/unit`. Recorded
+continuation evidence was local/non-CI and completed with zero retries. Its
+ignored evidence paths are `playwright-report/index.html`, `test-results/`, and
+`.runner-build/`; none is a release input.
 
 Vulnerability reports are separate from Playwright test reports. V1 records
 Jenkins build identity plus normalized Snyk/SonarQube evidence, screenshots,
@@ -584,14 +594,66 @@ typed state and bounded, redacted diagnostics.
 
 Phase 2 was approved with noted issues after review cycle 3. It is not a
 production-security sign-off: correlation can still be ambiguous after an
-unrelated navigation, login/job navigation does not yet reject every HTTP error
-response, some locator reads are not independently deadline-bounded, and
-path-based secret redaction/canonical URL rules need follow-up coverage.
-Phase 7 must either resolve or explicitly accept those gaps before release;
-they must not be described as closed fail-closed guarantees merely because the
-deterministic gates pass.
+unrelated navigation and some locator reads are not independently
+deadline-bounded. This continuation adds explicit HTTP-status rejection for
+login/job entry navigation, rejects query/fragment-bearing queue/build
+identity references, and redacts configured secrets from diagnostic URL paths.
+The remaining historical boundaries are explicitly accepted below; they are
+not described as closed fail-closed guarantees merely because deterministic
+gates pass.
 
-## Phase 7 final evidence and accepted residuals (2026-08-25)
+## Historical Phase 2/4 production-security audit and V1 acceptance (2026-08-25)
+
+The handoff audit compared the Phase 2/4 review notes, current source, tests,
+and commits `c148cbc`/`225cfe9`. The current continuation has focused tests for
+login/job HTTP errors, canonical queue/build references, and path-secret
+redaction in `tests/unit/jenkins-phase-02.spec.ts`.
+
+Resolved or already evidenced:
+
+No historical Phase 2/4 item is left unclassified: the items below are
+resolved or evidenced, and the remaining boundaries are explicitly accepted in
+the next block with an owner, acceptance date, and review/expiry date.
+
+- Phase 2 URL-origin/context validation, exact job identity, bounded polling,
+  response checks for build navigation/reload, and redacted diagnostics.
+- Phase 2 login/job entry HTTP status checks, credential-free canonical
+  queue/build references, and configured-secret redaction in diagnostic paths.
+- Phase 4 external Snyk identity requirements when configured, output caps,
+  bounded links/cards/references, 500-finding normalization, and safe failure
+  artifact omission, as covered by the existing source and regression suites.
+
+Explicit V1 production-security acceptance — owner: runner maintainers;
+accepted 2026-08-25; review/expiry 2026-09-25 and before remote/live vendor
+enablement or untrusted external input:
+
+- UI-only Jenkins response observation cannot prove causality for every
+  unrelated same-origin navigation response; ambiguous queue/build evidence
+  remains fail-closed where the existing state machine can detect it.
+- Some low-level Jenkins DOM reads and final polling errors share the workflow
+  deadline but are not independently cancellable; the shared deadline,
+  bounded Playwright defaults, and sanitized error chain are the current V1
+  containment.
+- Snyk links are not fully cryptographically bound to the exact terminal
+  build when an explicit configured destination is used, and inferred external
+  `homeUrl` identity is not equivalent to a pre-navigation project-identity
+  proof.
+- Mixed-valid Snyk summary severities may discard valid fields; DOM traversal
+  bounds cap retained output but do not cap every underlying `querySelectorAll`
+  enumeration.
+- Shared-page restoration after an exhausted capture deadline is best effort;
+  missing Snyk screenshots remain incomplete evidence and are not recaptured.
+- The Snyk capture module remains above the documented 200-line maintainability
+  target; this is accepted as a maintainability residual, not a security
+  guarantee.
+
+This acceptance is limited to the sequential, same-host, same-UID V1 runner,
+explicit origin allowlists, ephemeral credentials, bounded artifacts, and the
+opt-in remote gate below. It is not production-security approval for broader
+deployment. Reopen every accepted item before enabling remote/live Snyk,
+SonarQube, or Jenkins jobs, untrusted forks, or distributed report roots.
+
+## Phase 7 final evidence and accepted residuals (historical 85% / 121-unit handoff, 2026-08-25)
 
 The final deterministic and local-Compose evidence is recorded here; the
 [Phase 07 plan](../plans/260824-0023-jenkins-multi-project-vulnerability-reporting/phase-07-fixture-matrix-browser-gates-and-release.md)
@@ -618,16 +680,85 @@ Direct WebKit launch is unavailable on this Fedora host because `libicu74` and
 `libjpeg-turbo8` are unavailable; the supported WebKit gate is the pinned
 Ubuntu runner exposed by `npm run test:release:webkit`.
 
-The following are deferred/accepted residuals, not closed release gates:
+The following were deferred/accepted residuals at the handoff and are retained
+as historical context, not as the current continuation status:
 
 - remote/live vendor capture and the optional remote Jenkins contract;
 - crash-time/full staging-root enumeration and cleanup;
 - cross-process report-root locking (the V1 runner remains sequential).
 
-The sequential single-process invariant and absence of a cross-process
-aggregate lock remain accepted V1 deployment constraints.
+The sequential single-process invariant remains an accepted V1 deployment
+constraint; the current same-host report-root lease is documented below.
 
-The historical Phase 2/4 review findings above are not closed by this local
-release evidence. Broader production-security closure requires a later session
-to resolve them or record explicit acceptance alongside the three Phase 7
-residuals.
+The historical Phase 2/4 review findings were not closed by the handoff's local
+release evidence; the current continuation's audit and explicit V1 acceptance
+below supersede that handoff statement.
+
+## Phase 7 residual continuation closure (2026-08-25)
+
+The local/same-host V1 crash/failure lifecycle, bounded preservation, and
+report-root locking residuals are closed within the sequential, same-UID V1
+boundary. Distributed filesystems and uncoordinated foreign-host writers
+remain outside that closure. Remote/live Snyk/SonarQube capture and the
+optional remote Jenkins contract remain opt-in and blocked in this checkout
+without an authorized endpoint and trusted CI secret-store access: `git remote -v`
+returned no remotes, `gh` was unavailable, the configuration inventory
+contained only local Compose/Jenkins files, and the only discovered Jenkins
+endpoints were loopback listeners (`:8080` and `:18080`). A redacted
+environment audit exposed only Codex/session metadata among relevant names.
+The `:18080/login` HTTP 200 probe is local fixture evidence, not
+remote-contract evidence. No production job, untrusted fork, remote vendor
+page, or hard-coded credential was used.
+
+`ArtifactPaths` now validates canonical private roots and rejects overlap;
+staging allocations carry expiring private leases; and bounded startup and
+post-run reapers inspect only the exact configured report/staging roots. The
+reapers enforce safe project/run/build names, age and active-lease checks,
+entry/byte/removal budgets, no-follow symlink checks, and lexical containment.
+Malformed leases, active or over-budget trees, symlink candidates, and
+ambiguous random rollback backups are preserved with bounded warnings. Only
+recognized, safe, stale, in-budget entries inside the exact configured roots
+are deletion candidates; unrestricted recursive or exhaustive root deletion is
+not claimed. Orphan lock-recovery directories are quarantined and removed only
+inside the report root. Aggregate publication writes a bounded recovery journal
+before its two-file swap; startup replays that journal to restore the prior pair
+after a process death, or keeps a committed pair while removing leftovers.
+
+`reportRoot/.report-root-lock` now covers root initialization follow-on work,
+browser execution and close, discovery, cleanup, and aggregate publication.
+The owner record contains a token, PID, hostname, acquisition timestamp, and
+heartbeat lease. Recovery is limited to an expired same-host lock whose PID is
+demonstrably dead; foreign-host, malformed, live-owner, and symlinked locks
+fail closed. This is a same-host/same-UID filesystem lease, not a distributed
+lock, and the sequential V1 project policy remains in force inside the lease.
+
+The focused regression command was:
+
+```sh
+npx playwright test tests/unit/artifact-lifecycle.spec.ts tests/unit/jenkins-phase-02.spec.ts \
+  --config=playwright.unit.config.ts --workers=1
+```
+
+It passed 22/22, including SIGKILL staging recovery, interrupted aggregate
+publication recovery, bounded cleanup with an outside symlink sentinel,
+concurrent-process lock waiting, stale/incomplete-lock recovery, finite-limit
+rejection, direct lease traversal rejection, and the historical Phase 2
+HTTP/canonical-reference/path-redaction checks. The explicit Phase 2/4
+production-security acceptance above remains the policy boundary before
+enabling remote/live or untrusted inputs.
+
+Current continuation gate evidence, all recorded with zero retries:
+
+- `npm run test:release` — type-check, build, 130 unit tests, and 5 Chromium
+  report tests.
+- `JENKINS_PORT=18080 npm test` — 130 unit tests, 13 Jenkins E2E tests, and 1
+  expected skip.
+- `JENKINS_PORT=18080 npm run test:e2e:build-now` — Build Now 1/1.
+- `env XDG_RUNTIME_DIR=/run/user/$(id -u) npm run test:release:webkit` — 130
+  unit tests and 5 WebKit report tests in the unchanged pinned Ubuntu image
+  `mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e`.
+- `git diff --check` — passed.
+
+Generated evidence remained under `playwright-report/index.html`,
+`test-results/`, and `.runner-build/`; these ignored paths were not added to
+Git and are not release inputs.
