@@ -203,6 +203,7 @@ export interface AggregateRunSummary {
   runId: string;
   state: 'success' | 'partial' | 'failed';
   manifestPath: string;
+  reportPath?: string;
   warnings: string[];
 }
 
@@ -210,4 +211,5 @@ export interface AggregateReportResult {
   schemaVersion: 2;
   generatedAt: string;
   projects: AggregateProjectSummary[];
+  warnings: string[];
 }

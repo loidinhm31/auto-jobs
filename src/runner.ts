@@ -56,6 +56,7 @@ function aggregateSummary(
     runId: string;
     state: 'success' | 'partial' | 'failed';
     warnings: readonly string[];
+    reportPath?: string;
   }[],
 ): AggregateProjectSummary {
   const relativeDirectory = outcome.buildNumber === undefined
@@ -68,12 +69,10 @@ function aggregateSummary(
       runId: item.runId,
       state: item.state,
       manifestPath: `${item.relativeDirectory}/manifest.json`,
+      ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
       warnings: [...item.warnings],
     }));
-  const reportPath = relativeDirectory !== undefined && runs.some((run) =>
-    run.runId === outcome.runId && run.buildNumber === outcome.buildNumber)
-    ? `${relativeDirectory}/manifest.json`
-    : undefined;
+  const reportPath = runs.find((run) => run.runId === outcome.runId && run.buildNumber === outcome.buildNumber)?.reportPath;
   return {
     projectId: outcome.projectId,
     name: outcome.name,
@@ -130,18 +129,20 @@ export async function runConfiguredProjects(
     runId: item.manifest.run.runId,
     state: item.manifest.state,
     warnings: item.manifest.warnings,
+    ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
   })).filter((item) => item.buildNumber > 0);
   const configuredIds = new Set(config.projects.map((project) => project.id));
   const orphanWarnings = historical.some((item) => !configuredIds.has(item.projectId))
     ? ['ignored historical manifests for unconfigured projects']
     : [];
+  const warnings = [...initialWarnings, ...runtimeWarnings, ...discovery.warnings, ...orphanWarnings];
   const aggregate: AggregateReportResult = {
     schemaVersion: 2,
     generatedAt: (dependencies.now ?? (() => new Date()))().toISOString(),
     projects: outcomes.map((outcome) => aggregateSummary(outcome, historical)),
+    warnings,
   };
   await writeAggregateData(config.reportRoot, aggregate);
-  const warnings = [...initialWarnings, ...runtimeWarnings, ...discovery.warnings, ...orphanWarnings];
   return {
     outcomes,
     aggregate,

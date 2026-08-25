@@ -73,21 +73,30 @@ test('accepts summary-only evidence without inventing detailed findings', () => 
   expect(normalized.summary.detail).toEqual({ totalObserved: 0, retainedCount: 0, truncated: false, omittedCount: 0 });
 });
 
-test('deduplicates and retains exactly the first 500 details', () => {
-  const findings = Array.from({ length: 501 }, (_, index) => ({
-    id: `SNYK-${String(index).padStart(4, '0')}`,
-    title: `Finding ${index}`,
-    severity: 'low' as const,
-    paths: [`module-${index}`],
-    references: [`https://snyk.example/vuln/SNYK-${index}`],
-  }));
-  const normalized = normalizeSnykEvidence({
-    html: htmlEvidence(findings, { critical: 0, high: 0, medium: 0, low: 501 }),
-  });
-  expect(normalized.state).toBe('found');
-  expect(normalized.findings).toHaveLength(500);
-  expect(normalized.summary.detail).toEqual({ totalObserved: 501, retainedCount: 500, truncated: true, omittedCount: 1 });
-  expect(normalized.findings[0]?.id).toBe('SNYK-0000');
+test('deduplicates and retains the exact 500-detail boundary', () => {
+  for (const observed of [500, 501]) {
+    const findings = Array.from({ length: observed }, (_, index) => ({
+      id: `SNYK-${String(index).padStart(4, '0')}`,
+      title: `Finding ${index}`,
+      severity: 'low' as const,
+      paths: [`module-${index}`],
+      references: [`https://snyk.example/vuln/SNYK-${index}`],
+    }));
+    const normalized = normalizeSnykEvidence({
+      html: htmlEvidence(findings, { critical: 0, high: 0, medium: 0, low: observed }),
+    });
+    expect(normalized.state).toBe('found');
+    expect(normalized.summary.counts.low).toBe(observed);
+    expect(normalized.findings).toHaveLength(Math.min(observed, 500));
+    expect(normalized.summary.detail).toEqual({
+      totalObserved: observed,
+      retainedCount: Math.min(observed, 500),
+      truncated: observed === 501,
+      omittedCount: observed === 501 ? 1 : 0,
+    });
+    expect(normalized.findings[0]?.id).toBe('SNYK-0000');
+    expect(normalized.findings[499]?.id).toBe('SNYK-0499');
+  }
 });
 
 test('classifies only Snyk-shaped allowed links and rejects ambiguity', () => {

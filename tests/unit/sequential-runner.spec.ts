@@ -5,7 +5,9 @@ import * as path from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
 import { parseProjectsConfig } from '../../src/config.js';
+import { ArtifactPaths } from '../../src/artifacts/artifact-paths.js';
 import type { CaptureResult } from '../../src/project/project-runner.js';
+import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
 import { runConfiguredProjects } from '../../src/runner.js';
 
@@ -91,7 +93,7 @@ test('runs in config order with fresh contexts, continues failures, and closes o
         return runProject(project, { ...dependencies, workflow,
           capture: async ({ workflow: completed }) => completeCapture(completed.terminal.build.url) });
       },
-    });
+    }, ['initial warning']);
 
     expect(order).toEqual(['service-a', 'service-b']);
     expect(pages).toHaveLength(2);
@@ -101,10 +103,12 @@ test('runs in config order with fresh contexts, continues failures, and closes o
     expect(result.outcomes.map((item) => item.state)).toEqual(['failed', 'success']);
     expect(result.exitCode).toBe(1);
     expect(result.aggregate.projects.map((item) => item.projectId)).toEqual(['service-a', 'service-b']);
+    expect(result.aggregate.warnings).toContain('initial warning');
     const failedManifestPath = result.outcomes[0]!.manifestPath;
     expect(failedManifestPath).toBeDefined();
     expect(fs.readFileSync(failedManifestPath as string, 'utf8')).not.toContain('secret-a');
     expect(fs.existsSync(path.join(root, 'reports', 'aggregate-data.json'))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(path.join(root, 'reports', 'aggregate-data.json'), 'utf8')).warnings).toContain('initial warning');
 
     const rerun = await runConfiguredProjects(projects, {
       runtimeEnvironment: environment,
@@ -134,6 +138,63 @@ test('runs in config order with fresh contexts, continues failures, and closes o
     expect(thrownProject.outcomes[1]?.state).toBe('success');
     expect(thrownProject.exitCode).toBe(1);
     expect(browserCloseCount).toBe(3);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('keeps failure result and manifest timestamps identical after report rendering fails', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-06-failure-timestamp-'));
+  try {
+    const configPath = projectFile(root);
+    const environment = {
+      PROJECTS_CONFIG_PATH: configPath,
+      A_USER: 'user-a', A_PASSWORD: 'secret-a',
+      B_USER: 'user-b', B_PASSWORD: 'secret-b',
+    };
+    const project = parseProjectsConfig(environment).projects[0]!;
+    const reportRoot = path.join(root, 'reports');
+    const stagingRoot = path.join(root, 'artifacts');
+    const blockedReportRoot = path.join(root, 'blocked-report-root');
+    const artifacts = new ArtifactPaths(reportRoot, stagingRoot);
+    await artifacts.initialize();
+    fs.writeFileSync(blockedReportRoot, 'not a directory', { mode: 0o600 });
+    const build = { number: project.buildNumber as number, url: `${project.jobUrl}${project.buildNumber}/` };
+    const workflow: ProjectWorkflow = async (_page, _project, _secrets, _deadline, state) => {
+      state.transition('authenticated'); state.transition('job_resolved');
+      state.transition('existing_build_selected'); state.bindBuild(build); state.transition('running'); state.transition('terminal');
+      return {
+        terminal: { build, status: 'SUCCESS', observedAt: '2026-08-24T04:00:00.000Z', observationErrors: [], reloadCount: 0 },
+        trigger: { capability: 'existing_build', triggerAttempts: 0, build, warnings: [] },
+      };
+    };
+    const dates = [
+      new Date('2026-08-24T04:00:00.000Z'),
+      new Date('2026-08-24T04:00:00.001Z'),
+      new Date('2026-08-24T04:00:00.002Z'),
+    ];
+    let nowIndex = 0;
+    const browser = {
+      newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
+    } as unknown as Browser;
+    const outcome = await runProject(project, {
+      browser,
+      artifacts: {
+        reportRoot: blockedReportRoot,
+        allocateStaging: artifacts.allocateStaging.bind(artifacts),
+        allocateReport: artifacts.allocateReport.bind(artifacts),
+      } as unknown as ArtifactPaths,
+      env: environment,
+      now: () => dates[Math.min(nowIndex++, dates.length - 1)]!,
+      runIdSuffix: () => '0000000000000001',
+      workflow,
+      capture: async ({ workflow: completed }) => completeCapture(completed.terminal.build.url),
+    });
+
+    expect(outcome.state).toBe('failed');
+    const data = JSON.parse(fs.readFileSync(path.join(outcome.reportDirectory!, 'data.json'), 'utf8')) as { run: { observedAt: string } };
+    const manifest = JSON.parse(fs.readFileSync(outcome.manifestPath!, 'utf8')) as { run: { observedAt: string } };
+    expect(manifest.run.observedAt).toBe(data.run.observedAt);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

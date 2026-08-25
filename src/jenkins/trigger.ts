@@ -45,6 +45,17 @@ async function buildNowLocator(page: Page, config: RunnerConfig): Promise<Locato
   return controls[0]!.first();
 }
 
+function isBuildSubmissionUrl(value: string, jobUrl: string): boolean {
+  try {
+    const request = new URL(value);
+    const job = new URL(jobUrl);
+    const jobPath = job.pathname.replace(/\/+$/u, '');
+    return request.origin === job.origin && request.pathname.replace(/\/+$/u, '') === `${jobPath}/build`;
+  } catch {
+    return false;
+  }
+}
+
 export class UiBuildTrigger implements BuildTrigger {
   private state: ProjectTriggerState = 'capability_unchecked';
 
@@ -83,24 +94,50 @@ export class UiBuildTrigger implements BuildTrigger {
       this.state = 'submitted';
       let responseQueue: QueueReference | undefined;
       let responseBuild: BuildTriggerResult['build'];
-      let sawSubmissionNavigation = false;
+      let allowQueueDomFallback = false;
       let acceptsClickNavigation = true;
       const observeNavigation = (response: Response) => {
-        if (!acceptsClickNavigation || !response.request().isNavigationRequest() || response.frame() !== this.page.mainFrame()) return;
-        try {
-          validateJenkinsUrl(response.url(), this.config.baseUrl);
-          sawSubmissionNavigation = true;
-        } catch {
-          return;
+        if (!acceptsClickNavigation) return;
+        const request = response.request();
+        const navigation = request.isNavigationRequest() && response.frame() === this.page.mainFrame();
+        const buildSubmission = !navigation && request.method() === 'POST' && isBuildSubmissionUrl(request.url(), this.job.url);
+        if (!navigation && !buildSubmission) return;
+        const candidates = [response.url()];
+        const location = response.headers()['location'];
+        if (location !== undefined) {
+          try { candidates.push(new URL(location, response.url()).toString()); } catch { /* Ignore malformed redirects. */ }
         }
-        const queue = parseQueueReference(response.url(), this.config.baseUrl);
-        if (queue !== undefined && isNewQueue(queue, baseline)) responseQueue = queue;
-        const build = parseBuildReference(response.url(), this.config.baseUrl, this.job.url);
-        if (build !== undefined && build.number > (baseline.latestBuildNumber ?? 0)) responseBuild = build;
+        let correlated = false;
+        for (const candidate of candidates) {
+          try {
+            const safeCandidate = validateJenkinsUrl(candidate, this.config.baseUrl);
+            const queue = parseQueueReference(safeCandidate, this.config.baseUrl);
+            if (queue !== undefined && isNewQueue(queue, baseline)) {
+              responseQueue = queue;
+              correlated = true;
+            }
+            const build = parseBuildReference(safeCandidate, this.config.baseUrl, this.job.url);
+            if (build !== undefined && build.number > (baseline.latestBuildNumber ?? 0)) {
+              responseBuild = build;
+              correlated = true;
+            }
+          } catch {
+            // Reject unsafe or unrelated redirect candidates without aborting observation.
+          }
+        }
+        if (navigation || correlated && !buildSubmission) allowQueueDomFallback = true;
       };
       this.page.on('response', observeNavigation);
       removeNavigationObserver = () => this.page.off('response', observeNavigation);
+      const triggerResponse = this.page.waitForResponse((response) => {
+        const request = response.request();
+        if (request.isNavigationRequest()) return response.frame() === this.page.mainFrame();
+        return request.method() === 'POST' && isBuildSubmissionUrl(request.url(), this.job.url);
+      }, { timeout: Math.min(this.deadline.requireRemaining(), Math.max(250, this.config.pollIntervalMs * 2)) })
+        .then((response) => { observeNavigation(response); return response; })
+        .catch(() => undefined);
       await trigger.click({ timeout: this.deadline.requireRemaining() });
+      await triggerResponse;
 
       const result = await pollUntil<Correlation>({
         deadline: this.deadline,
@@ -114,7 +151,7 @@ export class UiBuildTrigger implements BuildTrigger {
             }
             if (responseBuild !== undefined) return { build: responseBuild };
             if (responseQueue !== undefined) return { queue: responseQueue };
-            if (sawSubmissionNavigation) {
+            if (allowQueueDomFallback) {
               const hrefs = await readAllHrefs(locatorFor(this.page, this.config.selectors.queueUrl), this.page);
               const queue = hrefs
                 .map((href) => parseQueueReference(href, this.config.baseUrl))

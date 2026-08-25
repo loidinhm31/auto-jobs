@@ -19,13 +19,17 @@ export const MAX_CAPTURE_TITLE_LENGTH = 512;
 export const MAX_SELECTOR_STRATEGY_LENGTH = 256;
 export const MAX_ARTIFACT_REFERENCE_LENGTH = 128;
 export const MAX_RUN_ARTIFACT_COUNT = 16;
+export const MAX_RUN_ARTIFACT_DIRECTORY_ENTRIES = 64;
 export const MAX_RUN_ARTIFACT_BYTES = 50 * 1_048_576;
+export const MAX_RUN_ARTIFACT_DIRECTORY_BYTES = MAX_RUN_ARTIFACT_BYTES;
+export const MAX_SINGLE_ARTIFACT_BYTES = 25 * 1_048_576;
 export const MAX_SNYK_FINDINGS = 500;
 export const MAX_SNYK_PATHS = 64;
 export const MAX_SNYK_REFERENCES = 64;
 export const MAX_SNYK_TEXT_LENGTH = 8_192;
 
 const SAFE_ARTIFACT = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
+const RESERVED_ARTIFACT_NAMES = new Set(['data.json', 'manifest.json', 'index.html', 'trace.zip']);
 const NAVIGATION_KEYS = ['jenkins-build', 'snyk-report', 'sonarqube-home', 'sonarqube-overall', 'sonarqube-issues'] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -46,6 +50,10 @@ function positiveInteger(value: unknown): value is number {
 
 export function isSafeArtifactReference(value: string): boolean {
   return value.length <= MAX_ARTIFACT_REFERENCE_LENGTH && SAFE_ARTIFACT.test(value);
+}
+
+export function isSafeScreenshotReference(value: string): boolean {
+  return isSafeArtifactReference(value) && !RESERVED_ARTIFACT_NAMES.has(value);
 }
 
 export function isSafePersistedUrl(value: unknown): value is string {
@@ -97,7 +105,7 @@ function validCapture(value: unknown): value is CaptureMetadata {
   if (!isRecord(value) || !isSafePersistedUrl(value.url) || !boundedString(value.capturedAt, 128) ||
     !optionalString(value.title, MAX_CAPTURE_TITLE_LENGTH) || !optionalString(value.selectorStrategy, MAX_SELECTOR_STRATEGY_LENGTH) ||
     (value.screenshotSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(String(value.screenshotSha256))) ||
-    (value.screenshotPath !== undefined && (typeof value.screenshotPath !== 'string' || !isSafeArtifactReference(value.screenshotPath)))) return false;
+    (value.screenshotPath !== undefined && (typeof value.screenshotPath !== 'string' || !isSafeScreenshotReference(value.screenshotPath)))) return false;
   if (value.viewport === undefined) return true;
   const viewport = value.viewport;
   return isRecord(viewport) && positiveInteger(viewport.width) && viewport.width <= 10_000 &&

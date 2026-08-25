@@ -14,7 +14,7 @@ function config() {
     JENKINS_USERNAME: 'user',
     JENKINS_PASSWORD: 'password',
     JENKINS_JOB_PATH: 'service-a',
-    JENKINS_TIMEOUT_MS: '500',
+    JENKINS_TIMEOUT_MS: '1000',
     JENKINS_POLL_INTERVAL_MS: '1',
     JENKINS_BUILD_URL_SELECTOR: JSON.stringify({ kind: 'css', value: 'a[href]', required: true }),
   });
@@ -110,6 +110,31 @@ test('accepts a new queue link rendered by the Build Now document navigation', a
   });
   await expect(new UiBuildTrigger(page, config(), job(), new WorkflowDeadline(500)).trigger())
     .resolves.toMatchObject({ state: 'queue_correlated', queueUrl: 'https://jenkins.example/jenkins/queue/item/31/' });
+});
+
+test('correlates a Build Now response through its exact queue Location', async ({ page }) => {
+  await serve(page, '<a href="/jenkins/job/service-a/build?delay=0sec">Build Now</a><a href="/jenkins/queue/item/30/">old</a>');
+  await page.route('**/job/service-a/build**', async (route) => {
+    await route.fulfill({ status: 201, headers: { location: '/jenkins/queue/item/31/' }, body: '' });
+  });
+  await expect(new UiBuildTrigger(page, config(), job(), new WorkflowDeadline(500)).trigger())
+    .resolves.toMatchObject({ state: 'queue_correlated', queueUrl: 'https://jenkins.example/jenkins/queue/item/31/' });
+});
+
+test('does not correlate an unrelated queue item when a Build Now POST has no Location', async ({ page }) => {
+  await serve(page, '<button>Build Now</button><a href="/jenkins/queue/item/30/">old</a>');
+  await page.route('**/job/service-a/build**', async (route) => {
+    await route.fulfill({ status: 201, body: '' });
+  });
+  await page.getByRole('button', { name: 'Build Now', exact: true }).evaluate((button) => {
+    button.addEventListener('click', () => {
+      document.body.insertAdjacentHTML('beforeend', '<a href="/jenkins/queue/item/31/">unrelated</a>');
+      void fetch('/jenkins/job/service-a/build', { method: 'POST' });
+    });
+  });
+  await expect(new UiBuildTrigger(page, config(), job(), new WorkflowDeadline(500)).trigger()).rejects.toThrow(
+    /build trigger failed/u,
+  );
 });
 
 test('rejects generic latest-build links after a Build Now submission', async ({ page }) => {

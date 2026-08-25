@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 
 import { redactText, sanitizeUrl } from '../config-errors.js';
 import type { NormalizedProjectConfig, ProjectSecrets } from '../config/config-types.js';
-import { isSafeArtifactReference, MAX_CAPTURE_URL_LENGTH, MAX_RUN_ARTIFACT_COUNT } from '../artifacts/result-validation.js';
+import { isSafeScreenshotReference, MAX_CAPTURE_URL_LENGTH, MAX_RUN_ARTIFACT_COUNT } from '../artifacts/result-validation.js';
 import { safeSnykSource } from '../artifacts/snyk-result-sanitizer.js';
 import type {
   CaptureMetadata,
@@ -108,8 +108,13 @@ function safeSonarSource(source: SonarSourceEvidence, secrets: readonly string[]
 
 function safeArtifacts(capture: CaptureResult): CaptureResult['artifacts'] | undefined {
   if (capture.artifacts === undefined) return undefined;
+  const seen = new Set<string>();
   return {
-    screenshots: capture.artifacts.screenshots.filter(isSafeArtifactReference).slice(0, MAX_RUN_ARTIFACT_COUNT),
+    screenshots: capture.artifacts.screenshots.filter((filename) => {
+      if (!isSafeScreenshotReference(filename) || seen.has(filename)) return false;
+      seen.add(filename);
+      return true;
+    }).slice(0, MAX_RUN_ARTIFACT_COUNT),
   };
 }
 

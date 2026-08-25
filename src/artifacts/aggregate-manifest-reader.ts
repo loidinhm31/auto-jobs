@@ -12,17 +12,18 @@ import {
   isSafePersistedUrl,
   isValidFailureResult,
   isValidProjectResult,
+  isSafeScreenshotReference,
   MAX_RUN_ARTIFACT_BYTES,
   MAX_RUN_ARTIFACT_COUNT,
+  MAX_SINGLE_ARTIFACT_BYTES,
 } from './result-validation.js';
+import { assertRunArtifactAllowlist } from './failure-artifact-inventory.js';
 
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
 const MAX_MANIFESTS = 5_000;
 const MAX_MANIFEST_BYTES = 1_048_576;
-const MAX_ARTIFACT_BYTES = 25 * 1_048_576;
 const MAX_DIAGNOSTICS = 32;
 const MAX_DIAGNOSTIC_LENGTH = 500;
-const SAFE_ARTIFACT = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -42,7 +43,8 @@ function validateManifest(
     (value.jenkins.status !== undefined && typeof value.jenkins.status !== 'string')) return false;
   if (!isSafePersistedUrl(value.jenkins.buildUrl)) return false;
   if (!isRecord(value.artifacts) || value.artifacts.manifest !== 'manifest.json' || value.artifacts.data !== 'data.json' || !Array.isArray(value.artifacts.screenshots)) return false;
-  if (!value.artifacts.screenshots.every((item) => typeof item === 'string' && SAFE_ARTIFACT.test(item))) return false;
+  if (!value.artifacts.screenshots.every((item) => typeof item === 'string' && isSafeScreenshotReference(item)) ||
+    new Set(value.artifacts.screenshots).size !== value.artifacts.screenshots.length) return false;
   if (value.artifacts.trace !== undefined && value.artifacts.trace !== 'trace.zip') return false;
   if (!Array.isArray(value.warnings) || value.warnings.length > MAX_DIAGNOSTICS || !value.warnings.every((item) => typeof item === 'string' && item.length <= MAX_DIAGNOSTIC_LENGTH)) return false;
   if (value.diagnostic !== undefined && (typeof value.diagnostic !== 'string' || value.diagnostic.length > 2_000)) return false;
@@ -93,7 +95,7 @@ async function readArtifact(
   const handle = await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > MAX_ARTIFACT_BYTES) throw new Error('artifact size is invalid');
+    if (!stat.isFile() || stat.size > MAX_SINGLE_ARTIFACT_BYTES) throw new Error('artifact size is invalid');
     if (budget !== undefined) {
       budget.count += 1;
       budget.bytes += stat.size;
@@ -102,6 +104,23 @@ async function readArtifact(
     return undefined;
   } finally {
     await handle.close();
+  }
+}
+
+async function optionalReportPath(directory: string): Promise<string | undefined> {
+  const filename = path.join(directory, 'index.html');
+  try {
+    const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const stat = await handle.stat();
+      return stat.isFile() ? filename : undefined;
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ELOOP') return undefined;
+    throw error;
   }
 }
 
@@ -131,8 +150,8 @@ async function validateReferencedArtifacts(
 ): Promise<void> {
   const budget = { count: 0, bytes: 0 };
   const data = await readArtifact(directory, manifest.artifacts.data, budget);
-  if (!isRecord(data) || data.schemaVersion !== 2 || !isRecord(data.project) || data.project.id !== manifest.project.id ||
-    !isRecord(data.run) || data.run.runId !== manifest.run.runId || data.state !== manifest.state ||
+  if (!isRecord(data) || data.schemaVersion !== 2 || !isRecord(data.project) || data.project.id !== manifest.project.id || data.project.name !== manifest.project.name ||
+    !isRecord(data.run) || data.run.runId !== manifest.run.runId || data.run.observedAt !== manifest.run.observedAt || data.state !== manifest.state ||
     !isRecord(data.jenkins) || data.jenkins.buildNumber !== manifest.jenkins?.buildNumber ||
     data.jenkins.buildUrl !== manifest.jenkins?.buildUrl || typeof data.jenkins.buildUrl !== 'string') {
     throw new Error('manifest data identity mismatch');
@@ -174,10 +193,13 @@ export async function discoverRunManifests(
           if (!validateManifest(value, projectId, buildNumber, runId)) throw new Error('manifest identity mismatch');
           const directory = path.join(root, projectId, buildName, runId);
           await validateReferencedArtifacts(directory, value);
+          await assertRunArtifactAllowlist(directory, value);
+          const reportFile = await optionalReportPath(directory);
           manifests.push({
             manifest: normalizedManifest(value),
             relativeDirectory: [projectId, buildName, runId].join('/'),
             manifestPath,
+            ...(reportFile === undefined ? {} : { reportPath: `${projectId}/${buildName}/${runId}/index.html` }),
           });
         } catch {
           warnings.push(`ignored invalid manifest for ${projectId}/${buildName}/${runId}`);

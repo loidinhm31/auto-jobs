@@ -7,6 +7,7 @@ import { parseBrowserName, parseConfig } from './src/config.js';
 
 const environment = process.env;
 const browserName = parseBrowserName(environment['PLAYWRIGHT_BROWSER']);
+const reportOnly = environment['PLAYWRIGHT_REPORT_ONLY'] === '1';
 
 function hasE2eSpecs(directory: string): boolean {
   if (!fs.existsSync(directory)) {
@@ -22,7 +23,7 @@ function hasE2eSpecs(directory: string): boolean {
 
 const e2eDirectory = path.resolve('tests/e2e');
 const hasE2eSpecFiles = hasE2eSpecs(e2eDirectory);
-const runnerConfig = hasE2eSpecFiles ? parseConfig(environment) : undefined;
+const runnerConfig = hasE2eSpecFiles && !reportOnly ? parseConfig(environment) : undefined;
 
 export default defineConfig({
   testDir: './tests',
@@ -35,13 +36,13 @@ export default defineConfig({
     timeout: 5_000,
   },
   reporter: environment['CI'] ? 'blob' : 'html',
-  outputDir: runnerConfig?.artifactDir || 'test-results',
+  outputDir: 'test-results',
   use: {
     baseURL: runnerConfig?.baseUrl,
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
     trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
+    screenshot: 'off',
     video: 'off',
     headless: true,
   },

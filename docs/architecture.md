@@ -10,8 +10,10 @@ JCasC-seeded job, and fixture report artifacts.
 
 Phases 1–2 remain the approved onboarding baseline. The original single-project
 Phases 3–5 design is superseded by the replanned target below; later implemented
-boundaries are called out by phase. Phase 7 live vendor, accessibility, and
-visual gates are not claimed complete here.
+boundaries are called out by phase. Phase 7 deterministic fixture/report and
+local Compose gates have final evidence below; broader live-vendor,
+remote-contract, WebKit-host, and artifact-lifecycle gates are not claimed
+complete here.
 
 ## Replanned target scope (2026-08-24)
 
@@ -149,6 +151,19 @@ evidence. The aggregate `reports/index.html` is rebuilt atomically from run
 manifests, links exact run folders, and reports partial-project failures without
 hiding successful projects.
 
+The accepted V1 scheduling invariant is sequential, single-process execution:
+enabled projects run in configuration order through one runner/browser process,
+with a fresh context per project. Aggregate publication stages and renames its
+files atomically within that invocation, but it is not cross-process locked.
+Deployments that point concurrent runner invocations at the same report root
+must serialize those invocations; parallel aggregate writers are unsupported.
+
+A failure before Jenkins returns a build identity remains a failed project
+outcome with a sanitized diagnostic rather than a build-linked run report;
+pre-build failure aggregation is a deferred/accepted residual. Publication
+rollback is file-scoped, not whole-directory rollback; whole-directory rollback
+is also a deferred/accepted residual.
+
 ## Phase 3 orchestration and artifact guarantees
 
 Phase 3 implements the replanned sequential runner. The browser is launched
@@ -159,6 +174,10 @@ writing happen after the project loop. The aggregate includes both outcomes
 from the current invocation and validated historical manifests discovered under
 the report root, while manifests for projects outside the current configuration
 are reported as ignored.
+
+The sequential/single-process runner invariant remains accepted for V1. Atomic
+aggregate staging and rollback do not provide a cross-process lock, so a
+deployment must serialize concurrent invocations that share one report root.
 
 Run directories are allocated beneath a canonical, owner-private report root.
 Project IDs, build numbers, and run IDs are validated before they become path
@@ -324,8 +343,10 @@ source requires all three navigation targets and no warnings.
 `JENKINS_JOB_PATH`. `JENKINS_LOGIN_PATH` defaults to `/login`;
 `JENKINS_TRIGGER_MODE` defaults to `ui` and only `ui` is accepted;
 `JENKINS_TIMEOUT_MS` defaults to `300000`; `JENKINS_POLL_INTERVAL_MS` defaults
-to `1000`; `PLAYWRIGHT_BROWSER` defaults to `chromium`; and `ARTIFACT_DIR`
-defaults to an absolute `test-results` path. `JENKINS_BUILD_NUMBER` is
+to `1000`; `PLAYWRIGHT_BROWSER` defaults to `chromium`; there is no automatic
+Firefox fallback; and `ARTIFACT_DIR` defaults to an absolute `test-results`
+path. Default Firefox fallback coverage is a deferred/accepted residual.
+`JENKINS_BUILD_NUMBER` is
 optional: when present it must be a positive integer and selects an existing
 build instead of triggering one.
 
@@ -439,16 +460,22 @@ Vulnerability reports are separate from Playwright test reports. V1 records
 Jenkins build identity plus normalized Snyk/SonarQube evidence, screenshots,
 and source links. Static output HTML escapes all values, validates link schemes,
 uses `noopener noreferrer` for external navigation, and applies a restrictive
-Content Security Policy. Missing optional publisher output produces a partial
-report with warnings, not a fabricated successful section.
+Content Security Policy. When a report is served over HTTP, the serving layer
+must also send a CSP response header containing `frame-ancestors 'none'`; an
+HTML meta policy cannot enforce that directive. Missing optional publisher output
+produces a partial report with warnings, not a fabricated successful section.
 
-Browser gates cover two-project isolation, existing-build zero-trigger proof,
+Unit and fixture gates cover sequential project isolation, existing-build
+zero-trigger proof,
 new queue/build correlation, parameterized detection with zero interaction,
 stale/concurrent queue entries, external/cross-origin redirects, exact job identity, Snyk title
 and detail capture, SonarQube home-to-overall navigation, and Type/Severity
-issues capture despite generated-class changes. Phase 7 live vendor,
-accessibility, and visual gates remain future release work and are not claimed
-complete by this document.
+issues capture despite generated-class changes. The deterministic generated-report
+gate covers local links, response-header CSP, escaping/inert HTML, keyboard
+traversal, axe WCAG A/AA, responsive widths, and fixed Chromium snapshots. These
+fixture/offline checks include Chromium and Firefox fixture coverage, but do
+not establish a live two-project vendor capture or WebKit coverage on hosts
+missing its required browser libraries.
 
 Failure evidence is never globally disabled. Keep normalized data, manifest,
 last safe URL/status, and trace on failure/first retry. Requested report
@@ -511,20 +538,29 @@ down`, allowing restart/repeated-build checks. Use `docker compose down -v`
 only when an explicit clean reset is required; it removes Jenkins history and
 forces JCasC to recreate the controller and job from the checked-in fixture.
 
-The seeded Pipeline accepts `FIXTURE_VARIANT` values `pass`, `failed`, `empty`,
-and `malformed`. It always archives `reports/manifest.json` and, when the
+The seeded parameterized Pipeline is the fail-closed control. It accepts
+`FIXTURE_VARIANT` values `pass`, `failed`, `empty`, and `malformed`; its
+`Build with Parameters` control is detected before interaction. A separate
+`playwright-vulnerability-report-build-now` Pipeline has no parameters and
+exercises the supported Build Now correlation path. Both jobs use the same
+compact report fixture corpus: `reports/manifest.json`, semantic Snyk
+HTML/JSON, and SonarQube home/Overall/Issues HTML plus JSON. The parameterized
+job always archives `reports/manifest.json` and, when the
 variant provides them, deterministic SonarQube/Snyk HTML and JSON artifacts.
 The `failed` variant archives reports before returning a failed build, which
 lets later phases test report extraction independently from build success.
 
-For Docker-backed development, `npm run test:e2e` supplies loopback defaults
-for the disposable fixture: `JENKINS_BASE_URL=http://127.0.0.1:8080`,
+For Docker-compatible development, `npm run test:e2e` supplies loopback
+defaults for the disposable fixture: `JENKINS_BASE_URL` is derived from
+`JENKINS_PORT` (default `8080`) when an explicit URL is absent,
 `JENKINS_USERNAME=local-admin`, `JENKINS_PASSWORD=local-fixture-password`,
-and `JENKINS_JOB_PATH=playwright-vulnerability-report`. These defaults are
-development-only and are overridden by the process environment in CI or when
-targeting a non-local controller. The Compose service injects the same
-development-only credentials into the fixture; production and CI credential
-values remain environment-provided.
+and `JENKINS_JOB_PATH=playwright-vulnerability-report`. The dedicated
+`npm run test:e2e:build-now` script selects the separate Build Now job. These
+defaults are development-only and are overridden by the process environment in
+CI or when targeting a non-local controller. The continuation used
+`JENKINS_PORT=18080` because an unrelated local service occupied port 8080.
+The Compose service injects the same development-only credentials into the
+fixture; production and CI credential values remain environment-provided.
 
 `npm run install` provisions Chromium. If `PLAYWRIGHT_BROWSER=firefox` or
 `PLAYWRIGHT_BROWSER=webkit` is selected, install that browser explicitly with
@@ -548,5 +584,37 @@ production-security sign-off: correlation can still be ambiguous after an
 unrelated navigation, login/job navigation does not yet reject every HTTP error
 response, some locator reads are not independently deadline-bounded, and
 path-based secret redaction/canonical URL rules need follow-up coverage.
-Phase 7 must resolve those gaps before release; they must not be described as
-closed fail-closed guarantees.
+Phase 7 must either resolve or explicitly accept those gaps before release;
+they must not be described as closed fail-closed guarantees merely because the
+deterministic gates pass.
+
+## Phase 7 final evidence and accepted residuals (2026-08-25)
+
+The final deterministic and local-Compose evidence is recorded here; the
+[Phase 07 plan](../plans/260824-0023-jenkins-multi-project-vulnerability-reporting/phase-07-fixture-matrix-browser-gates-and-release.md)
+remains the historical implementation record.
+
+Recorded passing evidence:
+
+- `npm run test:release`: type-check, build, 116 unit tests, and 5 report tests.
+- Focused suite: 38/38 passed. Chromium fixture 3/3 and Firefox fixture 3/3.
+- `JENKINS_PORT=18080 npm test`: Jenkins E2E 12 passed + 1 expected skip.
+- `JENKINS_PORT=18080 npm run test:e2e:build-now`: Build Now 1/1 against the
+  live Compose fixture.
+- All recorded final runs completed with zero retries; `git diff --check`
+  passed.
+
+WebKit is unavailable on this host because `libicu74` and `libjpeg-turbo8`
+are unavailable; no OS packages were installed to change that result.
+
+The following are deferred/accepted residuals, not closed release gates:
+
+- remote/live vendor capture and the optional remote Jenkins contract;
+- pre-build failure aggregation;
+- whole-directory rollback;
+- default Firefox fallback coverage (the configured default remains Chromium);
+- staging/temp-root enumeration and cleanup, including full
+  staging/unreferenced-artifact enumeration.
+
+The sequential single-process invariant and absence of a cross-process
+aggregate lock remain accepted V1 deployment constraints.

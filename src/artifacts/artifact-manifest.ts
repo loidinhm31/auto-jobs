@@ -42,6 +42,7 @@ export interface DiscoveredRunManifest {
   readonly manifest: ProjectRunManifest;
   readonly relativeDirectory: string;
   readonly manifestPath: string;
+  readonly reportPath?: string;
 }
 
 export interface ManifestDiscoveryResult {

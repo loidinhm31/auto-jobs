@@ -22,6 +22,7 @@ import {
   readSummary,
   safeObservedUrl,
   screenshotReport,
+  type ScriptSafePage,
   SNYK_VIEWPORT,
   snykProjectIdentityWarning,
   waitForLandmark,
@@ -68,6 +69,7 @@ export async function captureSnykEvidence(input: {
   deadline: WorkflowDeadline;
   outputDirectory: string;
   terminalBuildUrl?: string;
+  openSafePage?: (page: Page) => Promise<ScriptSafePage>;
 }): Promise<SnykCaptureResult> {
   let reportUrl: string | undefined;
   let terminalUrl: string | undefined;
@@ -92,7 +94,7 @@ export async function captureSnykEvidence(input: {
       return { source, navigation: source.navigation[0] as NavigationTarget, screenshots: [], warnings: source.warnings };
     }
 
-    const safeCapture = await openScriptSafePage(input.page);
+    const safeCapture = await (input.openSafePage ?? openScriptSafePage)(input.page);
     const capturePage = safeCapture.page;
     try {
       await capturePage.setViewportSize(SNYK_VIEWPORT);

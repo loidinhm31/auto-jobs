@@ -148,6 +148,32 @@ test('rejects data copied from a different Jenkins build', async () => {
   }
 });
 
+test('rejects data with mismatched project name or run timestamp', async () => {
+  const root = temporaryRoot();
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    for (const [index, mutation] of [
+      { project: { name: 'Wrong Service' } },
+      { run: { observedAt: '2026-08-24T05:00:00.000Z' } },
+    ].entries()) {
+      const runId = createRunId(new Date(`2026-08-24T04:00:0${index}.000Z`), `000000000000000${index + 6}`);
+      const directory = await paths.allocateReport('service-a', 12 + index, runId);
+      const value = failedManifest('service-a', 12 + index, runId);
+      fs.writeFileSync(path.join(directory, 'data.json'), JSON.stringify({
+        schemaVersion: 2, project: { ...value.project, ...mutation.project }, run: { ...value.run, ...mutation.run },
+        state: value.state, jenkins: value.jenkins, diagnostic: value.diagnostic, warnings: value.warnings,
+      }));
+      await writeFailureManifest(directory, value);
+    }
+    const result = await discoverRunManifests(paths.reportRoot);
+    expect(result.manifests).toEqual([]);
+    expect(result.warnings).toHaveLength(2);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('rejects unsafe manifest discovery limits', async () => {
   const root = temporaryRoot();
   try {

@@ -7,7 +7,7 @@ import type { NormalizedProjectConfig, ProjectSecrets } from '../config/config-t
 import type { ArtifactPaths } from '../artifacts/artifact-paths.js';
 import { createRunId } from '../artifacts/artifact-paths.js';
 import type { ProjectFailureResultV2 } from '../artifacts/artifact-manifest.js';
-import { writeFailureManifest, writeFailureResult, writeProjectResult } from '../artifacts/result-writer.js';
+import { writeFailureResult, writeProjectResult } from '../artifacts/result-writer.js';
 import type { VulnerabilityReportResultV2 } from '../result-types.js';
 import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import { ProjectRunState } from './project-run-state.js';
@@ -109,7 +109,7 @@ export async function runProject(
       diagnostic, warnings: [],
       ...(diagnostics === undefined ? {} : { diagnostics }),
     };
-    const manifestPath = await writeFailureResult(outputDirectory, failureResult, failedManifest);
+    const manifestPath = await writeFailureResult(outputDirectory, failureResult, failedManifest, dependencies.artifacts.reportRoot);
     return { projectId: project.id, name: project.name, state: 'failed', runId,
       ...(state.build === undefined ? {} : { buildNumber: state.build.number }), manifestPath,
       ...(reportDirectory === undefined ? {} : { reportDirectory }), warnings: [], error: diagnostic };
@@ -130,7 +130,7 @@ export async function runProject(
     result.jenkins.status, diagnostics, captureResult.artifacts?.screenshots,
   );
   try {
-    const manifestPath = await writeProjectResult(outputDirectory, result, runManifest);
+    const manifestPath = await writeProjectResult(outputDirectory, result, runManifest, dependencies.artifacts.reportRoot);
     state.transition('rendered');
     return { projectId: project.id, name: project.name, state: resultState, runId,
       buildNumber: result.jenkins.buildNumber, manifestPath, reportDirectory: outputDirectory,
@@ -138,11 +138,19 @@ export async function runProject(
   } catch (error) {
     const diagnostic = formatDiagnostic(error);
     state.fail(diagnostic);
+    const failureObservedAt = now().toISOString();
+    const failureResult: ProjectFailureResultV2 = {
+      schemaVersion: 2, project: { id: project.id, name: project.name },
+      run: { runId, observedAt: failureObservedAt }, state: 'failed',
+      jenkins: { buildNumber: result.jenkins.buildNumber, buildUrl: result.jenkins.buildUrl },
+      diagnostic, warnings: result.warnings,
+      ...(diagnostics === undefined ? {} : { diagnostics }),
+    };
     const failedManifest = createProjectManifest(
-      project, state, 'failed', now().toISOString(), result.warnings, diagnostic,
+      project, state, 'failed', failureObservedAt, result.warnings, diagnostic,
       result.jenkins.status, diagnostics, captureResult.artifacts?.screenshots,
     );
-    const manifestPath = await writeFailureManifest(outputDirectory, failedManifest);
+    const manifestPath = await writeFailureResult(outputDirectory, failureResult, failedManifest, dependencies.artifacts.reportRoot);
     return { projectId: project.id, name: project.name, state: 'failed', runId,
       buildNumber: result.jenkins.buildNumber, manifestPath, reportDirectory: outputDirectory,
       warnings: result.warnings, error: diagnostic };

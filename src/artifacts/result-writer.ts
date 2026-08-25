@@ -14,7 +14,10 @@ import {
   safeManifest,
   safeResult,
 } from './result-sanitizer.js';
-import { MAX_RUN_ARTIFACT_BYTES, MAX_RUN_ARTIFACT_COUNT } from './result-validation.js';
+import { MAX_RUN_ARTIFACT_BYTES, MAX_RUN_ARTIFACT_COUNT, MAX_SINGLE_ARTIFACT_BYTES } from './result-validation.js';
+import { writeAggregateDataPair } from './aggregate-report-publisher.js';
+import { assertRunArtifactAllowlist, failureManifestWithAvailableArtifacts } from './failure-artifact-inventory.js';
+import { writeProjectReportFiles } from '../reporting/report-output.js';
 
 async function writeTemporary(directory: string, contents: string): Promise<string> {
   const temporary = path.join(directory, `.tmp-${crypto.randomBytes(8).toString('hex')}`);
@@ -59,9 +62,49 @@ async function writeReplacing(
   return destination;
 }
 
-async function assertArtifactBudget(directory: string, manifest: ProjectRunManifest): Promise<void> {
+type RollbackEntry = { filename: 'data.json' | 'index.html' | 'manifest.json'; backupPath?: string };
+
+async function backupExistingFile(
+  directory: string,
+  backupDirectory: string,
+  filename: RollbackEntry['filename'],
+): Promise<RollbackEntry> {
+  const source = path.join(directory, filename);
+  try {
+    const stat = await fs.lstat(source);
+    if (!stat.isFile() && !stat.isSymbolicLink()) throw new Error(`existing ${filename} is not a file`);
+    const backupPath = path.join(backupDirectory, filename);
+    await fs.link(source, backupPath);
+    return { filename, backupPath };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { filename };
+    throw error;
+  }
+}
+
+async function restoreRollbackFiles(directory: string, entries: readonly RollbackEntry[]): Promise<void> {
+  for (const entry of [...entries].reverse()) {
+    const destination = path.join(directory, entry.filename);
+    await fs.unlink(destination).catch(() => undefined);
+    if (entry.backupPath !== undefined) await fs.rename(entry.backupPath, destination);
+  }
+}
+
+async function publishExclusiveFile(temporary: string, destination: string): Promise<void> {
+  try {
+    await fs.link(temporary, destination);
+  } finally {
+    await fs.unlink(temporary).catch(() => undefined);
+  }
+}
+
+async function assertArtifactBudget(
+  directory: string,
+  manifest: ProjectRunManifest,
+  includeData = true,
+): Promise<void> {
   const references = [
-    manifest.artifacts.data,
+    ...(includeData ? [manifest.artifacts.data] : []),
     ...manifest.artifacts.screenshots,
     ...(manifest.artifacts.trace === undefined ? [] : [manifest.artifacts.trace]),
   ];
@@ -81,7 +124,7 @@ async function assertArtifactBudget(directory: string, manifest: ProjectRunManif
     }
     try {
       const stat = await handle.stat();
-      if (!stat.isFile() || stat.size > 25 * 1_048_576) throw new Error('artifact size exceeds the safe limit');
+      if (!stat.isFile() || stat.size > MAX_SINGLE_ARTIFACT_BYTES) throw new Error('artifact size exceeds the safe limit');
       inspected += 1;
       bytes += stat.size;
     } finally {
@@ -97,13 +140,37 @@ export async function writeProjectResult(
   directory: string,
   result: VulnerabilityReportResultV2,
   manifest: ProjectRunManifest,
+  reportRoot?: string,
 ): Promise<string> {
   assertProjectIdentity(manifest, result);
   const safe = safeResult(result);
   assertValidProjectResult(safe);
-  await writeExclusive(directory, 'data.json', safe);
-  await assertArtifactBudget(directory, manifest);
-  return writeExclusive(directory, 'manifest.json', safeManifest(manifest));
+  const persistedManifest = safeManifest(manifest);
+  await assertRunArtifactAllowlist(directory, persistedManifest);
+  await assertArtifactBudget(directory, manifest, false);
+  const stagedIndex = path.join(directory, `.tmp-index-${crypto.randomBytes(8).toString('hex')}.html`);
+  let dataPublished = false;
+  let indexPublished = false;
+  let manifestPublished = false;
+  try {
+    await writeProjectReportFiles(directory, safe, persistedManifest, reportRoot, stagedIndex);
+    await writeExclusive(directory, 'data.json', safe);
+    dataPublished = true;
+    await assertArtifactBudget(directory, manifest);
+    await publishExclusiveFile(stagedIndex, path.join(directory, 'index.html'));
+    indexPublished = true;
+    const manifestPath = await writeExclusive(directory, 'manifest.json', persistedManifest);
+    manifestPublished = true;
+    await assertRunArtifactAllowlist(directory, persistedManifest);
+    return manifestPath;
+  } catch (error) {
+    if (manifestPublished) await fs.unlink(path.join(directory, 'manifest.json')).catch(() => undefined);
+    if (indexPublished) await fs.unlink(path.join(directory, 'index.html')).catch(() => undefined);
+    if (dataPublished) await fs.unlink(path.join(directory, 'data.json')).catch(() => undefined);
+    throw error;
+  } finally {
+    await fs.unlink(stagedIndex).catch(() => undefined);
+  }
 }
 
 export async function writeFailureManifest(
@@ -111,6 +178,7 @@ export async function writeFailureManifest(
   manifest: ProjectRunManifest,
 ): Promise<string> {
   assertManifestShape(manifest);
+  await assertRunArtifactAllowlist(directory, manifest);
   await assertArtifactBudget(directory, manifest);
   return writeExclusive(directory, 'manifest.json', safeManifest(manifest));
 }
@@ -119,18 +187,46 @@ export async function writeFailureResult(
   directory: string,
   result: ProjectFailureResultV2,
   manifest: ProjectRunManifest,
+  reportRoot?: string,
 ): Promise<string> {
-  assertProjectIdentity(manifest, result);
+  assertProjectIdentity(manifest, result, true);
   const safe = safeFailure(result);
   assertValidFailureResult(safe);
-  await writeExclusive(directory, 'data.json', safe);
-  await assertArtifactBudget(directory, manifest);
-  return writeExclusive(directory, 'manifest.json', safeManifest(manifest));
+  let rollbackDirectory: string | undefined;
+  const rollbackEntries: RollbackEntry[] = [];
+  try {
+    rollbackDirectory = await fs.mkdtemp(path.join(path.dirname(directory), '.failure-rollback-'));
+    for (const filename of ['data.json', 'index.html', 'manifest.json'] as const) {
+      rollbackEntries.push(await backupExistingFile(directory, rollbackDirectory, filename));
+    }
+    await writeReplacing(directory, 'data.json', safe);
+    let persistedManifest = await failureManifestWithAvailableArtifacts(directory, manifest);
+    assertManifestShape(persistedManifest);
+    await fs.unlink(path.join(directory, 'index.html')).catch(() => undefined);
+    if (manifest.jenkins !== undefined) {
+      try {
+        await writeProjectReportFiles(directory, safe, persistedManifest, reportRoot);
+      } catch {
+        persistedManifest = safeManifest({
+          ...persistedManifest,
+          warnings: [...persistedManifest.warnings, 'offline failure report rendering failed'],
+        });
+      }
+    }
+    await assertArtifactBudget(directory, persistedManifest);
+    await assertRunArtifactAllowlist(directory, persistedManifest);
+    return await writeReplacing(directory, 'manifest.json', persistedManifest);
+  } catch (error) {
+    await restoreRollbackFiles(directory, rollbackEntries);
+    throw error;
+  } finally {
+    if (rollbackDirectory !== undefined) await fs.rm(rollbackDirectory, { recursive: true, force: true });
+  }
 }
 
 export async function writeAggregateData(
   reportRoot: string,
   aggregate: AggregateReportResult,
 ): Promise<string> {
-  return writeReplacing(reportRoot, 'aggregate-data.json', aggregate);
+  return writeAggregateDataPair(reportRoot, aggregate);
 }

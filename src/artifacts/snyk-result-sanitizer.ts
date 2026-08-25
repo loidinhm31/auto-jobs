@@ -31,7 +31,7 @@ function safeFinding(value: SnykFinding, sanitize: TextSanitizer): SnykFinding {
     ? undefined
     : value.references.map((item) => safeReference(item, sanitize)).filter((item): item is string => item !== undefined).slice(0, MAX_SNYK_REFERENCES);
   return {
-    ...value,
+    severity: value.severity,
     ...(value.id === undefined ? {} : { id: sanitize(value.id).slice(0, 256) }),
     ...(value.title === undefined ? {} : { title: sanitize(value.title).slice(0, 512) }),
     ...(value.module === undefined ? {} : { module: sanitize(value.module).slice(0, 512) }),
@@ -44,8 +44,18 @@ function safeFinding(value: SnykFinding, sanitize: TextSanitizer): SnykFinding {
 
 function safeSummary(value: SnykSummary, sanitize: TextSanitizer): SnykSummary {
   return {
-    counts: value.counts,
-    detail: value.detail,
+    counts: {
+      critical: value.counts.critical,
+      high: value.counts.high,
+      medium: value.counts.medium,
+      low: value.counts.low,
+    },
+    detail: {
+      totalObserved: value.detail.totalObserved,
+      retainedCount: value.detail.retainedCount,
+      truncated: value.detail.truncated,
+      omittedCount: value.detail.omittedCount,
+    },
     ...(value.metadata === undefined ? {} : { metadata: {
       ...(value.metadata.scannedPath === undefined ? {} : { scannedPath: sanitize(value.metadata.scannedPath).slice(0, MAX_SNYK_TEXT_LENGTH) }),
       ...(value.metadata.packageManager === undefined ? {} : { packageManager: sanitize(value.metadata.packageManager).slice(0, 512) }),
