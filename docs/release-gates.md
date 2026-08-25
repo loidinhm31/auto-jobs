@@ -76,12 +76,17 @@ job, artifact, and smoke-image checks passing. In the current environment the
 Docker CLI is backed by rootless Podman, so this is also Podman-compatible
 evidence; it does not imply a separate remote Jenkins contract.
 
-## Phase 7 final evidence and accepted residuals
+## Phase 7 final evidence and accepted residuals (85% handoff)
 
 The final evidence record (2026-08-25) is below. The
 [Phase 07 plan](../plans/260824-0023-jenkins-multi-project-vulnerability-reporting/phase-07-fixture-matrix-browser-gates-and-release.md)
 is the historical implementation record; this section records the final docs
 evidence and accepted boundary.
+
+Handoff status: the scoped local release gate is complete at 85%, but Phase 7
+remains In Progress under conditional signoff. The baseline is commit
+`c148cbc` (2026-08-25). The WebKit gate is reproducible with
+`mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e`.
 
 - `npm run test:release`: 121 unit + 5 Chromium report tests; type-check and build
   passed.
@@ -113,6 +118,11 @@ those residuals. Remote Jenkins validation remains off by default. If enabled,
 use an isolated disposable job, explicit allowed origins, serialization, and CI
 secret-store credentials; never run it against production jobs or untrusted
 fork input.
+
+Historical Phase 2/4 review findings referenced by the architecture are a
+separate production-security follow-up. This release-gate record does not
+claim that they were resolved; the next session must either add evidence or
+record an explicit acceptance before broader closure.
 
 Artifact review must show only normalized `data.json`, the contract-validated
 `manifest.json`, requested Snyk/Sonar screenshots, and an allowed failure trace.

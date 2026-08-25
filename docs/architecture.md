@@ -336,16 +336,17 @@ are available; a screenshot failure still preserves the validated Issues URL
 and extracted facets while marking the step incomplete. A complete SonarQube
 source requires all three navigation targets and no warnings.
 
-## Current single-project configuration baseline
+## Historical single-project configuration baseline (pre-replanned loader)
 
 `src/config.ts` is the single environment boundary. Required inputs are
 `JENKINS_BASE_URL`, `JENKINS_USERNAME`, `JENKINS_PASSWORD`, and
 `JENKINS_JOB_PATH`. `JENKINS_LOGIN_PATH` defaults to `/login`;
 `JENKINS_TRIGGER_MODE` defaults to `ui` and only `ui` is accepted;
 `JENKINS_TIMEOUT_MS` defaults to `300000`; `JENKINS_POLL_INTERVAL_MS` defaults
-to `1000`; `PLAYWRIGHT_BROWSER` defaults to `chromium`; there is no automatic
-Firefox fallback; and `ARTIFACT_DIR` defaults to an absolute `test-results`
-path. Default Firefox fallback coverage is a deferred/accepted residual.
+to `1000`; `PLAYWRIGHT_BROWSER` defaults to `chromium`; and `ARTIFACT_DIR`
+defaults to an absolute `test-results` path. The Phase 7 handoff separately
+verifies the active safe-page path in Chromium and Firefox; this historical
+baseline is not the current release-gate status.
 `JENKINS_BUILD_NUMBER` is
 optional: when present it must be a positive integer and selects an existing
 build instead of triggering one.
@@ -370,9 +371,9 @@ Parsing collects invalid or missing-input issues and throws before a browser is
 launched. Diagnostics are redacted and bounded; raw credentials and
 secret-bearing URL data are not part of the config error contract.
 
-The replanned configuration loader replaces this as the orchestration entry
-point. During migration, these inputs may be normalized into one project; they
-must not remain a second execution path.
+Historical migration note: the replanned configuration loader replaces this as
+the orchestration entry point. During migration, these inputs may be normalized
+into one project; they must not remain a second execution path.
 
 ## Configuration invariants
 
@@ -490,7 +491,7 @@ ignored by Git. Authentication state is ephemeral; no `storageState` is
 persisted. The local Jenkins volume is reset only when a developer explicitly
 runs `docker compose down -v`.
 
-## Local Jenkins fixture (Phase 2)
+## Local Jenkins fixture (historical Phase 2 baseline; extended in Phase 7)
 
 The deterministic local fixture uses the official
 `jenkins/jenkins:2.568.1-lts-jdk21`
@@ -596,6 +597,11 @@ The final deterministic and local-Compose evidence is recorded here; the
 [Phase 07 plan](../plans/260824-0023-jenkins-multi-project-vulnerability-reporting/phase-07-fixture-matrix-browser-gates-and-release.md)
 remains the historical implementation record.
 
+Handoff status: the scoped local release gate is complete at 85% on commit
+`c148cbc`; Phase 7 remains In Progress under conditional signoff. The pinned
+WebKit image is
+`mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e`.
+
 Recorded passing evidence:
 
 - `npm run test:release`: type-check, build, 121 unit tests, and 5 Chromium report tests.
@@ -620,3 +626,8 @@ The following are deferred/accepted residuals, not closed release gates:
 
 The sequential single-process invariant and absence of a cross-process
 aggregate lock remain accepted V1 deployment constraints.
+
+The historical Phase 2/4 review findings above are not closed by this local
+release evidence. Broader production-security closure requires a later session
+to resolve them or record explicit acceptance alongside the three Phase 7
+residuals.
