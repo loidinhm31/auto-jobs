@@ -12,8 +12,8 @@ Phases 1–2 remain the approved onboarding baseline. The original single-projec
 Phases 3–5 design is superseded by the replanned target below; later implemented
 boundaries are called out by phase. Phase 7 deterministic fixture/report and
 local Compose gates have final evidence below; broader live-vendor,
-remote-contract, WebKit-host, and artifact-lifecycle gates are not claimed
-complete here.
+remote-contract, direct-host WebKit, and artifact-lifecycle gates are not
+claimed complete here.
 
 ## Replanned target scope (2026-08-24)
 
@@ -158,11 +158,11 @@ files atomically within that invocation, but it is not cross-process locked.
 Deployments that point concurrent runner invocations at the same report root
 must serialize those invocations; parallel aggregate writers are unsupported.
 
-A failure before Jenkins returns a build identity remains a failed project
-outcome with a sanitized diagnostic rather than a build-linked run report;
-pre-build failure aggregation is a deferred/accepted residual. Publication
-rollback is file-scoped, not whole-directory rollback; whole-directory rollback
-is also a deferred/accepted residual.
+A failure before Jenkins returns a build identity is published under an
+explicit `pre-build` run location with a sanitized diagnostic and no fabricated
+Jenkins identity. Complete-run publication stages and replaces the whole run
+directory; cross-process locking and crash-time staging-root enumeration remain
+accepted V1 residuals.
 
 ## Phase 3 orchestration and artifact guarantees
 
@@ -473,9 +473,10 @@ and detail capture, SonarQube home-to-overall navigation, and Type/Severity
 issues capture despite generated-class changes. The deterministic generated-report
 gate covers local links, response-header CSP, escaping/inert HTML, keyboard
 traversal, axe WCAG A/AA, responsive widths, and fixed Chromium snapshots. These
-fixture/offline checks include Chromium and Firefox fixture coverage, but do
-not establish a live two-project vendor capture or WebKit coverage on hosts
-missing its required browser libraries.
+fixture/offline checks include Chromium and Firefox fixture coverage. WebKit
+coverage uses the digest-pinned Playwright Ubuntu runner documented in
+`docs/release-gates.md`; direct host execution remains unsupported on Linux
+hosts missing the browser's required libraries.
 
 Failure evidence is never globally disabled. Keep normalized data, manifest,
 last safe URL/status, and trace on failure/first retry. Requested report
@@ -562,12 +563,13 @@ CI or when targeting a non-local controller. The continuation used
 The Compose service injects the same development-only credentials into the
 fixture; production and CI credential values remain environment-provided.
 
-`npm run install` provisions Chromium. If `PLAYWRIGHT_BROWSER=firefox` or
-`PLAYWRIGHT_BROWSER=webkit` is selected, install that browser explicitly with
-`npx playwright install firefox` or `npx playwright install webkit` before the
-test run. `JENKINS_BASE_URL` may include a context path; the readiness flow
-resolves login and job URLs beneath that path, including Jenkins folder-style
-job paths such as `folder/job-name`.
+`npm run install` provisions Chromium. For a supported Firefox host, install
+Firefox explicitly with `npx playwright install firefox`. The WebKit release
+gate uses `npm run test:release:webkit`; downloading WebKit with
+`npx playwright install webkit` does not make the Fedora host ABI-compatible.
+`JENKINS_BASE_URL` may include a context path; the readiness flow resolves
+login and job URLs beneath that path, including Jenkins folder-style job paths
+such as `folder/job-name`.
 
 ## Phase 2 implementation guarantees and review boundary
 
@@ -596,25 +598,25 @@ remains the historical implementation record.
 
 Recorded passing evidence:
 
-- `npm run test:release`: type-check, build, 116 unit tests, and 5 report tests.
-- Focused suite: 38/38 passed. Chromium fixture 3/3 and Firefox fixture 3/3.
-- `JENKINS_PORT=18080 npm test`: Jenkins E2E 12 passed + 1 expected skip.
+- `npm run test:release`: type-check, build, 121 unit tests, and 5 Chromium report tests.
+- Focused artifact/runner suite: 36/36 passed; prior warning-focused suite: 38/38. Chromium and Firefox vendor fixtures: 3/3 each, including the default safe-page path.
+- `JENKINS_PORT=18080 npm test`: Jenkins E2E 13 passed + 1 expected skip.
 - `JENKINS_PORT=18080 npm run test:e2e:build-now`: Build Now 1/1 against the
   live Compose fixture.
+- `npm run test:release:webkit`: type-check, build, 121 unit tests, and 5
+  WebKit report tests passed in the pinned Ubuntu runner.
 - All recorded final runs completed with zero retries; `git diff --check`
   passed.
 
-WebKit is unavailable on this host because `libicu74` and `libjpeg-turbo8`
-are unavailable; no OS packages were installed to change that result.
+Direct WebKit launch is unavailable on this Fedora host because `libicu74` and
+`libjpeg-turbo8` are unavailable; the supported WebKit gate is the pinned
+Ubuntu runner exposed by `npm run test:release:webkit`.
 
 The following are deferred/accepted residuals, not closed release gates:
 
 - remote/live vendor capture and the optional remote Jenkins contract;
-- pre-build failure aggregation;
-- whole-directory rollback;
-- default Firefox fallback coverage (the configured default remains Chromium);
-- staging/temp-root enumeration and cleanup, including full
-  staging/unreferenced-artifact enumeration.
+- crash-time/full staging-root enumeration and cleanup;
+- cross-process report-root locking (the V1 runner remains sequential).
 
 The sequential single-process invariant and absence of a cross-process
 aggregate lock remain accepted V1 deployment constraints.

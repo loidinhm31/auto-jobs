@@ -45,6 +45,29 @@ async function allocateLeaf(parent: string, segment: string): Promise<string> {
   return leaf;
 }
 
+async function assertDestinationAbsent(directory: string): Promise<void> {
+  try {
+    await fs.lstat(directory);
+    throw new Error('Artifact run directory already exists; unsafe reuse rejected');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
+
+async function moveEmptyStagingDirectory(source: string, destination: string): Promise<string | undefined> {
+  try {
+    const stat = await fs.lstat(source);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Staging run directory is unsafe');
+    if ((await fs.readdir(source)).length > 0) throw new Error('Staging run directory must be empty before build allocation');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  await assertDestinationAbsent(destination);
+  await fs.rename(source, destination);
+  return destination;
+}
+
 export function createRunId(
   now: Date = new Date(),
   suffix: string = crypto.randomBytes(8).toString('hex'),
@@ -95,7 +118,26 @@ export class ArtifactPaths {
     }
     const projectDirectory = await ensureChildDirectory(this.reportRoot, projectId);
     const buildDirectory = await ensureChildDirectory(projectDirectory, String(buildNumber));
-    return allocateLeaf(buildDirectory, runId);
+    const destination = path.join(buildDirectory, runId);
+    const stagingSource = path.join(this.stagingRoot, projectId, runId);
+    return await moveEmptyStagingDirectory(stagingSource, destination) ?? allocateLeaf(buildDirectory, runId);
+  }
+
+  public async publishPreBuild(
+    projectId: string,
+    runId: string,
+  ): Promise<{ readonly directory: string; readonly manifestPath: string }> {
+    assertSafeId(projectId, 'project ID');
+    assertSafeId(runId, 'run ID');
+    const source = path.join(this.stagingRoot, projectId, runId);
+    const projectDirectory = await ensureChildDirectory(this.reportRoot, projectId);
+    const preBuildDirectory = await ensureChildDirectory(projectDirectory, 'pre-build');
+    const destination = path.join(preBuildDirectory, runId);
+    await assertDestinationAbsent(destination);
+    const sourceStat = await fs.lstat(source);
+    if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) throw new Error('Pre-build staging directory is unsafe');
+    await fs.rename(source, destination);
+    return { directory: destination, manifestPath: path.join(destination, 'manifest.json') };
   }
 
   public relativeToReportRoot(directory: string): string {

@@ -1,4 +1,5 @@
 import { chromium, firefox, webkit, type Browser } from '@playwright/test';
+import { formatDiagnostic } from './config-errors.js';
 
 import { ArtifactPaths } from './artifacts/artifact-paths.js';
 import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
@@ -52,16 +53,13 @@ function aggregateSummary(
   historical: readonly {
     relativeDirectory: string;
     projectId: string;
-    buildNumber: number;
+    buildNumber: number | 'pre-build';
     runId: string;
     state: 'success' | 'partial' | 'failed';
     warnings: readonly string[];
     reportPath?: string;
   }[],
 ): AggregateProjectSummary {
-  const relativeDirectory = outcome.buildNumber === undefined
-    ? undefined
-    : `${outcome.projectId}/${outcome.buildNumber}/${outcome.runId}`;
   const runs: AggregateRunSummary[] = historical
     .filter((item) => item.projectId === outcome.projectId)
     .map((item) => ({
@@ -72,7 +70,8 @@ function aggregateSummary(
       ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
       warnings: [...item.warnings],
     }));
-  const reportPath = runs.find((run) => run.runId === outcome.runId && run.buildNumber === outcome.buildNumber)?.reportPath;
+  const reportPath = runs.find((run) => run.runId === outcome.runId &&
+    (outcome.buildNumber === undefined ? run.buildNumber === 'pre-build' : run.buildNumber === outcome.buildNumber))?.reportPath;
   return {
     projectId: outcome.projectId,
     name: outcome.name,
@@ -83,6 +82,24 @@ function aggregateSummary(
     runs,
     warnings: [...outcome.warnings, ...(outcome.error === undefined ? [] : [outcome.error])],
   };
+}
+
+async function publishPreBuildOutcome(
+  project: NormalizedProjectConfig,
+  outcome: ProjectOutcome,
+  artifacts: ArtifactPaths,
+): Promise<ProjectOutcome> {
+  if (outcome.state !== 'failed' || outcome.buildNumber !== undefined || outcome.manifestPath === undefined) return outcome;
+  try {
+    const published = await artifacts.publishPreBuild(project.id, outcome.runId);
+    return { ...outcome, reportDirectory: published.directory, manifestPath: published.manifestPath };
+  } catch (error) {
+    return {
+      ...outcome,
+      warnings: [...outcome.warnings, 'pre-build failure artifact publication failed'],
+      error: `${outcome.error ?? 'pre-build failure'}; ${formatDiagnostic(error)}`,
+    };
+  }
 }
 
 export async function runConfiguredProjects(
@@ -99,13 +116,14 @@ export async function runConfiguredProjects(
   try {
     for (const project of config.projects) {
       try {
-        outcomes.push(await (dependencies.executeProject ?? runProject)(project, {
+        const outcome = await (dependencies.executeProject ?? runProject)(project, {
           browser,
           artifacts,
           ...(dependencies.runtimeEnvironment === undefined ? {} : { ['env']: dependencies.runtimeEnvironment }),
           ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
           ...(dependencies.runIdSuffix === undefined ? {} : { runIdSuffix: dependencies.runIdSuffix }),
-        }));
+        });
+        outcomes.push(await publishPreBuildOutcome(project, outcome, artifacts));
       } catch (error) {
         outcomes.push({
           projectId: project.id,
@@ -125,12 +143,12 @@ export async function runConfiguredProjects(
   const historical = discovery.manifests.map((item) => ({
     relativeDirectory: item.relativeDirectory,
     projectId: item.manifest.project.id,
-    buildNumber: item.manifest.jenkins?.buildNumber ?? 0,
+    buildNumber: item.manifest.jenkins?.buildNumber ?? 'pre-build' as const,
     runId: item.manifest.run.runId,
     state: item.manifest.state,
     warnings: item.manifest.warnings,
     ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
-  })).filter((item) => item.buildNumber > 0);
+  }));
   const configuredIds = new Set(config.projects.map((project) => project.id));
   const orphanWarnings = historical.some((item) => !configuredIds.has(item.projectId))
     ? ['ignored historical manifests for unconfigured projects']

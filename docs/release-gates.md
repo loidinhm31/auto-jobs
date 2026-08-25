@@ -16,9 +16,27 @@ local-link integrity, safe external-link attributes, keyboard traversal, axe
 WCAG A/AA, responsive widths, and fixed desktop/mobile snapshots.
 
 `npm run test:release` is the combined deterministic release gate and includes
-the generated-report gate. The final run recorded 116 unit tests and 5 report
-tests. `npm run test:report` is the standalone generated-report gate when that
-check is needed separately.
+the generated-report gate. The continuation run recorded 121 unit tests and 5
+Chromium report tests. `npm run test:report` is the standalone generated-report
+gate when that check is needed separately.
+
+The WebKit release gate must run in the pinned Playwright Ubuntu image because
+the Linux WebKit bundle requires browser-specific system-library ABIs that are
+not available on Fedora hosts. The wrapper keeps the host's Docker-compatible
+runtime out of the Node dependency and browser path:
+
+```sh
+export XDG_RUNTIME_DIR=/run/user/$(id -u)  # Fedora rootless Podman
+npm run test:release:webkit
+```
+
+`docker-compose.webkit.yml` uses
+`mcr.microsoft.com/playwright:v1.62.1-noble` pinned by digest, mounts the
+repository for reports, isolates `node_modules` in a named volume, and runs
+`npm ci --ignore-scripts` before the same release gate. The image version must
+stay aligned with `@playwright/test`; refresh the image digest whenever that
+dependency changes. See the [Playwright Docker guidance](https://playwright.dev/docs/docker)
+for the supported image and security caveats.
 
 The full suite is:
 
@@ -65,26 +83,30 @@ The final evidence record (2026-08-25) is below. The
 is the historical implementation record; this section records the final docs
 evidence and accepted boundary.
 
-- `npm run test:release`: 116 unit + 5 report tests; type-check and build
+- `npm run test:release`: 121 unit + 5 Chromium report tests; type-check and build
   passed.
-- Focused suite: 38/38 passed. Chromium fixture 3/3 and Firefox fixture 3/3.
-- `JENKINS_PORT=18080 npm test`: Jenkins E2E 12 passed + 1 expected skip.
+- Focused artifact/runner suite: 36/36 passed; prior warning-focused suite:
+  38/38. Chromium and Firefox vendor fixtures: 3/3 each, including the default
+  safe-page path.
+- `JENKINS_PORT=18080 npm test`: Jenkins E2E 13 passed + 1 expected skip.
 - `JENKINS_PORT=18080 npm run test:e2e:build-now`: Build Now 1/1 against live
   Compose.
+- `npm run test:release:webkit`: type-check, build, 121 unit tests, and 5
+  WebKit report tests passed in the pinned Ubuntu runner.
 - All recorded final runs completed with zero retries; `git diff --check`
   passed.
 
-WebKit is unavailable on this host because `libicu74` and `libjpeg-turbo8`
-are unavailable. The release gate does not install OS packages.
+Direct WebKit launch is unsupported on this Fedora host because `libicu74` and
+`libjpeg-turbo8` are unavailable. Run `npm run test:release:webkit` for the
+supported Ubuntu-based gate; do not substitute host-library symlinks or rely on
+`npx playwright install webkit` alone, because browser download does not install
+the required ABI-compatible system libraries on Fedora.
 
 Deferred/accepted residuals (not closed by the passing gates):
 
 - remote/live vendor capture and the optional remote Jenkins contract;
-- pre-build failure aggregation;
-- whole-directory rollback;
-- default Firefox fallback coverage (the configured default remains Chromium);
-- staging/temp-root enumeration and cleanup, including full
-  staging/unreferenced-artifact enumeration.
+- crash-time/full staging-root enumeration and cleanup;
+- cross-process report-root locking (the V1 runner remains sequential).
 
 The passing local/CI-compatible and Podman-compatible checks do not close
 those residuals. Remote Jenkins validation remains off by default. If enabled,
@@ -98,8 +120,9 @@ It must not contain vendor HTML, video, storage state, auth captures,
 unrequested screenshots, Jenkins home, cookies, headers, or secret-bearing
 URLs. Inspect `git diff` and the generated artifact inventory before release;
 do not commit generated test output. The recorded inventory is scoped and
-passed; it is not the deferred full unreferenced-extra and allowlist enumeration,
-and it does not prove fixture temporary-root cleanup.
+passed; writer-owned publication/staging temporary cleanup is covered, but
+crash-time/full unreferenced-extra and root allowlist enumeration remain
+deferred.
 
 Generated HTML carries a restrictive meta CSP for document resources, but
 `frame-ancestors` must be supplied by the serving layer as a

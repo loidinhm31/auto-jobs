@@ -58,6 +58,40 @@ test('allocates immutable same-build run folders and discovers both exact manife
   }
 });
 
+test('moves an empty private staging run into its exact build folder', async () => {
+  const root = temporaryRoot();
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    const runId = createRunId(new Date('2026-08-24T04:00:00.000Z'), '0000000000000027');
+    const stagingDirectory = await paths.allocateStaging('service-a', runId);
+    const reportDirectory = await paths.allocateReport('service-a', 8, runId);
+
+    expect(reportDirectory).toBe(path.join(paths.reportRoot, 'service-a', '8', runId));
+    expect(fs.existsSync(stagingDirectory)).toBe(false);
+    expect(fs.existsSync(reportDirectory)).toBe(true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects non-empty private staging instead of leaving a stale run behind', async () => {
+  const root = temporaryRoot();
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    const runId = createRunId(new Date('2026-08-24T04:00:00.000Z'), '0000000000000028');
+    const stagingDirectory = await paths.allocateStaging('service-a', runId);
+    fs.writeFileSync(path.join(stagingDirectory, 'stale-screenshot.png'), 'stale');
+
+    await expect(paths.allocateReport('service-a', 8, runId)).rejects.toThrow(/[Ss]taging.*empty|unsafe reuse/u);
+    expect(fs.existsSync(path.join(paths.reportRoot, 'service-a', '8', runId))).toBe(false);
+    expect(fs.existsSync(path.join(stagingDirectory, 'stale-screenshot.png'))).toBe(true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('rejects traversal identities and ignores cross-run manifest reuse', async () => {
   const root = temporaryRoot();
   try {

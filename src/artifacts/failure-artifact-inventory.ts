@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import * as fs from 'node:fs/promises';
@@ -86,6 +87,121 @@ async function artifactSize(directory: string, filename: string): Promise<number
     return undefined;
   } finally {
     await handle.close().catch(() => undefined);
+  }
+}
+
+async function copyRegularArtifact(
+  sourceDirectory: string,
+  destinationDirectory: string,
+  filename: string,
+): Promise<void> {
+  const source = await fs.open(path.join(sourceDirectory, filename), constants.O_RDONLY | constants.O_NOFOLLOW);
+  let destination: fs.FileHandle | undefined;
+  try {
+    const stat = await source.stat();
+    if (!stat.isFile() || stat.size > MAX_SINGLE_ARTIFACT_BYTES) {
+      throw new Error(`run artifact is not a bounded regular file: ${filename}`);
+    }
+    destination = await fs.open(
+      path.join(destinationDirectory, filename),
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+      0o600,
+    );
+    const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, Math.max(1, stat.size)));
+    let position = 0;
+    while (position < stat.size) {
+      const read = await source.read(buffer, 0, Math.min(buffer.length, stat.size - position), position);
+      if (read.bytesRead === 0) throw new Error(`run artifact changed while being staged: ${filename}`);
+      await destination.write(buffer, 0, read.bytesRead, position);
+      position += read.bytesRead;
+    }
+    await destination.sync();
+  } finally {
+    await destination?.close().catch(() => undefined);
+    await source.close().catch(() => undefined);
+  }
+}
+
+async function copyReferencedArtifacts(
+  sourceDirectory: string,
+  destinationDirectory: string,
+  manifest: Pick<ProjectRunManifest, 'artifacts'>,
+): Promise<void> {
+  for (const filename of manifest.artifacts.screenshots) {
+    if (!isSafeScreenshotReference(filename)) {
+      throw new Error(`run artifact reference is unsafe: ${filename}`);
+    }
+    await copyRegularArtifact(sourceDirectory, destinationDirectory, filename);
+  }
+  if (manifest.artifacts.trace !== undefined) await copyRegularArtifact(sourceDirectory, destinationDirectory, manifest.artifacts.trace);
+}
+
+async function installPublishedDirectory(directory: string, stagingDirectory: string): Promise<void> {
+  const backup = path.join(
+    path.dirname(directory),
+    `.run-backup-${crypto.randomBytes(8).toString('hex')}`,
+  );
+  let originalMoved = false;
+  let replacementInstalled = false;
+  try {
+    await fs.rename(directory, backup);
+    originalMoved = true;
+    await fs.rename(stagingDirectory, directory);
+    replacementInstalled = true;
+    await fs.rm(backup, { recursive: true, force: true });
+  } catch (error) {
+    const rollbackErrors: string[] = [];
+    if (replacementInstalled) {
+      try { await fs.rm(directory, { recursive: true, force: true }); }
+      catch (rollbackError) { rollbackErrors.push(`remove replacement: ${String(rollbackError)}`); }
+    }
+    if (originalMoved) {
+      try { await fs.rename(backup, directory); }
+      catch (rollbackError) { rollbackErrors.push(`restore original run: ${String(rollbackError)}`); }
+    }
+    const original = error instanceof Error ? error.message : String(error);
+    if (rollbackErrors.length > 0) {
+      throw new Error(`run publication failed: ${original}; rollback incomplete: ${rollbackErrors.join('; ')}`);
+    }
+    throw error;
+  }
+}
+
+async function assertFreshRunDirectory(directory: string): Promise<void> {
+  const resolvedDirectory = path.resolve(directory);
+  const parent = path.dirname(resolvedDirectory);
+  const parentStat = await fs.lstat(parent);
+  const directoryStat = await fs.lstat(resolvedDirectory);
+  if (!parentStat.isDirectory() || parentStat.isSymbolicLink() ||
+    !directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+    throw new Error('run publication directory must be a real directory');
+  }
+  if (await fs.realpath(parent) !== parent) throw new Error('run publication directory contains a symbolic-link component');
+  for (const filename of ['data.json', 'index.html', 'manifest.json']) {
+    try {
+      await fs.lstat(path.join(resolvedDirectory, filename));
+      throw new Error('run directory already contains published output; unsafe reuse rejected');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+}
+
+/** Build a complete run beside the target, then install the directory as one unit. */
+export async function publishCompleteRunDirectory(
+  directory: string,
+  manifest: Pick<ProjectRunManifest, 'artifacts'>,
+  writePublishedFiles: (stagingDirectory: string) => Promise<void>,
+): Promise<void> {
+  await assertFreshRunDirectory(directory);
+  const resolvedDirectory = path.resolve(directory);
+  const stagingDirectory = await fs.mkdtemp(path.join(path.dirname(resolvedDirectory), '.run-publication-'));
+  try {
+    await copyReferencedArtifacts(resolvedDirectory, stagingDirectory, manifest);
+    await writePublishedFiles(stagingDirectory);
+    await installPublishedDirectory(resolvedDirectory, stagingDirectory);
+  } finally {
+    await fs.rm(stagingDirectory, { recursive: true, force: true });
   }
 }
 

@@ -1,8 +1,10 @@
+import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { expect, test, type Page, type Route } from '@playwright/test';
+import type { AddressInfo } from 'node:net';
 
 import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
 import { captureSonarqubeEvidence } from '../../src/reports/sonarqube/sonarqube-capture.js';
@@ -43,6 +45,62 @@ function sonarProject(): NormalizedProjectConfig {
     selectors: {},
   } as unknown as NormalizedProjectConfig;
 }
+
+async function startDefaultSafePageFixture(): Promise<{ origin: string; close: () => Promise<void> }> {
+  const server = http.createServer((request, response) => {
+    const pathname = new URL(request.url ?? '/', 'http://fixture').pathname;
+    const body = pathname.endsWith('/job/service-a/')
+      ? '<a href="/jenkins/artifact/snyk-default.html">Snyk test report</a>'
+      : pathname.endsWith('/artifact/snyk-default.html')
+        ? `<!doctype html><html><head><title>Static Snyk fixture report</title></head><body><main>
+          <h1>Snyk test report</h1>
+          <div class="severity-count critical">0</div><div class="severity-count high">0</div>
+          <div class="severity-count medium">0</div><div class="severity-count low">0</div>
+          <script>document.title = 'SCRIPT_EXECUTED'; document.querySelector('h1').textContent = 'SCRIPT_EXECUTED';</script>
+        </main></body></html>`
+        : undefined;
+    if (body === undefined) {
+      response.writeHead(404).end('not found');
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(body);
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    origin: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+  };
+}
+
+test('captures Snyk through the default safe page without executing report scripts', async ({ page }) => {
+  const fixture = await startDefaultSafePageFixture();
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'snyk-default-safe-page-'));
+  try {
+    const project = {
+      ...snykProject(),
+      baseUrl: `${fixture.origin}/jenkins`,
+      jobUrl: `${fixture.origin}/jenkins/job/service-a/`,
+      sourceOrigins: { jenkins: fixture.origin, snyk: [fixture.origin], sonarqube: [] },
+      sources: { snyk: { allowedOrigins: [fixture.origin] }, sonarqube: { allowedOrigins: [] } },
+    } as unknown as NormalizedProjectConfig;
+    await page.goto(`${fixture.origin}/jenkins/job/service-a/`);
+    await expect(page.getByRole('link', { name: 'Snyk test report' })).toBeVisible();
+
+    const result = await captureSnykEvidence({
+      page, project, deadline: new WorkflowDeadline(30_000), outputDirectory, terminalBuildUrl: page.url(),
+    });
+    expect(result.source.state, result.source.warnings.join(' | ')).toBe('found');
+    expect(result.source.captures[0]?.title).toBe('Static Snyk fixture report');
+    expect(result.source.findings).toEqual([]);
+  } finally {
+    await fixture.close();
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
 
 test('captures Snyk detail, summary-only, malformed, missing, and blocked redirect states', async ({ page }) => {
   const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-snyk-e2e-'));

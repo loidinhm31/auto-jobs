@@ -11,20 +11,93 @@ import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
 import { runConfiguredProjects } from '../../src/runner.js';
 
-function projectFile(root: string): string {
+function projectFile(root: string, firstBuildNumber: number | undefined = 11): string {
   const filePath = path.join(root, 'projects.json');
   fs.writeFileSync(filePath, JSON.stringify({
     schemaVersion: 1,
     defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000, pollIntervalMs: 50 },
     projects: [
       { id: 'service-a', name: 'Service A', baseUrl: 'https://jenkins.example', jobPath: 'service-a',
-        buildNumber: 11, credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
+        ...(firstBuildNumber === undefined ? {} : { buildNumber: firstBuildNumber }),
+        credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
       { id: 'service-b', name: 'Service B', baseUrl: 'https://jenkins.example', jobPath: 'service-b',
         buildNumber: 12, credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
     ],
   }), { mode: 0o600 });
   return filePath;
 }
+
+test('publishes sanitized pre-build trigger failures as discoverable runs and continues', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-08-pre-build-failure-'));
+  try {
+    const configPath = projectFile(root, undefined);
+    const environment = {
+      PROJECTS_CONFIG_PATH: configPath,
+      A_USER: 'user-a', A_PASSWORD: 'secret-a',
+      B_USER: 'user-b', B_PASSWORD: 'secret-b',
+    };
+    const projects = parseProjectsConfig(environment).projects;
+    const browser = {
+      newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
+      close: async () => undefined,
+    } as unknown as Browser;
+    const workflow: ProjectWorkflow = async (_page, project, _secrets, _deadline, state) => {
+      state.transition('authenticated');
+      state.transition('job_resolved');
+      if (project.id === 'service-a') {
+        state.transition('capability_checked');
+        throw new Error('trigger failed password=secret-a');
+      }
+      state.transition('existing_build_selected');
+      const build = { number: project.buildNumber as number, url: `${project.jobUrl}${project.buildNumber}/` };
+      state.bindBuild(build);
+      state.transition('running');
+      state.transition('terminal');
+      return {
+        terminal: { build, status: 'SUCCESS', observedAt: '2026-08-24T04:00:00.000Z', observationErrors: [], reloadCount: 0 },
+        trigger: { capability: 'existing_build', triggerAttempts: 0, build, warnings: [] },
+      };
+    };
+    let suffix = 0;
+    const result = await runConfiguredProjects(projects, {
+      runtimeEnvironment: environment,
+      launchBrowser: async () => browser,
+      runIdSuffix: () => (++suffix).toString(16).padStart(16, '0'),
+      now: () => new Date('2026-08-24T04:00:00.000Z'),
+      executeProject: async (project, dependencies) => runProject(project, {
+        ...dependencies,
+        workflow,
+        capture: async ({ workflow: completed }) => completeCapture(completed.terminal.build.url),
+      }),
+    });
+
+    const failed = result.outcomes[0]!;
+    expect(failed.state).toBe('failed');
+    expect(failed.buildNumber).toBeUndefined();
+    expect(failed.reportDirectory).toBe(path.join(root, 'reports', 'service-a', 'pre-build', failed.runId));
+    expect(failed.manifestPath).toBe(path.join(failed.reportDirectory!, 'manifest.json'));
+    expect(result.outcomes[1]?.state).toBe('success');
+    expect(result.exitCode).toBe(1);
+
+    const manifest = JSON.parse(fs.readFileSync(failed.manifestPath!, 'utf8')) as {
+      state: string; jenkins?: unknown; diagnostic: string;
+    };
+    expect(manifest.state).toBe('failed');
+    expect(manifest.jenkins).toBeUndefined();
+    expect(manifest.diagnostic).not.toContain('secret-a');
+    expect(result.manifests.some((item) => item.relativeDirectory === `service-a/pre-build/${failed.runId}`)).toBe(true);
+    const aggregateProject = result.aggregate.projects.find((item) => item.projectId === 'service-a')!;
+    expect(aggregateProject.runs).toContainEqual(expect.objectContaining({
+      buildNumber: 'pre-build',
+      runId: failed.runId,
+      manifestPath: `service-a/pre-build/${failed.runId}/manifest.json`,
+    }));
+    expect(JSON.stringify(result.aggregate)).not.toContain('"buildNumber":0');
+    expect(fs.existsSync(path.join(root, 'artifacts', 'service-a', failed.runId))).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function completeCapture(buildUrl: string): CaptureResult {
   const found = { state: 'found' as const, captures: [], navigation: [], warnings: [] };

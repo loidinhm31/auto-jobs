@@ -32,16 +32,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validateManifest(
   value: unknown,
   projectId: string,
-  buildNumber: number,
+  buildNumber: number | undefined,
   runId: string,
 ): value is ProjectRunManifest {
   if (!isRecord(value) || value.kind !== 'project-run' || value.schemaVersion !== 2) return false;
   if (!isRecord(value.project) || value.project.id !== projectId || typeof value.project.name !== 'string') return false;
   if (!isRecord(value.run) || value.run.runId !== runId || typeof value.run.observedAt !== 'string') return false;
   if (!['success', 'partial', 'failed'].includes(String(value.state))) return false;
-  if (!isRecord(value.jenkins) || value.jenkins.buildNumber !== buildNumber || typeof value.jenkins.buildUrl !== 'string' ||
-    (value.jenkins.status !== undefined && typeof value.jenkins.status !== 'string')) return false;
-  if (!isSafePersistedUrl(value.jenkins.buildUrl)) return false;
+  if (buildNumber === undefined) {
+    if (value.state !== 'failed' || value.jenkins !== undefined) return false;
+  } else {
+    if (!Number.isSafeInteger(buildNumber) || buildNumber < 1 || !isRecord(value.jenkins) ||
+      value.jenkins.buildNumber !== buildNumber || typeof value.jenkins.buildUrl !== 'string' ||
+      (value.jenkins.status !== undefined && typeof value.jenkins.status !== 'string') ||
+      !isSafePersistedUrl(value.jenkins.buildUrl)) return false;
+  }
   if (!isRecord(value.artifacts) || value.artifacts.manifest !== 'manifest.json' || value.artifacts.data !== 'data.json' || !Array.isArray(value.artifacts.screenshots)) return false;
   if (!value.artifacts.screenshots.every((item) => typeof item === 'string' && isSafeScreenshotReference(item)) ||
     new Set(value.artifacts.screenshots).size !== value.artifacts.screenshots.length) return false;
@@ -150,14 +155,18 @@ async function validateReferencedArtifacts(
 ): Promise<void> {
   const budget = { count: 0, bytes: 0 };
   const data = await readArtifact(directory, manifest.artifacts.data, budget);
-  if (!isRecord(data) || data.schemaVersion !== 2 || !isRecord(data.project) || data.project.id !== manifest.project.id || data.project.name !== manifest.project.name ||
-    !isRecord(data.run) || data.run.runId !== manifest.run.runId || data.run.observedAt !== manifest.run.observedAt || data.state !== manifest.state ||
-    !isRecord(data.jenkins) || data.jenkins.buildNumber !== manifest.jenkins?.buildNumber ||
-    data.jenkins.buildUrl !== manifest.jenkins?.buildUrl || typeof data.jenkins.buildUrl !== 'string') {
+  const dataRecord = isRecord(data) ? data : undefined;
+  const dataJenkins = dataRecord !== undefined && isRecord(dataRecord.jenkins) ? dataRecord.jenkins : undefined;
+  const buildIdentityMatches = manifest.jenkins === undefined
+    ? dataRecord !== undefined && dataJenkins === undefined
+    : dataJenkins !== undefined && dataJenkins.buildNumber === manifest.jenkins.buildNumber && dataJenkins.buildUrl === manifest.jenkins.buildUrl;
+  if (dataRecord === undefined || dataRecord.schemaVersion !== 2 || !isRecord(dataRecord.project) || dataRecord.project.id !== manifest.project.id || dataRecord.project.name !== manifest.project.name ||
+    !isRecord(dataRecord.run) || dataRecord.run.runId !== manifest.run.runId || dataRecord.run.observedAt !== manifest.run.observedAt || dataRecord.state !== manifest.state ||
+    !buildIdentityMatches) {
     throw new Error('manifest data identity mismatch');
   }
-  if (!isSafePersistedUrl(data.jenkins.buildUrl) ||
-    (manifest.state === 'failed' ? !isValidFailureResult(data) : !isValidProjectResult(data))) {
+  if ((dataJenkins !== undefined && !isSafePersistedUrl(dataJenkins.buildUrl)) ||
+    (manifest.state === 'failed' ? !isValidFailureResult(dataRecord) : !isValidProjectResult(dataRecord))) {
     throw new Error('invalid project result schema');
   }
   if (manifest.artifacts.screenshots.length > MAX_RUN_ARTIFACT_COUNT) throw new Error('artifact count is invalid');
@@ -181,7 +190,12 @@ export async function discoverRunManifests(
   for (const projectId of await safeDirectories(root, budget)) {
     if (!SAFE_ID.test(projectId)) { warnings.push('ignored unsafe project artifact directory'); continue; }
     for (const buildName of await safeDirectories(path.join(root, projectId), budget)) {
-      if (!/^\d+$/u.test(buildName) || Number(buildName) < 1) { warnings.push(`ignored invalid build directory for ${projectId}`); continue; }
+      const isPreBuild = buildName === 'pre-build';
+      const buildNumber = Number(buildName);
+      if (!isPreBuild && (!/^\d+$/u.test(buildName) || !Number.isSafeInteger(buildNumber) || buildNumber < 1)) {
+        warnings.push(`ignored invalid build directory for ${projectId}`);
+        continue;
+      }
       for (const runId of await safeDirectories(path.join(root, projectId, buildName), budget)) {
         if (inspected >= maximum) { warnings.push('manifest discovery limit reached'); return { manifests, warnings }; }
         inspected += 1;
@@ -189,8 +203,7 @@ export async function discoverRunManifests(
         const manifestPath = path.join(root, projectId, buildName, runId, 'manifest.json');
         try {
           const value = await readManifest(manifestPath);
-          const buildNumber = Number(buildName);
-          if (!validateManifest(value, projectId, buildNumber, runId)) throw new Error('manifest identity mismatch');
+          if (!validateManifest(value, projectId, isPreBuild ? undefined : Number(buildName), runId)) throw new Error('manifest identity mismatch');
           const directory = path.join(root, projectId, buildName, runId);
           await validateReferencedArtifacts(directory, value);
           await assertRunArtifactAllowlist(directory, value);
@@ -211,8 +224,12 @@ export async function discoverRunManifests(
   manifests.sort((left, right) => {
     const projectOrder = left.manifest.project.id.localeCompare(right.manifest.project.id);
     if (projectOrder !== 0) return projectOrder;
-    const buildOrder = (left.manifest.jenkins?.buildNumber ?? 0) - (right.manifest.jenkins?.buildNumber ?? 0);
-    return buildOrder !== 0 ? buildOrder : left.manifest.run.runId.localeCompare(right.manifest.run.runId);
+    const leftBuild = left.manifest.jenkins?.buildNumber;
+    const rightBuild = right.manifest.jenkins?.buildNumber;
+    if (leftBuild === undefined && rightBuild !== undefined) return -1;
+    if (leftBuild !== undefined && rightBuild === undefined) return 1;
+    if (leftBuild !== undefined && rightBuild !== undefined && leftBuild !== rightBuild) return leftBuild - rightBuild;
+    return left.manifest.run.runId.localeCompare(right.manifest.run.runId);
   });
   return { manifests, warnings };
 }

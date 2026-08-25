@@ -8,6 +8,7 @@ import { discoverRunManifests } from '../../src/artifacts/aggregate-manifest-rea
 import { ArtifactPaths, createRunId } from '../../src/artifacts/artifact-paths.js';
 import { writeAggregateData, writeFailureResult, writeProjectResult } from '../../src/artifacts/result-writer.js';
 import type { ProjectFailureResultV2, ProjectRunManifest } from '../../src/artifacts/artifact-manifest.js';
+import { MAX_SINGLE_ARTIFACT_BYTES } from '../../src/artifacts/result-validation.js';
 import type { AggregateReportResult, VulnerabilityReportResultV2 } from '../../src/result-types.js';
 
 function completeResult(runId: string, buildNumber: number): VulnerabilityReportResultV2 {
@@ -68,6 +69,54 @@ test('writes project HTML, shared CSS, JSON, and aggregate HTML atomically', asy
   }
 });
 
+test('rejects reused run directories before replacing their complete published set', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-08-report-directory-reuse-'));
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    const runId = createRunId(new Date('2026-08-24T04:00:00.000Z'), '0000000000000029');
+    const directory = await paths.allocateReport('service-a', 42, runId);
+    const manifest = { ...completeManifest(runId, 42), artifacts: { manifest: 'manifest.json' as const, data: 'data.json' as const, screenshots: [] } };
+    await writeProjectResult(directory, completeResult(runId, 42), manifest, paths.reportRoot);
+    const previous = ['data.json', 'index.html', 'manifest.json'].map((filename) => ({
+      filename,
+      contents: fs.readFileSync(path.join(directory, filename)),
+    }));
+
+    await expect(writeProjectResult(directory, completeResult(runId, 42), manifest, paths.reportRoot)).rejects.toThrow(/already published|unsafe reuse/u);
+    for (const file of previous) expect(fs.readFileSync(path.join(directory, file.filename))).toEqual(file.contents);
+    expect(fs.readdirSync(path.dirname(directory)).filter((filename) => filename.startsWith('.run-publication-'))).toEqual([]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects leftover, oversized, and symlinked artifacts without publication leftovers', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-08-report-boundaries-'));
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    const cases = [
+      { suffix: 'leftover', prepare: (directory: string) => fs.writeFileSync(path.join(directory, '.tmp-leftover'), 'orphan'), manifest: (runId: string) => ({ ...completeManifest(runId, 42), artifacts: { manifest: 'manifest.json' as const, data: 'data.json' as const, screenshots: [] } }) },
+      { suffix: 'oversized', prepare: (directory: string) => { const filename = path.join(directory, 'oversized.png'); fs.writeFileSync(filename, 'fixture'); fs.truncateSync(filename, MAX_SINGLE_ARTIFACT_BYTES + 1); }, manifest: (runId: string) => ({ ...completeManifest(runId, 42), artifacts: { manifest: 'manifest.json' as const, data: 'data.json' as const, screenshots: ['oversized.png'] } }) },
+      { suffix: 'symlink', prepare: (directory: string) => { const outside = path.join(path.dirname(directory), 'outside.png'); fs.writeFileSync(outside, 'outside'); fs.symlinkSync(outside, path.join(directory, 'screenshot.png')); }, manifest: (runId: string) => ({ ...completeManifest(runId, 42), artifacts: { manifest: 'manifest.json' as const, data: 'data.json' as const, screenshots: ['screenshot.png'] } }) },
+    ] as const;
+
+    for (const [index, scenario] of cases.entries()) {
+      const runId = createRunId(new Date(`2026-08-24T04:00:0${index}.000Z`), `000000000000003${index}`);
+      const directory = await paths.allocateReport('service-a', 42, runId);
+      scenario.prepare(directory);
+      await expect(writeProjectResult(directory, completeResult(runId, 42), scenario.manifest(runId), paths.reportRoot)).rejects.toThrow();
+      expect(fs.existsSync(path.join(directory, 'data.json'))).toBe(false);
+      expect(fs.existsSync(path.join(directory, 'index.html'))).toBe(false);
+      expect(fs.existsSync(path.join(directory, 'manifest.json'))).toBe(false);
+      expect(fs.readdirSync(path.dirname(directory)).filter((filename) => filename.startsWith('.run-'))).toEqual([]);
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('publishes a failed marker after report rendering fails without leaving a success marker', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-06-report-publication-'));
   try {
@@ -83,6 +132,7 @@ test('publishes a failed marker after report rendering fails without leaving a s
     await expect(writeProjectResult(directory, completeResult(runId, 42), successManifest, paths.reportRoot)).rejects.toThrow(/unsafe/u);
     expect(fs.existsSync(path.join(directory, 'data.json'))).toBe(false);
     expect(fs.existsSync(path.join(directory, 'manifest.json'))).toBe(false);
+    expect(fs.readdirSync(path.dirname(directory)).filter((filename) => filename.startsWith('.run-'))).toEqual([]);
 
     const failedManifest = { ...successManifest, state: 'failed' as const, warnings: [] };
     await writeFailureResult(directory, failureResult(runId, 42), failedManifest, paths.reportRoot);

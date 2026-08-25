@@ -199,7 +199,8 @@ export interface AggregateProjectSummary {
 }
 
 export interface AggregateRunSummary {
-  buildNumber: number;
+  /** Numeric Jenkins identity, or the explicit non-build pre-build location. */
+  buildNumber: number | 'pre-build';
   runId: string;
   state: 'success' | 'partial' | 'failed';
   manifestPath: string;
