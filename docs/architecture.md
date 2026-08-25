@@ -274,20 +274,24 @@ not collapse into one capture module:
 ### SonarQube identity, origin, and navigation guarantees
 
 Home discovery uses links from the exact terminal Jenkins page or a configured
-home destination; Overall and Issues URLs are reached through visible page
-actions, never synthesized as the entry path. The candidate and every final
-page/request are checked against the Jenkins base context or the project's
-explicit SonarQube origins. External redirects, blocked requests, home HTTP
-error responses, login bounces, and wrong-project pages fail closed.
+home destination. The validated Home/Overview identity must remain on the
+project dashboard path (`/dashboard`) with the expected project ID; the visible
+Overview/Overall action then validates the Overall state. Issues is a separate
+visible project-navigation step with its own `/issues` path and project-identity
+validation. URLs are never synthesized as the entry path. The candidate and
+every final page/request are checked against the Jenkins base context or the
+project's explicit SonarQube origins. External redirects, blocked requests,
+home HTTP error responses, login bounces, and wrong-project pages fail closed.
 
-The home must be a project dashboard with one non-empty `id` query value. If a
-project ID is configured, it must equal that URL identity. Rendered project
-identity is matched exactly in the scoped project header/navigation, or by a
-same-origin credential-free dashboard link with the expected `id`. Overall
-requires the same exact project ID and `codeScope=overall`; Issues requires
-the same exact project ID on an `/issues` target. Missing, empty, or duplicate
-query values are rejected by the shared exact-value check, so duplicate `id`
-parameters cannot be accepted by taking the first value.
+The Home/Overview page must be a project dashboard with one non-empty `id`
+query value. If a project ID is configured, it must equal that URL identity.
+Rendered project identity is matched exactly in the scoped project
+header/navigation, or by a same-origin credential-free dashboard link with the
+expected `id`. Overall requires the same exact project ID and
+`codeScope=overall`; Issues independently requires the same exact project ID on
+an `/issues` target. Missing, empty, or duplicate query values are rejected by
+the shared exact-value check, so duplicate `id` parameters cannot be accepted
+by taking the first value.
 
 Navigation and capture live URLs are policy-validated HTTP(S) references with
 no username or password authority. Browser credentials remain ephemeral and
@@ -358,9 +362,11 @@ must not remain a second execution path.
   or fragment. Job/login paths cannot escape its configured context path.
 - Snyk/SonarQube navigation is limited to the Jenkins origin or explicit
   canonical allowed origins for that project; redirects are revalidated.
-- SonarQube home, Overall, and Issues targets require one exact non-empty
-  project `id`; a configured SonarQube project ID must match it, and duplicate
-  `id` query parameters fail closed.
+- SonarQube Home/Overview identity checks require the project dashboard path and
+  one exact non-empty project `id`; Overall additionally requires
+  `codeScope=overall`, while Issues is independently validated on an `/issues`
+  path with the same exact project ID. A configured SonarQube project ID must
+  match it, and duplicate `id` query parameters fail closed.
 - SonarQube navigation targets and live links are credential-free; URL userinfo
   and credential-like query values are rejected before persistence.
 - Allowed origins must be bare HTTP(S) origins. Absolute source URLs may carry

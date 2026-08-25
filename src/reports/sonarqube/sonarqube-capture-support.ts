@@ -44,6 +44,9 @@ export function assertProjectUrl(value: string, expectedKey: string, label: stri
   const url = new URL(value);
   if (!hasCredentialFreeAuthority(url) || exactQueryValue(url, 'id') !== expectedKey) throw new Error(`SonarQube ${label} has the wrong project identity`);
   if (/\/login(?:\/|$)/iu.test(url.pathname)) throw new Error(`SonarQube ${label} redirected to login`);
+  if ((label === 'home' || label === 'Overview') && !/\/dashboard\/?$/iu.test(url.pathname)) {
+    throw new Error(`SonarQube ${label} is not a project dashboard`);
+  }
   return url.toString();
 }
 

@@ -15,7 +15,10 @@ import {
   issuesControlCandidates,
   overviewCandidates,
 } from '../../src/reports/sonarqube/sonarqube-locators.js';
-import { screenshotFacetRange } from '../../src/reports/sonarqube/sonarqube-capture-support.js';
+import {
+  assertProjectUrl,
+  screenshotFacetRange,
+} from '../../src/reports/sonarqube/sonarqube-capture-support.js';
 import { normalizeSonarIssueFacets } from '../../src/reports/sonarqube/sonarqube-issue-facets.js';
 import { classifySonarLinks } from '../../src/reports/source-link-classifier.js';
 import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
@@ -73,6 +76,24 @@ test('classifies one allowlisted Sonar dashboard and rejects ambiguity', () => {
     .toBeUndefined();
   expect(classifySonarLinks([{ href: 'https://analysis.example/dashboard?id=service-a&id=service-a', text: 'SonarQube' }], customOrigin).home)
     .toBeUndefined();
+});
+
+test('requires home and Overview identities to remain on a Sonar dashboard', () => {
+  expect(assertProjectUrl(
+    'https://sonar.example/dashboard?id=service-a',
+    'service-a',
+    'home',
+  )).toBe('https://sonar.example/dashboard?id=service-a');
+  expect(() => assertProjectUrl(
+    'https://sonar.example/project/issues?id=service-a',
+    'service-a',
+    'home',
+  )).toThrow(/project dashboard/u);
+  expect(() => assertProjectUrl(
+    'https://sonar.example/project/issues?id=service-a',
+    'service-a',
+    'Overview',
+  )).toThrow(/project dashboard/u);
 });
 
 test('normalizes only bounded Type and Severity values', () => {
