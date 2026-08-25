@@ -8,9 +8,10 @@ result contracts, redaction helpers, and unit coverage. Phase 2 covers the
 deterministic local Jenkins fixture, its pinned controller/plugin setup, the
 JCasC-seeded job, and fixture report artifacts.
 
-Phases 1–2 remain the implemented baseline. The original single-project
-Phases 3–5 design is superseded by the replanned target below; this document
-does not claim that the replanned flow is implemented.
+Phases 1–2 remain the approved onboarding baseline. The original single-project
+Phases 3–5 design is superseded by the replanned target below; later implemented
+boundaries are called out by phase. Phase 7 live vendor, accessibility, and
+visual gates are not claimed complete here.
 
 ## Replanned target scope (2026-08-24)
 
@@ -30,11 +31,12 @@ overall, and SonarQube issues when validated evidence exists.
 Snyk capture includes the visible `Snyk test report` section, a screenshot,
 severity totals, and at most 500 evidence-derived detailed findings with
 explicit truncation metadata.
-SonarQube capture starts at the configured home page, follows a user-visible
+SonarQube capture starts at a validated home page, follows a user-visible
 Overview/Overall action, captures the overall page, follows Issues, and
 extracts only Type and Severity facet data. Overall metrics are not normalized
-in V1; the Overall page is screenshot evidence only. Generated CSS class names
-are a diagnostic fallback, never the primary navigation contract.
+in V1; the Overall page is screenshot evidence only. Project identity and
+origin are revalidated across each transition, and generated CSS/structure
+fallbacks are diagnostic only, never the primary navigation contract.
 
 ## Implemented baseline and revised boundary
 
@@ -246,6 +248,71 @@ Cycle-3 P1/P2 review findings are explicitly deferred, not fixed by this
 section. Their open follow-ups remain tracked in the
 [Phase 04 plan](../plans/260824-0023-jenkins-multi-project-vulnerability-reporting/phase-04-snyk-evidence-capture-and-normalization.md).
 
+## Phase 05 SonarQube navigation and bounded facets (implemented 2026-08-25)
+
+Phase 05 is a focused SonarQube adapter. `sonarqube-capture.ts` owns the
+home → overall → issues state flow, source finalization, and retention of
+earlier evidence when a later step is incomplete. The boundary is split so
+browser actions, identity checks, facet extraction, and pure normalization do
+not collapse into one capture module:
+
+- `sonarqube-capture-steps.ts` handles rendered home identity, the visible
+  Overview/Overall transition, and Overall screenshot/provenance capture.
+- `sonarqube-issues-capture-step.ts` handles project-scoped Issues navigation,
+  rendered identity, Type/Severity extraction, and the facet-only screenshot.
+- `sonarqube-capture-step-types.ts` contains shared step input/result shapes;
+  `sonarqube-capture-support.ts` contains route policy, metadata, screenshots,
+  and bounded failure helpers.
+- `sonarqube-locators.ts` and `sonarqube-facet-locators.ts` provide
+  deadline-aware semantic locator ladders. `sonarqube-project-identity-locators.ts`
+  keeps identity matching scoped and exact. `sonarqube-url-identity.ts`
+  centralizes exact query-value and credential-free-authority checks.
+- `sonarqube-source-link-classifier.ts` selects a configured or observed
+  SonarQube home, while `sonarqube-issue-facets.ts` performs the pure
+  Type/Severity-only normalization.
+
+### SonarQube identity, origin, and navigation guarantees
+
+Home discovery uses links from the exact terminal Jenkins page or a configured
+home destination; Overall and Issues URLs are reached through visible page
+actions, never synthesized as the entry path. The candidate and every final
+page/request are checked against the Jenkins base context or the project's
+explicit SonarQube origins. External redirects, blocked requests, home HTTP
+error responses, login bounces, and wrong-project pages fail closed.
+
+The home must be a project dashboard with one non-empty `id` query value. If a
+project ID is configured, it must equal that URL identity. Rendered project
+identity is matched exactly in the scoped project header/navigation, or by a
+same-origin credential-free dashboard link with the expected `id`. Overall
+requires the same exact project ID and `codeScope=overall`; Issues requires
+the same exact project ID on an `/issues` target. Missing, empty, or duplicate
+query values are rejected by the shared exact-value check, so duplicate `id`
+parameters cannot be accepted by taking the first value.
+
+Navigation and capture live URLs are policy-validated HTTP(S) references with
+no username or password authority. Browser credentials remain ephemeral and
+are not included in navigation targets or persisted capture metadata,
+diagnostics, or report data.
+
+### Facet-only and partial evidence behavior
+
+Overall contributes screenshot/provenance metadata only; its measures are not
+normalized. Issues extraction reads only Type and Severity facet controls
+inside their identified groups. Issue rows, descriptions, rules, paths,
+assignees, tags, and source details are outside the SonarQube evidence model.
+Semantic facet/data-property locators are preferred; generated structure is a
+scoped diagnostic fallback.
+
+Each facet is capped at 64 entries. Labels are trimmed to 128 characters and
+counts must be bounded non-negative integers (at most 10,000,000); duplicate
+labels are ignored with a warning. Type and Severity are captured
+independently: if one facet is unavailable, the other valid facet remains in
+the partial result, warnings are retained, and the Issues/source state is
+`incomplete`. The Issues screenshot is attempted only when both facet regions
+are available; a screenshot failure still preserves the validated Issues URL
+and extracted facets while marking the step incomplete. A complete SonarQube
+source requires all three navigation targets and no warnings.
+
 ## Current single-project configuration baseline
 
 `src/config.ts` is the single environment boundary. Required inputs are
@@ -291,6 +358,11 @@ must not remain a second execution path.
   or fragment. Job/login paths cannot escape its configured context path.
 - Snyk/SonarQube navigation is limited to the Jenkins origin or explicit
   canonical allowed origins for that project; redirects are revalidated.
+- SonarQube home, Overall, and Issues targets require one exact non-empty
+  project `id`; a configured SonarQube project ID must match it, and duplicate
+  `id` query parameters fail closed.
+- SonarQube navigation targets and live links are credential-free; URL userinfo
+  and credential-like query values are rejected before persistence.
 - Allowed origins must be bare HTTP(S) origins. Absolute source URLs may carry
   ordinary application query parameters, but credential-like query keys or
   nested assignments are rejected without echoing their values. Malformed or
@@ -333,7 +405,9 @@ must not remain a second execution path.
   SonarQube pages are captured only through the project's origin policy.
 - Snyk detail is evidence-derived and capped at 500; summary-only input never
   creates invented findings. SonarQube Overall is screenshot-only, and Issues
-  extraction contains only Type and Severity.
+  extraction contains only bounded Type and Severity facet data. Missing one
+  facet preserves the other as partial evidence and keeps the source
+  `incomplete`; it is never promoted to a fabricated complete result.
 - Authentication state is ephemeral and no `storageState` is persisted.
 
 ## Test, report, and artifact policy
@@ -366,9 +440,9 @@ Browser gates cover two-project isolation, existing-build zero-trigger proof,
 new queue/build correlation, parameterized detection with zero interaction,
 stale/concurrent queue entries, external/cross-origin redirects, exact job identity, Snyk title
 and detail capture, SonarQube home-to-overall navigation, and Type/Severity
-issues capture despite generated-class changes. Generated reports receive
-fixed-data visual regression, keyboard/accessibility checks, and local-link
-integrity checks.
+issues capture despite generated-class changes. Phase 7 live vendor,
+accessibility, and visual gates remain future release work and are not claimed
+complete by this document.
 
 Failure evidence is never globally disabled. Keep normalized data, manifest,
 last safe URL/status, and trace on failure/first retry. Requested report

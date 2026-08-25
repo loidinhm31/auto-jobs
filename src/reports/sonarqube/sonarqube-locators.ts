@@ -1,104 +1,183 @@
-import type { Locator, Page } from '@playwright/test';
-
-import { MAX_SONAR_FACETS, type SonarFacetCandidate } from './sonarqube-issue-facets.js';
-
+import { expect, type Locator, type Page } from '@playwright/test';
+import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
+import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
+export { facetCandidates, facetCandidatesWithStatus, facetLocators } from './sonarqube-facet-locators.js';
+export type { SonarFacetExtraction, SonarFacetLocators } from './sonarqube-facet-locators.js';
+export {
+  projectIdentityCandidates,
+  projectIdentityHrefCandidates,
+} from './sonarqube-project-identity-locators.js';
 export interface SonarLocator {
   locator: Locator;
   strategy: string;
+  validate?: (locator: Locator) => Promise<boolean>;
 }
-
-export interface SonarFacetLocators {
-  container: Locator;
-  header: Locator;
-  panel: Locator;
-  strategy: string;
-}
-
-export interface SonarFacetExtraction {
-  values: SonarFacetCandidate[];
-  truncated: boolean;
-}
-
+const MAX_VISIBLE_LOCATOR_MATCHES = 256;
+const MAX_LOCATOR_WAIT_MS = 5_000;
+type SonarLocatorFactory = () => readonly SonarLocator[] | Promise<readonly SonarLocator[]>;
+type SonarLocatorCandidates = readonly SonarLocator[] | SonarLocatorFactory;
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
-
-const MAX_PROJECT_IDENTITY_LINKS = 256;
-const MAX_VISIBLE_LOCATOR_MATCHES = 256;
-
-export async function firstAvailable(candidates: readonly SonarLocator[]): Promise<SonarLocator> {
-  for (const candidate of candidates) {
+async function resolveCandidates(input: SonarLocatorCandidates): Promise<readonly SonarLocator[]> {
+  return typeof input === 'function' ? input() : input;
+}
+async function isActionable(locator: Locator): Promise<boolean> {
+  if (!(await locator.isVisible().catch(() => false))) return false;
+  if (!(await locator.isEnabled().catch(() => false))) return false;
+  return (await locator.getAttribute('aria-disabled').catch(() => null)) !== 'true';
+}
+async function findAvailable(candidates: SonarLocatorCandidates): Promise<SonarLocator | undefined> {
+  for (const candidate of await resolveCandidates(candidates)) {
     const count = await candidate.locator.count();
     for (let index = 0; index < Math.min(count, MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
       const match = candidate.locator.nth(index);
-      if (await match.isVisible().catch(() => false)) return { ...candidate, locator: match };
+      if (!(await isActionable(match))) continue;
+      if (candidate.validate !== undefined && !(await candidate.validate(match).catch(() => false))) continue;
+      return { ...candidate, locator: match };
     }
   }
-  throw new Error('SonarQube semantic control was not found');
+  return undefined;
 }
-
-export function projectIdentityCandidates(page: Page, projectKey: string, displayName?: string): SonarLocator[] {
-  const names = [...new Set([projectKey, displayName].filter((value): value is string => value !== undefined && value.trim().length > 0))];
-  return names.flatMap((name) => {
-    const pattern = new RegExp(escapeRegex(name), 'u');
-    const suffix = name === projectKey ? 'project-key' : 'project-display-name';
-    return [
-      { locator: page.getByRole('link', { name, exact: true }), strategy: `role:link:${suffix}` },
-      { locator: page.getByRole('heading', { name: pattern }), strategy: `role:heading:${suffix}` },
-      { locator: page.getByText(name, { exact: true }), strategy: `text:${suffix}` },
+export async function firstAvailable(
+  candidates: SonarLocatorCandidates,
+  deadline?: WorkflowDeadline,
+): Promise<SonarLocator> {
+  let result: SonarLocator | undefined;
+  const resolve = async (): Promise<boolean> => {
+    result = await findAvailable(candidates);
+    return result !== undefined;
+  };
+  if (deadline === undefined) {
+    if (!(await resolve())) throw new Error('SonarQube semantic control was not found');
+  } else {
+    await expect.poll(resolve, {
+      timeout: deadline.requireRemaining(),
+      intervals: [50, 100, 250, 500],
+    }).toBe(true);
+  }
+  if (result === undefined) throw new Error('SonarQube semantic control was not found');
+  return result;
+}
+function projectContentRoot(page: Page): Locator {
+  return page.locator('[data-component="project-content-header"]').locator('xpath=ancestor::*[.//main][1]');
+}
+async function hasVisibleProjectIdentity(scope: Locator, names: readonly string[]): Promise<boolean> {
+  for (const name of names) {
+    const identity = new RegExp(`^${escapeRegex(name)}$`, 'u');
+    const candidates = [
+      scope.getByRole('link', { name, exact: true }),
+      scope.getByRole('heading', { name: identity }),
+      scope.getByText(name, { exact: true }),
     ];
-  });
-}
-
-export async function projectIdentityHrefCandidates(page: Page, projectKey: string): Promise<SonarLocator[]> {
-  const links = page.getByRole('link');
-  const candidates: SonarLocator[] = [];
-  for (let index = 0; index < Math.min(await links.count(), MAX_PROJECT_IDENTITY_LINKS); index += 1) {
-    const candidate = links.nth(index);
-    const href = await candidate.getAttribute('href');
-    if (href === null) continue;
-    try {
-      const url = new URL(href, page.url());
-      if (/\/dashboard(?:\/|$)/iu.test(url.pathname) && url.searchParams.get('id') === projectKey) {
-        candidates.push({ locator: candidate, strategy: 'role:link:project-key-href' });
+    for (const candidate of candidates) {
+      const count = await candidate.count();
+      for (let index = 0; index < Math.min(count, MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
+        if (await candidate.nth(index).isVisible().catch(() => false)) return true;
       }
-    } catch {
-      // Ignore malformed links and continue to the semantic fallbacks.
     }
   }
-  return candidates;
+  return false;
+}
+async function hasExpectedProjectHref(
+  page: Page,
+  locator: Locator,
+  projectKey: string,
+  pathPattern: RegExp,
+): Promise<boolean> {
+  const href = await locator.getAttribute('href');
+  if (href === null) return false;
+  try {
+    const current = new URL(page.url());
+    const target = new URL(href, current);
+    return hasCredentialFreeAuthority(target) && target.origin === current.origin && pathPattern.test(target.pathname) && exactQueryValue(target, 'id') === projectKey;
+  } catch {
+    return false;
+  }
+}
+async function isProjectAction(
+  page: Page,
+  scope: Locator,
+  locator: Locator,
+  projectKey: string,
+  displayName?: string,
+): Promise<boolean> {
+  if (!(await hasVisibleProjectIdentity(scope, [projectKey, ...(displayName === undefined ? [] : [displayName])]))) return false;
+  const href = await locator.getAttribute('href');
+  return href === null || await hasExpectedProjectHref(page, locator, projectKey, /\/dashboard(?:\/|$)/iu);
 }
 
-export function overviewCandidates(page: Page): SonarLocator[] {
+function scopedActionCandidates(
+  scopes: readonly Locator[],
+  label: string,
+  scopeNames: readonly string[],
+  validate?: (locator: Locator) => Promise<boolean>,
+): SonarLocator[] {
+  return scopes.flatMap((scope, index) => [
+    { locator: scope.getByRole('link', { name: label, exact: true }), strategy: `scope:${scopeNames[index]};role:link:${label}`, ...(validate === undefined ? {} : { validate }) },
+    { locator: scope.getByRole('button', { name: label, exact: true }), strategy: `scope:${scopeNames[index]};role:button:${label}`, ...(validate === undefined ? {} : { validate }) },
+    { locator: scope.getByRole('tab', { name: label, exact: true }), strategy: `scope:${scopeNames[index]};role:tab:${label}`, ...(validate === undefined ? {} : { validate }) },
+  ]);
+}
+
+export function overviewCandidates(page: Page, projectKey: string, displayName?: string): SonarLocator[] {
+  const root = projectContentRoot(page);
   return [
-    { locator: page.getByRole('link', { name: 'Overview', exact: true }), strategy: 'role:link:Overview' },
-    { locator: page.getByRole('heading', { name: 'Overview', exact: true }), strategy: 'role:heading:Overview' },
-    { locator: page.getByText('Overview', { exact: true }), strategy: 'text:Overview' },
+    {
+      locator: page.getByRole('navigation', { name: 'Project', exact: true }).getByRole('link', { name: 'Overview', exact: true }),
+      strategy: 'scope:project-navigation;role:link:Overview',
+      validate: (locator) => hasExpectedProjectHref(page, locator, projectKey, /\/dashboard(?:\/|$)/iu),
+    },
+    ...scopedActionCandidates(
+      [root],
+      'Overview',
+      ['project-content'],
+      (locator) => isProjectAction(page, root, locator, projectKey, displayName),
+    ).filter((candidate) => !candidate.strategy.includes(';role:link:')),
   ];
 }
 
-export function overallControlCandidates(page: Page): SonarLocator[] {
-  return [
-    { locator: page.getByRole('tab', { name: 'Overall Code', exact: true }), strategy: 'role:tab:Overall Code' },
-    { locator: page.getByRole('button', { name: 'Overall Code', exact: true }), strategy: 'role:button:Overall Code' },
-    { locator: page.getByRole('link', { name: 'Overall Code', exact: true }), strategy: 'role:link:Overall Code' },
-    { locator: page.getByText('Overall Code', { exact: true }), strategy: 'text:Overall Code' },
-  ];
+export function overallControlCandidates(page: Page, projectKey: string, displayName?: string): SonarLocator[] {
+  const root = projectContentRoot(page);
+  return scopedActionCandidates(
+    [root],
+    'Overall Code',
+    ['project-content'],
+    (locator) => isProjectAction(page, root, locator, projectKey, displayName),
+  );
 }
 
-export async function overallPanel(page: Page): Promise<Locator> {
+export async function overallPanel(page: Page, deadline?: WorkflowDeadline): Promise<Locator> {
+  const root = projectContentRoot(page);
   const candidates = [
-    page.locator('[data-component="overall-code-measures-panel"]'),
-    page.locator('#tabpanel-overall'),
+    root.locator('[data-component="overall-code-measures-panel"]'),
+    root.locator('#tabpanel-overall'),
   ];
-  for (const candidate of candidates) {
-    const count = await candidate.count();
-    for (let index = 0; index < Math.min(count, MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
-      const match = candidate.nth(index);
-      if (await match.isVisible().catch(() => false)) return match;
+  let result: Locator | undefined;
+  const resolve = async (): Promise<boolean> => {
+    for (const candidate of candidates) {
+      const count = await candidate.count();
+      for (let index = 0; index < Math.min(count, MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
+        const match = candidate.nth(index);
+        if (await match.isVisible().catch(() => false)) {
+          result = match;
+          return true;
+        }
+      }
     }
+    result = undefined;
+    return false;
+  };
+  if (deadline === undefined) {
+    if (!(await resolve())) throw new Error('SonarQube Overall panel was not visible');
+  } else {
+    await expect.poll(resolve, {
+      timeout: Math.min(deadline.requireRemaining(), MAX_LOCATOR_WAIT_MS),
+      intervals: [50, 100, 250, 500],
+    }).toBe(true);
   }
-  throw new Error('SonarQube Overall panel was not visible');
+  if (result === undefined) throw new Error('SonarQube Overall panel was not visible');
+  return result;
 }
 
 export async function issuesControlCandidates(page: Page, projectKey: string): Promise<SonarLocator[]> {
@@ -107,119 +186,13 @@ export async function issuesControlCandidates(page: Page, projectKey: string): P
   const projectLinks = projectNavigation.getByRole('link', { name: 'Issues', exact: true });
   for (let index = 0; index < Math.min(await projectLinks.count(), MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
     const projectLink = projectLinks.nth(index);
-    const projectHref = await projectLink.getAttribute('href');
-    if (projectHref !== null) {
-      try {
-        const url = new URL(projectHref, page.url());
-        if (/\/issues(?:\/|$)/iu.test(url.pathname) && url.searchParams.get('id') === projectKey) {
-          candidates.push({ locator: projectLink, strategy: 'role:navigation:Project>role:link:Issues' });
-        }
-      } catch {
-        // Ignore malformed project-navigation links and continue to validated candidates.
-      }
-    }
-  }
-  const projectButtons = projectNavigation.getByRole('button', { name: 'Issues', exact: true });
-  for (let index = 0; index < Math.min(await projectButtons.count(), MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
-    candidates.push({ locator: projectButtons.nth(index), strategy: 'role:navigation:Project>role:button:Issues' });
-  }
-
-  const links = page.getByRole('link', { name: 'Issues', exact: true });
-  for (let index = 0; index < Math.min(await links.count(), MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
-    const candidate = links.nth(index);
-    const href = await candidate.getAttribute('href');
-    if (href === null) continue;
-    try {
-      const url = new URL(href, page.url());
-      if (/\/issues(?:\/|$)/iu.test(url.pathname) && url.searchParams.get('id') === projectKey) {
-        candidates.push({ locator: candidate, strategy: `role:link:Issues;project-id:${projectKey}` });
-      }
-    } catch {
-      // Ignore malformed observed links and fail closed if no scoped link remains.
+    if (await hasExpectedProjectHref(page, projectLink, projectKey, /\/issues(?:\/|$)/iu)) {
+      candidates.push({
+        locator: projectLink,
+        strategy: 'scope:project-navigation;role:link:Issues',
+        validate: (locator) => hasExpectedProjectHref(page, locator, projectKey, /\/issues(?:\/|$)/iu),
+      });
     }
   }
   return candidates;
-}
-
-export async function facetLocators(
-  page: Page,
-  property: 'types' | 'severities',
-  label: 'Type' | 'Severity',
-): Promise<SonarFacetLocators> {
-  const semantic = page.locator(`[data-component="facet-box"][data-property="${property}"]`);
-  for (let index = 0; index < Math.min(await semantic.count(), MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
-    const container = semantic.nth(index);
-    const header = await firstVisibleLocator(container.getByRole('button', { name: label, exact: true }));
-    if (header !== undefined) {
-      return {
-        container,
-        header,
-        panel: container.getByRole('group').first(),
-        strategy: `data-property:${property};role:button:${label}`,
-      };
-    }
-  }
-  const generated = page.locator(`div:has(> [role="group"]):has(button[aria-label="${label}"])`);
-  for (let index = 0; index < Math.min(await generated.count(), MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
-    const container = generated.nth(index);
-    const header = await firstVisibleLocator(container.getByRole('button', { name: label, exact: true }));
-    if (header !== undefined) {
-      return {
-        container,
-        header,
-        panel: container.getByRole('group').first(),
-        strategy: `scoped-generated-fallback:facet-ancestor:has(${label})`,
-      };
-    }
-  }
-  const header = await firstVisibleLocator(page.getByRole('button', { name: label, exact: true }));
-  if (header === undefined) throw new Error(`SonarQube ${label} facet was not found`);
-  const container = header.locator('xpath=ancestor::div[.//*[@role="group"]][1]');
-  const panel = container.getByRole('group').first();
-  if (await panel.count() === 0) throw new Error(`SonarQube ${label} facet panel was not found`);
-  return {
-    container,
-    header,
-    panel,
-    strategy: `scoped-generated-fallback:ancestor-with-group:${label}`,
-  };
-}
-
-async function firstVisibleLocator(locator: Locator): Promise<Locator | undefined> {
-  const count = await locator.count();
-  for (let index = 0; index < Math.min(count, MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
-    const match = locator.nth(index);
-    if (await match.isVisible().catch(() => false)) return match;
-  }
-  return undefined;
-}
-
-export async function facetCandidatesWithStatus(
-  facet: SonarFacetLocators,
-  kind: 'types' | 'severities',
-): Promise<SonarFacetExtraction> {
-  const buttons = facet.panel.getByRole('checkbox');
-  const total = await buttons.count();
-  const values: SonarFacetCandidate[] = [];
-  for (let index = 0; index < Math.min(total, MAX_SONAR_FACETS); index += 1) {
-    const button = buttons.nth(index);
-    const name = (await button.locator('.name').first().textContent().catch(() => null))?.trim();
-    const title = (await button.getAttribute('title'))?.trim();
-    const accessible = (await button.getAttribute('aria-label'))?.trim();
-    const stat = (await button.locator('.stat').first().textContent().catch(() => null))?.trim();
-    const label = (kind === 'severities' ? title : name) ?? accessible?.replace(/\s+\d+$/u, '');
-    const count = stat ?? accessible?.match(/(\d+)\s*$/u)?.[1];
-    values.push({
-      label: label?.replace(/^Severity:\s*/iu, '').trim() ?? '',
-      count: count ?? '',
-    });
-  }
-  return { values, truncated: total > MAX_SONAR_FACETS };
-}
-
-export async function facetCandidates(
-  facet: SonarFacetLocators,
-  kind: 'types' | 'severities',
-): Promise<SonarFacetCandidate[]> {
-  return (await facetCandidatesWithStatus(facet, kind)).values;
 }

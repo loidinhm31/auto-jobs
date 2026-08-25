@@ -4,6 +4,7 @@ import type {
   ClassifiedSourceLink,
   PageLinkCandidate,
 } from '../source-link-classifier.js';
+import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
 
 export interface SonarLinkClassification {
   home?: ClassifiedSourceLink;
@@ -17,13 +18,31 @@ function candidateText(candidate: PageLinkCandidate): string {
     .toLowerCase();
 }
 
-function sonarHome(candidate: PageLinkCandidate): ClassifiedSourceLink | undefined {
+function configuredProjectId(project: NormalizedProjectConfig): string | undefined {
+  const projectId = project.sources.sonarqube.projectId?.trim();
+  if (projectId !== undefined && projectId.length > 0) return projectId;
+  const homeUrl = project.sources.sonarqube.homeUrl;
+  if (homeUrl === undefined) return undefined;
+  try {
+    return exactQueryValue(new URL(homeUrl), 'id');
+  } catch {
+    return undefined;
+  }
+}
+
+function sonarHome(candidate: PageLinkCandidate, project: NormalizedProjectConfig): ClassifiedSourceLink | undefined {
   let url: URL;
   try { url = new URL(candidate.href); } catch { return undefined; }
   const path = url.pathname.toLowerCase().replace(/\/+$/u, '');
   const text = candidateText(candidate);
-  if (!path.endsWith('/dashboard') || url.searchParams.get('id')?.trim() === '' ||
-    (!text.includes('sonar') && !path.includes('sonar') && !url.hostname.toLowerCase().includes('sonar'))) return undefined;
+  const projectId = exactQueryValue(url, 'id');
+  const expectedProjectId = configuredProjectId(project);
+  const configuredOrigin = project.sourceOrigins.sonarqube.some((origin) => {
+    try { return new URL(origin).origin === url.origin; } catch { return false; }
+  });
+  if (!hasCredentialFreeAuthority(url) || !path.endsWith('/dashboard') || projectId === undefined ||
+    (expectedProjectId !== undefined && projectId !== expectedProjectId) ||
+    (!configuredOrigin && !text.includes('sonar') && !path.includes('sonar') && !url.hostname.toLowerCase().includes('sonar'))) return undefined;
   return {
     href: url.toString(), publisher: 'sonarqube', kind: 'home',
     signal: text.includes('sonar') ? 'accessible-name' : 'path',
@@ -35,7 +54,10 @@ function configuredHome(href: string | undefined, project: NormalizedProjectConf
   try {
     const validated = assertAllowedUrl(href, project.baseUrl, project.sourceOrigins.sonarqube, 'configured SonarQube home');
     const url = new URL(validated);
-    if (!url.pathname.toLowerCase().replace(/\/+$/u, '').endsWith('/dashboard') || url.searchParams.get('id')?.trim() === '') return undefined;
+    const projectId = exactQueryValue(url, 'id');
+    const expectedProjectId = configuredProjectId(project);
+    if (!hasCredentialFreeAuthority(url) || !url.pathname.toLowerCase().replace(/\/+$/u, '').endsWith('/dashboard') || projectId === undefined ||
+      (expectedProjectId !== undefined && projectId !== expectedProjectId)) return undefined;
     return { href: validated, publisher: 'sonarqube', kind: 'home', signal: 'configured' };
   } catch {
     return undefined;
@@ -50,7 +72,7 @@ export function classifySonarLinks(
   const configured = configuredHome(project.sources.sonarqube.homeUrl, project);
   const homes: ClassifiedSourceLink[] = configured === undefined ? [] : [configured];
   for (const candidate of candidates) {
-    const classified = sonarHome(candidate);
+    const classified = sonarHome(candidate, project);
     if (classified === undefined) continue;
     try {
       const href = assertAllowedUrl(candidate.href, project.baseUrl, project.sourceOrigins.sonarqube, 'observed SonarQube home');

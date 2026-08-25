@@ -9,6 +9,7 @@ import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import type { CaptureMetadata, NavigationTarget } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
+import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
 
 export const SONAR_VIEWPORT = { width: 1_440, height: 900 } as const;
 export const SONAR_SCREENSHOTS = {
@@ -26,8 +27,12 @@ export function projectKeyFromHome(
   project: NormalizedProjectConfig,
 ): string {
   const configured = project.sources.sonarqube.projectId?.trim();
-  const fromUrl = new URL(homeUrl).searchParams.get('id')?.trim();
-  if (configured !== undefined && fromUrl !== undefined && configured !== fromUrl) {
+  const url = new URL(homeUrl);
+  const fromUrl = exactQueryValue(url, 'id');
+  if (!hasCredentialFreeAuthority(url) || fromUrl === undefined) {
+    throw new Error('SonarQube home URL has an invalid project identity');
+  }
+  if (configured !== undefined && configured !== fromUrl) {
     throw new Error('SonarQube configured project identity does not match the home URL');
   }
   const key = configured ?? fromUrl;
@@ -37,7 +42,7 @@ export function projectKeyFromHome(
 
 export function assertProjectUrl(value: string, expectedKey: string, label: string): string {
   const url = new URL(value);
-  if (url.searchParams.get('id') !== expectedKey) throw new Error(`SonarQube ${label} has the wrong project identity`);
+  if (!hasCredentialFreeAuthority(url) || exactQueryValue(url, 'id') !== expectedKey) throw new Error(`SonarQube ${label} has the wrong project identity`);
   if (/\/login(?:\/|$)/iu.test(url.pathname)) throw new Error(`SonarQube ${label} redirected to login`);
   return url.toString();
 }
