@@ -9,7 +9,7 @@ import type { AddressInfo } from 'node:net';
 import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
 import { captureSonarqubeEvidence } from '../../src/reports/sonarqube/sonarqube-capture.js';
 import { captureSnykEvidence } from '../../src/reports/snyk/snyk-capture.js';
-import type { ScriptSafePage } from '../../src/reports/snyk/snyk-capture-support.js';
+import { screenshotReport, SNYK_VIEWPORT, type ScriptSafePage } from '../../src/reports/snyk/snyk-capture-support.js';
 import { defaultCapture } from '../../src/project/project-capture.js';
 import type { ProjectWorkflowResult } from '../../src/project/project-workflow.js';
 import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
@@ -23,6 +23,25 @@ const SONAR_PROJECT = 'com.example-domain.example-package:com.example-domain.exa
 function readFixture(filename: string): string {
   return fs.readFileSync(path.join(process.cwd(), 'templates', filename), 'utf8');
 }
+
+test('captures the first viewport after the source page has been scrolled', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'snyk-first-viewport-'));
+  try {
+    await page.setViewportSize(SNYK_VIEWPORT);
+    await page.setContent(readFixture('snyk-template/template.html'));
+    await page.evaluate(() => window.scrollTo(0, 1_200));
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+    await screenshotReport(page, outputDirectory, new WorkflowDeadline(30_000));
+
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const screenshot = fs.readFileSync(path.join(outputDirectory, 'snyk-test-report.png'));
+    expect({ width: screenshot.readUInt32BE(16), height: screenshot.readUInt32BE(20) })
+      .toEqual(SNYK_VIEWPORT);
+  } finally {
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
 
 function snykProject(): NormalizedProjectConfig {
   return {
@@ -145,7 +164,9 @@ test('captures Snyk detail, summary-only, malformed, missing, and blocked redire
     expect(result.source.state, result.source.warnings.join(' | ')).toBe('found');
     expect(result.source.findings?.length).toBeGreaterThan(0);
     expect(result.source.captures[0]?.screenshotPath).toBe('snyk-test-report.png');
-    expect(fs.existsSync(path.join(outputDirectory, 'snyk-test-report.png'))).toBe(true);
+    const screenshot = fs.readFileSync(path.join(outputDirectory, 'snyk-test-report.png'));
+    expect({ width: screenshot.readUInt32BE(16), height: screenshot.readUInt32BE(20) })
+      .toEqual({ width: 1_440, height: 900 });
 
     mode = 'summary';
     await page.goto(`${JENKINS_ORIGIN}/jenkins/job/service-a/`);

@@ -173,19 +173,22 @@ export async function readSummary(
 
 export async function screenshotReport(
   page: Page,
-  landmark: Locator,
   outputDirectory: string,
   deadline: WorkflowDeadline,
 ): Promise<{ metadata: Pick<CaptureMetadata, 'screenshotPath' | 'screenshotSha256' | 'viewport'>; filename: string }> {
-  const container = page.locator('main').filter({ has: landmark }).first();
-  const report = (await container.count()) > 0 ? container : page.locator('body');
-  await report.scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, 0));
   const screenshotPath = path.join(outputDirectory, SNYK_SCREENSHOT_NAME);
   let captured = false;
   let screenshotError: unknown;
   for (let attempt = 0; attempt < MAX_SCREENSHOT_ATTEMPTS; attempt += 1) {
     try {
-      await report.screenshot({ path: screenshotPath, animations: 'disabled', timeout: deadline.requireRemaining() });
+      await page.screenshot({
+        path: screenshotPath,
+        fullPage: false,
+        scale: 'css',
+        animations: 'disabled',
+        timeout: deadline.requireRemaining(),
+      });
       captured = true;
       break;
     } catch (error) {

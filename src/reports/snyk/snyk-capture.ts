@@ -177,7 +177,7 @@ export async function captureSnykEvidence(input: {
         }
         let screenshot: Awaited<ReturnType<typeof screenshotReport>> | undefined;
         try {
-          screenshot = await screenshotReport(capturePage, landmark.locator, input.outputDirectory, input.deadline);
+          screenshot = await screenshotReport(capturePage, input.outputDirectory, input.deadline);
         } catch (error) {
           warnings.push(`Snyk screenshot capture failed: ${captureFailureMessage(error)}`);
         }
