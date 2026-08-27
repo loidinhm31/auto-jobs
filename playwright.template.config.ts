@@ -1,33 +1,23 @@
 import { defineConfig } from '@playwright/test';
 
-import { parseBrowserName } from './src/config.js';
-
-const browserName = parseBrowserName(process.env['PLAYWRIGHT_BROWSER']);
-
 export default defineConfig({
   testDir: './tests',
-  testMatch: '**/unit/**/*.spec.ts',
+  testMatch: '**/e2e/template-navigation.spec.ts',
   fullyParallel: true,
   forbidOnly: Boolean(process.env['CI']),
   retries: process.env['CI'] ? 1 : 0,
   timeout: 30_000,
-  expect: {
-    timeout: 5_000,
-  },
+  expect: { timeout: 5_000 },
   reporter: process.env['CI'] ? 'blob' : 'html',
-  outputDir: 'test-results/unit',
+  outputDir: 'test-results/templates',
   use: {
     actionTimeout: 10_000,
+    javaScriptEnabled: false,
     navigationTimeout: 30_000,
-    trace: 'retain-on-failure',
+    trace: 'on-first-retry',
     screenshot: 'off',
     video: 'off',
     headless: true,
   },
-  projects: [
-    {
-      name: `${browserName}-unit`,
-      use: { browserName },
-    },
-  ],
+  projects: [{ name: 'chromium-template', use: { browserName: 'chromium' } }],
 });

@@ -6,6 +6,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 
 import { parseProjectsConfig } from '../../src/config.js';
 import { ArtifactPaths } from '../../src/artifacts/artifact-paths.js';
+import { stagingLeasePath } from '../../src/artifacts/staging-lease.js';
 import type { CaptureResult } from '../../src/project/project-runner.js';
 import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
@@ -26,6 +27,47 @@ function projectFile(root: string, firstBuildNumber: number | undefined = 11): s
   }), { mode: 0o600 });
   return filePath;
 }
+
+test('keeps the pre-build staging lease until failure publication renames the directory', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-pre-build-lease-'));
+  try {
+    const environment = {
+      PROJECTS_CONFIG_PATH: projectFile(root, undefined),
+      A_USER: 'user-a', A_PASSWORD: 'secret-a',
+      B_USER: 'user-b', B_PASSWORD: 'secret-b',
+    };
+    const project = parseProjectsConfig(environment).projects[0]!;
+    const artifacts = new ArtifactPaths(path.join(root, 'reports'), path.join(root, 'artifacts'));
+    await artifacts.initialize();
+    const browser = {
+      newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
+    } as unknown as Browser;
+
+    const outcome = await runProject(project, {
+      browser,
+      artifacts,
+      env: environment,
+      now: () => new Date('2026-08-26T04:00:00.000Z'),
+      runIdSuffix: () => '0000000000000001',
+      workflow: async () => { throw new Error('trigger failed'); },
+    });
+
+    expect(outcome.state).toBe('failed');
+    const stagingDirectory = path.join(artifacts.stagingRoot, project.id, outcome.runId);
+    expect(outcome.reportDirectory).toBeUndefined();
+    expect(fs.existsSync(stagingDirectory)).toBe(true);
+    const lease = stagingLeasePath(artifacts.stagingRoot, project.id, outcome.runId);
+    expect(fs.existsSync(lease)).toBe(true);
+
+    const published = await artifacts.publishPreBuild(project.id, outcome.runId);
+    expect(fs.existsSync(published.directory)).toBe(true);
+    expect(fs.existsSync(published.manifestPath)).toBe(true);
+    expect(fs.existsSync(stagingDirectory)).toBe(false);
+    expect(fs.existsSync(lease)).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('publishes sanitized pre-build trigger failures as discoverable runs and continues', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-08-pre-build-failure-'));

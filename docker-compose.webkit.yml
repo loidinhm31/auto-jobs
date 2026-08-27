@@ -10,6 +10,7 @@ services:
     environment:
       PLAYWRIGHT_BROWSER: webkit
       PLAYWRIGHT_HTML_OPEN: never
+      NODE_DISABLE_COMPILE_CACHE: "1"
     command:
       - sh
       - -eu

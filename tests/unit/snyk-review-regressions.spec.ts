@@ -43,6 +43,27 @@ test('extracts fallback severity classes only from visible cards', async ({ page
   expect(evidence.warnings).toContain('Snyk detail cards contained unrecognized severity labels');
 });
 
+test('extracts semantic counts and findings only from visible nodes', async ({ page }) => {
+  await page.setContent(`
+    <div class="meta-row" style="display:none"><span class="meta-row-label">Project</span><span class="meta-row-value">hidden-project</span></div>
+    <div class="severity-count critical" style="display:none">9</div>
+    <main data-testid="snyk-report">
+      <table><tbody>
+        <tr><th scope="row">High</th><td>1</td></tr>
+        <tr style="display:none"><th scope="row">Critical</th><td>9</td></tr>
+      </tbody></table>
+      <ul data-testid="snyk-findings">
+        <li>Visible high finding</li>
+        <li style="display:none">Hidden critical finding</li>
+      </ul>
+    </main>
+  `);
+  const evidence = await extractSnykHtml(page);
+  expect(evidence.severityCounts).toEqual({ critical: 0, high: 1, medium: 0, low: 0 });
+  expect(evidence.findings).toEqual([{ title: 'Visible high finding', severity: 'high' }]);
+  expect(evidence.metadata).not.toHaveProperty('project');
+});
+
 test('retains zero-valued visible severity totals without detail cards', async ({ page }) => {
   await page.setContent(`
     <div class="severity-count critical">0</div><div class="severity-count high">0</div>

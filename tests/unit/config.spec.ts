@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 import { expect, test } from '@playwright/test';
 
 import {
@@ -30,6 +32,7 @@ test('parses a valid environment once and normalizes public paths', () => {
   expect(config.browser).toBe('chromium');
   expect(config.timeoutMs).toBe(300_000);
   expect(config.pollIntervalMs).toBe(1_000);
+  expect(config.artifactDir).toBe(path.resolve('reports'));
   expect(config.selectors.authLandmark.required).toBe(false);
   expect(config.selectors.sonarqubeReport.required).toBe(false);
   expect(config.selectors.snykReport.kind).toBe('testId');

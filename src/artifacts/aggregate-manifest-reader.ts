@@ -24,6 +24,7 @@ const MAX_MANIFESTS = 5_000;
 const MAX_MANIFEST_BYTES = 1_048_576;
 const MAX_DIAGNOSTICS = 32;
 const MAX_DIAGNOSTIC_LENGTH = 500;
+const INTERNAL_DIRECTORIES = new Set(['.report-root-lock']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -188,6 +189,7 @@ export async function discoverRunManifests(
   const budget: DiscoveryBudget = { remaining: Math.max(100, maximum * 4), exhausted: false };
   let inspected = 0;
   for (const projectId of await safeDirectories(root, budget)) {
+    if (INTERNAL_DIRECTORIES.has(projectId)) continue;
     if (!SAFE_ID.test(projectId)) { warnings.push('ignored unsafe project artifact directory'); continue; }
     for (const buildName of await safeDirectories(path.join(root, projectId), budget)) {
       const isPreBuild = buildName === 'pre-build';

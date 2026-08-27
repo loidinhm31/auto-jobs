@@ -16,9 +16,189 @@ local-link integrity, safe external-link attributes, keyboard traversal, axe
 WCAG A/AA, responsive widths, and fixed desktop/mobile snapshots.
 
 `npm run test:release` is the combined deterministic release gate and includes
-the generated-report gate. The current continuation run recorded 130 unit
-tests and 5 Chromium report tests. `npm run test:report` is the standalone
+the generated-report gate. An earlier post-hardening baseline recorded 143
+unit tests and 5 Chromium report tests; the latest result is recorded in the
+current continuation section below. `npm run test:report` is the standalone
 generated-report gate when that check is needed separately.
+
+The saved Jenkins/Snyk/SonarQube template snapshots have a separate hard-fail
+navigation gate. It starts at the Jenkins template, serves only the checked-in
+fixtures, disables JavaScript, and follows every vendor destination:
+
+```sh
+npm run test:e2e:templates
+```
+
+This static-fixture check is intentionally separate from `test:release`; it
+checks template navigation. The generated offline-report check is a separate
+report command and is included in the focused unit gate below; the full
+`npm test` E2E glob still includes this navigation test.
+
+## Offline template report (default)
+
+`npm run report` now reads the checked-in Jenkins, Snyk, and SonarQube
+templates. It installs bounded Playwright context routes for the synthetic
+template origin, runs the normal capture/normalization/rendering path, and
+writes the aggregate and per-run report under `ARTIFACT_DIR` (default
+`reports`). It does not require Jenkins credentials and does not contact a
+Jenkins or vendor endpoint:
+
+```sh
+PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
+ARTIFACT_DIR=reports npm run report
+```
+
+Open `reports/index.html`; the run directory contains `index.html`,
+`data.json`, `manifest.json`, and `snyk-test-report.png`,
+`sonarqube-overall.png`, and `sonarqube-issues.png`. The checked-in Snyk
+template now reports critical/high `2/4` in both its summary JSON and six
+visible detail cards. Its page metadata also reports six known vulnerabilities
+and six vulnerable dependency paths, so the template-backed run can be
+`success` when the other captures complete. The runner still preserves
+mismatched external evidence and marks it `partial` with a warning. Use
+`REPORT_SOURCE=jenkins npm run report` (or
+`npm run report:jenkins`) only when a live authorized non-production endpoint
+and trusted secret-store access are available.
+
+By default, the generated report stays in the project-local, Git-ignored
+`reports/` directory; an explicit `ARTIFACT_DIR` remains caller-controlled.
+The `report` npm script also routes Node/Playwright scratch writes
+to a unique project-local, Git-ignored `.report-runtime-*` directory, removes
+it after completion when it remains safe and within the bounded cleanup
+budget, and boundedly prunes only stale safe directories. The package-managed
+Node and Playwright processes therefore do not intentionally use the host
+`/tmp` quota. Node 24/npm 11 can initialize npm's own compile cache before a
+package script starts; if that parent process is also quota-constrained, run
+`NODE_DISABLE_COMPILE_CACHE=1 npm run report:jenkins` (or the corresponding
+command) so the launcher itself does not touch `/tmp`. Unsafe or over-budget
+runtime trees are preserved with a warning for manual review. `tmp/` paths
+shown in older continuation evidence were explicitly chosen as disposable
+validation roots; they are not the default output and remain preserved as
+historical evidence.
+`test-results/` is reserved for the Playwright test runner. From the repository
+root, serve the generated report locally with:
+
+```sh
+npm run serve:report
+```
+
+It listens at `http://127.0.0.1:4173/`. For a trusted LAN-only preview, make
+the exposure explicit:
+
+```sh
+npm run serve:report -- --host 0.0.0.0 --allow-lan --port 4173
+```
+
+Open `http://<this-machine-LAN-IP>:4173/`. `0.0.0.0` binds all IPv4
+interfaces, so configure a firewall and never use it on an untrusted or public
+network. A selected `--host <LAN-IP>` is narrower but still requires
+`--allow-lan`. This server is read-only and unauthenticated. It rejects
+non-canonical roots, dot-prefixed internal paths, traversal, symlinked files,
+and non-GET/HEAD methods. Use `REPORT_ROOT=<directory>` or `--root <directory>`
+only with a deliberate canonical report directory.
+
+Report viewer verification on 2026-08-26 used the generated project-local
+artifact at `reports/index.html` and its current run at
+`reports/local-build-now/1/20260826t094751850z-4d8d7bd3f5c5c790/`:
+
+```sh
+npx playwright test tests/unit/report-server.spec.ts --config=playwright.unit.config.ts --workers=1
+# 5 passed
+
+npm run serve:report -- --host 127.0.0.1 --port 4173
+# Report server: http://127.0.0.1:4173/ (root .../reports)
+curl -sS -o /dev/null -w 'aggregate status=%{http_code} type=%{content_type}\n' http://127.0.0.1:4173/
+# aggregate status=200 type=text/html; charset=utf-8
+curl -sS -o /dev/null -w 'stylesheet status=%{http_code} type=%{content_type}\n' http://127.0.0.1:4173/assets/report.css
+# stylesheet status=200 type=text/css; charset=utf-8
+
+npm run serve:report -- --host 0.0.0.0 --allow-lan --port 4173
+# LISTEN ... 0.0.0.0:4173 ...; LAN URLs were printed; aggregate status=200
+```
+
+The server was stopped after each smoke check. Traversal and the internal
+`.report-root-lock/owner.json` path returned HTTP 400, and no server process
+was left running. The report files are ignored under `reports/`; only the
+source, test, package script, and documentation changes are release inputs.
+
+Historical template-backed report verification before fixture cleanup
+on 2026-08-26:
+
+```sh
+mkdir -p tmp/template-report-final-20260826-current
+ARTIFACT_DIR=/mnt/data/ws/sharing/playwright-report-vulnerabilities/tmp/template-report-final-20260826-current \
+PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
+npm run report
+# exit 0
+# report source: checked-in templates (no Jenkins job was run)
+# local-build-now: partial
+# local-build-now: summary Snyk critical=3, high=17, medium=0, low=0; detailed=6/6; SonarQube types Bug=1, Vulnerability=0, Code Smell=526; severities Blocker=23, Critical=8, Major=165, Minor=323, Info=8; snapshots=3
+# Snyk summary/detail mismatch: critical summary=3 observed=2, high summary=17 observed=4
+```
+
+The aggregate is
+`tmp/template-report-final-20260826-current/index.html`; the per-run report is
+`tmp/template-report-final-20260826-current/local-build-now/1/20260826t083045454z-1c8f964242db6248/data.json`
+and its sibling `index.html`. That run retained six Snyk findings and the
+summary counts `3/17/0/0` (critical/high/medium/low), plus SonarQube Type and
+Severity facets (`Bug: 1`, `Code Smell: 526`, `Blocker: 23`, `Critical: 8`,
+`Major: 165`, `Minor: 323`, `Info: 8`) and all three requested screenshots.
+The focused regression passed 3/3 with
+`npx playwright test tests/unit/template-report.spec.ts --config=playwright.unit.config.ts`.
+The `partial` state is intentional because the checked-in summary totals do
+not equal the six visible detail cards; no Jenkins or private credential was
+used or persisted.
+
+## Clean template consistency refresh (2026-08-27)
+
+The checked-in Snyk template was corrected after confirming that its six
+visible cards contain two critical and four high findings. The summary JSON,
+page description, and visible page totals now all report six findings and six
+vulnerable dependency paths. The separate Docker Jenkins Snyk fixture remains
+consistent at four findings with counts `0/1/2/1`.
+
+```sh
+PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' npm run report
+# exit 0; report source: checked-in templates (no Jenkins job was run)
+# local-build-now: success
+# local-build-now: summary Snyk critical=2, high=4, medium=0, low=0; detailed=6/6; SonarQube types Bug=1, Vulnerability=0, Code Smell=526; severities Blocker=23, Critical=8, Major=165, Minor=323, Info=8; snapshots=3
+# aggregate report: reports/index.html
+
+npx playwright test tests/unit/snyk-phase-04.spec.ts tests/unit/snyk-screenshot-retry.spec.ts \
+  tests/unit/template-report.spec.ts \
+  --config=playwright.unit.config.ts --workers=1
+# 14 passed
+
+npm run test:e2e:templates
+# 1 passed
+```
+
+The complete validation matrix was rerun after the correction. The disposable
+Compose controller was started with `XDG_RUNTIME_DIR=/run/user/$(id -u)
+JENKINS_PORT=18080 docker compose up -d --build` and reported healthy; the
+Docker-compatible `docker info` and `docker run --rm hello-world` smoke checks
+also passed. The exact release and browser results were:
+
+- `npm run test:release` — PASS: type-check, build, 160 unit tests, and 5
+  Chromium report tests.
+- `TMPDIR=/mnt/data/ws/sharing/.pw-runtime.tx7Xac JENKINS_PORT=18080 npm test`
+  — PASS: 160 unit tests, 15 E2E tests, and 1 expected skip. The temporary
+  directory was used only because the host `/tmp` filesystem was nearly full;
+  existing files there were preserved.
+- `JENKINS_PORT=18080 npm run test:e2e:build-now` — PASS, 1/1.
+- `env XDG_RUNTIME_DIR=/run/user/$(id -u) npm run test:release:webkit` — PASS:
+  160 WebKit unit tests and 5 WebKit report tests in the unchanged pinned
+  Ubuntu runner; the container audit reported 0 vulnerabilities.
+- `git diff --check` — PASS; Git emitted only existing CRLF normalization
+  warnings for checked-in template files.
+
+The fresh aggregate is `reports/index.html`; the exact project run is
+`reports/local-build-now/1/20260826t184223704z-c1a5984b06a78db3/` and contains
+the normalized `data.json`, generated report, manifest, stylesheet-backed
+HTML, and three requested screenshots. The generated run has no Snyk
+summary/detail mismatch warning. The old partial artifact was quarantined
+outside the served root before regeneration; no source or private credential
+was removed.
 
 The WebKit release gate must run in the pinned Playwright Ubuntu image because
 the Linux WebKit bundle requires browser-specific system-library ABIs that are
@@ -126,7 +306,7 @@ Historical Phase 2/4 review findings referenced by the architecture were a
 separate production-security follow-up at this handoff. The continuation
 audit and V1 acceptance are recorded in the current section below.
 
-## Phase 7 residual continuation (2026-08-25)
+## Phase 7 residual continuation (2026-08-26)
 
 The local/same-host V1 lifecycle and report-root locking residuals are closed
 within the documented sequential, same-UID boundary. Distributed filesystems
@@ -135,25 +315,29 @@ and the optional remote Jenkins contract remain opt-in and blocked without an
 authorized endpoint and trusted CI secret-store access; this checkout has
 neither.
 
-Current continuation gate evidence (2026-08-25; every recorded run had zero
-retries):
+Current continuation gate evidence (2026-08-26; successful test runs had zero
+retries; the WebKit compose retry was only for the registry-install failure):
 
-- `npm run test:release` — type-check, build, 130 unit tests, and 5 Chromium
+- `npm run test:release` — type-check, build, 157 unit tests, and 5 Chromium
   report tests.
-- `JENKINS_PORT=18080 npm test` — 130 unit tests, 13 Jenkins E2E tests, and 1
-  expected skip.
+- `npm run test:e2e:templates` — 1/1 template-navigation test passed from the
+  Jenkins snapshot through Snyk and all SonarQube snapshots.
+- `JENKINS_PORT=18080 npm test` — 157 unit tests, 15 E2E tests, and 1 expected
+  skip (14 Jenkins-backed tests plus the template-navigation test).
 - `JENKINS_PORT=18080 npm run test:e2e:build-now` — Build Now 1/1.
-- `env XDG_RUNTIME_DIR=/run/user/$(id -u) npm run test:release:webkit` — 130
-  unit tests and 5 WebKit report tests in the unchanged pinned Ubuntu image
-  `mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e`.
+- `env XDG_RUNTIME_DIR=/run/user/$(id -u) npm run test:release:webkit` — 157
+  WebKit unit tests and 5 WebKit report tests passed in the unchanged pinned
+  Ubuntu image; the container `npm ci --ignore-scripts` step audited 10
+  packages with 0 vulnerabilities.
 - `env XDG_RUNTIME_DIR=/run/user/$(id -u) docker info` and
   `docker run --rm hello-world` — passed under rootless Podman compatibility.
 - `git diff --check` — passed.
 
 The checked-in configs permit one retry in CI, but the recorded continuation
-commands were local/non-CI and had zero retries. Generated/ignored evidence
-paths are `playwright-report/index.html`, `test-results/`, and `.runner-build/`;
-they are not release inputs.
+commands were local/non-CI and had zero retries. Generated application evidence
+is under `reports/index.html`; Playwright test evidence is under
+`playwright-report/index.html`, `test-results/`, and `.runner-build/`; none are
+release inputs.
 
 Read-only capability audit:
 
@@ -184,11 +368,15 @@ hard-coded or sourced from untrusted fork jobs.
 
 Lifecycle and lock implementation:
 
-- `ArtifactPaths.initialize()` creates owner-private canonical report and
-  staging roots, rejects root overlap, and refuses symlink components.
+- `ArtifactPaths.initialize()` creates canonical report and staging roots,
+  rejects root overlap, and refuses symlink components. The caller controls
+  permissions for global roots and descendants; path containment, no-follow
+  symlink checks, and artifact identity validation remain enforced.
 - Staging runs receive a bounded `.leases/<project>/<run>.lease`; startup and
   post-run cleanup inspect only the exact configured roots, enforce age,
-  lease, entry, byte, and removal budgets, and never follow symlinks.
+  lease, entry, byte, and removal budgets, and never follow symlinks. An
+  expired recognized lease whose staging run was renamed before lease cleanup
+  is also reaped; active or malformed orphan leases are preserved.
 - Cleanup accepts only the known project/run/build layout and preserves
   malformed or ambiguous entries, including random `.run-backup-*` rollback
   directories, rather than risking deletion of evidence. Recovery lock
@@ -209,16 +397,17 @@ recursive deletion or exhaustive root enumeration.
 Focused regression evidence:
 
 ```sh
-npx playwright test tests/unit/artifact-lifecycle.spec.ts tests/unit/jenkins-phase-02.spec.ts \
+npx playwright test tests/unit/artifact-lifecycle.spec.ts tests/unit/artifact-paths.spec.ts tests/unit/jenkins-phase-02.spec.ts tests/unit/sequential-runner.spec.ts \
   --config=playwright.unit.config.ts --workers=1
 ```
 
-Result: 22/22 passed. The test creates and removes stale staging/publication
+Result: 49/49 passed. The test creates and removes stale staging/publication
 directories, preserves active/oversized/symlink candidates and an outside
 sentinel, kills a staging child with `SIGKILL`, recovers an interrupted
 aggregate publication, rejects unsafe direct lease/limit inputs, proves a
 second process waits for the report lock, and reclaims expired same-host
-dead-PID and incomplete-initial locks. Playwright outputs are under the
+dead-PID and incomplete-initial locks, including an expired lease whose
+staging directory was already renamed. Playwright outputs are under the
 ignored `playwright-report/index.html` and `test-results/` paths;
 `.runner-build/` contains generated build output. No generated output is
 release input.
@@ -244,3 +433,196 @@ Generated HTML carries a restrictive meta CSP for document resources, but
 `frame-ancestors` must be supplied by the serving layer as a
 `Content-Security-Policy` response header (the generated-report fixture sends
 `frame-ancestors 'none'`). A meta policy cannot enforce that directive.
+
+## Continuation verification (2026-08-26)
+
+The remaining local compatibility failure was reproduced with the existing
+root-owned `0777` `tmp/reports` and `tmp/artifacts` directories. The runner now
+accepts caller-managed permissions while retaining real-directory, no-follow
+symlink, containment, safe-identity, lease, and report-root-lock checks. The
+internal `.report-root-lock` directory is ignored by manifest discovery rather
+than reported as a project artifact.
+
+Focused regression command and result:
+
+```sh
+npx playwright test tests/unit/artifact-lifecycle.spec.ts tests/unit/artifact-paths.spec.ts tests/unit/jenkins-phase-02.spec.ts tests/unit/sequential-runner.spec.ts \
+  --config=playwright.unit.config.ts --workers=1
+# 49 passed
+```
+
+The Jenkins adapter now recovers a disappeared queue item only through an
+exact same-origin queue API executable tied to the exact configured job; it
+never scans the job page for a sole newer build. Queue/build API requests
+disable redirects and verify the final response URL, and queue payloads must
+be non-cancelled with matching task/build identities. Standard Jenkins
+status/build markup is supported when the optional custom `data-testid` hooks
+are absent. The 64 KiB response check rejects known oversized responses before
+body acceptance and rejects oversized buffered responses; because Playwright
+buffers `APIResponse`, this is an accepted input/retention bound rather than a
+hard peak-memory bound.
+
+The local command was verified with credentials supplied only through the
+shell environment (not recorded here):
+
+```sh
+ARTIFACT_DIR=/mnt/data/ws/sharing/playwright-report-vulnerabilities/tmp/reports \
+JENKINS_BASE_URL=http://127.0.0.1:18080 \
+JENKINS_JOB_PATH=playwright-vulnerability-report-build-now \
+JENKINS_USERNAME="$JENKINS_USERNAME" JENKINS_PASSWORD="$JENKINS_PASSWORD" \
+PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
+REPORT_SOURCE=jenkins npm run report
+```
+
+Result: exit 0, `partial` (legacy mode does not declare Snyk/Sonar artifact
+identity), build 42, and report artifact
+`tmp/reports/local-build-now/42/20260825t210326691z-3041b4a9fee125a2/`.
+The remaining partial-evidence risk is intentional: use schema-v1
+`PROJECTS_CONFIG_PATH` with explicit source paths/identities for complete
+vendor evidence. Remote/live vendor capture and the optional Jenkins contract
+remain opt-in without authorized non-production endpoints and trusted secret
+store access. Relaxed root permissions also require a trusted isolated root;
+they do not protect against another same-host writer with access to it. This
+legacy partial result and trusted-root race are accepted V1 policy boundaries,
+not production or remote/live approvals.
+
+## Report-output and archived-fixture compatibility (2026-08-26)
+
+The report-output residual is closed for the disposable local fixture. The
+legacy default is now `reports`, while `test-results/` remains Playwright's
+ignored test artifact directory. Archived Jenkins links are discovered from
+the exact terminal build, the terminal page is refreshed for a bounded period
+when Jenkins has not indexed artifacts yet, and optional legacy vendor IDs are
+validated independently from the runner `PROJECT_ID`.
+
+After refreshing the disposable container with the current fixture
+(`JENKINS_PORT=18080 docker compose up --build -d jenkins`), this command was
+run from the repository using only loopback fixture credentials:
+
+```sh
+ARTIFACT_DIR=/mnt/data/ws/sharing/playwright-report-vulnerabilities/tmp/reports \
+JENKINS_BASE_URL=http://127.0.0.1:18080 \
+JENKINS_JOB_PATH=playwright-vulnerability-report-build-now \
+JENKINS_USERNAME=local-admin JENKINS_PASSWORD=local-fixture-password \
+PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
+SNYK_PROJECT_ID=service-a SONARQUBE_PROJECT_ID=service-a \
+REPORT_SOURCE=jenkins npm run report
+```
+
+Result: exit 0, `local-build-now: success`, Jenkins build 54. The current
+artifact is
+`tmp/reports/local-build-now/54/20260826t012010422z-4ee12d17e9d03bdf/`;
+`data.json` records Snyk `found` with counts `0/1/2/1` and four findings, and
+SonarQube `found` with Type `Bug: 1` and Severity `Major: 2`. The aggregate is
+`tmp/reports/index.html` and the local stylesheet is
+`tmp/reports/assets/report.css`.
+
+Browser smoke against an HTTP server rooted at `tmp/reports` returned HTTP
+200 for the aggregate and current report, loaded the local stylesheet and all
+three screenshots, found the Snyk and Sonar headings, and found no scripts or
+inline event handlers. No vendor HTML/CSS/scripts are copied into the report.
+This earlier live-run record predates the offline template-source mode; the
+saved `templates/` files are now also consumed by the default report command.
+
+Without `SNYK_PROJECT_ID` and `SONARQUBE_PROJECT_ID`, legacy mode may still
+produce a valid but partial report when a publisher's archived identity cannot
+be proven. That is an explicit fail-closed configuration outcome; use the
+identities above or schema-v1 file mode for complete evidence. Remote/live
+Snyk/SonarQube and optional Jenkins contract infrastructure remains unavailable
+and opt-in.
+
+## Post-review edge hardening (2026-08-26)
+
+The follow-up review residuals are now covered. The default Jenkins build-link
+selector accepts a sole newer queue-page link only when the same queue item's
+bounded same-origin API executable proves the exact job and build; malformed or
+duplicate Sonar `id` parameters fail closed. Terminal settlement waits for all
+configured publishers, caps reload attempts at 32 inside a five-second budget,
+and semantic Snyk table/list extraction ignores hidden nodes.
+
+Focused regression evidence:
+
+```sh
+npx playwright test tests/unit/jenkins-phase-02.spec.ts tests/unit/snyk-review-regressions.spec.ts tests/unit/sonarqube-phase-05.spec.ts \
+  --config=playwright.unit.config.ts --workers=1
+# 60 passed
+
+JENKINS_BASE_URL=http://127.0.0.1:18080 JENKINS_USERNAME=local-admin \
+JENKINS_PASSWORD=local-fixture-password JENKINS_JOB_PATH=service-a \
+npx playwright test tests/e2e/vendor-template-capture.spec.ts \
+  -g 'refreshes an exact terminal build' --config=playwright.config.ts --workers=1
+# 1 passed
+```
+
+The required gates were rerun after those fixes:
+
+```sh
+JENKINS_PORT=18080 npm test                                  # 152 unit; 15 E2E passed, 1 skipped
+JENKINS_PORT=18080 npm run test:e2e:build-now                # 1 passed
+npm run test:release                                          # 152 unit; 5 Chromium report passed
+env XDG_RUNTIME_DIR=/run/user/$(id -u) npm run test:release:webkit # compose npm ci blocked by registry EIDLETIMEOUT
+```
+
+The same pinned Ubuntu image, invoked with the already-installed checkout
+dependencies, passed the WebKit release suite: 152 unit tests and 5 report
+tests. The compose definition and image digest were not changed.
+
+The exact loopback report command exited 0 with `local-build-now: success`,
+Jenkins build 56, and artifact
+`tmp/reports/local-build-now/56/20260826t020350772z-241ee9943873267c/`.
+`data.json` records Snyk `found` with counts `0/1/2/1` and four findings, and
+SonarQube `found` with Type `Bug: 1` and Severity `Major: 2`. The aggregate and
+stylesheet are `tmp/reports/index.html` and `tmp/reports/assets/report.css`.
+Remote/live Snyk/SonarQube and optional Jenkins infrastructure remains
+unavailable and opt-in; no production job, untrusted fork, or private secret
+store was used.
+
+## Node 24 quota-safe report and Playwright launchers (2026-08-27)
+
+The reported `Unknown system error -122: Unknown system error -122, write`
+was Linux `EDQUOT`: Node 24/npm 11 was initializing its default
+`/tmp/node-compile-cache` on a host tmpfs at its quota. The report command also
+had an unnecessary nested npm hop. The package now launches the report
+wrapper directly, disables Node's optional compile cache for managed children,
+and uses `scripts/run-playwright.mjs` to route Playwright `TMPDIR`, `TMP`, and
+`TEMP` to a unique project-local `.report-runtime-*` directory. The bounded
+cleanup and stale-recovery rules remain unchanged. The outer npm process starts
+before package scripts can change its environment; if it is itself blocked by
+the host quota, use the explicit prefix shown below.
+
+Exact live-fixture verification from the repository root:
+
+```sh
+JENKINS_BASE_URL=http://127.0.0.1:18080 \
+JENKINS_JOB_PATH=playwright-vulnerability-report-build-now \
+JENKINS_USERNAME=local-admin JENKINS_PASSWORD=local-fixture-password \
+PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
+SNYK_PROJECT_ID=service-a SONARQUBE_PROJECT_ID=service-a \
+npm run report:jenkins
+# exit 0; local-build-now: success
+# summary Snyk critical=0, high=1, medium=2, low=1; detailed=4/4
+# SonarQube types Bug=1; severities Major=2; snapshots=3
+# report: reports/local-build-now/84/20260827t023441946z-442477419d9cc4ba/index.html
+# aggregate: reports/index.html
+
+npm run test:release
+# PASS: type-check, build, 160 Chromium unit tests, 5 Chromium report tests
+
+JENKINS_PORT=18080 npm test
+# PASS: 160 unit tests, 15 E2E tests, 1 expected skip
+
+JENKINS_PORT=18080 npm run test:e2e:build-now
+# PASS: 1/1
+
+env XDG_RUNTIME_DIR=/run/user/$(id -u) npm run test:release:webkit
+# PASS: 160 WebKit unit tests and 5 WebKit report tests in the unchanged
+# digest-pinned Ubuntu runner; container npm audit reported 0 vulnerabilities
+
+git diff --check
+# PASS; only existing CRLF normalization warnings were emitted
+```
+
+After each run, no `.report-runtime-*` directory remained in the project.
+The generated report is under ignored `reports/`; `test-results/` remains
+reserved for Playwright test output. No `tmp/`, production job, untrusted fork,
+or private secret-store data was removed or used.

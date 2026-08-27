@@ -25,10 +25,7 @@ async function ensureCanonicalDirectory(directory: string): Promise<void> {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
     const stat = await fs.lstat(current);
-    const currentUid = typeof process.getuid === 'function' ? process.getuid() : undefined;
-    const isFinal = current === resolved;
-    if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(current) !== current ||
-      (isFinal && ((stat.mode & 0o077) !== 0 || (currentUid !== undefined && stat.uid !== currentUid)))) {
+    if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(current) !== current) {
       throw new Error('Output root must be a real directory without symbolic-link components');
     }
   }
@@ -47,7 +44,7 @@ async function ensureChildDirectory(parent: string, segment: string): Promise<st
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
   }
   const stat = await fs.lstat(child);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) {
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error('Artifact path contains a symbolic link or non-directory');
   }
   return child;
@@ -57,8 +54,8 @@ async function allocateLeaf(parent: string, segment: string): Promise<string> {
   const leaf = path.join(parent, segment);
   await fs.mkdir(leaf, { mode: 0o700 });
   const stat = await fs.lstat(leaf);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) {
-    throw new Error('Artifact leaf is not a private directory');
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error('Artifact leaf is not a directory');
   }
   return leaf;
 }
@@ -84,6 +81,15 @@ async function moveEmptyStagingDirectory(source: string, destination: string): P
   await assertDestinationAbsent(destination);
   await fs.rename(source, destination);
   return destination;
+}
+
+async function releaseStagingLeaseBestEffort(stagingRoot: string, projectId: string, runId: string): Promise<void> {
+  try {
+    await releaseStagingLease(stagingRoot, projectId, runId);
+  } catch {
+    // A successful publication is recoverable even when its lease cleanup is not.
+    // The bounded orphan reaper will preserve unsafe leases and remove expired safe ones.
+  }
 }
 
 export function createRunId(
@@ -138,8 +144,9 @@ export class ArtifactPaths {
     const buildDirectory = await ensureChildDirectory(projectDirectory, String(buildNumber));
     const destination = path.join(buildDirectory, runId);
     const stagingSource = path.join(this.stagingRoot, projectId, runId);
-    await releaseStagingLease(this.stagingRoot, projectId, runId);
-    return await moveEmptyStagingDirectory(stagingSource, destination) ?? allocateLeaf(buildDirectory, runId);
+    const moved = await moveEmptyStagingDirectory(stagingSource, destination);
+    await releaseStagingLeaseBestEffort(this.stagingRoot, projectId, runId);
+    return moved ?? allocateLeaf(buildDirectory, runId);
   }
 
   public async publishPreBuild(
@@ -153,10 +160,10 @@ export class ArtifactPaths {
     const preBuildDirectory = await ensureChildDirectory(projectDirectory, 'pre-build');
     const destination = path.join(preBuildDirectory, runId);
     await assertDestinationAbsent(destination);
-    await releaseStagingLease(this.stagingRoot, projectId, runId);
     const sourceStat = await fs.lstat(source);
     if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) throw new Error('Pre-build staging directory is unsafe');
     await fs.rename(source, destination);
+    await releaseStagingLeaseBestEffort(this.stagingRoot, projectId, runId);
     return { directory: destination, manifestPath: path.join(destination, 'manifest.json') };
   }
 

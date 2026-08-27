@@ -1,8 +1,10 @@
+import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { expect, test } from '@playwright/test';
+import type { AddressInfo } from 'node:net';
 
 import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
 import { classifySnykLinks } from '../../src/reports/source-link-classifier.js';
@@ -37,7 +39,7 @@ function htmlEvidence(findings: SnykFinding[], counts?: SnykHtmlEvidence['severi
 test('parses the saved summary without retaining vendor identifiers', () => {
   const parsed = parseSnykSummaryJson(fs.readFileSync(summaryPath, 'utf8'));
   expect(parsed.warnings).toEqual([]);
-  expect(parsed.counts).toEqual({ critical: 3, high: 17, medium: 0, low: 0 });
+  expect(parsed.counts).toEqual({ critical: 2, high: 4, medium: 0, low: 0 });
 });
 
 test('extracts the saved Snyk title, metadata, severity cards, and references', async ({ page }) => {
@@ -48,21 +50,24 @@ test('extracts the saved Snyk title, metadata, severity cards, and references', 
   expect(evidence.selectorStrategy).toBe('data-snyk-test');
   expect(evidence.findings.length).toBeGreaterThan(0);
   expect(evidence.findings[0]?.severity).toBe('critical');
+  expect(evidence.severityCounts).toEqual({ critical: 2, high: 4, medium: 0, low: 0 });
   expect(evidence.findings[0]?.references?.[0]).toMatch(/^https:\/\//u);
   expect(evidence.metadata.packageManager).toBe('maven');
-  expect(evidence.metadata.project).toBeDefined();
+  expect(evidence.metadata.project).toBe('com.example-domain.example-package:com.example-domain.example-package.service');
+  expect(evidence.metadata.dependencyCount).toBe(160);
+  expect(evidence.metadata.dependencyPathCount).toBe(6);
 });
 
-test('normalizes summary/detail mismatch while omitting project identifiers', async ({ page }) => {
+test('normalizes consistent summary/detail evidence while omitting project identifiers', async ({ page }) => {
   await page.setContent(fs.readFileSync(templatePath, 'utf8'));
   const html = await extractSnykHtml(page);
   const summary = parseSnykSummaryJson(fs.readFileSync(summaryPath, 'utf8'));
   const normalized = normalizeSnykEvidence({ html, summary });
-  expect(normalized.state).toBe('incomplete');
-  expect(normalized.summary.counts).toEqual({ critical: 3, high: 17, medium: 0, low: 0 });
+  expect(normalized.state).toBe('found');
+  expect(normalized.summary.counts).toEqual({ critical: 2, high: 4, medium: 0, low: 0 });
   expect(normalized.summary.metadata).not.toHaveProperty('project');
   expect(normalized.findings.length).toBeGreaterThan(0);
-  expect(normalized.warnings.some((warning) => warning.includes('mismatch'))).toBe(true);
+  expect(normalized.warnings.some((warning) => warning.includes('mismatch'))).toBe(false);
 });
 
 test('accepts summary-only evidence without inventing detailed findings', () => {
@@ -124,31 +129,92 @@ test('classifies only Snyk-shaped allowed links and rejects ambiguity', () => {
 test('captures a validated report section with fixed viewport and hashed screenshot', async ({ page }) => {
   const reportHtml = fs.readFileSync(templatePath, 'utf8');
   const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'snyk-capture-'));
+  const server = http.createServer((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    const body = url.pathname.endsWith('/job/service-a/')
+      ? '<a href="/jenkins/artifact/snyk-results.html">Snyk test report</a>'
+      : url.pathname.endsWith('/artifact/snyk-results.html') ? reportHtml : undefined;
+    if (body === undefined) {
+      response.writeHead(404).end('not found');
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(body);
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const configured = project({
+    baseUrl: `${origin}/jenkins`,
+    jobUrl: `${origin}/jenkins/job/service-a/`,
+    sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [] },
+    sources: { snyk: { allowedOrigins: [origin] }, sonarqube: { allowedOrigins: [] } },
+  });
   try {
-    await page.route('https://jenkins.example/**', async (route) => {
-      const url = new URL(route.request().url());
-      if (url.pathname.endsWith('/job/service-a/')) {
-        await route.fulfill({ status: 200, contentType: 'text/html', body: '<a href="/jenkins/artifact/snyk-results.html">Snyk test report</a>' });
-      } else if (url.pathname.endsWith('/artifact/snyk-results.html')) {
-        await route.fulfill({ status: 200, contentType: 'text/html', body: reportHtml });
-      } else {
-        await route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
-      }
-    });
-    await page.goto('https://jenkins.example/jenkins/job/service-a/');
+    await page.goto(`${origin}/jenkins/job/service-a/`);
     const result = await captureSnykEvidence({
       page,
-      project: project(),
+      project: configured,
       deadline: new WorkflowDeadline(30_000),
       outputDirectory,
-      terminalBuildUrl: 'https://jenkins.example/jenkins/job/service-a/',
+      terminalBuildUrl: `${origin}/jenkins/job/service-a/`,
     });
     expect(result.source.state).toBe('found');
     expect(result.source.captures[0]?.screenshotPath).toBe('snyk-test-report.png');
     expect(result.source.captures[0]?.screenshotSha256).toMatch(/^[a-f0-9]{64}$/u);
     expect(fs.existsSync(path.join(outputDirectory, 'snyk-test-report.png'))).toBe(true);
-    expect(page.url()).toBe('https://jenkins.example/jenkins/job/service-a/');
+    expect(page.url()).toBe(`${origin}/jenkins/job/service-a/`);
   } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
+
+test('captures the deterministic Jenkins archived Snyk fixture without a legacy source override', async ({ page }) => {
+  const reportHtml = fs.readFileSync(path.resolve('docker/jenkins/fixtures/reports/snyk/index.html'), 'utf8');
+  const summaryJson = fs.readFileSync(path.resolve('docker/jenkins/fixtures/reports/snyk/report.json'), 'utf8');
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'snyk-archived-fixture-'));
+  const server = http.createServer((request, response) => {
+    const url = new URL(request.url ?? '/', 'http://fixture');
+    const body = url.pathname.endsWith('/job/service-a/')
+      ? '<a href="/jenkins/job/service-a/42/artifact/reports/snyk/index.html">snyk/index.html</a><a href="/jenkins/job/service-a/42/artifact/reports/snyk/report.json">snyk/report.json</a>'
+      : url.pathname.endsWith('/artifact/reports/snyk/index.html') ? reportHtml
+        : url.pathname.endsWith('/artifact/reports/snyk/report.json') ? summaryJson
+          : undefined;
+    if (body === undefined) {
+      response.writeHead(404).end('not found');
+      return;
+    }
+    response.writeHead(200, {
+      'content-type': url.pathname.endsWith('.json') ? 'application/json' : 'text/html; charset=utf-8',
+    }).end(body);
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const configured = project({
+    baseUrl: `${origin}/jenkins`,
+    jobUrl: `${origin}/jenkins/job/service-a/`,
+    sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [] },
+    sources: { snyk: { allowedOrigins: [origin] }, sonarqube: { allowedOrigins: [] } },
+  });
+  try {
+    await page.goto(`${origin}/jenkins/job/service-a/`);
+    const result = await captureSnykEvidence({
+      page, project: configured,
+      deadline: new WorkflowDeadline(30_000),
+      outputDirectory,
+      terminalBuildUrl: `${origin}/jenkins/job/service-a/`,
+    });
+    expect(result.source.state).toBe('found');
+    expect(result.source.summary?.counts).toEqual({ critical: 0, high: 1, medium: 2, low: 1 });
+    expect(result.source.findings).toHaveLength(4);
+    expect(result.screenshots).toEqual(['snyk-test-report.png']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });

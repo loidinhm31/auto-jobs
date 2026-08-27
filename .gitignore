@@ -15,6 +15,7 @@ reports/
 !src/reports/
 !src/reports/**
 .runner-build/
+.report-runtime*/
 !docker/
 !docker/jenkins/
 !docker/jenkins/fixtures/

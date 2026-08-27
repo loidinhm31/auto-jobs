@@ -10,6 +10,7 @@ export interface SonarStepInput {
   expectedKey: string;
   deadline: WorkflowDeadline;
   outputDirectory: string;
+  allowArchivedSnapshot?: boolean;
 }
 
 export interface SonarStepResult {

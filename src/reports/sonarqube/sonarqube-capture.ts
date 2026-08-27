@@ -23,6 +23,7 @@ import {
   captureOverallStep,
   type SonarNavigation,
 } from './sonarqube-capture-steps.js';
+import { isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
 
 function emptyResult(state: 'not_found' | 'incomplete', warnings: readonly string[]): SonarCaptureResult {
   const navigation: SonarNavigation = {
@@ -85,9 +86,11 @@ export async function captureSonarqubeEvidence(input: {
       const expected = assertAllowedUrl(input.terminalBuildUrl, input.project.baseUrl, [input.project.sourceOrigins.jenkins], 'terminal build URL');
       if (terminalIdentity(terminalUrl) !== terminalIdentity(expected)) throw new Error('SonarQube capture did not start from the exact terminal Jenkins build');
     }
-    const classified = classifySonarLinks(await pageLinkCandidates(input.page), input.project);
+    const links = await pageLinkCandidates(input.page);
+    const classified = classifySonarLinks(links, input.project);
     warnings.push(...classified.warnings);
     if (classified.home === undefined) return emptyResult(warnings.length === 0 ? 'not_found' : 'incomplete', warnings);
+    const allowArchivedSnapshot = isArchivedSonarqubeSnapshot(new URL(classified.home.href));
     const expectedKey = projectKeyFromHome(classified.home.href, input.project);
     capturePage = await input.page.context().newPage();
     await capturePage.setViewportSize(SONAR_VIEWPORT);
@@ -101,18 +104,20 @@ export async function captureSonarqubeEvidence(input: {
       assertAllowedUrl(capturePage.url(), input.project.baseUrl, input.project.sourceOrigins.sonarqube, 'SonarQube home URL'),
       expectedKey,
       'home',
+      allowArchivedSnapshot,
     );
-    const homeStrategy = await assertHomeIdentity(capturePage, expectedKey, input.deadline, input.project.name);
+    const homeStrategy = await assertHomeIdentity(capturePage, expectedKey, input.deadline, input.project.name, allowArchivedSnapshot);
     const validatedHomeUrl = assertProjectUrl(
       assertAllowedUrl(capturePage.url(), input.project.baseUrl, input.project.sourceOrigins.sonarqube, 'SonarQube Overview URL'),
       expectedKey,
       'Overview',
+      allowArchivedSnapshot,
     );
     captures.push(await pageCaptureMetadata(capturePage, validatedHomeUrl, homeStrategy));
     navigation = { ...navigation, 'sonarqube-home': sonarNavigation('sonarqube-home', 'found', validatedHomeUrl) };
 
     try {
-      const overall = await captureOverallStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory });
+      const overall = await captureOverallStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot });
       captures.push(overall.capture);
       if (overall.screenshot !== undefined) screenshots.push(overall.screenshot);
       warnings.push(...overall.warnings);
@@ -123,7 +128,7 @@ export async function captureSonarqubeEvidence(input: {
     }
 
     try {
-      const issues = await captureIssuesStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory });
+      const issues = await captureIssuesStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot });
       captures.push(issues.capture);
       if (issues.screenshot !== undefined) screenshots.push(issues.screenshot);
       facets = issues.facets;

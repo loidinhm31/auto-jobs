@@ -65,6 +65,62 @@ HTML/JSON, and SonarQube home/Overall/Issues HTML plus JSON. Variants may
 intentionally remove or replace publisher files, while the Build Now job uses
 the normal corpus.
 
+## Offline template report (default)
+
+The normal report command consumes the checked-in template snapshots directly.
+It runs Playwright against bounded synthetic-origin context routes, so the
+Jenkins controller and vendor credentials are not needed:
+
+```sh
+ARTIFACT_DIR=reports \
+PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
+npm run report
+```
+
+Open `reports/index.html`. The project run contains the normalized Snyk
+summary/detail findings, SonarQube Type/Severity facets, provenance, and the
+three source screenshots. The checked-in Snyk summary and six visible detail
+cards now agree at `2/4` critical/high, and the page metadata reports six
+vulnerabilities and six vulnerable dependency paths. The separate archived
+Jenkins fixture also remains consistent at `0/1/2/1` with four findings.
+
+## Authorized live Jenkins report
+
+Recreate the disposable controller after changing Docker fixtures so the
+container receives the current files:
+
+```sh
+JENKINS_PORT=18080 docker compose up --build -d jenkins
+```
+
+From the directory where the report should be written (for example `tmp/`),
+run the legacy compatibility path with vendor identities separate from the
+runner project ID:
+
+```sh
+ARTIFACT_DIR=reports \
+JENKINS_BASE_URL=http://127.0.0.1:18080 \
+JENKINS_JOB_PATH=playwright-vulnerability-report-build-now \
+JENKINS_USERNAME=local-admin \
+JENKINS_PASSWORD=local-fixture-password \
+PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
+SNYK_PROJECT_ID=service-a SONARQUBE_PROJECT_ID=service-a \
+REPORT_SOURCE=jenkins npm run report
+```
+
+The expected local result is `local-build-now: success`. This is the explicit
+live-Jenkins path; the default command above does not use the pipeline or
+controller. Open
+`reports/index.html` (or serve `reports/` over HTTP) and follow the run link.
+`reports/<project>/<build>/<run>/` contains normalized `data.json`,
+`manifest.json`, local screenshots, and generated HTML. `test-results/`
+belongs only to Playwright test-runner output; it is ignored and is not the
+application report root. The saved files under `templates/` are consumed as
+bounded source snapshots in offline mode, but are not copied as production
+HTML/CSS into reports. Generated reports use
+the local `reports/assets/report.css` stylesheet and retain only normalized
+vendor evidence plus requested screenshots.
+
 The configuration contract does not close remote/live vendor capture. Remote/live
 Snyk/SonarQube capture and the optional Jenkins contract remain opt-in and
 blocked here without an authorized endpoint and trusted CI secret-store access.
@@ -75,11 +131,20 @@ bounded preservation still keeps malformed, oversized, symlinked, active, and
 ambiguous entries. See [Release gates](./release-gates.md) for the exact current
 commands, counts, artifact paths, and release boundary.
 
-Current continuation evidence is 130 unit + 5 Chromium and 130 unit + 5
-WebKit; Jenkins is 13 E2E + 1 expected skip; Build Now is 1/1; and the focused
-regression is 22/22. Generated evidence paths are the ignored
-`playwright-report/index.html`, `test-results/`, and `.runner-build/`; they are
-not release inputs.
+Current continuation evidence (2026-08-26) is 152 unit + 5 Chromium and 152
+unit + 5 WebKit (including the template-backed runner); Jenkins is 152 unit +
+15 E2E + 1 expected skip; Build Now is 1/1; and the focused edge regression is
+60/60 plus the delayed-publisher browser regression 1/1. With the default
+`ARTIFACT_DIR`, generated evidence paths are the ignored
+`reports/`, `.report-runtime-*`, `playwright-report/index.html`,
+`test-results/`, and `.runner-build/`; they are not release inputs. The report
+command cleans its per-run `.report-runtime-*` directory on normal completion
+and bounds stale-directory pruning after an interrupted process. The package
+also disables Node's optional compile cache for its managed children. If the
+Node 24/npm 11 parent process fails before a script starts because its default
+`/tmp/node-compile-cache` is quota-constrained, prefix the command with
+`NODE_DISABLE_COMPILE_CACHE=1`; package scripts cannot change the parent after
+it has started.
 
 Historical Phase 2/4 findings are resolved or explicitly accepted at the
 architecture boundary. The remaining V1 acceptance is owned by the runner

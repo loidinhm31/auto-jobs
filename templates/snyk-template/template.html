@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>Snyk test report</title>
-  <meta name="description" content="20 known vulnerabilities found in 20 vulnerable dependency paths.">
+  <meta name="description" content="6 known vulnerabilities found in 6 vulnerable dependency paths.">
   <!--<base target="_blank">--><base href="." target="_blank">
   <link rel="icon" type="image/png" href="https://res.cloudinary.com/snyk/image/upload/v1468845142/favicon/favicon.png" sizes="194x194">
   <link rel="shortcut icon" href="https://res.cloudinary.com/snyk/image/upload/v1468845142/favicon/favicon.ico">
@@ -437,6 +437,15 @@
 </head>
 
 <body class="section-projects">
+  <nav aria-label="Vulnerability reports" data-template-navigation
+    style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:.75rem 1rem;background:#172b4d;color:#fff;font:600 14px/1.4 system-ui,sans-serif;position:relative;z-index:1000">
+    <span>Vulnerability reports</span>
+    <a href="../jenkins-template/template.html" target="_self" data-template-target="jenkins" style="color:#fff">Jenkins hub</a>
+    <a href="../snyk-template/template.html" target="_self" data-template-target="snyk" aria-current="page" style="color:#fff">Snyk report</a>
+    <a href="../sonarqube-template/template-home.html" target="_self" data-template-target="sonarqube-home" style="color:#fff">SonarQube home</a>
+    <a href="../sonarqube-template/template-overall.html" target="_self" data-template-target="sonarqube-overall" style="color:#fff">SonarQube overall</a>
+    <a href="../sonarqube-template/template-issues.html" target="_self" data-template-target="sonarqube-issues" style="color:#fff">SonarQube issues</a>
+  </nav>
   <main class="layout-stacked">
         <div class="layout-stacked__header header">
           <header class="project__header">
@@ -464,8 +473,8 @@
               </div>
 
               <div class="meta-counts">
-                <div class="meta-count"><span>20</span> <span>known vulnerabilities</span></div>
-                <div class="meta-count"><span>20 vulnerable dependency paths</span></div>
+                <div class="meta-count"><span>6</span> <span>known vulnerabilities</span></div>
+                <div class="meta-count"><span>6 vulnerable dependency paths</span></div>
                 <div class="meta-count"><span>160</span> <span>dependencies</span></div>
               </div><!-- .meta-counts -->
             </div><!-- .layout-container--short -->

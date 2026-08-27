@@ -17,6 +17,11 @@ export interface JenkinsJobReference {
   lastObservedBuildNumber?: number;
 }
 
+function usesDefaultBuildUrlSelector(config: RunnerConfig): boolean {
+  const selector = config.selectors.buildUrl;
+  return selector.kind === 'testId' && selector.value === 'jenkins-build-url';
+}
+
 function configuredJobName(jobPath: string): string {
   const segment = jobPath.split('/').filter(Boolean).at(-1);
   return decodeURIComponent(segment ?? jobPath);
@@ -47,7 +52,10 @@ export async function latestBuildNumber(
   deadline: WorkflowDeadline,
 ): Promise<number | undefined> {
   deadline.requireRemaining();
-  const hrefs = await readAllHrefs(locatorFor(page, config.selectors.buildUrl), page);
+  let hrefs = await readAllHrefs(locatorFor(page, config.selectors.buildUrl), page);
+  if (hrefs.length === 0 && usesDefaultBuildUrlSelector(config)) {
+    hrefs = await readAllHrefs(page.locator('a[href]'), page);
+  }
   const numbers = hrefs
     .map((href) => parseBuildReference(href, config.baseUrl, jobUrl)?.number)
     .filter((number): number is number => number !== undefined);

@@ -8,6 +8,7 @@ import { discoverRunManifests } from '../../src/artifacts/aggregate-manifest-rea
 import { ArtifactPaths, createRunId } from '../../src/artifacts/artifact-paths.js';
 import type { ProjectRunManifest } from '../../src/artifacts/artifact-manifest.js';
 import { writeFailureManifest } from '../../src/artifacts/result-writer.js';
+import { stagingLeasePath } from '../../src/artifacts/staging-lease.js';
 
 function temporaryRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'phase-03-artifacts-'));
@@ -58,6 +59,20 @@ test('allocates immutable same-build run folders and discovers both exact manife
   }
 });
 
+test('ignores the runner lock directory during report discovery', async () => {
+  const root = temporaryRoot();
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    fs.mkdirSync(path.join(paths.reportRoot, '.report-root-lock'));
+    const result = await discoverRunManifests(paths.reportRoot);
+    expect(result.manifests).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('moves an empty private staging run into its exact build folder', async () => {
   const root = temporaryRoot();
   try {
@@ -69,7 +84,31 @@ test('moves an empty private staging run into its exact build folder', async () 
 
     expect(reportDirectory).toBe(path.join(paths.reportRoot, 'service-a', '8', runId));
     expect(fs.existsSync(stagingDirectory)).toBe(false);
+    expect(fs.existsSync(stagingLeasePath(paths.stagingRoot, 'service-a', runId))).toBe(false);
     expect(fs.existsSync(reportDirectory)).toBe(true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('keeps a successful publication when post-rename lease cleanup is unsafe', async () => {
+  const root = temporaryRoot();
+  try {
+    const paths = new ArtifactPaths(path.join(root, 'reports'));
+    await paths.initialize();
+    const runId = createRunId(new Date('2026-08-24T04:00:00.000Z'), '0000000000000029');
+    const stagingDirectory = await paths.allocateStaging('service-a', runId);
+    const lease = stagingLeasePath(paths.stagingRoot, 'service-a', runId);
+    const outside = path.join(root, 'outside-lease');
+    fs.writeFileSync(outside, 'must survive');
+    fs.unlinkSync(lease);
+    fs.symlinkSync(outside, lease);
+
+    const reportDirectory = await paths.publishPreBuild('service-a', runId);
+    expect(fs.existsSync(reportDirectory.directory)).toBe(true);
+    expect(fs.existsSync(stagingDirectory)).toBe(false);
+    expect(fs.lstatSync(lease).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(outside, 'utf8')).toBe('must survive');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -87,6 +126,7 @@ test('rejects non-empty private staging instead of leaving a stale run behind', 
     await expect(paths.allocateReport('service-a', 8, runId)).rejects.toThrow(/[Ss]taging.*empty|unsafe reuse/u);
     expect(fs.existsSync(path.join(paths.reportRoot, 'service-a', '8', runId))).toBe(false);
     expect(fs.existsSync(path.join(stagingDirectory, 'stale-screenshot.png'))).toBe(true);
+    expect(fs.existsSync(stagingLeasePath(paths.stagingRoot, 'service-a', runId))).toBe(true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -125,13 +165,44 @@ test('does not follow a symlinked run directory', async () => {
   }
 });
 
-test('rejects configured output roots that are not owner-private', async () => {
+test('accepts a real configured output root with caller-managed permissions', async () => {
   const root = temporaryRoot();
   try {
     const reportRoot = path.join(root, 'reports');
+    const stagingRoot = path.join(root, 'artifacts');
     fs.mkdirSync(reportRoot, { recursive: true, mode: 0o755 });
+    fs.mkdirSync(stagingRoot, { recursive: true, mode: 0o755 });
     fs.chmodSync(reportRoot, 0o755);
-    await expect(new ArtifactPaths(reportRoot).initialize()).rejects.toThrow(/private|real directory/u);
+    fs.chmodSync(stagingRoot, 0o755);
+    const reportMode = fs.statSync(reportRoot).mode & 0o777;
+    const stagingMode = fs.statSync(stagingRoot).mode & 0o777;
+    const paths = new ArtifactPaths(reportRoot, stagingRoot);
+    await paths.initialize();
+    expect(fs.statSync(paths.reportRoot).mode & 0o777).toBe(reportMode);
+    expect(fs.statSync(paths.stagingRoot).mode & 0o777).toBe(stagingMode);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('accepts existing non-private project, build, and staging directories', async () => {
+  const root = temporaryRoot();
+  try {
+    const reportRoot = path.join(root, 'reports');
+    const stagingRoot = path.join(root, 'artifacts');
+    const reportBuild = path.join(reportRoot, 'service-a', '12');
+    const stagingProject = path.join(stagingRoot, 'service-a');
+    for (const directory of [reportRoot, stagingRoot, path.dirname(reportBuild), reportBuild, stagingProject]) {
+      fs.mkdirSync(directory, { recursive: true, mode: 0o755 });
+      fs.chmodSync(directory, 0o755);
+    }
+    const paths = new ArtifactPaths(reportRoot, stagingRoot);
+    await paths.initialize();
+    const runId = createRunId(new Date('2026-08-24T04:00:00.000Z'), '0000000000000012');
+    const stagingDirectory = await paths.allocateStaging('service-a', runId);
+    const reportDirectory = await paths.allocateReport('service-a', 12, runId);
+    expect(stagingDirectory).not.toBe(reportDirectory);
+    expect(fs.existsSync(reportDirectory)).toBe(true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

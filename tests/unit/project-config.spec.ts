@@ -171,6 +171,20 @@ test('normalizes legacy inputs into one project and records deprecation', () => 
   expect(result.diagnostics[0]).toMatch(/deprecated/u);
 });
 
+test('preserves optional legacy vendor identities separately from the runner project id', () => {
+  const result = parseProjectsConfig({
+    JENKINS_BASE_URL: 'https://jenkins.example/jenkins',
+    JENKINS_USERNAME: 'legacy-user',
+    JENKINS_PASSWORD: 'legacy-password',
+    JENKINS_JOB_PATH: 'service-a',
+    PROJECT_ID: 'local-build-now',
+    SNYK_PROJECT_ID: 'service-a',
+    SONARQUBE_PROJECT_ID: 'service-a',
+  });
+  expect(result.projects[0]?.sources.snyk.projectId).toBe('service-a');
+  expect(result.projects[0]?.sources.sonarqube.projectId).toBe('service-a');
+});
+
 test('canonicalizes origins and contains relative navigation', () => {
   expect(canonicalizeBaseUrl('https://jenkins.example:443/jenkins/')).toBe(
     'https://jenkins.example/jenkins',

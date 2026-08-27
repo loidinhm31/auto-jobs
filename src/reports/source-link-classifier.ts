@@ -53,6 +53,11 @@ function basename(href: string): string {
   }
 }
 
+function isArchivedSnykArtifact(href: string): boolean {
+  const pathname = pathText(href);
+  return pathname.includes('/artifact/') && /(?:^|\/)snyk\//u.test(pathname);
+}
+
 export function classifyPublisherLink(candidate: PageLinkCandidate): SourcePublisher {
   const text = linkText(candidate).toLowerCase();
   const pathname = pathText(candidate.href);
@@ -71,8 +76,11 @@ function classifySnykCandidate(candidate: PageLinkCandidate): ClassifiedSourceLi
   let canonicalHref: string;
   try { canonicalHref = canonicalArtifactUrl(candidate.href); } catch { return undefined; }
   const file = basename(canonicalHref);
-  const isSummary = file === 'snyk-sca-results-summary.json';
-  const isReport = file === 'snyk-results.html' || (text.includes('snyk test report') && file.endsWith('.html'));
+  const archived = isArchivedSnykArtifact(canonicalHref);
+  const isSummary = file === 'snyk-sca-results-summary.json' || (archived && file === 'report.json');
+  const isReport = file === 'snyk-results.html' ||
+    (text.includes('snyk test report') && file.endsWith('.html')) ||
+    (archived && file === 'index.html');
   if (!isSummary && !isReport) return undefined;
   const signal = text.includes('snyk') ? 'accessible-name' : 'path';
   return {

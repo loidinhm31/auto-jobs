@@ -83,14 +83,26 @@ async function hasExpectedProjectHref(
   page: Page,
   locator: Locator,
   projectKey: string,
-  pathPattern: RegExp,
+  pathKind: 'home' | 'overall' | 'issues',
+  allowArchivedSnapshot = false,
 ): Promise<boolean> {
   const href = await locator.getAttribute('href');
   if (href === null) return false;
   try {
     const current = new URL(page.url());
     const target = new URL(href, current);
-    return hasCredentialFreeAuthority(target) && target.origin === current.origin && pathPattern.test(target.pathname) && exactQueryValue(target, 'id') === projectKey;
+    const path = target.pathname.toLowerCase();
+    const standardPath = pathKind === 'home'
+      ? /\/dashboard\/?$/u.test(path)
+      : pathKind === 'overall'
+        ? /\/dashboard\/?$/u.test(path)
+        : /\/issues(?:\/|$)/u.test(path);
+    const archivedPath = allowArchivedSnapshot && /\/artifact\/(?:[^/]+\/)*sonarqube\/(?:index|overall|issues)\.html$/u.test(path) &&
+      ((pathKind === 'home' && path.endsWith('/index.html')) ||
+        (pathKind === 'overall' && path.endsWith('/overall.html')) ||
+        (pathKind === 'issues' && path.endsWith('/issues.html')));
+    return hasCredentialFreeAuthority(target) && target.origin === current.origin &&
+      (standardPath || archivedPath) && exactQueryValue(target, 'id') === projectKey;
   } catch {
     return false;
   }
@@ -101,10 +113,12 @@ async function isProjectAction(
   locator: Locator,
   projectKey: string,
   displayName?: string,
+  pathKind: 'home' | 'overall' = 'home',
+  allowArchivedSnapshot = false,
 ): Promise<boolean> {
   if (!(await hasVisibleProjectIdentity(scope, [projectKey, ...(displayName === undefined ? [] : [displayName])]))) return false;
   const href = await locator.getAttribute('href');
-  return href === null || await hasExpectedProjectHref(page, locator, projectKey, /\/dashboard(?:\/|$)/iu);
+  return href === null || await hasExpectedProjectHref(page, locator, projectKey, pathKind, allowArchivedSnapshot);
 }
 
 function scopedActionCandidates(
@@ -120,30 +134,30 @@ function scopedActionCandidates(
   ]);
 }
 
-export function overviewCandidates(page: Page, projectKey: string, displayName?: string): SonarLocator[] {
+export function overviewCandidates(page: Page, projectKey: string, displayName?: string, allowArchivedSnapshot = false): SonarLocator[] {
   const root = projectContentRoot(page);
   return [
     {
       locator: page.getByRole('navigation', { name: 'Project', exact: true }).getByRole('link', { name: 'Overview', exact: true }),
       strategy: 'scope:project-navigation;role:link:Overview',
-      validate: (locator) => hasExpectedProjectHref(page, locator, projectKey, /\/dashboard(?:\/|$)/iu),
+      validate: (locator) => hasExpectedProjectHref(page, locator, projectKey, 'home', allowArchivedSnapshot),
     },
     ...scopedActionCandidates(
       [root],
       'Overview',
       ['project-content'],
-      (locator) => isProjectAction(page, root, locator, projectKey, displayName),
+      (locator) => isProjectAction(page, root, locator, projectKey, displayName, 'home', allowArchivedSnapshot),
     ).filter((candidate) => !candidate.strategy.includes(';role:link:')),
   ];
 }
 
-export function overallControlCandidates(page: Page, projectKey: string, displayName?: string): SonarLocator[] {
+export function overallControlCandidates(page: Page, projectKey: string, displayName?: string, allowArchivedSnapshot = false): SonarLocator[] {
   const root = projectContentRoot(page);
   return scopedActionCandidates(
     [root],
     'Overall Code',
     ['project-content'],
-    (locator) => isProjectAction(page, root, locator, projectKey, displayName),
+    (locator) => isProjectAction(page, root, locator, projectKey, displayName, 'overall', allowArchivedSnapshot),
   );
 }
 
@@ -180,17 +194,17 @@ export async function overallPanel(page: Page, deadline?: WorkflowDeadline): Pro
   return result;
 }
 
-export async function issuesControlCandidates(page: Page, projectKey: string): Promise<SonarLocator[]> {
+export async function issuesControlCandidates(page: Page, projectKey: string, allowArchivedSnapshot = false): Promise<SonarLocator[]> {
   const candidates: SonarLocator[] = [];
   const projectNavigation = page.getByRole('navigation', { name: 'Project', exact: true });
   const projectLinks = projectNavigation.getByRole('link', { name: 'Issues', exact: true });
   for (let index = 0; index < Math.min(await projectLinks.count(), MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
     const projectLink = projectLinks.nth(index);
-    if (await hasExpectedProjectHref(page, projectLink, projectKey, /\/issues(?:\/|$)/iu)) {
+    if (await hasExpectedProjectHref(page, projectLink, projectKey, 'issues', allowArchivedSnapshot)) {
       candidates.push({
         locator: projectLink,
         strategy: 'scope:project-navigation;role:link:Issues',
-        validate: (locator) => hasExpectedProjectHref(page, locator, projectKey, /\/issues(?:\/|$)/iu),
+        validate: (locator) => hasExpectedProjectHref(page, locator, projectKey, 'issues', allowArchivedSnapshot),
       });
     }
   }

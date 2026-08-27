@@ -172,6 +172,7 @@ export async function runConfiguredProjects(
     };
     await writeAggregateData(config.reportRoot, aggregate);
     return {
+      reportRoot: config.reportRoot,
       outcomes,
       aggregate,
       manifests: discovery.manifests,

@@ -84,6 +84,14 @@ function normalizeDocument(
   return Object.freeze(normalized);
 }
 
+export function normalizeProjectConfigDocument(
+  document: ProjectConfigDocumentV1,
+  env: NodeJS.ProcessEnv = process.env,
+  validateSecrets = true,
+): readonly NormalizedProjectConfig[] {
+  return normalizeDocument(assertProjectConfigDocument(document), env, validateSecrets);
+}
+
 export function loadProjectConfig(filePath: string, env: NodeJS.ProcessEnv = process.env): readonly NormalizedProjectConfig[] {
   return normalizeDocument(readDocument(filePath), env);
 }

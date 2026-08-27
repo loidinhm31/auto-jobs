@@ -10,6 +10,8 @@ import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
 import { captureSonarqubeEvidence } from '../../src/reports/sonarqube/sonarqube-capture.js';
 import { captureSnykEvidence } from '../../src/reports/snyk/snyk-capture.js';
 import type { ScriptSafePage } from '../../src/reports/snyk/snyk-capture-support.js';
+import { defaultCapture } from '../../src/project/project-capture.js';
+import type { ProjectWorkflowResult } from '../../src/project/project-workflow.js';
 import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
 
 test.use({ trace: 'on-first-retry', screenshot: 'off', video: 'off' });
@@ -169,6 +171,69 @@ test('captures Snyk detail, summary-only, malformed, missing, and blocked redire
     expect(result.warnings.join(' ')).not.toContain('fixture-secret');
   } finally {
     await page.unroute(`${JENKINS_ORIGIN}/**`, fixtureRoute);
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
+
+test('refreshes an exact terminal build until archived publisher links are available', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'publisher-link-settle-'));
+  const snykHtml = fs.readFileSync(path.resolve('docker/jenkins/fixtures/reports/snyk/index.html'), 'utf8');
+  const sonarRoot = path.resolve('docker/jenkins/fixtures/reports/sonarqube');
+  const sonarHome = fs.readFileSync(path.join(sonarRoot, 'index.html'), 'utf8');
+  const sonarOverall = fs.readFileSync(path.join(sonarRoot, 'overall.html'), 'utf8');
+  const sonarIssues = fs.readFileSync(path.join(sonarRoot, 'issues.html'), 'utf8');
+  const origin = JENKINS_ORIGIN;
+  let terminalLoads = 0;
+  const terminalUrl = `${origin}/jenkins/job/service-a/42/`;
+  const project = {
+    ...snykProject(),
+    sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [origin] },
+    sources: {
+      snyk: { allowedOrigins: [origin], projectId: 'service-a' },
+      sonarqube: { allowedOrigins: [origin], projectId: 'service-a' },
+    },
+  } as unknown as NormalizedProjectConfig;
+  const workflow: ProjectWorkflowResult = {
+    terminal: {
+      build: { number: 42, url: terminalUrl }, status: 'SUCCESS', observedAt: new Date().toISOString(),
+      observationErrors: [], reloadCount: 0,
+    },
+    trigger: { capability: 'existing_build', triggerAttempts: 0, build: { number: 42, url: terminalUrl }, warnings: [] },
+  };
+  await page.context().route(`${origin}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/jenkins/job/service-a/42/') {
+      terminalLoads += 1;
+      const body = terminalLoads === 1
+        ? `<a style="display:none" href="${origin}/jenkins/job/service-a/42/artifact/reports/snyk/index.html">hidden stale Snyk</a>`
+        : terminalLoads === 2
+        ? `<a href="${origin}/jenkins/job/service-a/42/artifact/reports/snyk/index.html">snyk/index.html</a>` : `
+        <a href="${origin}/jenkins/job/service-a/42/artifact/reports/snyk/index.html">snyk/index.html</a>
+        <a href="${origin}/jenkins/job/service-a/42/artifact/reports/sonarqube/index.html">sonarqube/index.html</a>`;
+      await route.fulfill({ status: 200, contentType: 'text/html', body });
+    } else if (url.pathname.endsWith('/artifact/reports/snyk/index.html')) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: snykHtml });
+    } else if (url.pathname.endsWith('/artifact/reports/sonarqube/index.html')) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: sonarHome });
+    } else if (url.pathname.endsWith('/artifact/reports/sonarqube/overall.html')) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: sonarOverall });
+    } else if (url.pathname.endsWith('/artifact/reports/sonarqube/issues.html')) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: sonarIssues });
+    } else {
+      await route.fulfill({ status: 404, body: 'not found' });
+    }
+  });
+  try {
+    await page.goto(terminalUrl);
+    const result = await defaultCapture({
+      page, project, workflow, deadline: new WorkflowDeadline(30_000), outputDirectory,
+    });
+    expect(terminalLoads).toBeGreaterThan(2);
+    expect(result.reports.snyk.state).toBe('found');
+    expect(result.reports.sonarqube.state).toBe('found');
+    expect(result.artifacts?.screenshots).toEqual(['snyk-test-report.png', 'sonarqube-overall.png', 'sonarqube-issues.png']);
+  } finally {
+    await page.context().unroute(`${origin}/**`);
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });

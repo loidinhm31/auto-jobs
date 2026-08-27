@@ -23,6 +23,7 @@ export interface ProjectOutcome {
 }
 
 export interface RunnerExecutionResult {
+  readonly reportRoot: string;
   readonly outcomes: readonly ProjectOutcome[];
   readonly aggregate: AggregateReportResult;
   readonly manifests: readonly DiscoveredRunManifest[];

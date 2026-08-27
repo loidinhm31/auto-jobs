@@ -70,7 +70,7 @@ function validatedStepUrl(input: SonarStepInput, value: string, label: 'overall'
 
 export async function captureOverallStep(input: SonarStepInput): Promise<SonarStepResult> {
   const control = await firstAvailable(
-    overallControlCandidates(input.page, input.expectedKey, input.project.name),
+    overallControlCandidates(input.page, input.expectedKey, input.project.name, input.allowArchivedSnapshot),
     input.deadline,
   );
   await visible(control.locator, input.deadline, 'SonarQube Overall Code control was not visible');
@@ -101,9 +101,10 @@ export async function assertHomeIdentity(
   expectedKey: string,
   deadline: WorkflowDeadline,
   displayName?: string,
+  allowArchivedSnapshot = false,
 ): Promise<string> {
   const identityStrategy = await assertRenderedProjectIdentity(page, expectedKey, deadline, displayName, 'home');
-  const overview = await firstAvailable(overviewCandidates(page, expectedKey, displayName), deadline);
+  const overview = await firstAvailable(overviewCandidates(page, expectedKey, displayName, allowArchivedSnapshot), deadline);
   await visible(overview.locator, deadline, 'SonarQube Overview project header was not visible');
   if (!/;role:(?:link|button|tab):Overview$/u.test(overview.strategy)) {
     throw new Error('SonarQube Overview navigation control was not actionable');

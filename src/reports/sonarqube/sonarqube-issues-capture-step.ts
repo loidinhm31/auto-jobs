@@ -67,7 +67,7 @@ export async function assertRenderedProjectIdentity(
 
 export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIssuesStepResult> {
   const control = await firstAvailable(
-    () => issuesControlCandidates(input.page, input.expectedKey),
+    () => issuesControlCandidates(input.page, input.expectedKey, input.allowArchivedSnapshot),
     input.deadline,
   );
   await visible(control.locator, input, 'SonarQube Issues control was not visible');
@@ -75,7 +75,9 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
   await expect.poll(() => {
     try {
       const url = new URL(input.page.url());
-      return hasCredentialFreeAuthority(url) && exactQueryValue(url, 'id') === input.expectedKey && /\/issues(?:\/|$)/iu.test(url.pathname);
+      return hasCredentialFreeAuthority(url) && exactQueryValue(url, 'id') === input.expectedKey &&
+        (/\/issues(?:\/|$)/iu.test(url.pathname) ||
+          (input.allowArchivedSnapshot && /\/artifact\/(?:[^/]+\/)*sonarqube\/issues\.html$/iu.test(url.pathname)));
     } catch {
       return false;
     }

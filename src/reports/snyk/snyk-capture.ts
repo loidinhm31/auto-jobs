@@ -23,6 +23,7 @@ import {
   safeObservedUrl,
   screenshotReport,
   type ScriptSafePage,
+  type SnykSummaryEvidence,
   SNYK_VIEWPORT,
   snykProjectIdentityWarning,
   waitForLandmark,
@@ -34,6 +35,13 @@ export interface SnykCaptureResult {
   screenshots: string[];
   warnings: string[];
 }
+
+export type SnykSummaryReader = (
+  page: Page,
+  summaryUrl: string,
+  project: NormalizedProjectConfig,
+  deadline: WorkflowDeadline,
+) => Promise<SnykSummaryEvidence>;
 
 function navigation(state: SnykSourceEvidence['state'], liveUrl?: string): NavigationTarget {
   return {
@@ -70,6 +78,7 @@ export async function captureSnykEvidence(input: {
   outputDirectory: string;
   terminalBuildUrl?: string;
   openSafePage?: (page: Page) => Promise<ScriptSafePage>;
+  readSummary?: SnykSummaryReader;
 }): Promise<SnykCaptureResult> {
   let reportUrl: string | undefined;
   let terminalUrl: string | undefined;
@@ -99,19 +108,20 @@ export async function captureSnykEvidence(input: {
     try {
       await capturePage.setViewportSize(SNYK_VIEWPORT);
       const routeHandler = async (route: Parameters<Parameters<Page['route']>[1]>[0]): Promise<void> => {
+        const request = route.request();
         try {
           assertAllowedUrl(
-            route.request().url(),
+            request.url(),
             input.project.baseUrl,
             input.project.sourceOrigins.snyk,
             'Snyk request URL',
           );
         } catch {
-          policyBlocked = true;
+          if (request.isNavigationRequest() && request.resourceType() === 'document') policyBlocked = true;
           await route.abort('blockedbyclient');
           return;
         }
-        const blocked = ['font', 'image', 'media', 'script', 'worker', 'websocket'].includes(route.request().resourceType());
+        const blocked = ['font', 'image', 'media', 'script', 'worker', 'websocket'].includes(request.resourceType());
         if (blocked) await route.abort();
         else await route.fallback();
       };
@@ -138,7 +148,7 @@ export async function captureSnykEvidence(input: {
         if (identityWarning !== undefined) warnings.push(identityWarning);
         if (classified.summary?.href !== undefined) {
           try {
-            summaryEvidence = await readSummary(capturePage, classified.summary.href, input.project, input.deadline);
+            summaryEvidence = await (input.readSummary ?? readSummary)(capturePage, classified.summary.href, input.project, input.deadline);
           } catch (error) {
             warnings.push(`Snyk summary evidence failed: ${captureFailureMessage(error)}`);
           }

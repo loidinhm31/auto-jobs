@@ -86,6 +86,34 @@ test('reaps stale staging and publication temporaries without following symlinks
   }
 });
 
+test('reaps an expired lease left behind after a staging publication rename', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-orphan-lease-'));
+  try {
+    const reportRoot = path.join(root, 'reports');
+    const stagingRoot = path.join(root, 'artifacts');
+    const paths = new ArtifactPaths(reportRoot, stagingRoot);
+    await paths.initialize();
+    const runId = createRunId(NOW, '0000000000000104');
+    const staging = await paths.allocateStaging('service-a', runId);
+    const leasePath = stagingLeasePath(stagingRoot, 'service-a', runId);
+    const destination = path.join(reportRoot, 'service-a', 'pre-build', runId);
+    fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+    fs.renameSync(staging, destination);
+    fs.writeFileSync(leasePath, JSON.stringify({
+      schemaVersion: 1, projectId: 'service-a', runId, pid: 99999999,
+      createdAt: OLD.toISOString(), expiresAt: OLD.getTime(),
+    }));
+    markOld(leasePath);
+
+    const result = await paths.cleanupOrphans({ now: NOW, minimumAgeMs: 100 });
+    expect(result.removed).toBeGreaterThanOrEqual(1);
+    expect(fs.existsSync(destination)).toBe(true);
+    expect(fs.existsSync(leasePath)).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('preserves oversized orphan candidates and recovers a terminated staging owner', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-crash-recovery-'));
   try {

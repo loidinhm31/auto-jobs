@@ -19,6 +19,7 @@ export interface PollUntilOptions<T> {
   observe: () => Promise<T | undefined>;
   accept: (value: T) => boolean;
   maxObservations?: number;
+  maxAttempts?: number;
   signal?: AbortSignal;
 }
 
@@ -36,10 +37,17 @@ function pause(durationMs: number, signal?: AbortSignal): Promise<void> {
 export async function pollUntil<T>(options: PollUntilOptions<T>): Promise<PollResult<T>> {
   const observations: PollObservation<T>[] = [];
   const maxObservations = options.maxObservations ?? 32;
+  const maxAttempts = options.maxAttempts ?? Number.POSITIVE_INFINITY;
+  if (options.maxAttempts !== undefined && (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1)) {
+    throw new Error('Polling attempt limit must be a positive safe integer');
+  }
   let lastValue: T | undefined;
   let lastError: unknown;
+  let attempts = 0;
 
   while (options.deadline.remainingMs() > 0) {
+    if (attempts >= maxAttempts) throw new Error('Jenkins polling attempt limit was reached');
+    attempts += 1;
     if (options.signal?.aborted) {
       throw options.signal.reason ?? new Error('Polling aborted');
     }

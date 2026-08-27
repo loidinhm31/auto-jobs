@@ -25,10 +25,21 @@ gets a fresh browser context, absolute workflow deadline, run-scoped trigger
 state, artifact directory, normalized evidence model, and static HTML report.
 
 The saved pages under `templates/jenkins-template`, `templates/snyk-template`,
-and `templates/sonarqube-template` are fixture and design evidence. They are
-not copied wholesale into production output. The generated Jenkins/project
-report shell provides links to Jenkins, Snyk, SonarQube home, SonarQube
-overall, and SonarQube issues when validated evidence exists.
+and `templates/sonarqube-template` are also the explicit offline input for the
+default `npm run report` command. That mode loads bounded regular files,
+serves the snapshots through bounded Playwright context routes at a synthetic
+origin, follows the same Snyk/SonarQube capture flow, and writes normalized
+evidence, counts, findings, facets, screenshots, and an aggregate index. It
+does not contact a Jenkins job or a vendor host and never copies the captured
+HTML/CSS into the generated report. Set `REPORT_SOURCE=jenkins` to opt into
+the existing live collector when an authorized non-production endpoint and
+secret store exist.
+
+The generated Jenkins/project report shell provides links to Jenkins, Snyk,
+SonarQube home, SonarQube overall, and SonarQube issues when validated evidence
+exists. The snapshots also carry a passive relative-link navigation bar for
+the template-only Playwright fixture check; that check remains separate from
+the report-generation path.
 
 Snyk capture includes the visible `Snyk test report` section, a screenshot,
 severity totals, and at most 500 evidence-derived detailed findings with
@@ -151,6 +162,16 @@ evidence. The aggregate `reports/index.html` is rebuilt atomically from run
 manifests, links exact run folders, and reports partial-project failures without
 hiding successful projects.
 
+The default report command resolves this output as the project-local
+`reports/` directory when run from the repository root. `serve:report` is an
+optional read-only static viewer for that directory: it binds to loopback by
+default and requires explicit `--allow-lan` together with a non-loopback host
+for a trusted-LAN preview. `0.0.0.0` binds every IPv4 interface.
+The viewer has no authentication, does not list directories, refuses
+traversal and symlink paths, and never follows paths outside the canonical
+configured report root. Playwright's `test-results/` remains a separate test
+runner output directory.
+
 The accepted V1 scheduling invariant is sequential project execution within one
 runner/browser process, with a fresh context per project. After canonical report
 and staging roots are initialized, a private `reportRoot/.report-root-lock`
@@ -185,7 +206,10 @@ staging and rollback are now paired with the report-root lease, so concurrent
 same-host invocations sharing a report root wait or fail closed instead of
 publishing concurrently. Multi-host/distributed locking is not claimed.
 
-Run directories are allocated beneath a canonical, owner-private report root.
+Run directories are allocated beneath a canonical report root whose path
+components are real directories and never symlinks. The caller controls
+permissions for the global roots and their descendants; path traversal,
+symlinked directories, and unsafe artifact identities are still rejected.
 Project IDs, build numbers, and run IDs are validated before they become path
 segments. Manifest and result writes use temporary files followed by atomic
 renames. Discovery rejects symlinked directories and follows only safe artifact
@@ -351,7 +375,8 @@ source requires all three navigation targets and no warnings.
 `JENKINS_TRIGGER_MODE` defaults to `ui` and only `ui` is accepted;
 `JENKINS_TIMEOUT_MS` defaults to `300000`; `JENKINS_POLL_INTERVAL_MS` defaults
 to `1000`; `PLAYWRIGHT_BROWSER` defaults to `chromium`; and `ARTIFACT_DIR`
-defaults to an absolute `test-results` path. The Phase 7 handoff separately
+defaults to an absolute `reports` path. `test-results/` is reserved for
+Playwright test-runner output and is not the application report root. The Phase 7 handoff separately
 verifies the active safe-page path in Chromium and Firefox; this historical
 baseline is not the current release-gate status.
 `JENKINS_BUILD_NUMBER` is
@@ -367,6 +392,12 @@ non-empty `value`, optional `name`, and boolean `required`; supported kinds are
 `role`, `label`, `testId`, `text`, and `css`. Missing values use defaults.
 Report selectors may set `required: false`, making absent publisher output a
 normal report state rather than a configuration error.
+
+Legacy compatibility mode also accepts optional `SNYK_PROJECT_ID` and
+`SONARQUBE_PROJECT_ID` values. These identify the publisher project inside an
+archived report and may differ from `PROJECT_ID`, which identifies the runner
+output. Supplying them lets the local archived Snyk/Sonar fixtures remain
+complete without weakening project-identity validation.
 
 The authentication and build-page selector overrides
 (`JENKINS_AUTH_LANDMARK`, `JENKINS_BUILD_STATUS_SELECTOR`, and
@@ -476,6 +507,44 @@ must also send a CSP response header containing `frame-ancestors 'none'`; an
 HTML meta policy cannot enforce that directive. Missing optional publisher output
 produces a partial report with warnings, not a fabricated successful section.
 
+### Offline template report mode
+
+The CLI defaults to the checked-in snapshots so a meaningful report can be
+generated without the Jenkins pipeline. `npm run report` loads the six bounded
+template inputs, derives the SonarQube project identity from the saved
+dashboard, serves the pages from bounded Playwright context routes at
+`https://templates.invalid`, and runs the same Playwright capture and renderer
+used by the live path. The Snyk summary JSON is parsed from the checked-in
+file through an in-memory reader, so no loopback server or vendor request is
+needed. The result is written under `ARTIFACT_DIR` (default `reports`) with
+normalized Snyk summary/detail data, SonarQube Type/Severity facets, source
+screenshots, `data.json`, `manifest.json`, and an aggregate `index.html`.
+The `report` npm script routes Node/Playwright scratch writes to a unique
+project-local, Git-ignored `.report-runtime-*` directory, removes it after
+completion when it remains safe and within the bounded cleanup budget, and
+boundedly prunes only stale safe directories rather than intentionally using
+the host `/tmp` directory. The package scripts disable Node's optional compile
+cache for their child processes; when npm itself is quota-constrained before
+the script starts, prefix the command with
+`NODE_DISABLE_COMPILE_CACHE=1`. Unsafe or over-budget trees are preserved with
+a warning.
+
+The synthetic build is marked `TEMPLATE` with an `unknown` trigger capability;
+it is provenance for the snapshot run, not evidence that Jenkins executed a
+job. The checked-in Snyk summary now matches its six visible cards (critical/high
+`2/4`), and its page metadata reports six known vulnerabilities and six
+vulnerable dependency paths. The generated template-backed result is therefore
+`success` when all captures complete. Mismatched external evidence remains
+`partial` with a warning. Set
+`REPORT_SOURCE=jenkins` or use `npm run report:jenkins` only for the optional
+authorized live collector.
+
+The checked-in template fixture was refreshed on 2026-08-27 so its Snyk page
+metadata, six visible cards, and summary JSON agree: six findings total,
+critical/high `2/4`, and six vulnerable dependency paths. A clean
+template-backed run therefore reaches `success` when the other captures
+complete; mismatch handling remains required for arbitrary external reports.
+
 Unit and fixture gates cover sequential project isolation, existing-build
 zero-trigger proof,
 new queue/build correlation, parameterized detection with zero interaction,
@@ -484,14 +553,18 @@ and detail capture, SonarQube home-to-overall navigation, and Type/Severity
 issues capture despite generated-class changes. The deterministic generated-report
 gate covers local links, response-header CSP, escaping/inert HTML, keyboard
 traversal, axe WCAG A/AA, responsive widths, and fixed Chromium snapshots. These
-fixture/offline checks include Chromium and Firefox fixture coverage. WebKit
-coverage uses the digest-pinned Playwright Ubuntu runner documented in
+fixture/offline checks include Chromium and Firefox fixture coverage; the
+pinned WebKit release gate also selects WebKit for the unit suite, including
+the template-backed report runner. WebKit coverage uses the digest-pinned
+Playwright Ubuntu runner documented in
 `docs/release-gates.md`; direct host execution remains unsupported on Linux
 hosts missing the browser's required libraries.
 
 Failure evidence is never globally disabled. Keep normalized data, manifest,
 last safe URL/status, and trace on failure/first retry. Requested report
-screenshots are retained when capture succeeded; raw HTML, extra failure
+screenshots use a bounded three-attempt retry for transient browser protocol
+failures and are retained when capture succeeds; a persistent failure remains
+`incomplete` with its warning. Raw HTML, extra failure
 screenshots, and video are not retained. Redact credentials, cookies, query
 secrets, and sensitive headers before persistence.
 
@@ -710,13 +783,17 @@ The `:18080/login` HTTP 200 probe is local fixture evidence, not
 remote-contract evidence. No production job, untrusted fork, remote vendor
 page, or hard-coded credential was used.
 
-`ArtifactPaths` now validates canonical private roots and rejects overlap;
-staging allocations carry expiring private leases; and bounded startup and
+`ArtifactPaths` now validates canonical real-directory roots whose permissions
+are caller-managed and rejects overlap; staging allocations carry expiring
+leases; and bounded startup and
 post-run reapers inspect only the exact configured report/staging roots. The
 reapers enforce safe project/run/build names, age and active-lease checks,
 entry/byte/removal budgets, no-follow symlink checks, and lexical containment.
 Malformed leases, active or over-budget trees, symlink candidates, and
-ambiguous random rollback backups are preserved with bounded warnings. Only
+ambiguous random rollback backups are preserved with bounded warnings. The
+reaper also removes an expired, recognized lease whose staging run was already
+renamed into publication, closing the crash window between rename and lease
+cleanup. Only
 recognized, safe, stale, in-budget entries inside the exact configured roots
 are deletion candidates; unrestricted recursive or exhaustive root deletion is
 not claimed. Orphan lock-recovery directories are quarantined and removed only
@@ -735,30 +812,84 @@ lock, and the sequential V1 project policy remains in force inside the lease.
 The focused regression command was:
 
 ```sh
-npx playwright test tests/unit/artifact-lifecycle.spec.ts tests/unit/jenkins-phase-02.spec.ts \
+npx playwright test tests/unit/artifact-lifecycle.spec.ts tests/unit/artifact-paths.spec.ts tests/unit/jenkins-phase-02.spec.ts tests/unit/sequential-runner.spec.ts \
   --config=playwright.unit.config.ts --workers=1
 ```
 
-It passed 22/22, including SIGKILL staging recovery, interrupted aggregate
+It passed 49/49, including SIGKILL staging recovery, interrupted aggregate
 publication recovery, bounded cleanup with an outside symlink sentinel,
 concurrent-process lock waiting, stale/incomplete-lock recovery, finite-limit
 rejection, direct lease traversal rejection, and the historical Phase 2
-HTTP/canonical-reference/path-redaction checks. The explicit Phase 2/4
+HTTP/canonical-reference/path-redaction checks, caller-managed non-private
+artifact roots, standard Jenkins build markup, queue disappearance recovery,
+and concurrent-build rejection. The explicit Phase 2/4
 production-security acceptance above remains the policy boundary before
 enabling remote/live or untrusted inputs.
 
-Current continuation gate evidence, all recorded with zero retries:
+The default Jenkins contract reads bounded same-origin queue/build JSON when the
+fixture omits optional custom hooks, and a sole newer link under the default
+build selector is accepted only when that queue API proves the exact configured
+job/build identity. Custom selectors remain authoritative.
 
-- `npm run test:release` — type-check, build, 130 unit tests, and 5 Chromium
+Caller-managed permissions are an operational compatibility choice for shared
+workspace roots, not an authorization boundary: a same-host writer that can
+modify those roots can race publication paths. Security-sensitive deployments
+must provide a trusted, isolated report root and retain the same symlink,
+containment, identity, lease, and lock protections. This race is an accepted
+V1 local/same-host policy boundary, and the legacy `local-build-now: partial`
+result is accepted only as incomplete vendor evidence; neither is a
+production, remote/live, distributed, or untrusted-fork approval.
+
+Current post-hardening gate evidence, with no command retries:
+
+- `npm run test:release` — type-check, build, 160 unit tests, and 5 Chromium
   report tests.
-- `JENKINS_PORT=18080 npm test` — 130 unit tests, 13 Jenkins E2E tests, and 1
-  expected skip.
+- `JENKINS_PORT=18080 npm test` — 160 unit tests, 15 E2E tests, and 1 expected
+  skip (14 Jenkins-backed tests plus template navigation).
 - `JENKINS_PORT=18080 npm run test:e2e:build-now` — Build Now 1/1.
-- `env XDG_RUNTIME_DIR=/run/user/$(id -u) npm run test:release:webkit` — 130
-  unit tests and 5 WebKit report tests in the unchanged pinned Ubuntu image
-  `mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e`.
+- `env XDG_RUNTIME_DIR=/run/user/$(id -u) npm run test:release:webkit` — 160
+  WebKit unit tests and 5 WebKit report tests passed in the unchanged pinned
+  Ubuntu image; the container `npm ci --ignore-scripts` step audited 10
+  packages with 0 vulnerabilities.
 - `git diff --check` — passed.
 
-Generated evidence remained under `playwright-report/index.html`,
-`test-results/`, and `.runner-build/`; these ignored paths were not added to
-Git and are not release inputs.
+Generated application evidence is under `reports/index.html`; Playwright
+evidence remains under `playwright-report/index.html`, `test-results/`, and
+`.runner-build/`. All are ignored and are not release inputs.
+
+The final live-fixture report command exited 0 with `local-build-now: partial`
+and published Jenkins build 42 at
+`tmp/reports/local-build-now/42/20260825t210326691z-3041b4a9fee125a2/`;
+`data.json` records `state: partial` and nested `jenkins.buildNumber: 42` /
+`jenkins.status: SUCCESS`. Legacy mode remains partial until a schema-v1
+project file declares Snyk/Sonar artifact paths and identities.
+
+The queue-404 recovery is fail-closed: only the exact same-origin queue API
+executable tied to the exact configured job is accepted, and the job page is
+never scanned as a disappearance fallback. Queue/build API requests disable
+redirects and verify the final response URL. The 64 KiB response check rejects
+known oversized responses before body acceptance and rejects oversized
+buffered responses; because Playwright buffers `APIResponse`, this is an
+accepted input/retention bound rather than a hard peak-memory bound.
+
+## Post-review edge hardening (2026-08-26)
+
+The Phase 2/4 audit follow-up also closes the remaining local edge cases. A
+present-but-empty or duplicate SonarQube `id` query parameter is rejected
+before archived-link canonicalization; it is never replaced with the expected
+project ID. Terminal artifact settlement requires every configured publisher,
+uses an absolute five-second deadline with a 32-attempt cap, and keeps the
+previous optional-publisher behavior when neither publisher is configured.
+Semantic Snyk severity rows, findings, and project metadata are accepted only
+from visible nodes. The focused edge suite passed 60/60 and the delayed
+two-publisher browser regression passed 1/1.
+
+The current final local evidence supersedes the earlier historical build-42
+partial snapshot: `npm run test:release` passed with 152 unit and 5 Chromium
+report tests; `JENKINS_PORT=18080 npm test` passed with 152 unit, 15 E2E, and 1
+expected skip; Build Now passed 1/1; and the pinned Ubuntu WebKit runner passed
+152 unit (including the template-backed report runner) plus 5 WebKit report
+tests. The loopback report is
+`tmp/reports/local-build-now/56/20260826t020350772z-241ee9943873267c/` with
+`state: success`. Remote/live and trusted-secret-store access remain explicitly
+accepted opt-in boundaries, not release evidence.

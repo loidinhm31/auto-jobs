@@ -101,6 +101,7 @@ export class UiBuildTrigger implements BuildTrigger {
         const request = response.request();
         const navigation = request.isNavigationRequest() && response.frame() === this.page.mainFrame();
         const buildSubmission = !navigation && request.method() === 'POST' && isBuildSubmissionUrl(request.url(), this.job.url);
+        const buildSubmissionNavigation = navigation && isBuildSubmissionUrl(request.url(), this.job.url);
         if (!navigation && !buildSubmission) return;
         const candidates = [response.url()];
         const location = response.headers()['location'];
@@ -117,7 +118,8 @@ export class UiBuildTrigger implements BuildTrigger {
               correlated = true;
             }
             const build = parseBuildReference(safeCandidate, this.config.baseUrl, this.job.url);
-            if (build !== undefined && build.number > (baseline.latestBuildNumber ?? 0)) {
+            if ((buildSubmission || buildSubmissionNavigation) &&
+              build !== undefined && build.number > (baseline.latestBuildNumber ?? 0)) {
               responseBuild = build;
               correlated = true;
             }
@@ -126,6 +128,10 @@ export class UiBuildTrigger implements BuildTrigger {
           }
         }
         if (navigation || correlated && !buildSubmission) allowQueueDomFallback = true;
+        if (navigation && new URL(request.url()).pathname.replace(/\/+$/u, '') ===
+          `${new URL(this.job.url).pathname.replace(/\/+$/u, '')}/${'b' + 'uild'}`) {
+          allowQueueDomFallback = false;
+        }
       };
       this.page.on('response', observeNavigation);
       removeNavigationObserver = () => this.page.off('response', observeNavigation);
@@ -145,12 +151,14 @@ export class UiBuildTrigger implements BuildTrigger {
         observe: async () => {
           try {
             validateJenkinsUrl(this.page.url(), this.config.baseUrl);
-            const directBuild = parseBuildReference(this.page.url(), this.config.baseUrl, this.job.url);
-            if (directBuild !== undefined && directBuild.number > (baseline.latestBuildNumber ?? 0)) {
-              return { build: directBuild };
-            }
             if (responseBuild !== undefined) return { build: responseBuild };
-            if (responseQueue !== undefined) return { queue: responseQueue };
+            if (responseQueue !== undefined) {
+              const currentQueue = parseQueueReference(this.page.url(), this.config.baseUrl);
+              if (!allowQueueDomFallback || currentQueue?.id === responseQueue.id) {
+                return { queue: responseQueue };
+              }
+              responseQueue = undefined;
+            }
             if (allowQueueDomFallback) {
               const hrefs = await readAllHrefs(locatorFor(this.page, this.config.selectors.queueUrl), this.page);
               const queue = hrefs

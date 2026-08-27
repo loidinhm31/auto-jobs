@@ -4,7 +4,7 @@ import type {
   ClassifiedSourceLink,
   PageLinkCandidate,
 } from '../source-link-classifier.js';
-import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
+import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
 
 export interface SonarLinkClassification {
   home?: ClassifiedSourceLink;
@@ -35,14 +35,19 @@ function sonarHome(candidate: PageLinkCandidate, project: NormalizedProjectConfi
   try { url = new URL(candidate.href); } catch { return undefined; }
   const path = url.pathname.toLowerCase().replace(/\/+$/u, '');
   const text = candidateText(candidate);
+  const hasProjectIdParameter = url.searchParams.has('id');
   const projectId = exactQueryValue(url, 'id');
   const expectedProjectId = configuredProjectId(project);
+  const archivedSnapshot = isArchivedSonarqubeSnapshot(url);
+  if (hasProjectIdParameter && projectId === undefined) return undefined;
+  const snapshotProjectId = projectId ?? (archivedSnapshot ? expectedProjectId ?? project.id : undefined);
   const configuredOrigin = project.sourceOrigins.sonarqube.some((origin) => {
     try { return new URL(origin).origin === url.origin; } catch { return false; }
   });
-  if (!hasCredentialFreeAuthority(url) || !path.endsWith('/dashboard') || projectId === undefined ||
-    (expectedProjectId !== undefined && projectId !== expectedProjectId) ||
+  if (!hasCredentialFreeAuthority(url) || (!path.endsWith('/dashboard') && !archivedSnapshot) || snapshotProjectId === undefined ||
+    (expectedProjectId !== undefined && snapshotProjectId !== expectedProjectId) ||
     (!configuredOrigin && !text.includes('sonar') && !path.includes('sonar') && !url.hostname.toLowerCase().includes('sonar'))) return undefined;
+  if (projectId === undefined) url.searchParams.set('id', snapshotProjectId);
   return {
     href: url.toString(), publisher: 'sonarqube', kind: 'home',
     signal: text.includes('sonar') ? 'accessible-name' : 'path',
@@ -75,7 +80,7 @@ export function classifySonarLinks(
     const classified = sonarHome(candidate, project);
     if (classified === undefined) continue;
     try {
-      const href = assertAllowedUrl(candidate.href, project.baseUrl, project.sourceOrigins.sonarqube, 'observed SonarQube home');
+      const href = assertAllowedUrl(classified.href, project.baseUrl, project.sourceOrigins.sonarqube, 'observed SonarQube home');
       homes.push({ ...classified, href });
     } catch {
       warnings.push('an observed SonarQube home link was outside the configured origins');

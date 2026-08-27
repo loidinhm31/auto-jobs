@@ -26,7 +26,9 @@ const LEGACY_INPUT_KEYS = [
   'SONAR_REPORT_SELECTOR',
   'SNYK_REPORT_SELECTOR',
   'SNYK_ALLOWED_ORIGINS',
+  'SNYK_PROJECT_ID',
   'SONARQUBE_ALLOWED_ORIGINS',
+  'SONARQUBE_PROJECT_ID',
 ] as const;
 
 function optional(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -69,11 +71,15 @@ export function legacyProjectConfigDocument(
   if (legacy.buildNumber !== undefined) project.buildNumber = legacy.buildNumber;
   const snykOrigins = originList(env, 'SNYK_ALLOWED_ORIGINS');
   const sonarOrigins = originList(env, 'SONARQUBE_ALLOWED_ORIGINS');
+  const snykProjectId = optional(env, 'SNYK_PROJECT_ID');
+  const sonarProjectId = optional(env, 'SONARQUBE_PROJECT_ID');
   if (snykOrigins !== undefined || sonarOrigins !== undefined) {
     project.sourceOrigins = {};
     if (snykOrigins !== undefined) project.sourceOrigins.snyk = snykOrigins;
     if (sonarOrigins !== undefined) project.sourceOrigins.sonarqube = sonarOrigins;
   }
+  if (snykProjectId !== undefined) project.snyk = { projectId: snykProjectId };
+  if (sonarProjectId !== undefined) project.sonarqube = { projectId: sonarProjectId };
   return { schemaVersion: 1, projects: [project] };
 }
 

@@ -16,8 +16,12 @@ JENKINS_BUILD_STATUS_SELECTOR='{"kind":"testId","value":"jenkins-build-status","
 JENKINS_BUILD_URL_SELECTOR='{"kind":"testId","value":"jenkins-build-url","required":true}'
 SONAR_REPORT_SELECTOR='{"kind":"testId","value":"sonarqube-report","required":false}'
 SNYK_REPORT_SELECTOR='{"kind":"testId","value":"snyk-report","required":false}'
+# Optional vendor identities for archived reports when PROJECT_ID is only the
+# runner/report identifier. The local Jenkins fixture uses service-a.
+# SNYK_PROJECT_ID=service-a
+# SONARQUBE_PROJECT_ID=service-a
 
 JENKINS_TIMEOUT_MS=300000
 JENKINS_POLL_INTERVAL_MS=1000
 PLAYWRIGHT_BROWSER=chromium
-ARTIFACT_DIR=test-results
+ARTIFACT_DIR=reports

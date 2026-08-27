@@ -112,9 +112,9 @@ export async function extractSnykHtml(page: Page): Promise<SnykHtmlEvidence> {
     const cardElements = elements<HTMLElement>(document, '[data-snyk-test]', maxDetailCards + 1);
     const fallbackCards = elements<HTMLElement>(document, '.card--vuln', maxDetailCards + 1);
     const rawCards = [...new Set([...cardElements, ...fallbackCards])];
-    const visible = (card: HTMLElement): boolean => {
-      const style = getComputedStyle(card);
-      return style.display !== 'none' && style.visibility !== 'hidden' && card.getClientRects().length > 0;
+    const visible = (element: Element): boolean => {
+      const style = getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
     };
     const visibleCards = rawCards.filter(visible);
     const visibleCardSeverities = visibleCards.map(severityOf);
@@ -150,24 +150,25 @@ export async function extractSnykHtml(page: Page): Promise<SnykHtmlEvidence> {
       }];
     });
     const rowValue = (label: string): string | undefined => {
-      const row = elements(document, '.meta-row', 128).find((item) =>
+      const row = elements(document, '.meta-row', 128).filter(visible).find((item) =>
         item.querySelector('.meta-row-label')?.textContent?.trim().toLowerCase() === label);
       return textOf(row?.querySelector('.meta-row-value') ?? null);
     };
-    const countText = elements(document, '.meta-count', 128)
+    const countText = elements(document, '.meta-count', 128).filter(visible)
       .map((item) => textOf(item) ?? '').join(' ');
     const numberAfter = (pattern: RegExp): number | undefined => {
       const match = pattern.exec(countText);
       return match?.[1] === undefined ? undefined : Number(match[1]);
     };
-    const scannedPath = textOf(document.querySelector('.source-panel .paths'));
+    const scannedPathElement = document.querySelector('.source-panel .paths');
+    const scannedPath = scannedPathElement !== null && visible(scannedPathElement) ? textOf(scannedPathElement) : undefined;
     const packageManager = rowValue('package manager');
     const project = rowValue('project');
     const dependencyCount = numberAfter(/(\d+)\s+dependencies/iu);
     const dependencyPathCount = numberAfter(/(\d+)\s+vulnerable dependency paths/iu);
     const summaryCounts = Object.fromEntries(severityNames.map((severity) => [severity, 0])) as unknown as SnykSeverityCounts;
     let hasSummaryCounts = false;
-    for (const item of elements(document, '[data-severity-count], [data-severity], [class*="severity-count"]', 128)) {
+    for (const item of elements(document, '[data-severity-count], [data-severity], [class*="severity-count"]', 128).filter(visible)) {
       if (item.closest('[data-snyk-test], .card--vuln') !== null) continue;
       const severity = severityFromValue([
         item.getAttribute('data-severity'), item.getAttribute('aria-label'), item.getAttribute('class'),
@@ -178,21 +179,55 @@ export async function extractSnykHtml(page: Page): Promise<SnykHtmlEvidence> {
       summaryCounts[severity] += Number(match[1]);
       hasSummaryCounts = true;
     }
+    const semanticRoot = document.querySelector<HTMLElement>('[data-testid="snyk-report"]');
+    const semanticReport = semanticRoot !== null && visible(semanticRoot) ? semanticRoot : null;
+    const semanticCounts = Object.fromEntries(severityNames.map((severity) => [severity, 0])) as unknown as SnykSeverityCounts;
+    let hasSemanticCounts = false;
+    for (const row of semanticReport === null ? [] : elements(semanticReport, 'table tbody tr', 128).filter(visible)) {
+      const label = textOf(row.querySelector('th[scope="row"], th'));
+      const severity = severityFromValue(label);
+      const rawCount = textOf(row.querySelector('td'));
+      const match = /(?:^|\D)(\d{1,9})(?:\D|$)/u.exec(rawCount ?? '');
+      if (severity === undefined || match?.[1] === undefined) continue;
+      semanticCounts[severity] += Number(match[1]);
+      hasSemanticCounts = true;
+    }
+    const semanticFindings = semanticReport === null ? [] : elements(semanticReport, '[data-testid="snyk-findings"] li', maxDetailCards + 1)
+      .filter(visible)
+      .map((item): SnykFinding | undefined => {
+        const value = textOf(item);
+        const severity = severityFromValue(value);
+        if (value === undefined || severity === undefined) return undefined;
+        return { title: value, severity };
+      })
+      .filter((finding): finding is SnykFinding => finding !== undefined);
+    const semanticProjectElement = semanticReport?.querySelector('[data-testid="snyk-project"]') ?? null;
+    const semanticProject = semanticReport?.getAttribute('data-project-id') ??
+      (semanticProjectElement !== null && visible(semanticProjectElement) ? textOf(semanticProjectElement) : undefined)
+        ?.replace(/^project\s*:\s*/iu, '').trim();
+    const semanticMetadata = semanticProject === undefined || semanticProject.length === 0 ? {} : { project: semanticProject };
+    const effectiveFindings = findings.length > 0 ? findings : semanticFindings;
+    const effectiveHasDetailCards = visibleCards.length > 0 || semanticFindings.length > 0;
+    const effectiveCounts = hasSummaryCounts ? summaryCounts : hasSemanticCounts ? semanticCounts : undefined;
+    const severityCounts = cards.length > 0 ? counts : effectiveCounts;
     const metadata: SnykScanMetadata = {
       ...(scannedPath === undefined ? {} : { scannedPath }),
       ...(packageManager === undefined ? {} : { packageManager }),
       ...(project === undefined ? {} : { project }),
       ...(dependencyCount === undefined ? {} : { dependencyCount }),
       ...(dependencyPathCount === undefined ? {} : { dependencyPathCount }),
+      ...semanticMetadata,
     };
     const heading = textOf(document.querySelector('h1'));
     return {
       ...(heading === undefined ? {} : { title: heading }),
       metadata,
-      ...((cards.length > 0 || hasSummaryCounts) ? { severityCounts: cards.length > 0 ? counts : summaryCounts } : {}),
-      findings,
-      hasDetailCards: visibleCards.length > 0,
-      ...(cards.length === 0 ? {} : { selectorStrategy: cards.some((card) => cardElements.includes(card)) ? 'data-snyk-test' : 'css:.card--vuln' }),
+      ...(severityCounts === undefined ? {} : { severityCounts }),
+      findings: effectiveFindings,
+      hasDetailCards: effectiveHasDetailCards,
+      ...(cards.length > 0
+        ? { selectorStrategy: cards.some((card) => cardElements.includes(card)) ? 'data-snyk-test' : 'css:.card--vuln' }
+        : semanticFindings.length > 0 || hasSemanticCounts ? { selectorStrategy: 'semantic:data-testid=snyk-report' } : {}),
       ...(extractionWarnings.length === 0 ? {} : { warnings: extractionWarnings }),
     };
   }, { severityNames: [...SEVERITIES], maxDetailCards: MAX_DETAIL_CARDS });

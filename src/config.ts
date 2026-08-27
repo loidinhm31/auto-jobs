@@ -19,6 +19,7 @@ export type { RunnerConfig } from './config/legacy-runner-config.js';
 export {
   loadProjectConfig,
   loadProjectConfigs,
+  normalizeProjectConfigDocument,
   parseProjectsConfig,
   resolveProjectSecrets,
 } from './config/project-config-loader.js';

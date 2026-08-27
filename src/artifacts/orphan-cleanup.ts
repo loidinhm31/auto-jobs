@@ -12,6 +12,7 @@ const BUILD_DIRECTORY = /^(?:pre-build|[1-9]\d*)$/u;
 const PUBLICATION_DIRECTORY = /^(?:\.run-publication-|\.run-backup-)/u;
 const TEMP_ENTRY = /^(?:\.tmp-|\.bak-aggregate-|\.aggregate-publication-|\.report-root-lock-recovery-)/u;
 const STAGING_LEASE_TEMP = /^\.[a-z0-9][a-z0-9-]{0,80}\.lease\.[a-f\d]{16}\.tmp$/u;
+const STAGING_LEASE_FILE = /^([a-z0-9][a-z0-9-]{0,80})\.lease$/u;
 const MAX_WARNINGS = 32;
 export interface OrphanCleanupOptions {
   readonly now?: Date; readonly minimumAgeMs?: number; readonly maxEntries?: number;
@@ -91,7 +92,7 @@ async function removeCandidate(
     return false;
   }
 }
-async function cleanupLeaseTemps(leases: string, root: string, state: CleanupState): Promise<void> {
+async function cleanupLeaseEntries(leases: string, root: string, state: CleanupState): Promise<void> {
   let projects: Dirent[];
   try { projects = await entries(leases, state); } catch (error) { addWarning(state, `staging lease inventory failed: ${String(error)}`); return; }
   for (const project of projects) {
@@ -100,8 +101,31 @@ async function cleanupLeaseTemps(leases: string, root: string, state: CleanupSta
     let temps: Dirent[];
     try { temps = await entries(projectPath, state); } catch (error) { addWarning(state, `staging lease project inventory failed: ${project.name}`); continue; }
     for (const temp of temps) {
-      if (!STAGING_LEASE_TEMP.test(temp.name)) continue;
-      await removeCandidate(safeChild(projectPath, temp.name), root, state).catch((error) => addWarning(state, `staging lease cleanup failed: ${String(error)}`));
+      if (STAGING_LEASE_TEMP.test(temp.name)) {
+        await removeCandidate(safeChild(projectPath, temp.name), root, state).catch((error) => addWarning(state, `staging lease cleanup failed: ${String(error)}`));
+        continue;
+      }
+      const leaseMatch = STAGING_LEASE_FILE.exec(temp.name);
+      if (leaseMatch === null) continue;
+      const runId = leaseMatch[1]!;
+      const runPath = safeChild(root, project.name, runId);
+      try {
+        const runStat = await fs.lstat(runPath);
+        if (runStat.isSymbolicLink() || !runStat.isDirectory()) {
+          addWarning(state, `preserved unsafe staging run for orphan lease: ${project.name}/${runId}`);
+        }
+        continue;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          addWarning(state, `preserved staging run for orphan lease: ${project.name}/${runId}`);
+          continue;
+        }
+      }
+      let lease;
+      try { lease = await readStagingLease(root, project.name, runId); }
+      catch { addWarning(state, `preserved malformed orphan staging lease: ${project.name}/${runId}`); continue; }
+      if (lease === undefined || lease.expiresAt > state.options.now.getTime()) continue;
+      await removeCandidate(safeChild(projectPath, temp.name), root, state).catch((error) => addWarning(state, `orphan staging lease cleanup failed: ${String(error)}`));
     }
   }
 }
@@ -112,7 +136,7 @@ async function cleanupStagingRoot(root: string, state: CleanupState): Promise<vo
   for (const project of projectEntries) {
     if (project.name === STAGING_LEASE_DIRECTORY) {
       if (project.isSymbolicLink()) addWarning(state, 'preserved symlink staging lease directory');
-      else await cleanupLeaseTemps(safeChild(root, project.name), root, state);
+      else await cleanupLeaseEntries(safeChild(root, project.name), root, state);
       continue;
     }
     if (!project.isDirectory() || project.isSymbolicLink() || !SAFE_ID.test(project.name)) {

@@ -76,6 +76,10 @@ test('classifies one allowlisted Sonar dashboard and rejects ambiguity', () => {
     .toBeUndefined();
   expect(classifySonarLinks([{ href: 'https://analysis.example/dashboard?id=service-a&id=service-a', text: 'SonarQube' }], customOrigin).home)
     .toBeUndefined();
+  expect(classifySonarLinks([{ href: 'https://sonar.example/artifact/reports/sonarqube/index.html?id=' }], configured).home)
+    .toBeUndefined();
+  expect(classifySonarLinks([{ href: 'https://sonar.example/artifact/reports/sonarqube/index.html?id=service-a&id=service-a' }], configured).home)
+    .toBeUndefined();
 });
 
 test('requires home and Overview identities to remain on a Sonar dashboard', () => {
@@ -192,6 +196,47 @@ test('captures the saved Sonar templates through the complete Home to Overall to
   } finally {
     await page.context().unroute('https://jenkins.example/**');
     await page.context().unroute(`${sonarOrigin}/**`);
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
+
+test('captures the deterministic Jenkins archived SonarQube fixture through visible navigation', async ({ page }) => {
+  const fixtureRoot = path.resolve('docker/jenkins/fixtures/reports/sonarqube');
+  const home = fs.readFileSync(path.join(fixtureRoot, 'index.html'), 'utf8');
+  const overall = fs.readFileSync(path.join(fixtureRoot, 'overall.html'), 'utf8');
+  const issues = fs.readFileSync(path.join(fixtureRoot, 'issues.html'), 'utf8');
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-archived-fixture-'));
+  const configured = project({
+    sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: [] },
+    sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: [] } },
+  });
+  await page.context().route('https://jenkins.example/**', async (route) => {
+    const url = new URL(route.request().url());
+    const body = url.pathname.endsWith('/job/service-a/')
+      ? '<a href="/jenkins/job/service-a/42/artifact/reports/sonarqube/index.html">sonarqube/index.html</a>'
+      : url.pathname.endsWith('/artifact/reports/sonarqube/overall.html') ? overall
+        : url.pathname.endsWith('/artifact/reports/sonarqube/issues.html') ? issues
+          : url.pathname.endsWith('/artifact/reports/sonarqube/index.html') ? home
+            : 'not found';
+    await route.fulfill({ status: body === 'not found' ? 404 : 200, contentType: 'text/html', body });
+  });
+  try {
+    await page.goto('https://jenkins.example/jenkins/job/service-a/');
+    const result = await captureSonarqubeEvidence({
+      page,
+      project: configured,
+      deadline: new WorkflowDeadline(60_000),
+      outputDirectory,
+      terminalBuildUrl: 'https://jenkins.example/jenkins/job/service-a/',
+    });
+    expect(result.source.state).toBe('found');
+    expect(result.navigation['sonarqube-home'].state).toBe('found');
+    expect(result.navigation['sonarqube-overall'].state).toBe('found');
+    expect(result.navigation['sonarqube-issues'].state).toBe('found');
+    expect(result.source.facets).toEqual({ types: [{ label: 'Bug', count: 1 }], severities: [{ label: 'Major', count: 2 }] });
+    expect(result.screenshots).toEqual(['sonarqube-overall.png', 'sonarqube-issues.png']);
+  } finally {
+    await page.context().unroute('https://jenkins.example/**');
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });

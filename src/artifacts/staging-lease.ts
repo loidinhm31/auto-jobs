@@ -21,7 +21,7 @@ function assertSafeId(value: string, fieldName: string): void {
   if (!SAFE_ID.test(value)) throw new Error(`${fieldName} is not filesystem-safe`);
 }
 
-async function ensurePrivateChild(parent: string, name: string): Promise<string> {
+async function ensureChildDirectory(parent: string, name: string): Promise<string> {
   const child = path.join(parent, name);
   try {
     await fs.mkdir(child, { mode: 0o700 });
@@ -29,8 +29,8 @@ async function ensurePrivateChild(parent: string, name: string): Promise<string>
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
   }
   const stat = await fs.lstat(child);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || await fs.realpath(child) !== child) {
-    throw new Error('Staging lease path is unsafe');
+  if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(child) !== child) {
+    throw new Error('Staging lease path contains a symbolic link or non-directory');
   }
   return child;
 }
@@ -65,8 +65,8 @@ export async function createStagingLease(
   now = new Date(),
 ): Promise<void> {
   const leasePath = stagingLeasePath(stagingRoot, projectId, runId);
-  const leases = await ensurePrivateChild(path.resolve(stagingRoot), STAGING_LEASE_DIRECTORY);
-  const projectDirectory = await ensurePrivateChild(leases, projectId);
+  const leases = await ensureChildDirectory(path.resolve(stagingRoot), STAGING_LEASE_DIRECTORY);
+  const projectDirectory = await ensureChildDirectory(leases, projectId);
   const lease: StagingLease = {
     schemaVersion: 1,
     projectId,

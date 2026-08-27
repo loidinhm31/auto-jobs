@@ -9,7 +9,7 @@ import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import type { CaptureMetadata, NavigationTarget } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
-import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
+import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
 
 export const SONAR_VIEWPORT = { width: 1_440, height: 900 } as const;
 export const SONAR_SCREENSHOTS = {
@@ -40,11 +40,17 @@ export function projectKeyFromHome(
   return key;
 }
 
-export function assertProjectUrl(value: string, expectedKey: string, label: string): string {
+export function assertProjectUrl(
+  value: string,
+  expectedKey: string,
+  label: string,
+  allowArchivedSnapshot = false,
+): string {
   const url = new URL(value);
   if (!hasCredentialFreeAuthority(url) || exactQueryValue(url, 'id') !== expectedKey) throw new Error(`SonarQube ${label} has the wrong project identity`);
   if (/\/login(?:\/|$)/iu.test(url.pathname)) throw new Error(`SonarQube ${label} redirected to login`);
-  if ((label === 'home' || label === 'Overview') && !/\/dashboard\/?$/iu.test(url.pathname)) {
+  if ((label === 'home' || label === 'Overview') && !/\/dashboard\/?$/iu.test(url.pathname) &&
+    !(allowArchivedSnapshot && isArchivedSonarqubeSnapshot(url))) {
     throw new Error(`SonarQube ${label} is not a project dashboard`);
   }
   return url.toString();

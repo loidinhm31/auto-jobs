@@ -20,6 +20,7 @@ export const SNYK_VIEWPORT = { width: 1_440, height: 900 } as const;
 export const SNYK_SCREENSHOT_NAME = 'snyk-test-report.png';
 const MAX_LINK_CANDIDATES = 256;
 const MAX_SUMMARY_REDIRECTS = 5;
+const MAX_SCREENSHOT_ATTEMPTS = 3;
 
 export interface SnykSummaryEvidence {
   parsed: ParsedSnykSummary;
@@ -39,6 +40,8 @@ export async function pageLinkCandidates(page: Page): Promise<PageLinkCandidate[
       const link = items.item(index);
       if (link === null) continue;
       if (result.length >= maximum) break;
+      const style = getComputedStyle(link);
+      if (style.display === 'none' || style.visibility === 'hidden' || link.getClientRects().length === 0) continue;
       const href = link.getAttribute('href');
       if (href === null || href.trim().length === 0) continue;
       try {
@@ -178,7 +181,21 @@ export async function screenshotReport(
   const report = (await container.count()) > 0 ? container : page.locator('body');
   await report.scrollIntoViewIfNeeded();
   const screenshotPath = path.join(outputDirectory, SNYK_SCREENSHOT_NAME);
-  await report.screenshot({ path: screenshotPath, animations: 'disabled', timeout: deadline.requireRemaining() });
+  let captured = false;
+  let screenshotError: unknown;
+  for (let attempt = 0; attempt < MAX_SCREENSHOT_ATTEMPTS; attempt += 1) {
+    try {
+      await report.screenshot({ path: screenshotPath, animations: 'disabled', timeout: deadline.requireRemaining() });
+      captured = true;
+      break;
+    } catch (error) {
+      screenshotError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt + 1 >= MAX_SCREENSHOT_ATTEMPTS || !/Protocol error|captureScreenshot|Unable to capture screenshot/iu.test(message)) break;
+      try { deadline.requireRemaining(); } catch { break; }
+    }
+  }
+  if (!captured) throw screenshotError ?? new Error('Snyk report screenshot failed without a diagnostic');
   const hash = crypto.createHash('sha256').update(await fs.readFile(screenshotPath)).digest('hex');
   return {
     metadata: { screenshotPath: SNYK_SCREENSHOT_NAME, screenshotSha256: hash, viewport: SNYK_VIEWPORT },

@@ -8,3 +8,7 @@ export function exactQueryValue(url: URL, key: string): string | undefined {
 export function hasCredentialFreeAuthority(url: URL): boolean {
   return url.username.length === 0 && url.password.length === 0;
 }
+
+export function isArchivedSonarqubeSnapshot(url: URL): boolean {
+  return /\/artifact\/(?:[^/]+\/)*sonarqube\/index\.html$/iu.test(url.pathname);
+}

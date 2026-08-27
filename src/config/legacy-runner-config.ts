@@ -167,7 +167,7 @@ export function parseConfig(
     timeoutMs,
     pollIntervalMs,
     browser,
-    artifactDir: path.resolve(readOptional(env, 'ARTIFACT_DIR') || 'test-results'),
+    artifactDir: path.resolve(readOptional(env, 'ARTIFACT_DIR') || 'reports'),
   };
   if (buildNumber !== undefined) {
     config.buildNumber = buildNumber;
