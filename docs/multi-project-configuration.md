@@ -1,8 +1,58 @@
 # Multi-project configuration
 
-The V1 runner reads one schema-versioned JSON document and executes enabled
-projects sequentially. Project IDs are lower-case filesystem-safe identifiers;
-the runner creates immutable `reports/<project>/<build>/<run>/` directories.
+The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
+projects, and runs them sequentially in configuration order. The current
+implementation is in `src/config/project-config-schema.ts`,
+`src/config/project-config-loader.ts`, and `src/runner.ts`.
+
+## Source selection
+
+`REPORT_SOURCE` accepts `templates` or `jenkins` and defaults to `templates`.
+
+- Template mode creates its own synthetic schema-v1 project from the checked-in
+  files under `templates/`. It does not parse `PROJECTS_CONFIG_PATH`, use
+  Jenkins credentials, or contact Jenkins.
+- Jenkins mode calls the project-config loader. In this mode,
+  `PROJECTS_CONFIG_PATH` is honored and selects file mode; when it is absent,
+  legacy environment inputs are adapted into one project.
+
+File mode and legacy structural inputs are mutually exclusive. Do not set
+`PROJECTS_CONFIG_PATH` together with inputs such as `JENKINS_BASE_URL`,
+`JENKINS_JOB_PATH`, `JENKINS_BUILD_NUMBER`, or `ARTIFACT_DIR`. Credential
+environment variables referenced by the JSON are resolved at run time and are
+not themselves configuration structure.
+
+## Schema-v1 document
+
+The root requires `schemaVersion: 1` and `projects` with one to 50 entries and
+at least one enabled project. Each project requires:
+
+- a unique lowercase filesystem-safe `id`;
+- a display `name`;
+- `baseUrl` (or the compatibility alias `jenkinsUrl`); and
+- a relative `jobPath`.
+
+`enabled: false` retains an entry without executing it. Optional project and
+`defaults` fields cover `loginPath`, `triggerMode` (`ui` only), bounded
+timeouts/poll intervals, `browser`, `artifactDir`, selectors, origin policy,
+credential references, `buildNumber`, and source settings for `snyk` and
+`sonarqube`.
+
+The checked-in [projects.example.json](../config/projects.example.json) shows
+two projects with source paths, source origins, identities, and per-project
+credential references. A minimal valid document is also shown in the root
+[README](../README.md).
+
+The checked-in example uses `.invalid` placeholder hosts and is not a runnable
+Jenkins configuration. Replace its Jenkins/vendor URLs and job paths with
+authorized values before using it for a live collection.
+
+### Credentials
+
+Use either `credentials` with `usernameVariable`/`passwordVariable`, or the
+compatibility `credentialVariables` shape with `username`/`password`. Both
+shapes name environment variables; neither accepts secret values. If omitted,
+the loader falls back to `JENKINS_USERNAME` and `JENKINS_PASSWORD`.
 
 ```json
 {
@@ -11,145 +61,182 @@ the runner creates immutable `reports/<project>/<build>/<run>/` directories.
     "credentials": {
       "usernameVariable": "JENKINS_USERNAME",
       "passwordVariable": "JENKINS_PASSWORD"
-    },
-    "artifactDir": "reports",
-    "browser": "chromium"
+    }
   },
   "projects": [
     {
       "id": "service-a",
       "name": "Service A",
-      "baseUrl": "https://jenkins.example/jenkins",
-      "jobPath": "service-a",
-      "snyk": { "reportPath": "artifact/snyk-results.html", "projectId": "service-a" },
-      "sonarqube": { "homeUrl": "https://sonarqube.example/dashboard?id=service-a" }
+      "baseUrl": "https://jenkins.example.invalid/jenkins",
+      "jobPath": "service-a"
     }
   ]
 }
 ```
 
-Set `PROJECTS_CONFIG_PATH` to the document. Credentials are environment
-variable names, never credential values. A project may override the default
-references with `credentialVariables: { "username": "SERVICE_A_USER",
-"password": "SERVICE_A_PASSWORD" }`. Keep those values in the CI secret
-store or local shell environment; do not put them in JSON, fixtures, traces,
-screenshots, or reports.
+Set the referenced names in the shell or CI secret store before running. Do
+not put usernames, passwords, tokens, cookies, or credential-bearing URLs in
+the JSON, source tree, traces, screenshots, or reports.
 
-`enabled: false` keeps a project in the document without executing it. The
-enabled sequence is the execution order. The aggregate report records every
-outcome and keeps going after a project failure; the CLI exits nonzero if any
-project failed.
+## Source settings and validation
 
-V1 keeps the accepted sequential project invariant: enabled projects run one at
-a time in configuration order through one runner/browser process, with a fresh
-context for each project. The local/same-host V1 lifecycle and report-root lock
-residuals are closed: a private same-host/same-UID lease serializes concurrent
-invocations through discovery and aggregate publication, with bounded stale
-recovery. Distributed filesystems and uncoordinated foreign-host writers
-remain unsupported.
+Source settings are optional but useful for complete evidence:
 
-All enabled projects use one browser in a sequential run. `browser` defaults to
-`chromium`; Firefox and WebKit require explicit selection. The fixture gate
-passed 3/3 in Chromium and 3/3 in Firefox, including the default safe-page
-fallback. WebKit is unavailable on this host because `libicu74` and
-`libjpeg-turbo8` are unavailable; use the pinned Ubuntu runner.
+```json
+{
+  "sourceOrigins": {
+    "snyk": ["https://snyk.example.invalid"],
+    "sonarqube": ["https://sonarqube.example.invalid"]
+  },
+  "snyk": {
+    "reportPath": "artifact/snyk-results.html",
+    "projectId": "service-a"
+  },
+  "sonarqube": {
+    "homeUrl": "https://sonarqube.example.invalid/dashboard?id=service-a",
+    "projectId": "service-a"
+  }
+}
+```
 
-For the disposable Compose controller, use
-`playwright-vulnerability-report` as the parameterized fail-closed control. Its
-`FIXTURE_VARIANT` values are `pass`, `failed`, `empty`, and `malformed`; the
-`Build with Parameters` control is detected before interaction. Use
-`playwright-vulnerability-report-build-now` for the minimal non-parameterized
-Build Now correlation path. Both jobs are seeded on the same controller and
-use the same compact fixture corpus: `reports/manifest.json`, semantic Snyk
-HTML/JSON, and SonarQube home/Overall/Issues HTML plus JSON. Variants may
-intentionally remove or replace publisher files, while the Build Now job uses
-the normal corpus.
+The snippet is an extension to a project entry, not a standalone document.
+`reportPath` must remain within the Jenkins base context. `homeUrl` and all
+observed redirects must be HTTP(S), credential-free, and within the Jenkins
+base context or an explicit allowed origin. Origin values are bare origins,
+not paths. Credential-like query keys/values, traversal, unsafe job paths,
+queries/fragments in base URLs, and duplicate or invalid SonarQube project IDs
+are rejected.
 
-## Offline template report (default)
+The loader validates the JSON before a browser is launched. A file is a regular
+JSON file no larger than 1 MiB. Timeouts, poll intervals, origins, selectors,
+artifact identities, and report data are bounded. Enabled projects must share
+one browser and one global `artifactDir` for the sequential runner.
 
-The normal report command consumes the checked-in template snapshots directly.
-It runs Playwright against bounded synthetic-origin context routes, so the
-Jenkins controller and vendor credentials are not needed:
+## Execution and output
+
+Run file mode explicitly:
 
 ```sh
-ARTIFACT_DIR=reports \
-PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
+REPORT_SOURCE=jenkins \
+PROJECTS_CONFIG_PATH="$PWD/config/projects.example.json" \
 npm run report
 ```
 
-Open `reports/index.html`. The project run contains the normalized Snyk
-summary/detail findings, SonarQube Type/Severity facets, provenance, and the
-three source screenshots. The checked-in Snyk summary and six visible detail
-cards now agree at `2/4` critical/high, and the page metadata reports six
-vulnerabilities and six vulnerable dependency paths. The separate archived
-Jenkins fixture also remains consistent at `0/1/2/1` with four findings.
+The command above is illustrative only until the `.invalid` placeholders in
+the example are replaced. Provide the environment variables named by the
+document separately. The CLI
+exits nonzero if a project fails, while the aggregate keeps outcomes for
+projects that did complete. A failed publisher capture is represented as
+`partial`; a workflow or persistence failure is `failed`.
 
-## Authorized live Jenkins report
+The default report root is `reports/`, or the configured `artifactDir`. Each
+run is immutable and uses:
 
-Recreate the disposable controller after changing Docker fixtures so the
-container receives the current files:
-
-```sh
-JENKINS_PORT=18080 docker compose up --build -d jenkins
+```text
+<artifactDir>/
+├── index.html
+├── aggregate-data.json
+├── assets/report.css
+└── <project-id>/
+    ├── <build-number>/<run-id>/
+    │   ├── index.html
+    │   ├── data.json
+    │   ├── manifest.json
+    │   └── requested screenshots
+    └── pre-build/<run-id>/
+        ├── data.json
+        └── manifest.json
 ```
 
-From the directory where the report should be written (for example `tmp/`),
-run the legacy compatibility path with vendor identities separate from the
-runner project ID:
+The `pre-build` location is used for failures before Jenkins provides a build
+identity. It has no fabricated build number or build URL and normally has no
+build-linked `index.html`. Failure persistence is best-effort: the runner
+attempts to write bounded failure data, a manifest, diagnostics, and available
+artifacts, but a write/render/publish failure can leave the outcome without a
+complete run directory.
 
-```sh
-ARTIFACT_DIR=reports \
-JENKINS_BASE_URL=http://127.0.0.1:18080 \
-JENKINS_JOB_PATH=playwright-vulnerability-report-build-now \
-JENKINS_USERNAME=local-admin \
-JENKINS_PASSWORD=local-fixture-password \
-PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' \
-SNYK_PROJECT_ID=service-a SONARQUBE_PROJECT_ID=service-a \
-REPORT_SOURCE=jenkins npm run report
-```
+## Sequential and lock boundaries
 
-The expected local result is `local-build-now: success`. This is the explicit
-live-Jenkins path; the default command above does not use the pipeline or
-controller. Open
-`reports/index.html` (or serve `reports/` over HTTP) and follow the run link.
-`reports/<project>/<build>/<run>/` contains normalized `data.json`,
-`manifest.json`, local screenshots, and generated HTML. `test-results/`
-belongs only to Playwright test-runner output; it is ignored and is not the
-application report root. The saved files under `templates/` are consumed as
-bounded source snapshots in offline mode, but are not copied as production
-HTML/CSS into reports. Generated reports use
-the local `reports/assets/report.css` stylesheet and retain only normalized
-vendor evidence plus requested screenshots.
+Enabled projects run one at a time through one browser process, with a fresh
+Playwright context per project and one absolute workflow deadline per project.
+Existing-build mode performs no trigger action. Without `buildNumber`, Jenkins
+V1 supports only a non-parameterized UI `Build Now`; parameterized jobs are
+detected before interaction and rejected.
 
-The configuration contract does not close remote/live vendor capture. Remote/live
-Snyk/SonarQube capture and the optional Jenkins contract remain opt-in and
-blocked here without an authorized endpoint and trusted CI secret-store access.
-Pre-build failures remain sanitized project outcomes without a build-linked
-report. Whole-directory publication rollback, bounded staging/temp-root
-recovery, aggregate crash recovery, and same-host locking are closed within V1;
-bounded preservation still keeps malformed, oversized, symlinked, active, and
-ambiguous entries. See [Release gates](./release-gates.md) for the exact current
-commands, counts, artifact paths, and release boundary.
+The runner uses a private report-root filesystem lease to serialize concurrent
+work through discovery and aggregate publication. The owner record contains a
+random token, PID, hostname, acquisition time, and expiry; it has no UID field.
+Therefore “same-host/same-UID” is not an authorization guarantee. Recovery is
+limited to an expired same-host owner whose PID is demonstrably dead (or a
+bounded incomplete claim); foreign-host, malformed, live-owner, and symlinked
+locks fail closed. Distributed filesystems and uncoordinated foreign-host
+writers are outside V1.
 
-Current continuation evidence (2026-08-26) is 152 unit + 5 Chromium and 152
-unit + 5 WebKit (including the template-backed runner); Jenkins is 152 unit +
-15 E2E + 1 expected skip; Build Now is 1/1; and the focused edge regression is
-60/60 plus the delayed-publisher browser regression 1/1. With the default
-`ARTIFACT_DIR`, generated evidence paths are the ignored
-`reports/`, `.report-runtime-*`, `playwright-report/index.html`,
-`test-results/`, and `.runner-build/`; they are not release inputs. The report
-command cleans its per-run `.report-runtime-*` directory on normal completion
-and bounds stale-directory pruning after an interrupted process. The package
-also disables Node's optional compile cache for its managed children. If the
-Node 24/npm 11 parent process fails before a script starts because its default
-`/tmp/node-compile-cache` is quota-constrained, prefix the command with
-`NODE_DISABLE_COMPILE_CACHE=1`; package scripts cannot change the parent after
-it has started.
+Report and staging roots must be canonical, non-overlapping directories.
+Project/build/run path segments are validated, temporary publication uses
+atomic replacement/rollback, and cleanup inspects only the exact configured
+roots within entry, byte, age, lease, and removal budgets. Unsafe, malformed,
+active, oversized, symlinked, or ambiguous entries are preserved with bounded
+warnings.
 
-Historical Phase 2/4 findings are resolved or explicitly accepted at the
-architecture boundary. The remaining V1 acceptance is owned by the runner
-maintainers, dated 2026-08-25, and must be reviewed/expired by 2026-09-25 and
-before any remote/live or untrusted-input enablement. The pinned Ubuntu WebKit
-runner and digest are unchanged:
-`mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e`.
-Direct host WebKit remains unsupported on this Fedora host.
+## Disposable Jenkins fixture
+
+The Compose fixture seeds two jobs on one controller:
+
+- `playwright-vulnerability-report` is parameterized with
+  `FIXTURE_VARIANT=pass|failed|empty|malformed`. `pass` keeps the normal
+  compact publisher corpus; `failed` archives it before returning a failed
+  build; `empty` removes publisher directories; `malformed` substitutes
+  malformed publisher files.
+- `playwright-vulnerability-report-build-now` has no parameters and exercises
+  the non-parameterized Build Now correlation path with the normal corpus.
+
+Neither job runs a real Snyk or SonarQube scanner. The fixture archives
+`reports/manifest.json`, Snyk HTML/JSON, and SonarQube home/overall/issues
+HTML/JSON files. Use [docker-compose.yml](../docker-compose.yml) for startup;
+its `JENKINS_PORT` value is the host port and maps to container port 8080.
+`docker-compose.webkit.yml` is a separate browser gate and publishes no
+ports.
+
+Do not use fixture credentials outside disposable local development. Stop with
+`docker compose down`; use `docker compose down -v` only when intentionally
+discarding the named `jenkins_home` volume and its history.
+
+## Offline template source
+
+Template mode reads six bounded inputs: the Jenkins snapshot, Snyk HTML and
+summary JSON, and SonarQube home, Overall, and Issues HTML. It installs bounded
+Playwright context routes at a synthetic origin and invokes the same capture,
+normalization, artifact, and rendering boundaries as the Jenkins workflow.
+No Jenkins controller, pipeline, vendor service, or Jenkins credential is
+needed. `PROJECTS_CONFIG_PATH` is not consulted in this mode.
+
+The checked-in template Snyk page and summary describe six findings (critical
+2, high 4); the Docker Jenkins fixture is a separate four-finding corpus
+(critical 0, high 1, medium 2, low 1). These are fixture data, not live
+service observations.
+
+## Artifact and trace distinction
+
+Application report artifacts are normalized `data.json`, contract-validated
+`manifest.json`, generated `index.html` when a build-linked report can be
+rendered, and requested Snyk/SonarQube screenshots. The Playwright test runner
+uses `test-results/` (and the HTML/blob report locations selected by its
+configuration) for test evidence. Its traces are test traces, not vendor
+report evidence. An optional `trace.zip` name is accepted by the application
+manifest allowlist only when it is actually supplied; do not assume it exists,
+especially for a pre-build failure.
+
+## Security boundary
+
+The renderer escapes values and validates external links. The server sends a
+restrictive CSP response header, refuses traversal/symlink escapes, and serves
+only GET/HEAD from a canonical report root. Credentials and authentication
+state are ephemeral; storage state and raw vendor HTML are not persisted.
+Caller-managed permissions on report/staging roots are an operational choice,
+not an authorization boundary: another same-host writer with access to the
+root can race publication. Use a trusted isolated root for sensitive runs.
+
+For the complete command and release boundary, see
+[release-gates.md](./release-gates.md). This repository documentation does not
+claim that a live Jenkins or browser execution has been run.
