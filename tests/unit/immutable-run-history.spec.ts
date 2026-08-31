@@ -16,9 +16,7 @@ function writeConfig(root: string): string {
     schemaVersion: 1,
     defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
     projects: [{
-      id: 'service-a',
-      name: 'Service A',
-      loginUrl: 'https://jenkins.example/login',
+      id: 'service-a', name: 'Service A', loginUrl: 'https://jenkins.example/login',
       jobUrl: 'https://jenkins.example/job/service-a/',
       credentials: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
     }],
@@ -26,61 +24,54 @@ function writeConfig(root: string): string {
   return filename;
 }
 
-function completeCapture(buildUrl: string): CaptureResult {
-  const source = { state: 'found' as const, captures: [], navigation: [], warnings: [] };
-  const target = (key: 'jenkins-build' | 'snyk-report' | 'sonarqube-home' | 'sonarqube-overall' | 'sonarqube-issues') => ({
+function completeCapture(jobUrl: string): CaptureResult {
+  const target = (key: 'jenkins-job' | 'snyk-report' | 'sonarqube-home' | 'sonarqube-overall' | 'sonarqube-issues') => ({
     key, localAnchor: `#${key}`, state: 'found' as const,
   });
+  const source = { state: 'found' as const, captures: [], navigation: [], warnings: [] };
+  const snykSource = { ...source, navigation: [target('snyk-report')] };
+  const sonarqubeSource = {
+    ...source,
+    navigation: [target('sonarqube-home'), target('sonarqube-overall'), target('sonarqube-issues')],
+  };
   return {
     navigation: {
-      'jenkins-build': { ...target('jenkins-build'), liveUrl: buildUrl },
+      'jenkins-job': { ...target('jenkins-job'), localAnchor: '#jenkins', liveUrl: jobUrl },
       'snyk-report': target('snyk-report'),
       'sonarqube-home': target('sonarqube-home'),
       'sonarqube-overall': target('sonarqube-overall'),
       'sonarqube-issues': target('sonarqube-issues'),
     },
-    reports: { snyk: source, sonarqube: source },
+    reports: { snyk: snykSource, sonarqube: sonarqubeSource },
     warnings: [],
   };
 }
 
-test('keeps exact same-build reruns in immutable report folders and aggregate links', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-run-history-'));
+test('keeps direct same-job reruns in immutable report folders and aggregate links', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'direct-run-history-'));
   try {
-    const configPath = writeConfig(root);
-    const environment = {
-      USER: 'fixture-user', PASSWORD: 'fixture-password',
-    };
-    const project = loadProjectConfig(configPath, environment)[0]!;
+    const environment = { USER: 'fixture-user', PASSWORD: 'fixture-password' };
+    const project = loadProjectConfig(writeConfig(root), environment)[0]!;
     const browser = {
       newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
       close: async () => undefined,
     } as unknown as Browser;
     const workflow: ProjectWorkflow = async (_page, currentProject, _secrets, _deadline, state) => {
-      const build = { number: 42, url: `${currentProject.jobUrl}42/` };
       state.transition('authenticated');
-      state.transition('job_resolved');
-      state.transition('existing_build_selected');
-      state.bindBuild(build);
-      state.transition('running');
-      state.transition('terminal');
-      return {
-        terminal: { build, status: 'SUCCESS', observedAt: '2026-08-24T04:00:00.000Z', observationErrors: [], reloadCount: 0 },
-        trigger: { capability: 'existing_build', triggerAttempts: 0, build, warnings: [] },
-      };
+      state.transition('job_opened');
+      return { jobUrl: currentProject.jobUrl, observedAt: '2026-08-24T04:00:00.000Z' };
     };
     let suffix = 0;
-    const executeProject = (currentProject: typeof project, dependencies: Parameters<typeof runProject>[1]) => runProject(currentProject, {
-      ...dependencies,
-      workflow,
-      capture: async ({ workflow: completed }) => completeCapture(completed.terminal.build.url),
-    });
     const run = () => runConfiguredProjects([project], {
       runtimeEnvironment: environment,
       launchBrowser: async () => browser,
       runIdSuffix: () => (++suffix).toString(16).padStart(16, '0'),
       now: () => new Date('2026-08-24T04:00:00.000Z'),
-      executeProject,
+      executeProject: async (currentProject, dependencies) => runProject(currentProject, {
+        ...dependencies,
+        workflow,
+        capture: async () => completeCapture(currentProject.jobUrl),
+      }),
     });
 
     const first = await run();
@@ -89,33 +80,28 @@ test('keeps exact same-build reruns in immutable report folders and aggregate li
     const snapshot = ['data.json', 'index.html', 'manifest.json'].map((filename) => ({
       filename, contents: fs.readFileSync(path.join(firstDirectory, filename)),
     }));
-
     const second = await run();
     const secondOutcome = second.outcomes[0]!;
-    expect(firstOutcome.buildNumber).toBe(42);
-    expect(secondOutcome.buildNumber).toBe(42);
-    expect(secondOutcome.reportDirectory).not.toBe(firstDirectory);
-    for (const file of snapshot) {
-      expect(fs.readFileSync(path.join(firstDirectory, file.filename))).toEqual(file.contents);
-    }
 
-    const aggregate = JSON.parse(fs.readFileSync(path.join(root, 'reports', 'aggregate-data.json'), 'utf8')) as {
-      projects: Array<{ projectId: string; runs: Array<{ buildNumber: number; runId: string; manifestPath: string; reportPath?: string }> }>;
-    };
-    const aggregateHtml = fs.readFileSync(path.join(root, 'reports', 'index.html'), 'utf8');
-    const runs = aggregate.projects.find((item) => item.projectId === 'service-a')?.runs ?? [];
-    expect(runs).toHaveLength(2);
-    expect(new Set(runs.map((item) => item.runId))).toEqual(new Set([firstOutcome.runId, secondOutcome.runId]));
-    for (const runEntry of runs) {
-      expect(runEntry.buildNumber).toBe(42);
-      const manifestPath = path.join(root, 'reports', runEntry.manifestPath);
-      expect(fs.existsSync(manifestPath)).toBe(true);
-      expect(runEntry.reportPath).toBeDefined();
-      expect(fs.existsSync(path.join(root, 'reports', runEntry.reportPath!))).toBe(true);
-      expect(aggregateHtml).toContain(`href="${runEntry.reportPath!}"`);
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as { run: { runId: string }; jenkins: { buildNumber: number } };
-      expect(manifest.run.runId).toBe(runEntry.runId);
-      expect(manifest.jenkins.buildNumber).toBe(42);
+    expect(firstOutcome.state).toBe('success');
+    expect(secondOutcome.state).toBe('success');
+    expect(secondOutcome.reportDirectory).not.toBe(firstDirectory);
+    for (const file of snapshot) expect(fs.readFileSync(path.join(firstDirectory, file.filename))).toEqual(file.contents);
+
+    const runs = first.aggregate.projects[0]?.runs ?? [];
+    const rerunEntries = second.aggregate.projects[0]?.runs ?? [];
+    expect(runs).toHaveLength(1);
+    expect(rerunEntries).toHaveLength(2);
+    expect(new Set(rerunEntries.map((item) => item.runId))).toEqual(new Set([firstOutcome.runId, secondOutcome.runId]));
+    expect(JSON.stringify(second.aggregate)).not.toContain('buildNumber');
+    for (const entry of rerunEntries) {
+      expect(entry.manifestPath).toBe(`service-a/${entry.runId}/manifest.json`);
+      expect(entry.reportPath).toBe(`service-a/${entry.runId}/index.html`);
+      expect(fs.existsSync(path.join(root, 'reports', entry.manifestPath))).toBe(true);
+      expect(fs.existsSync(path.join(root, 'reports', entry.reportPath!))).toBe(true);
+      const manifest = JSON.parse(fs.readFileSync(path.join(root, 'reports', entry.manifestPath), 'utf8')) as { schemaVersion: number; jenkins?: { jobUrl: string } };
+      expect(manifest.schemaVersion).toBe(3);
+      expect(manifest.jenkins?.jobUrl).toBe(project.jobUrl);
     }
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

@@ -15,13 +15,7 @@ test('generates a meaningful report from the checked-in Snyk and SonarQube templ
       PROJECT_ID: 'template-report-fixture',
       PROJECT_NAME: 'Template Fixture Report',
       ARTIFACT_DIR: reportRoot,
-      TEMPLATE_BUILD_NUMBER: '7',
       TEMPLATE_TIMEOUT_MS: '30000',
-      TEMPLATE_POLL_INTERVAL_MS: '50',
-      JENKINS_BASE_URL: 'http://127.0.0.1:9',
-      JENKINS_JOB_PATH: 'private-job',
-      JENKINS_USERNAME: 'private-user',
-      JENKINS_PASSWORD: 'private-password',
     });
     const outcome = result.outcomes[0];
     expect(result.exitCode).toBe(0);
@@ -31,7 +25,7 @@ test('generates a meaningful report from the checked-in Snyk and SonarQube templ
     const reportDirectory = outcome?.reportDirectory as string;
     const data = JSON.parse(fs.readFileSync(path.join(reportDirectory, 'data.json'), 'utf8')) as {
       project: { id: string; name: string };
-      jenkins: { status: string; buildNumber: number; trigger: { capability: string } };
+      jenkins: { jobUrl: string };
       reports: {
         snyk: { state: string; summary?: { counts: Record<string, number> }; findings?: unknown[]; captures?: { screenshotPath?: string }[] };
         sonarqube: { state: string; facets?: { types: unknown[]; severities: unknown[] } };
@@ -39,12 +33,7 @@ test('generates a meaningful report from the checked-in Snyk and SonarQube templ
       warnings: string[];
     };
     expect(data.project).toEqual({ id: 'template-report-fixture', name: 'Template Fixture Report' });
-    expect(data.jenkins).toMatchObject({
-      baseUrl: 'https://templates.invalid/',
-      status: 'TEMPLATE',
-      buildNumber: 7,
-      trigger: { capability: 'unknown' },
-    });
+    expect(data.jenkins).toEqual({ jobUrl: 'https://templates.invalid/job/template-report/' });
     expect(data.reports.snyk).toMatchObject({
       state: 'found',
       summary: {
@@ -73,17 +62,16 @@ test('generates a meaningful report from the checked-in Snyk and SonarQube templ
   }
 });
 
-test('keeps template capture routed when Firefox needs a separate safe context', async () => {
+test('keeps template capture routed when WebKit needs a separate safe context', async () => {
   test.setTimeout(60_000);
-  const reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'template-report-firefox-'));
+  const reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'template-report-webkit-'));
   try {
     const result = await runFromTemplates({
-      PROJECT_ID: 'template-report-firefox',
-      PROJECT_NAME: 'Template Firefox Report',
+      PROJECT_ID: 'template-report-webkit',
+      PROJECT_NAME: 'Template WebKit Report',
       ARTIFACT_DIR: reportRoot,
-      PLAYWRIGHT_BROWSER: 'firefox',
+      PLAYWRIGHT_BROWSER: 'webkit',
       TEMPLATE_TIMEOUT_MS: '30000',
-      TEMPLATE_POLL_INTERVAL_MS: '50',
     });
     const outcome = result.outcomes[0];
     expect(result.exitCode).toBe(0);
@@ -106,11 +94,11 @@ test('rejects symlinked and oversized template sources before capture', async ()
   try {
     const sourceRoot = path.resolve('templates');
     fs.symlinkSync(sourceRoot, path.join(symlinkRoot, 'templates'), 'dir');
-    await expect(loadTemplateReportFixture({ TEMPLATES_DIR: path.join(symlinkRoot, 'templates') }, 1)).rejects.toThrow(/real directory/iu);
+    await expect(loadTemplateReportFixture({ TEMPLATES_DIR: path.join(symlinkRoot, 'templates') })).rejects.toThrow(/real directory/iu);
 
     fs.mkdirSync(path.join(oversizedRoot, 'jenkins-template'), { recursive: true });
     fs.writeFileSync(path.join(oversizedRoot, 'jenkins-template', 'template.html'), Buffer.alloc(4 * 1_048_576 + 1, 0x41));
-    await expect(loadTemplateReportFixture({ TEMPLATES_DIR: oversizedRoot }, 1)).rejects.toThrow(/regular file/iu);
+    await expect(loadTemplateReportFixture({ TEMPLATES_DIR: oversizedRoot })).rejects.toThrow(/regular file/iu);
   } finally {
     fs.rmSync(symlinkRoot, { recursive: true, force: true });
     fs.rmSync(oversizedRoot, { recursive: true, force: true });

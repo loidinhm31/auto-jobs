@@ -25,28 +25,28 @@ function writeConfig(root: string): string {
   return filename;
 }
 
-function completeCapture(buildUrl: string): CaptureResult {
-  const target = (key: 'jenkins-build' | 'snyk-report' | 'sonarqube-home' | 'sonarqube-overall' | 'sonarqube-issues') => ({
-    key, localAnchor: `#${key}`, state: 'found' as const,
-  });
+function completeCapture(jobUrl: string): CaptureResult {
+  const target = (key: 'jenkins-job' | 'snyk-report' | 'sonarqube-home' | 'sonarqube-overall' | 'sonarqube-issues') => ({ key, localAnchor: `#${key}`, state: 'found' as const });
   const source = { state: 'found' as const, captures: [], navigation: [], warnings: [] };
+  const snykSource = { ...source, navigation: [target('snyk-report')] };
+  const sonarqubeSource = {
+    ...source,
+    navigation: [target('sonarqube-home'), target('sonarqube-overall'), target('sonarqube-issues')],
+  };
   return {
     navigation: {
-      'jenkins-build': { ...target('jenkins-build'), liveUrl: buildUrl },
+      'jenkins-job': { ...target('jenkins-job'), localAnchor: '#jenkins', liveUrl: jobUrl },
       'snyk-report': target('snyk-report'), 'sonarqube-home': target('sonarqube-home'),
       'sonarqube-overall': target('sonarqube-overall'), 'sonarqube-issues': target('sonarqube-issues'),
     },
-    reports: { snyk: source, sonarqube: source }, warnings: [],
+    reports: { snyk: snykSource, sonarqube: sonarqubeSource }, warnings: [],
   };
 }
 
 test('runs two projects in order with fresh browser state and later-project continuation', async ({ browser }) => {
   test.setTimeout(60_000);
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-multi-project-e2e-'));
-  const environment = {
-    A_USER: 'user-a', A_PASSWORD: 'password-a',
-    B_USER: 'user-b', B_PASSWORD: 'password-b',
-  };
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'direct-multi-project-'));
+  const environment = { A_USER: 'user-a', A_PASSWORD: 'password-a', B_USER: 'user-b', B_PASSWORD: 'password-b' };
   let runnerBrowser: Browser | undefined;
   try {
     const projects = loadProjectConfig(writeConfig(root), environment);
@@ -56,23 +56,14 @@ test('runs two projects in order with fresh browser state and later-project cont
     let suffix = 0;
     const workflow: ProjectWorkflow = async (page, project, _secrets, _deadline, state) => {
       order.push(project.id);
-      await page.route('http://fixture.test/**', async (route) => route.fulfill({
-        status: 200, contentType: 'text/html', body: `<body data-project="${project.id}">${project.name}</body>`,
-      }));
+      await page.route('http://fixture.test/**', async (route) => route.fulfill({ status: 200, contentType: 'text/html', body: `<body data-project="${project.id}">${project.name}</body>` }));
       await page.goto(`http://fixture.test/${project.id}`);
-      const cookies = await page.context().cookies('http://fixture.test');
-      observations.push({ projectId: project.id, cookies: cookies.map((cookie) => `${cookie.name}=${cookie.value}`) });
+      observations.push({ projectId: project.id, cookies: (await page.context().cookies('http://fixture.test')).map((cookie) => `${cookie.name}=${cookie.value}`) });
       await page.context().addCookies([{ name: 'project', value: project.id, url: 'http://fixture.test/' }]);
       state.transition('authenticated');
-      if (project.id === 'service-a') throw new Error('fixture parameterized project rejected');
-      const buildNumber = project.id === 'service-a' ? 11 : 12;
-      const build = { number: buildNumber, url: `${project.jobUrl}${buildNumber}/` };
-      state.transition('job_resolved'); state.transition('existing_build_selected');
-      state.bindBuild(build); state.transition('running'); state.transition('terminal');
-      return {
-        terminal: { build, status: 'SUCCESS', observedAt: '2026-08-24T04:00:00.000Z', observationErrors: [], reloadCount: 0 },
-        trigger: { capability: 'existing_build', triggerAttempts: 0, build, warnings: [] },
-      };
+      if (project.id === 'service-a') throw new Error('fixture project rejected');
+      state.transition('job_opened');
+      return { jobUrl: project.jobUrl, observedAt: '2026-08-24T04:00:00.000Z' };
     };
     const result = await runConfiguredProjects(projects, {
       runtimeEnvironment: environment,
@@ -82,26 +73,22 @@ test('runs two projects in order with fresh browser state and later-project cont
       executeProject: async (project, dependencies) => runProject(project, {
         ...dependencies,
         workflow,
-        capture: async ({ page, workflow: completed }) => {
+        capture: async ({ page }) => {
           expect(await page.locator('body').getAttribute('data-project')).toBe(project.id);
-          expect(await page.context().cookies('http://fixture.test')).toEqual(expect.arrayContaining([
-            expect.objectContaining({ name: 'project', value: project.id }),
-          ]));
-          return completeCapture(completed.terminal.build.url);
+          expect(await page.context().cookies('http://fixture.test')).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'project', value: project.id })]));
+          return completeCapture(project.jobUrl);
         },
       }),
     });
-
     expect(order).toEqual(['service-a', 'service-b']);
     expect(observations).toEqual([{ projectId: 'service-a', cookies: [] }, { projectId: 'service-b', cookies: [] }]);
     expect(result.outcomes.map((outcome) => outcome.state)).toEqual(['failed', 'success']);
     expect(result.exitCode).toBe(1);
     expect(result.aggregate.projects.map((project) => project.projectId)).toEqual(['service-a', 'service-b']);
     const success = result.outcomes[1]!;
-    expect(success.buildNumber).toBe(12);
     expect(fs.existsSync(path.join(success.reportDirectory!, 'data.json'))).toBe(true);
-    const saved = JSON.parse(fs.readFileSync(path.join(success.reportDirectory!, 'data.json'), 'utf8')) as { project: { id: string } };
-    expect(saved.project.id).toBe('service-b');
+    expect(JSON.parse(fs.readFileSync(path.join(success.reportDirectory!, 'data.json'), 'utf8')).project.id).toBe('service-b');
+    expect(JSON.stringify(result.aggregate)).not.toContain('buildNumber');
   } finally {
     await runnerBrowser?.close();
     fs.rmSync(root, { recursive: true, force: true });

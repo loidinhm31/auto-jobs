@@ -24,61 +24,6 @@ export type SelectorOverrides = Partial<
   Record<keyof SelectorConfig, LocatorSelectorInput>
 >;
 
-export interface Report {
-  state: ReportState;
-  urls: string[];
-  text: string[];
-}
-
-export interface BuildReference {
-  number: number;
-  url: string;
-  queueUrl?: string;
-}
-
-export type BuildTriggerCapability = 'build_now' | 'unsupported_parameterized';
-
-export type ProjectTriggerState =
-  | 'capability_unchecked'
-  | 'unsupported_parameterized'
-  | 'build_now_ready'
-  | 'baseline_captured'
-  | 'submitted'
-  | 'queue_correlated'
-  | 'build_correlated';
-
-export interface QueueReference {
-  id: number;
-  url: string;
-}
-
-export interface JenkinsBaseline {
-  capturedAt: string;
-  latestBuildNumber?: number;
-  queueItems: readonly QueueReference[];
-}
-
-export interface TriggerDiagnostics {
-  lastSafeUrl?: string;
-  observationErrors: readonly string[];
-  reloadCount: number;
-}
-
-export interface BuildTriggerResult {
-  triggered: boolean;
-  capability: BuildTriggerCapability;
-  triggerAttempts: number;
-  state: ProjectTriggerState;
-  baseline?: JenkinsBaseline;
-  queueUrl?: string;
-  build?: BuildReference;
-  diagnostics: TriggerDiagnostics;
-}
-
-export interface BuildTrigger {
-  trigger(): Promise<BuildTriggerResult>;
-}
-
 export type {
   NormalizedProjectConfig,
   NormalizedSourceConfig,
@@ -90,9 +35,11 @@ export type {
   ProjectSecrets,
   ProjectSourceInput,
 } from './config/config-types.js';
+
 export type {
   AggregateProjectSummary,
   AggregateReportResult,
+  AggregateRunSummary,
   CaptureMetadata,
   NavigationTarget,
   NavigationTargetKey,
@@ -107,15 +54,13 @@ export type {
   SonarFacetValue,
   SonarIssueFacets,
   SonarSourceEvidence,
-  TriggerCapability,
-  TriggerEvidence,
-  VulnerabilityReportResult,
-  VulnerabilityReportResultV2,
+  VulnerabilityReportResultV3,
 } from './result-types.js';
 export {
   hasCompleteNavigationTargets,
   REQUIRED_NAVIGATION_TARGET_KEYS,
 } from './result-types.js';
+
 export type {
   ProjectOutcome,
   ProjectOutcomeState,

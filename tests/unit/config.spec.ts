@@ -37,7 +37,7 @@ function validDocument(): ProjectConfigDocumentV1 {
           kind: 'role',
           value: 'link',
           name: 'Manage Jenkins',
-          required: false,
+          required: true,
         },
       },
       snyk: { projectId: 'service-a' },
@@ -59,7 +59,7 @@ test('normalizes exact URLs, defaults, selectors, and runtime-only credentials',
   expect(config?.timeoutMs).toBe(30_000);
   expect(config?.browser).toBe('chromium');
   expect(config?.artifactDir).toMatch(/reports$/u);
-  expect(config?.selectors.authLandmark.required).toBe(false);
+  expect(config?.selectors.authLandmark.required).toBe(true);
   expect(config?.selectors.sonarqubeReport.value).toBe('sonarqube-report');
   expect(config?.selectors.snykReport.value).toBe('snyk-report');
   expect(config).not.toHaveProperty('baseUrl');
@@ -97,6 +97,13 @@ test('requires credential-free HTTP(S) URLs and a shared Jenkins context', () =>
     'https://example.test/jenkins/login#secret',
     'loginUrl',
   )).toThrow(/fragment/u);
+  expect(() => assertProjectConfigDocument({
+    ...validDocument(),
+    projects: [{
+      ...validDocument().projects[0],
+      jobUrl: 'https://jenkins.example/jenkins/job/service-a/?view=full',
+    }],
+  })).toThrow(/must not contain a query/u);
   expect(() => deriveJenkinsBaseUrl(
     'https://jenkins.example/jenkins/login',
     'https://jenkins.example/other/job/service-a/',
@@ -124,6 +131,20 @@ test('rejects legacy fields, invalid options, and unsafe selectors', () => {
       selectors: { authLandmark: { kind: 'css' } },
     }],
   })).toThrow(/selector/u);
+  expect(() => assertProjectConfigDocument({
+    ...document,
+    projects: [{
+      ...document.projects[0],
+      selectors: {
+        authLandmark: {
+          kind: 'role',
+          value: 'link',
+          name: 'Manage Jenkins',
+          required: false,
+        },
+      },
+    }],
+  })).toThrow(/must be required/u);
 });
 
 test('redacts supplied secrets and sensitive URL data from diagnostics', () => {

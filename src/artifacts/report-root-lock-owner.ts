@@ -1,8 +1,14 @@
-import { constants, type Stats } from 'node:fs';
+import { constants, type Dirent, type Stats } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+
+import {
+  inspectProcessInstance,
+  isValidProcessStartedAt,
+  type ProcessInspection,
+} from './process-instance-inspector.js';
 export const REPORT_LOCK_DIRECTORY = '.report-root-lock';
 export const REPORT_LOCK_RECOVERY_PREFIX = '.report-root-lock-recovery-';
 export const REPORT_LOCK_LEASE_MS = 2 * 60 * 1_000;
@@ -21,10 +27,12 @@ export interface LockOwner {
   readonly hostname: string;
   readonly acquiredAt: string;
   readonly expiresAt: number;
+  readonly processStartedAt?: string;
 }
 interface LockClaim {
   readonly schemaVersion: 1; readonly pid: number; readonly hostname: string;
   readonly acquiredAt: string; readonly expiresAt: number;
+  readonly processStartedAt?: string;
 }
 export interface ReportRootLockOptions {
   readonly now?: () => number; readonly leaseMs?: number; readonly heartbeatMs?: number;
@@ -53,7 +61,7 @@ export async function readLockOwner(directory: string): Promise<LockOwner | unde
     const record = value as Record<string, unknown>;
     if (record.schemaVersion !== 1 || typeof record.token !== 'string' || !/^[a-f\d]{32}$/u.test(record.token) || typeof record.pid !== 'number' ||
       !Number.isSafeInteger(record.pid) || record.pid < 1 || typeof record.hostname !== 'string' || record.hostname.length < 1 || record.hostname.length > 255 ||
-      typeof record.acquiredAt !== 'string' || !Number.isFinite(Date.parse(record.acquiredAt)) || typeof record.expiresAt !== 'number' || !Number.isSafeInteger(record.expiresAt)) {
+      typeof record.acquiredAt !== 'string' || !Number.isFinite(Date.parse(record.acquiredAt)) || typeof record.expiresAt !== 'number' || !Number.isSafeInteger(record.expiresAt) || (record.processStartedAt !== undefined && !isValidProcessStartedAt(record.processStartedAt))) {
       throw new Error('Report root lock owner record is malformed');
     }
     return record as unknown as LockOwner;
@@ -75,7 +83,7 @@ async function readClaim(directory: string): Promise<LockClaim | undefined> {
     const claim = value as Record<string, unknown>;
     if (claim.schemaVersion !== 1 || typeof claim.pid !== 'number' || !Number.isSafeInteger(claim.pid) || claim.pid < 1 || typeof claim.hostname !== 'string' ||
       claim.hostname.length < 1 || claim.hostname.length > 255 || typeof claim.acquiredAt !== 'string' || !Number.isFinite(Date.parse(claim.acquiredAt)) ||
-      typeof claim.expiresAt !== 'number' || !Number.isSafeInteger(claim.expiresAt)) throw new Error('Report root lock claim is malformed');
+      typeof claim.expiresAt !== 'number' || !Number.isSafeInteger(claim.expiresAt) || (claim.processStartedAt !== undefined && !isValidProcessStartedAt(claim.processStartedAt))) throw new Error('Report root lock claim is malformed');
     return claim as unknown as LockClaim;
   } finally { await handle.close(); }
 }
@@ -84,9 +92,9 @@ async function writeLockClaim(directory: string, claim: LockClaim): Promise<void
   try { await writeOwnerFile(temporary, claim); await fs.rename(temporary, path.join(directory, CLAIM_FILE)); }
   finally { await fs.unlink(temporary).catch(() => undefined); }
 }
-async function boundedEntries(directory: string): Promise<import('node:fs').Dirent[]> {
+async function boundedEntries(directory: string): Promise<Dirent[]> {
   const handle = await fs.opendir(directory);
-  const entries: import('node:fs').Dirent[] = [];
+  const entries: Dirent[] = [];
   try { for await (const entry of handle) { if (entries.length >= MAX_INCOMPLETE_ENTRIES) throw new Error('incomplete lock inventory is oversized'); entries.push(entry); } return entries; }
   finally { await handle.close().catch(() => undefined); }
 }
@@ -101,11 +109,50 @@ export async function writeLockOwner(directory: string, owner: LockOwner, expect
     return true;
   } finally { await fs.unlink(temporary).catch(() => undefined); }
 }
-function processIsDead(pid: number): boolean {
-  try { process.kill(pid, 0); return false; } catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH'; }
+type ProcessRecord = Pick<LockOwner, 'pid' | 'processStartedAt' | 'acquiredAt' | 'expiresAt'>;
+type LockProcessInspector = (record: ProcessRecord) => Promise<ProcessInspection>;
+
+const productionInspector: LockProcessInspector = (record) => inspectProcessInstance(record.pid);
+
+function canReclaimProcess(record: ProcessRecord, inspection: ProcessInspection): boolean {
+  if (inspection.state === 'dead') return true;
+  return process.platform === 'win32' && inspection.state === 'live' &&
+    record.processStartedAt !== undefined && inspection.startedAt !== undefined &&
+    record.processStartedAt !== inspection.startedAt;
 }
-export async function reclaimStaleLock(root: string, owner: LockOwner, now: number, hostname: string): Promise<boolean> {
-  if (owner.hostname !== hostname || owner.expiresAt > now || !processIsDead(owner.pid)) return false;
+
+function cachedInspector(inspector: LockProcessInspector): LockProcessInspector {
+  let fingerprint: string | undefined;
+  let checkedAt = 0;
+  let cached: ProcessInspection | undefined;
+  return async (record) => {
+    const nextFingerprint = `${record.pid}|${record.processStartedAt ?? ''}|${record.acquiredAt}|${record.expiresAt}`;
+    const now = Date.now();
+    if (cached !== undefined && fingerprint === nextFingerprint && now - checkedAt < 1_000) return cached;
+    cached = await inspector(record);
+    fingerprint = nextFingerprint;
+    checkedAt = now;
+    return cached;
+  };
+}
+
+async function currentProcessStartedAt(pid: number): Promise<string | undefined> {
+  if (process.platform !== 'win32') return undefined;
+  const inspection = await inspectProcessInstance(pid);
+  if (inspection.state !== 'live' || inspection.startedAt === undefined) {
+    throw new Error('Report root lock process identity could not be established');
+  }
+  return inspection.startedAt;
+}
+
+export async function reclaimStaleLock(
+  root: string,
+  owner: LockOwner,
+  now: number,
+  hostname: string,
+  inspector: LockProcessInspector = productionInspector,
+): Promise<boolean> {
+  if (owner.hostname !== hostname || owner.expiresAt > now || !canReclaimProcess(owner, await inspector(owner))) return false;
   const directory = lockPath(root);
   const current = await readLockOwner(directory);
   if (current?.token !== owner.token) return false;
@@ -114,14 +161,20 @@ export async function reclaimStaleLock(root: string, owner: LockOwner, now: numb
   await fs.rm(recovery, { recursive: true, force: true });
   return true;
 }
-export async function reclaimIncompleteLock(root: string, now: number, leaseMs: number, hostname: string): Promise<boolean> {
+export async function reclaimIncompleteLock(
+  root: string,
+  now: number,
+  leaseMs: number,
+  hostname: string,
+  inspector: LockProcessInspector = productionInspector,
+): Promise<boolean> {
   const directory = lockPath(root);
   let stat: Stats;
   try { stat = await fs.lstat(directory); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
   if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(directory) !== directory || stat.mtimeMs > now - leaseMs) return false;
   if (await readLockOwner(directory) !== undefined) return false;
   const claim = await readClaim(directory);
-  if (claim === undefined || claim.hostname !== hostname || claim.expiresAt > now || !processIsDead(claim.pid)) return false;
+  if (claim === undefined || claim.hostname !== hostname || claim.expiresAt > now || !canReclaimProcess(claim, await inspector(claim))) return false;
   const entries = await boundedEntries(directory);
   if (entries.length > MAX_INCOMPLETE_ENTRIES || entries.some((entry) => !entry.isFile() || (entry.name !== CLAIM_FILE && !OWNER_TEMP.test(entry.name) && !CLAIM_TEMP.test(entry.name)))) return false;
   const recovery = path.join(root, `${REPORT_LOCK_RECOVERY_PREFIX}${crypto.randomBytes(8).toString('hex')}`);
@@ -146,6 +199,7 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
   const pollIntervalMs = options.pollIntervalMs ?? 50;
   const pid = options.pid ?? process.pid;
   const hostname = options.hostname ?? os.hostname();
+  const inspect = cachedInspector(productionInspector);
   if (![leaseMs, heartbeatMs, waitMs, pollIntervalMs, pid].every(Number.isSafeInteger) || typeof hostname !== 'string' ||
     leaseMs < 1_000 || heartbeatMs < 100 || heartbeatMs >= leaseMs || waitMs < 0 || pollIntervalMs < 1 || pid < 1 ||
     hostname.length < 1 || hostname.length > 255) throw new Error('Report root lock limits are invalid');
@@ -156,10 +210,13 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
       await fs.mkdir(directory, { mode: 0o700 });
       const token = crypto.randomBytes(16).toString('hex');
       const acquiredAt = new Date(currentTime(now)).toISOString();
-      const claim = { schemaVersion: 1 as const, pid, hostname, acquiredAt, expiresAt: currentTime(now) + leaseMs };
+      const processStartedAt = await currentProcessStartedAt(pid);
+      const claim: LockClaim = { schemaVersion: 1 as const, pid, hostname, acquiredAt, expiresAt: currentTime(now) + leaseMs,
+        ...(processStartedAt === undefined ? {} : { processStartedAt }) };
       try {
         await writeLockClaim(directory, claim);
-        await writeLockOwner(directory, { schemaVersion: 1, token, pid, hostname, acquiredAt, expiresAt: claim.expiresAt });
+        await writeLockOwner(directory, { schemaVersion: 1, token, pid, hostname, acquiredAt, expiresAt: claim.expiresAt,
+          ...(processStartedAt === undefined ? {} : { processStartedAt }) });
         await fs.unlink(path.join(directory, CLAIM_FILE)).catch(() => undefined);
       } catch (error) {
         await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
@@ -170,7 +227,8 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
       const heartbeat = setInterval(() => {
         heartbeatInFlight = heartbeatInFlight.then(async () => {
           if (!active) return;
-          await writeLockOwner(directory, { schemaVersion: 1, token, pid, hostname, acquiredAt, expiresAt: currentTime(now) + leaseMs }, token);
+          await writeLockOwner(directory, { schemaVersion: 1, token, pid, hostname, acquiredAt, expiresAt: currentTime(now) + leaseMs,
+            ...(processStartedAt === undefined ? {} : { processStartedAt }) }, token);
         }).catch(() => undefined);
       }, heartbeatMs);
       heartbeat.unref?.();
@@ -189,8 +247,8 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
       const owner = await readLockOwner(directory);
-      if (owner !== undefined && await reclaimStaleLock(root, owner, currentTime(now), hostname)) continue;
-      if (owner === undefined && await reclaimIncompleteLock(root, currentTime(now), leaseMs, hostname)) continue;
+      if (owner !== undefined && await reclaimStaleLock(root, owner, currentTime(now), hostname, inspect)) continue;
+      if (owner === undefined && await reclaimIncompleteLock(root, currentTime(now), leaseMs, hostname, inspect)) continue;
       const remaining = deadline - currentTime(now);
       if (remaining <= 0) throw new Error('Report root is locked by another live or unsafe process');
       await pause(Math.min(pollIntervalMs, remaining));

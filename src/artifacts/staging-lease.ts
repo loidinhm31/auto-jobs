@@ -2,10 +2,10 @@ import { constants } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { SAFE_ID } from './artifact-identity.js';
 
 export const STAGING_LEASE_DIRECTORY = '.leases';
 export const STAGING_LEASE_DURATION_MS = 2 * 60 * 60 * 1_000;
-const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
 const MAX_LEASE_BYTES = 4_096;
 
 export interface StagingLease {

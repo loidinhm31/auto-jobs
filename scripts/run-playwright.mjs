@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import * as path from 'node:path';
 
 import { createRuntimeDirectory, removeRuntimeDirectory } from './report-runtime.mjs';
 
@@ -33,13 +34,46 @@ function forwardSignal(signal) {
   signalTimer.unref();
 }
 
+function executableForPlatform(command) {
+  if (process.platform !== 'win32' || /\.[a-z0-9]+$/iu.test(command)) return command;
+  return `${command}.cmd`;
+}
+
+function parseLaunchArguments(values) {
+  const remaining = [...values];
+  const environment = {};
+  while (remaining[0] === '--env') {
+    remaining.shift();
+    const assignment = remaining.shift();
+    const separator = assignment?.indexOf('=');
+    if (assignment === undefined || separator === undefined || separator <= 0) {
+      throw new Error('--env requires NAME=VALUE');
+    }
+    const name = assignment.slice(0, separator);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) throw new Error('--env name is invalid');
+    environment[name] = assignment.slice(separator + 1);
+  }
+  const [command, ...args] = remaining;
+  return { command, args, environment };
+}
+
 function run(command, args, environment, cwd) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, {
+    const childEnvironment = process.platform === 'win32'
+      ? (() => {
+          const pathKey = Object.keys(environment).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
+          return {
+            ...environment,
+            [pathKey]: `${path.join(cwd, 'node_modules', '.bin')}${path.delimiter}${environment[pathKey] ?? ''}`,
+          };
+        })()
+      : environment;
+    const child = spawn(executableForPlatform(command), args, {
       cwd,
-      env: environment,
+      env: childEnvironment,
       stdio: 'inherit',
       detached: process.platform !== 'win32',
+      ...(process.platform === 'win32' ? { shell: true } : {}),
     });
     activeChild = child;
     let settled = false;
@@ -62,12 +96,13 @@ function run(command, args, environment, cwd) {
 }
 
 async function main() {
-  const [command, ...args] = process.argv.slice(2);
+  const { command, args, environment: environmentOverrides } = parseLaunchArguments(process.argv.slice(2));
   if (command === undefined) throw new Error('project-runtime command is required');
 
   const runtime = await createRuntimeDirectory();
   const environment = {
     ...process.env,
+    ...environmentOverrides,
     TMPDIR: runtime.directory,
     TMP: runtime.directory,
     TEMP: runtime.directory,

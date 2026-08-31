@@ -20,7 +20,7 @@ test.describe('generated offline reports', () => {
     expect(response.status()).toBe(200);
     expect(response.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
     await expect(page).toHaveTitle('Service <A> vulnerability report');
-    await expect(page.locator('link[rel="stylesheet"]')).toHaveAttribute('href', '../../../assets/report.css');
+    await expect(page.locator('link[rel="stylesheet"]')).toHaveAttribute('href', '../../assets/report.css');
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.getByRole('heading', { name: 'Snyk test report' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Overall and Issues evidence' })).toBeVisible();
@@ -81,7 +81,7 @@ test.describe('generated offline reports', () => {
     await page.goto(`${fixture.baseUrl}/reports/index.html`, { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'Vulnerability report index' })).toBeVisible();
     const reportLink = page.getByRole('link', { name: 'Open current report' });
-    await expect(reportLink).toHaveAttribute('href', 'service-a/42/20260824t040000z-0000000000000042/index.html');
+    await expect(reportLink).toHaveAttribute('href', 'service-a/20260824t040000z-0000000000000042/index.html');
     expect((await request.get(new URL(await reportLink.getAttribute('href') ?? '', page.url()).toString())).status()).toBe(200);
   });
 });

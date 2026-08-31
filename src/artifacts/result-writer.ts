@@ -3,8 +3,8 @@ import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { AggregateReportResult, VulnerabilityReportResultV2 } from '../result-types.js';
-import type { ProjectFailureResultV2, ProjectRunManifest } from './artifact-manifest.js';
+import type { AggregateReportResult, VulnerabilityReportResultV3 } from '../result-types.js';
+import type { ProjectFailureResultV3, ProjectRunManifest } from './artifact-manifest.js';
 import {
   assertManifestShape,
   assertProjectIdentity,
@@ -22,15 +22,41 @@ import {
   publishCompleteRunDirectory,
 } from './failure-artifact-inventory.js';
 import { writeProjectReportFiles } from '../reporting/report-output.js';
+import { withWorkflowDeadline, type WorkflowDeadline } from '../workflow/workflow-deadline.js';
 
-async function writeTemporary(directory: string, contents: string): Promise<string> {
-  const temporary = path.join(directory, `.tmp-${crypto.randomBytes(8).toString('hex')}`);
-  const handle = await fs.open(temporary, 'wx', 0o600);
+function requireDeadline(deadline?: WorkflowDeadline): void {
+  deadline?.requireRemaining();
+}
+
+async function bounded<T>(operation: () => Promise<T>, deadline?: WorkflowDeadline): Promise<T> {
+  return deadline === undefined ? operation() : withWorkflowDeadline(operation, deadline);
+}
+
+async function cleanupWithinRemaining<T>(operation: () => Promise<T>, deadline?: WorkflowDeadline): Promise<T> {
+  if (deadline === undefined) return operation();
+  const timeoutMs = Math.max(1, deadline.remainingMs());
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await handle.writeFile(contents, 'utf8');
-    await handle.sync();
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('result cleanup exceeded workflow deadline')), timeoutMs);
+    });
+    return await Promise.race([operation(), timeout]);
   } finally {
-    await handle.close();
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function writeTemporary(directory: string, contents: string, deadline?: WorkflowDeadline): Promise<string> {
+  requireDeadline(deadline);
+  const temporary = path.join(directory, `.tmp-${crypto.randomBytes(8).toString('hex')}`);
+  const handle = await bounded(() => fs.open(temporary, 'wx', 0o600), deadline);
+  try {
+    await bounded(() => handle.writeFile(contents, 'utf8'), deadline);
+    requireDeadline(deadline);
+    await bounded(() => handle.sync(), deadline);
+    requireDeadline(deadline);
+  } finally {
+    await cleanupWithinRemaining(() => handle.close(), deadline).catch(() => undefined);
   }
   return temporary;
 }
@@ -39,13 +65,17 @@ async function writeExclusive(
   directory: string,
   filename: string,
   value: unknown,
+  deadline?: WorkflowDeadline,
 ): Promise<string> {
+  requireDeadline(deadline);
   const destination = path.join(directory, filename);
-  const temporary = await writeTemporary(directory, `${JSON.stringify(value, null, 2)}\n`);
+  const temporary = await writeTemporary(directory, JSON.stringify(value, null, 2) + String.fromCharCode(10), deadline);
   try {
-    await fs.link(temporary, destination);
+    requireDeadline(deadline);
+    await bounded(() => fs.link(temporary, destination), deadline);
+    requireDeadline(deadline);
   } finally {
-    await fs.unlink(temporary).catch(() => undefined);
+    await cleanupWithinRemaining(() => fs.unlink(temporary), deadline).catch(() => undefined);
   }
   return destination;
 }
@@ -54,7 +84,9 @@ async function assertArtifactBudget(
   directory: string,
   manifest: ProjectRunManifest,
   includeData = true,
+  deadline?: WorkflowDeadline,
 ): Promise<void> {
+  requireDeadline(deadline);
   const references = [
     ...(includeData ? [manifest.artifacts.data] : []),
     ...manifest.artifacts.screenshots,
@@ -64,10 +96,11 @@ async function assertArtifactBudget(
   let bytes = 0;
   let inspected = 0;
   for (const filename of references) {
+    requireDeadline(deadline);
     const filePath = path.join(directory, filename);
     let handle: fs.FileHandle;
     try {
-      handle = await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+      handle = await bounded(() => fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW), deadline);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         throw new Error(`referenced artifact is missing: ${filename}`);
@@ -75,14 +108,16 @@ async function assertArtifactBudget(
       throw error;
     }
     try {
-      const stat = await handle.stat();
+      const stat = await bounded(() => handle.stat(), deadline);
       if (!stat.isFile() || stat.size > MAX_SINGLE_ARTIFACT_BYTES) throw new Error('artifact size exceeds the safe limit');
       inspected += 1;
       bytes += stat.size;
+      requireDeadline(deadline);
     } finally {
-      await handle.close();
+      await cleanupWithinRemaining(() => handle.close(), deadline).catch(() => undefined);
     }
   }
+  requireDeadline(deadline);
   if (inspected > MAX_RUN_ARTIFACT_COUNT || bytes > MAX_RUN_ARTIFACT_BYTES) {
     throw new Error('run artifact budget exceeded');
   }
@@ -90,70 +125,76 @@ async function assertArtifactBudget(
 
 export async function writeProjectResult(
   directory: string,
-  result: VulnerabilityReportResultV2,
+  result: VulnerabilityReportResultV3,
   manifest: ProjectRunManifest,
   reportRoot?: string,
+  deadline?: WorkflowDeadline,
 ): Promise<string> {
+  requireDeadline(deadline);
   assertProjectIdentity(manifest, result);
   const safe = safeResult(result);
   assertValidProjectResult(safe);
   const persistedManifest = safeManifest(manifest);
-  await assertRunArtifactAllowlist(directory, persistedManifest);
-  await assertArtifactBudget(directory, manifest, false);
+  await assertRunArtifactAllowlist(directory, persistedManifest, deadline);
+  await assertArtifactBudget(directory, manifest, false, deadline);
   await publishCompleteRunDirectory(directory, persistedManifest, async (stagingDirectory) => {
-    await writeProjectReportFiles(stagingDirectory, safe, persistedManifest, reportRoot);
-    await writeExclusive(stagingDirectory, 'data.json', safe);
-    await assertArtifactBudget(stagingDirectory, persistedManifest);
-    await writeExclusive(stagingDirectory, 'manifest.json', persistedManifest);
-    await assertRunArtifactAllowlist(stagingDirectory, persistedManifest);
-  });
+    requireDeadline(deadline);
+    await writeProjectReportFiles(stagingDirectory, safe, persistedManifest, reportRoot, undefined, deadline);
+    await writeExclusive(stagingDirectory, 'data.json', safe, deadline);
+    await assertArtifactBudget(stagingDirectory, persistedManifest, true, deadline);
+    await writeExclusive(stagingDirectory, 'manifest.json', persistedManifest, deadline);
+    await assertRunArtifactAllowlist(stagingDirectory, persistedManifest, deadline);
+  }, deadline);
   return path.join(directory, 'manifest.json');
 }
 
 export async function writeFailureManifest(
   directory: string,
   manifest: ProjectRunManifest,
+  deadline?: WorkflowDeadline,
 ): Promise<string> {
+  requireDeadline(deadline);
   assertManifestShape(manifest);
-  await assertRunArtifactAllowlist(directory, manifest);
-  await assertArtifactBudget(directory, manifest);
-  return writeExclusive(directory, 'manifest.json', safeManifest(manifest));
+  await assertRunArtifactAllowlist(directory, manifest, deadline);
+  await assertArtifactBudget(directory, manifest, true, deadline);
+  return writeExclusive(directory, 'manifest.json', safeManifest(manifest), deadline);
 }
 
 export async function writeFailureResult(
   directory: string,
-  result: ProjectFailureResultV2,
+  result: ProjectFailureResultV3,
   manifest: ProjectRunManifest,
   reportRoot?: string,
+  deadline?: WorkflowDeadline,
 ): Promise<string> {
+  requireDeadline(deadline);
   assertProjectIdentity(manifest, result, true);
   const safe = safeFailure(result);
   assertValidFailureResult(safe);
-  let persistedManifest = await failureManifestWithAvailableArtifacts(directory, manifest);
+  let persistedManifest = await failureManifestWithAvailableArtifacts(directory, manifest, deadline);
+  requireDeadline(deadline);
   assertManifestShape(persistedManifest);
-  await assertArtifactBudget(directory, persistedManifest, false);
-  if (persistedManifest.artifacts.screenshots.length + (persistedManifest.artifacts.trace === undefined ? 0 : 1) >= MAX_RUN_ARTIFACT_COUNT) {
-    throw new Error('run artifact count exceeds the safe limit');
-  }
-  await assertRunArtifactAllowlist(directory, persistedManifest);
+  await assertArtifactBudget(directory, persistedManifest, false, deadline);
+  await assertRunArtifactAllowlist(directory, persistedManifest, deadline);
   await publishCompleteRunDirectory(directory, persistedManifest, async (stagingDirectory) => {
-    await writeExclusive(stagingDirectory, 'data.json', safe);
-    if (manifest.jenkins !== undefined) {
-      try {
-        await writeProjectReportFiles(stagingDirectory, safe, persistedManifest, reportRoot);
-      } catch {
-        persistedManifest = safeManifest({
-          ...persistedManifest,
-          warnings: [...persistedManifest.warnings, 'offline failure report rendering failed'],
-        });
-      }
+    requireDeadline(deadline);
+    await writeExclusive(stagingDirectory, 'data.json', safe, deadline);
+    try {
+      await writeProjectReportFiles(stagingDirectory, safe, persistedManifest, reportRoot, undefined, deadline);
+    } catch {
+      requireDeadline(deadline);
+      persistedManifest = safeManifest({
+        ...persistedManifest,
+        warnings: [...persistedManifest.warnings, 'offline failure report rendering failed'],
+      });
     }
-    await assertArtifactBudget(stagingDirectory, persistedManifest);
-    await writeExclusive(stagingDirectory, 'manifest.json', persistedManifest);
-    await assertRunArtifactAllowlist(stagingDirectory, persistedManifest);
-  });
+    await assertArtifactBudget(stagingDirectory, persistedManifest, true, deadline);
+    await writeExclusive(stagingDirectory, 'manifest.json', persistedManifest, deadline);
+    await assertRunArtifactAllowlist(stagingDirectory, persistedManifest, deadline);
+  }, deadline);
   return path.join(directory, 'manifest.json');
 }
+
 
 export async function writeAggregateData(
   reportRoot: string,

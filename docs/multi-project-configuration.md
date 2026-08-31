@@ -134,85 +134,55 @@ run is immutable and uses:
 ├── index.html
 ├── aggregate-data.json
 ├── assets/report.css
-└── <project-id>/
-    ├── <build-number>/<run-id>/
-    │   ├── index.html
-    │   ├── data.json
-    │   ├── manifest.json
-    │   └── requested screenshots
-    └── pre-build/<run-id>/
-        ├── data.json
-        └── manifest.json
+└── <project-id>/<run-id>/
+    ├── index.html
+    ├── data.json
+    ├── manifest.json
+    └── requested screenshots
 ```
 
-The `pre-build` location is used for failures before Jenkins provides a build
-identity. It has no fabricated build number or build URL and normally has no
-build-linked `index.html`. Failure persistence is best-effort: the runner
-attempts to write bounded failure data, a manifest, diagnostics, and available
-artifacts, but a write/render/publish failure can leave the outcome without a
-complete run directory.
+Success, partial, and failure attempts use the same project/run path. Failure
+data includes the direct schema-3 state and bounded diagnostics; persistence
+uses a bounded fallback after the workflow deadline and records a warning if
+both persistence attempts fail.
 
 ## Sequential and lock boundaries
 
 Enabled projects run one at a time through one browser process, with a fresh
 Playwright context per project and one absolute workflow deadline per project.
-Each project authenticates through its exact `loginUrl`, resolves its exact
-`jobUrl`, submits the non-parameterized UI `Build Now` action, correlates the
-resulting build, and captures terminal evidence. Parameterized jobs are
-detected before interaction and rejected.
+Each project authenticates through its exact `loginUrl`, opens its exact
+`jobUrl`, discovers publisher destinations once, and captures the configured
+Snyk and SonarQube evidence. There is no job search, trigger, queue/build
+correlation, terminal polling, or build-number path.
 
-The schema has no existing-build mode, job-page capture mode, build-number
-override, or polling/source-switch environment inputs. These behaviors are
-internal workflow details rather than configuration contracts.
+The schema has no source switch, existing-build mode, job-page override, build
+identity, or polling environment inputs. These are intentionally absent from
+the direct workflow contract.
 
-## Disposable Jenkins fixture
-
-The Compose fixture seeds two jobs on one controller:
-
-- `playwright-vulnerability-report` is parameterized with
-  `FIXTURE_VARIANT=pass|failed|empty|malformed`. `pass` keeps the normal
-  compact publisher corpus; `failed` archives it before returning a failed
-  build; `empty` removes publisher directories; `malformed` substitutes
-  malformed publisher files.
-- `playwright-vulnerability-report-build-now` has no parameters and exercises
-  the non-parameterized Build Now correlation path with the normal corpus.
-
-Neither job runs a real Snyk or SonarQube scanner. The fixture archives
-`reports/manifest.json`, Snyk HTML/JSON, and SonarQube home/overall/issues
-HTML/JSON files. Use [docker-compose.yml](../docker-compose.yml) for startup;
-its `JENKINS_PORT` value is the host port and maps to container port 8080.
-`docker-compose.webkit.yml` is a separate browser gate and publishes no
-ports.
-
-Do not use fixture credentials outside disposable local development. Stop with
-`docker compose down`; use `docker compose down -v` only when intentionally
-discarding the named `jenkins_home` volume and its history.
 
 ## Offline capture fixtures
 
-Offline fixture tests read six bounded inputs: the Jenkins snapshot, Snyk HTML
-and summary JSON, and SonarQube home, Overall, and Issues HTML. They install
-bounded Playwright context routes at a synthetic origin and invoke the same
-capture, normalization, artifact, and rendering boundaries as the Jenkins
+Offline fixture tests read seven bounded inputs: the Jenkins job and login
+snapshots, Snyk HTML and summary JSON, and SonarQube home, Overall, and
+Issues HTML. They install bounded Playwright context routes at a synthetic
+origin and invoke the same capture, normalization, artifact, and rendering
 workflow. No Jenkins controller, pipeline, vendor service, or Jenkins
 credential is needed. These fixtures are test inputs, not report CLI source
 modes.
 
 The checked-in template Snyk page and summary describe six findings (critical
-2, high 4); the Docker Jenkins fixture is a separate four-finding corpus
-(critical 0, high 1, medium 2, low 1). These are fixture data, not live
-service observations.
+2, high 4). These are fixture data, not live service observations.
 
 ## Artifact and trace distinction
 
+
 Application report artifacts are normalized `data.json`, contract-validated
-`manifest.json`, generated `index.html` when a build-linked report can be
-rendered, and requested Snyk/SonarQube screenshots. The Playwright test runner
-uses `test-results/` (and the HTML/blob report locations selected by its
-configuration) for test evidence. Its traces are test traces, not vendor
-report evidence. An optional `trace.zip` name is accepted by the application
-manifest allowlist only when it is actually supplied; do not assume it exists,
-especially for a pre-build failure.
+`manifest.json`, generated `index.html`, and requested Snyk/SonarQube
+screenshots. The Playwright test runner uses `test-results/` (and the
+HTML/blob report locations selected by its configuration) for test evidence.
+Its traces are test traces, not vendor report evidence. An optional
+`trace.zip` name is accepted by the application manifest allowlist only when
+it is actually supplied; do not assume it exists.
 
 ## Security boundary
 

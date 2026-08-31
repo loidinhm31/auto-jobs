@@ -22,6 +22,18 @@ function childCode(moduleName: string, importName: string, body: string): string
   return `import { ${importName} } from ${JSON.stringify(moduleUrl)};\n${body}`;
 }
 
+// Direct strip-types child execution remaps build-style .js specifiers to source .ts files.
+const STRIP_TYPES_SOURCE_LOADER = `data:text/javascript,${encodeURIComponent([
+  'export async function resolve(specifier, context, nextResolve) {',
+  '  if (specifier.endsWith(".js") && (specifier.startsWith(".") || specifier.startsWith("file:"))) return nextResolve(specifier.slice(0, -3) + ".ts", context);',
+  '  return nextResolve(specifier, context);',
+  '}',
+].join('\n'))}`;
+
+function stripTypesNodeArgs(): string[] {
+  return ['--experimental-strip-types', '--experimental-loader', STRIP_TYPES_SOURCE_LOADER, '--input-type=module'];
+}
+
 async function waitForOutput(child: ReturnType<typeof spawn>, marker: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let output = '';
@@ -61,15 +73,20 @@ test('reaps stale staging and publication temporaries without following symlinks
     const activeRunId = createRunId(NOW, '0000000000000102');
     const active = await paths.allocateStaging('service-a', activeRunId);
     markOld(active);
-    const buildRoot = path.join(reportRoot, 'service-a', '42');
-    const publication = path.join(buildRoot, '.run-publication-stale');
+    const projectRoot = path.join(reportRoot, 'service-a');
+    const runRoot = path.join(projectRoot, 'run-20260825-0000000000000103');
+    fs.mkdirSync(runRoot, { recursive: true, mode: 0o700 });
+    const publication = path.join(projectRoot, '.run-publication-stale');
     fs.mkdirSync(publication, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(publication, 'partial.tmp'), 'partial');
     markOld(publication); markOld(path.join(publication, 'partial.tmp'));
+    const backup = path.join(projectRoot, '.run-backup-stale');
+    fs.mkdirSync(backup, { recursive: true, mode: 0o700 });
+    markOld(backup);
     fs.writeFileSync(path.join(reportRoot, '.tmp-stale'), 'partial'); markOld(path.join(reportRoot, '.tmp-stale'));
     const outside = path.join(root, 'outside.txt');
     fs.writeFileSync(outside, 'must survive');
-    fs.symlinkSync(outside, path.join(buildRoot, '.run-publication-link'));
+    fs.symlinkSync(outside, path.join(runRoot, '.run-publication-link'));
 
     const result = await paths.cleanupOrphans({ now: NOW, minimumAgeMs: 100 });
     expect(result.removed).toBeGreaterThanOrEqual(3);
@@ -79,7 +96,8 @@ test('reaps stale staging and publication temporaries without following symlinks
     expect(fs.existsSync(path.join(reportRoot, '.tmp-stale'))).toBe(false);
     expect(fs.existsSync(active)).toBe(true);
     expect(fs.readFileSync(outside, 'utf8')).toBe('must survive');
-    expect(fs.lstatSync(path.join(buildRoot, '.run-publication-link')).isSymbolicLink()).toBe(true);
+    expect(fs.existsSync(backup)).toBe(true);
+    expect(fs.lstatSync(path.join(runRoot, '.run-publication-link')).isSymbolicLink()).toBe(true);
     expect(result.warnings.some((warning) => warning.includes('symlink'))).toBe(true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -96,7 +114,7 @@ test('reaps an expired lease left behind after a staging publication rename', as
     const runId = createRunId(NOW, '0000000000000104');
     const staging = await paths.allocateStaging('service-a', runId);
     const leasePath = stagingLeasePath(stagingRoot, 'service-a', runId);
-    const destination = path.join(reportRoot, 'service-a', 'pre-build', runId);
+    const destination = path.join(reportRoot, 'service-a', runId);
     fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
     fs.renameSync(staging, destination);
     fs.writeFileSync(leasePath, JSON.stringify({
@@ -121,7 +139,7 @@ test('preserves oversized orphan candidates and recovers a terminated staging ow
     const stagingRoot = path.join(root, 'artifacts');
     const paths = new ArtifactPaths(reportRoot, stagingRoot);
     await paths.initialize();
-    const oversized = path.join(reportRoot, 'service-a', '42', '.run-publication-oversized');
+    const oversized = path.join(reportRoot, 'service-a', '.run-publication-oversized');
     fs.mkdirSync(oversized, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(oversized, 'large.tmp'), '0123456789');
     markOld(oversized); markOld(path.join(oversized, 'large.tmp'));
@@ -130,7 +148,7 @@ test('preserves oversized orphan candidates and recovers a terminated staging ow
     expect(bounded.warnings.some((warning) => warning.includes('byte budget'))).toBe(true);
 
     const runId = createRunId(NOW, '0000000000000103');
-    const child = spawn(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', childCode('staging-lease', 'createStagingLease', `
+    const child = spawn(process.execPath, [...stripTypesNodeArgs(), '-e', childCode('staging-lease', 'createStagingLease', `
 const fs = await import('node:fs/promises');
     await fs.mkdir(${JSON.stringify(path.join(stagingRoot, 'service-a', runId))}, { recursive: true, mode: 0o700 });
 await createStagingLease(${JSON.stringify(stagingRoot)}, 'service-a', ${JSON.stringify(runId)});
@@ -139,7 +157,7 @@ process.stdout.write('STAGED\\n', () => process.kill(process.pid, 'SIGKILL'));
     const childExit = waitForExit(child);
     await waitForOutput(child, 'STAGED');
     const exit = await childExit;
-    expect(exit.signal).toBe('SIGKILL');
+    expect(exit.signal === 'SIGKILL' || (process.platform === 'win32' && exit.signal === null)).toBe(true);
     const crashed = path.join(stagingRoot, 'service-a', runId);
     const leasePath = path.join(stagingRoot, '.leases', 'service-a', `${runId}.lease`);
     fs.writeFileSync(leasePath, JSON.stringify({ schemaVersion: 1, projectId: 'service-a', runId, pid: 99999999, createdAt: OLD.toISOString(), expiresAt: OLD.getTime() }));
@@ -224,7 +242,7 @@ test('waits for a second process and reclaims a dead same-host lock', async () =
     const stagingRoot = path.join(root, 'artifacts');
     const paths = new ArtifactPaths(reportRoot, stagingRoot);
     await paths.initialize();
-    const child = spawn(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', childCode('report-root-lock-owner', 'acquireReportRootLock', `
+    const child = spawn(process.execPath, [...stripTypesNodeArgs(), '-e', childCode('report-root-lock-owner', 'acquireReportRootLock', `
 const lock = await acquireReportRootLock(${JSON.stringify(reportRoot)}, { leaseMs: 1000, heartbeatMs: 100, waitMs: 1000, pollIntervalMs: 20 });
 console.log('LOCKED');
 await new Promise((resolve) => setTimeout(resolve, 300));

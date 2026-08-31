@@ -7,12 +7,10 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { formatDiagnostic } from '../../config-errors.js';
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
-import type { BuildReference } from '../../types.js';
 import type { CaptureMetadata, NavigationTarget } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
-import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
-import { isJenkinsArtifactPathForBuild } from '../../jenkins/url-identity.js';
-import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
+import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeArtifact, isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
+import { WorkflowDeadlineExceededError, withWorkflowDeadline, type WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 
 export const SONAR_VIEWPORT = { width: 1_440, height: 900 } as const;
 export const SONAR_SCREENSHOTS = {
@@ -20,24 +18,6 @@ export const SONAR_SCREENSHOTS = {
   issues: 'sonarqube-issues.png',
 } as const;
 
-export function terminalIdentity(value: string): string {
-  const url = new URL(value);
-  return `${url.origin}${url.pathname.replace(/\/+$/u, '')}${url.search}`;
-}
-
-export function assertSonarqubeUrlMatchesBuild(
-  value: string,
-  project: NormalizedProjectConfig,
-  expectedBuild?: BuildReference,
-): void {
-  if (expectedBuild === undefined) return;
-  const candidate = new URL(value);
-  const jenkinsOrigin = new URL(project.sourceOrigins.jenkins).origin;
-  if (candidate.origin === jenkinsOrigin && candidate.pathname.includes('/artifact/') &&
-    !isJenkinsArtifactPathForBuild(project.jobUrl, value, expectedBuild.number)) {
-    throw new Error('SonarQube evidence did not belong to the selected Jenkins build');
-  }
-}
 
 export function projectKeyFromHome(
   homeUrl: string,
@@ -65,9 +45,17 @@ export function assertProjectUrl(
 ): string {
   const url = new URL(value);
   if (!hasCredentialFreeAuthority(url) || exactQueryValue(url, 'id') !== expectedKey) throw new Error(`SonarQube ${label} has the wrong project identity`);
+  if (label === 'Overall' && exactQueryValue(url, 'codeScope') !== 'overall') throw new Error('SonarQube Overall has an invalid code scope');
   if (/\/login(?:\/|$)/iu.test(url.pathname)) throw new Error(`SonarQube ${label} redirected to login`);
-  if ((label === 'home' || label === 'Overview') && !/\/dashboard\/?$/iu.test(url.pathname) &&
-    !(allowArchivedSnapshot && isArchivedSonarqubeSnapshot(url))) {
+  const dashboardPath = label === 'Overall'
+    ? (url.pathname === '/dashboard' || url.pathname === '/dashboard/')
+    : /\/dashboard\/?$/iu.test(url.pathname);
+  const archivedPath = allowArchivedSnapshot && (
+    label === 'Overall'
+      ? isArchivedSonarqubeArtifact(url) && /\/sonarqube\/overall\.html$/iu.test(url.pathname)
+      : isArchivedSonarqubeSnapshot(url)
+  );
+  if ((label === 'home' || label === 'Overview' || label === 'Overall') && !dashboardPath && !archivedPath) {
     throw new Error(`SonarQube ${label} is not a project dashboard`);
   }
   return url.toString();
@@ -93,14 +81,15 @@ export async function screenshotRegion(
   filename: string,
   deadline: WorkflowDeadline,
 ): Promise<Pick<CaptureMetadata, 'screenshotPath' | 'screenshotSha256' | 'viewport'>> {
-  await region.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() });
+  await withWorkflowDeadline(() => region.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() }), deadline);
   const screenshotPath = path.join(outputDirectory, filename);
-  await region.screenshot({
+  await withWorkflowDeadline(() => region.screenshot({
     path: screenshotPath,
     animations: 'disabled',
     timeout: deadline.requireRemaining(),
-  });
-  const hash = crypto.createHash('sha256').update(await fs.readFile(screenshotPath)).digest('hex');
+  }), deadline);
+  const screenshotBytes = await withWorkflowDeadline(() => fs.readFile(screenshotPath), deadline);
+  const hash = crypto.createHash('sha256').update(screenshotBytes).digest('hex');
   return { screenshotPath: filename, screenshotSha256: hash, viewport: SONAR_VIEWPORT };
 }
 
@@ -112,10 +101,10 @@ export async function screenshotFacetRange(
   filename: string,
   deadline: WorkflowDeadline,
 ): Promise<Pick<CaptureMetadata, 'screenshotPath' | 'screenshotSha256' | 'viewport'>> {
-  await first.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() });
-  await second.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() });
-  const firstBox = await first.boundingBox();
-  const secondBox = await second.boundingBox();
+  await withWorkflowDeadline(() => first.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() }), deadline);
+  await withWorkflowDeadline(() => second.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() }), deadline);
+  const firstBox = await withWorkflowDeadline(() => first.boundingBox(), deadline);
+  const secondBox = await withWorkflowDeadline(() => second.boundingBox(), deadline);
   if (firstBox === null || secondBox === null) throw new Error('SonarQube Type/Severity facet bounds were unavailable');
   const left = Math.floor(Math.min(firstBox.x, secondBox.x));
   const top = Math.floor(Math.min(firstBox.y, secondBox.y));
@@ -125,13 +114,14 @@ export async function screenshotFacetRange(
   const height = bottom - top;
   if (width <= 0 || height <= 0) throw new Error('SonarQube Type/Severity facet bounds were empty');
   const screenshotPath = path.join(outputDirectory, filename);
-  await page.screenshot({
+  await withWorkflowDeadline(() => page.screenshot({
     path: screenshotPath,
     clip: { x: left, y: top, width, height },
     animations: 'disabled',
     timeout: deadline.requireRemaining(),
-  });
-  const hash = crypto.createHash('sha256').update(await fs.readFile(screenshotPath)).digest('hex');
+  }), deadline);
+  const screenshotBytes = await withWorkflowDeadline(() => fs.readFile(screenshotPath), deadline);
+  const hash = crypto.createHash('sha256').update(screenshotBytes).digest('hex');
   return { screenshotPath: filename, screenshotSha256: hash, viewport: SONAR_VIEWPORT };
 }
 
@@ -139,9 +129,10 @@ export async function pageCaptureMetadata(
   page: Page,
   url: string,
   selectorStrategy: string,
+  deadline: WorkflowDeadline,
   screenshot?: Pick<CaptureMetadata, 'screenshotPath' | 'screenshotSha256' | 'viewport'>,
 ): Promise<CaptureMetadata> {
-  const title = (await page.title()).trim();
+  const title = (await withWorkflowDeadline(() => page.title(), deadline)).trim();
   return {
     url,
     ...(title.length === 0 ? {} : { title: title.slice(0, 512) }),
@@ -151,9 +142,21 @@ export async function pageCaptureMetadata(
   };
 }
 
+async function settleRouteAction(
+  operation: () => Promise<void>,
+  deadline: WorkflowDeadline,
+): Promise<void> {
+  try {
+    await withWorkflowDeadline(operation, deadline);
+  } catch (error) {
+    if (!(error instanceof WorkflowDeadlineExceededError)) throw error;
+  }
+}
+
 export function createRouteHandler(
   project: NormalizedProjectConfig,
   state: { blocked: boolean },
+  deadline: WorkflowDeadline,
 ): (route: Route) => Promise<void> {
   return async (route) => {
     try {
@@ -165,14 +168,14 @@ export function createRouteHandler(
       );
     } catch {
       state.blocked = true;
-      await route.abort('blockedbyclient');
+      await settleRouteAction(() => route.abort('blockedbyclient'), deadline);
       return;
     }
     if (['font', 'image', 'media', 'worker', 'websocket'].includes(route.request().resourceType())) {
-      await route.abort();
+      await settleRouteAction(() => route.abort(), deadline);
       return;
     }
-    await route.fallback();
+    await settleRouteAction(() => route.fallback(), deadline);
   };
 }
 

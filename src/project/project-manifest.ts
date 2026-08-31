@@ -6,9 +6,14 @@ import type { ProjectRunState } from './project-run-state.js';
 
 export interface ProjectDiagnostics {
   readonly lastSafeUrl?: string;
-  readonly status?: string;
   readonly observationErrors: readonly string[];
-  readonly reloadCount: number;
+}
+
+export interface ProjectManifestOptions {
+  readonly jobUrl?: string;
+  readonly diagnostic?: string;
+  readonly diagnostics?: ProjectDiagnostics;
+  readonly screenshots?: readonly string[];
 }
 
 export function createProjectManifest(
@@ -17,31 +22,26 @@ export function createProjectManifest(
   resultState: ProjectOutcomeState,
   observedAt: string,
   warnings: readonly string[],
-  diagnostic?: string,
-  status?: string,
-  diagnostics?: ProjectDiagnostics,
-  screenshots: readonly string[] = [],
+  options: ProjectManifestOptions = {},
 ): ProjectRunManifest {
   return {
     kind: 'project-run',
-    schemaVersion: 2,
+    schemaVersion: 3,
     project: { id: project.id, name: project.name },
     run: { runId: state.identity.runId, observedAt },
     state: resultState,
-    ...(state.build === undefined ? {} : {
-      jenkins: {
-        buildNumber: state.build.number,
-        buildUrl: state.build.url,
-        ...(status === undefined ? {} : { status }),
-      },
-    }),
-    artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [...screenshots] },
+    ...(options.jobUrl === undefined ? {} : { jenkins: { jobUrl: options.jobUrl } }),
+    artifacts: {
+      manifest: 'manifest.json',
+      data: 'data.json',
+      screenshots: [...(options.screenshots ?? [])],
+    },
     warnings: [...warnings],
-    ...(diagnostic === undefined ? {} : { diagnostic }),
-    ...(diagnostics === undefined ? {} : {
+    ...(options.diagnostic === undefined ? {} : { diagnostic: options.diagnostic }),
+    ...(options.diagnostics === undefined ? {} : {
       diagnostics: {
-        ...diagnostics,
-        observationErrors: boundedDiagnostics(diagnostics.observationErrors),
+        ...options.diagnostics,
+        observationErrors: boundedDiagnostics(options.diagnostics.observationErrors),
       },
     }),
   };

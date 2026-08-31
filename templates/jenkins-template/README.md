@@ -3,15 +3,11 @@ https://jenkins-example.example-domain.com/job/Container%20Platform/job/XX/job/j
 
 ## Fixture and navigation contract
 
-This capture is a checked-in offline report source as well as selector and URL
-evidence. It is not served wholesale: the Blink snapshot contains stale hosts,
-third-party resources, and vendor CSS. The default `npm run report` command
-reads this Jenkins snapshot together with the Snyk and SonarQube snapshots,
-serves them through bounded Playwright fixture routes, and writes a normalized
-report.
-No Jenkins job or external vendor is contacted. Use
-`REPORT_SOURCE=jenkins npm run report` only for the separately authorized live
-collector path.
+This capture is a checked-in offline fixture and selector/URL evidence. It is
+not served wholesale: the snapshot contains stale hosts, third-party
+resources, and vendor CSS. Template-only Playwright routes serve this corpus
+at exact configured and discovered URLs for tests. The report command does not
+read templates automatically and has no `REPORT_SOURCE` mode.
 
 The nested path demonstrates Jenkins folder URLs. Decode each configured job
 segment once, then encode it once when generating `/job/<segment>/` links. The
@@ -22,7 +18,7 @@ Captured landmarks map to generated report destinations as follows:
 
 | Captured evidence | Generated destination | Live source rule |
 | --- | --- | --- |
-| Exact build URL and heading | `#jenkins` | Same canonical Jenkins origin/context |
+| Exact Jenkins job URL and heading | `#jenkins` | Same canonical Jenkins origin/context |
 | Archived `snyk-results.html`/Snyk report | `#snyk-test-report` | Jenkins artifact or configured Snyk origin |
 | SonarQube Quality Gate link | `#sonarqube-home` | Explicit project SonarQube origin |
 | Sonar Overview → Overall action | `#sonarqube-overall` | Same validated Sonar project |
@@ -45,12 +41,12 @@ Run the template-only browser check from the repository root:
 npm run test:e2e:templates
 ```
 
-It starts at this Jenkins snapshot and follows every Snyk/Sonar destination.
+It starts at this Jenkins fixture and follows every Snyk/Sonar destination.
 This checks static fixture navigation. The report regression also exercises the
-normal capture/normalization/rendering path and writes `reports/index.html`,
-`reports/<project>/<build>/<run>/index.html`, `data.json`, `manifest.json`,
-and the three local screenshots. `test-results/` remains reserved for
-Playwright test-runner output.
+normal direct capture/normalization/rendering path and writes
+`reports/<project>/<run>/index.html`, `data.json`, `manifest.json`, and the
+three local screenshots. `test-results/` remains reserved for Playwright
+test-runner output.
 
 ## View the generated report
 
@@ -58,7 +54,7 @@ Run these commands from the repository root. The report is project-local and
 ignored by Git; it is not written to the operating-system `/tmp` directory:
 
 ```sh
-PROJECT_ID=local-build-now PROJECT_NAME='Local Build Now' npm run report
+npm run report -- --config config/authorized-projects.json
 npm run serve:report
 ```
 

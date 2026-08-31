@@ -17,7 +17,6 @@ import {
 } from '../../src/reports/sonarqube/sonarqube-locators.js';
 import {
   assertProjectUrl,
-  assertSonarqubeUrlMatchesBuild,
   screenshotFacetRange,
 } from '../../src/reports/sonarqube/sonarqube-capture-support.js';
 import { normalizeSonarIssueFacets } from '../../src/reports/sonarqube/sonarqube-issue-facets.js';
@@ -85,42 +84,28 @@ test('classifies one allowlisted Sonar dashboard and rejects ambiguity', () => {
     .toBeUndefined();
 });
 
-test('rejects archived SonarQube links from a different selected build', () => {
-  const selectedBuild = { number: 42, url: 'https://jenkins.example/job/service-a/42/' };
-  const result = classifySonarLinks([
-    { href: 'https://jenkins.example/job/service-a/41/artifact/reports/sonarqube/index.html', text: 'SonarQube Quality Gate' },
-    { href: 'https://jenkins.example/job/service-a/42/artifact/reports/sonarqube/index.html', text: 'SonarQube Quality Gate' },
-  ], project({ sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: ['https://jenkins.example'] }, sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: ['https://jenkins.example'], projectId: 'service-a' } } }), selectedBuild);
-  expect(result.home?.href).toBe('https://jenkins.example/job/service-a/42/artifact/reports/sonarqube/index.html?id=service-a');
-  expect(result.warnings).toContain('an observed SonarQube link did not belong to the selected Jenkins build');
-  const withoutIdentity = project({
-    sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: ['https://jenkins.example'] },
-    sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: ['https://jenkins.example'] } },
-  });
-  expect(classifySonarLinks([
-    { href: 'https://jenkins.example/job/service-a/42/artifact/reports/sonarqube/index.html', text: 'SonarQube Quality Gate' },
-  ], withoutIdentity, selectedBuild).home).toBeUndefined();
-});
-test('rejects redirected archived SonarQube pages from a different selected build', () => {
-  const selectedBuild = { number: 42, url: 'https://jenkins.example/job/service-a/42/' };
-  expect(() => assertSonarqubeUrlMatchesBuild(
-    'https://jenkins.example/job/service-a/41/artifact/reports/sonarqube/overall.html?id=service-a',
-    project(),
-    selectedBuild,
-  )).toThrow(/selected Jenkins build/u);
-  expect(() => assertSonarqubeUrlMatchesBuild(
-    'https://sonar.example/dashboard?id=service-a',
-    project(),
-    selectedBuild,
-  )).not.toThrow();
-});
 
-test('requires home and Overview identities to remain on a Sonar dashboard', () => {
+test('requires home, Overall, and Overview identities to remain on a Sonar dashboard', () => {
   expect(assertProjectUrl(
     'https://sonar.example/dashboard?id=service-a',
     'service-a',
     'home',
   )).toBe('https://sonar.example/dashboard?id=service-a');
+  expect(assertProjectUrl(
+    'https://sonar.example/dashboard?id=service-a&codeScope=overall',
+    'service-a',
+    'Overall',
+  )).toBe('https://sonar.example/dashboard?id=service-a&codeScope=overall');
+  expect(() => assertProjectUrl(
+    'https://sonar.example/dashboard?id=service-a',
+    'service-a',
+    'Overall',
+  )).toThrow(/code scope/u);
+  expect(() => assertProjectUrl(
+    'https://sonar.example/project/issues?id=service-a&codeScope=overall',
+    'service-a',
+    'Overall',
+  )).toThrow(/project dashboard/u);
   expect(() => assertProjectUrl(
     'https://sonar.example/project/issues?id=service-a',
     'service-a',
@@ -162,7 +147,7 @@ test('captures home to Overall to Issues through visible actions and scoped face
     await page.goto('https://jenkins.example/job/service-a/');
     const result = await captureSonarqubeEvidence({
       page, project: project(), deadline: new WorkflowDeadline(30_000), outputDirectory,
-      terminalBuildUrl: 'https://jenkins.example/job/service-a/',
+      homeUrl: 'https://sonar.example/dashboard?id=service-a',
     });
     expect(result.source.state).toBe('found');
     expect(result.source.facets).toEqual({ types: [{ label: 'Bug', count: 1 }], severities: [{ label: 'Critical', count: 4 }] });
@@ -217,7 +202,7 @@ test('captures the saved Sonar templates through the complete Home to Overall to
       project: configured,
       deadline: new WorkflowDeadline(60_000),
       outputDirectory,
-      terminalBuildUrl: 'https://jenkins.example/job/service-a/',
+      homeUrl: `${sonarOrigin}/dashboard?id=${encodeURIComponent(projectKey)}`,
     });
     expect(result.source.state).toBe('found');
     expect(result.navigation['sonarqube-home'].state).toBe('found');
@@ -233,46 +218,6 @@ test('captures the saved Sonar templates through the complete Home to Overall to
   }
 });
 
-test('captures the deterministic Jenkins archived SonarQube fixture through visible navigation', async ({ page }) => {
-  const fixtureRoot = path.resolve('docker/jenkins/fixtures/reports/sonarqube');
-  const home = fs.readFileSync(path.join(fixtureRoot, 'index.html'), 'utf8');
-  const overall = fs.readFileSync(path.join(fixtureRoot, 'overall.html'), 'utf8');
-  const issues = fs.readFileSync(path.join(fixtureRoot, 'issues.html'), 'utf8');
-  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-archived-fixture-'));
-  const configured = project({
-    sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: [] },
-    sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: [], projectId: 'service-a' } },
-  });
-  await page.context().route('https://jenkins.example/**', async (route) => {
-    const url = new URL(route.request().url());
-    const body = url.pathname.endsWith('/job/service-a/')
-      ? '<a href="/jenkins/job/service-a/42/artifact/reports/sonarqube/index.html">sonarqube/index.html</a>'
-      : url.pathname.endsWith('/artifact/reports/sonarqube/overall.html') ? overall
-        : url.pathname.endsWith('/artifact/reports/sonarqube/issues.html') ? issues
-          : url.pathname.endsWith('/artifact/reports/sonarqube/index.html') ? home
-            : 'not found';
-    await route.fulfill({ status: body === 'not found' ? 404 : 200, contentType: 'text/html', body });
-  });
-  try {
-    await page.goto('https://jenkins.example/jenkins/job/service-a/');
-    const result = await captureSonarqubeEvidence({
-      page,
-      project: configured,
-      deadline: new WorkflowDeadline(60_000),
-      outputDirectory,
-      terminalBuildUrl: 'https://jenkins.example/jenkins/job/service-a/',
-    });
-    expect(result.source.state).toBe('found');
-    expect(result.navigation['sonarqube-home'].state).toBe('found');
-    expect(result.navigation['sonarqube-overall'].state).toBe('found');
-    expect(result.navigation['sonarqube-issues'].state).toBe('found');
-    expect(result.source.facets).toEqual({ types: [{ label: 'Bug', count: 1 }], severities: [{ label: 'Major', count: 2 }] });
-    expect(result.screenshots).toEqual(['sonarqube-overall.png', 'sonarqube-issues.png']);
-  } finally {
-    await page.context().unroute('https://jenkins.example/**');
-    fs.rmSync(outputDirectory, { recursive: true, force: true });
-  }
-});
 
 test('uses the scoped generated-class fallback without reading unrelated wrappers', async ({ page }) => {
   await page.setContent('<div class="css-1l8tlcx"><button aria-label="Type" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="BUG" aria-label="Bug 2"><span class="name">Bug</span><span class="stat">2</span></button></div></div><div class="css-1l8tlcx"><button aria-label="Tag"></button><div role="group"><button role="checkbox" data-facet="TAG" aria-label="secret row"><span class="name">Wrong</span><span class="stat">99</span></button></div></div>');
@@ -441,8 +386,7 @@ test('fails closed when Overall navigates with duplicate project identities', as
     await route.fulfill({ status: 200, contentType: 'text/html', body });
   });
   await page.goto('https://jenkins.example/job/service-a/');
-  const result = await captureSonarqubeEvidence({ page, project: project(), deadline: new WorkflowDeadline(3_000), outputDirectory: os.tmpdir(), terminalBuildUrl: 'https://jenkins.example/job/service-a/' });
-  expect(result.source.state).toBe('incomplete');
+  const result = await captureSonarqubeEvidence({ page, project: project(), deadline: new WorkflowDeadline(3_000), outputDirectory: os.tmpdir(), homeUrl: 'https://sonar.example/dashboard?id=service-a' });
   expect(result.navigation['sonarqube-home'].state).toBe('found');
   expect(result.navigation['sonarqube-overall'].state).toBe('incomplete');
   expect(result.warnings.join(' ')).toMatch(/project|Overall/u);

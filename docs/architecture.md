@@ -57,9 +57,8 @@ flowchart LR
   report-root locking, cleanup, manifest discovery, and aggregate publication.
 - `src/project/` owns the direct login/job-page/capture workflow, deadlines,
   outcome state, and sanitized failure handling.
-- `src/jenkins/` authenticates and opens the exact configured job page, then
-  submits the supported non-parameterized UI `Build Now` action and correlates
-  the resulting build.
+- `src/jenkins/` authenticates and opens the exact configured job page without
+  triggering builds, inspecting queues/build identities, or polling status.
 - `src/reports/snyk/` and `src/reports/sonarqube/` validate allowed links,
   capture bounded visible evidence, and normalize source-specific results.
 - `src/artifacts/` creates immutable run paths, writes validated files, manages
@@ -122,9 +121,9 @@ and never read from runtime project JSON.
 
 The workflow submits credentials only to the configured Jenkins login
 destination, validates the final authenticated page, opens the exact
-configured job page, rejects parameterized jobs, submits non-parameterized
-`Build Now`, correlates the resulting build, waits for terminal status, and
-captures publisher evidence. It does not search for another job or accept an
+configured job page, discovers publisher links once, and captures evidence
+from those destinations. It does not search for another job, trigger builds,
+inspect queues or build identities, poll terminal status, or accept an
 existing-build/build-number override.
 
 Every configured, discovered, redirected, and final URL must be credential-free
@@ -138,7 +137,7 @@ page. Every configured, discovered, redirected, and final URL must be
 credential-free HTTP(S) and inside its allowed canonical origin.
 
 The Snyk adapter selects one exact report link and one unambiguous summary JSON
-link from the validated job/build context. The SonarQube adapter follows one
+link from the validated Jenkins job page. The SonarQube adapter follows one
 validated dashboard sequence: Home, Overall with `codeScope=overall`, then
 Issues for the same project identity. Tests fulfill these exact browser URLs
 from the checked-in template files; runtime opens them normally.

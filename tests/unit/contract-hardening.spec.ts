@@ -142,7 +142,7 @@ test('inherits the default requiredness for selector overrides', () => {
       JENKINS_USERNAME: 'user',
       JENKINS_PASSWORD: 'password',
     });
-    expect(loaded?.selectors.authLandmark.required).toBe(false);
+    expect(loaded?.selectors.authLandmark.required).toBe(true);
   } finally {
     fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
   }
@@ -181,7 +181,7 @@ test('requires all five keyed navigation targets', () => {
     }]),
   );
   expect(hasCompleteNavigationTargets(complete)).toBe(true);
-  expect(hasCompleteNavigationTargets({ ...complete, extra: complete['jenkins-build'] })).toBe(false);
+  expect(hasCompleteNavigationTargets({ ...complete, extra: complete['jenkins-job'] })).toBe(false);
   delete complete['sonarqube-issues'];
   expect(hasCompleteNavigationTargets(complete)).toBe(false);
   expect(hasCompleteNavigationTargets(Object.values(complete))).toBe(false);

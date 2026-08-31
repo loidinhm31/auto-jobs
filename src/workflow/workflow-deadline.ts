@@ -25,3 +25,74 @@ export class WorkflowDeadline {
     return remaining;
   }
 }
+
+export async function withWorkflowDeadline<T>(
+  operation: () => Promise<T>,
+  deadline: WorkflowDeadline,
+): Promise<T> {
+  const timeoutMs = deadline.requireRemaining();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new WorkflowDeadlineExceededError()), timeoutMs);
+    });
+    return await Promise.race([operation(), timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+export const CLEANUP_SETTLE_TIMEOUT_MS = 5_000;
+
+export async function withHardTimeout<T>(
+  operation: () => Promise<T>,
+  timeoutMs: number,
+  timeoutMessage = 'Operation exceeded hard timeout',
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    });
+    return await Promise.race([operation(), timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+export async function settleCleanup(
+  operation: () => Promise<unknown>,
+  timeoutMs: number = CLEANUP_SETTLE_TIMEOUT_MS,
+): Promise<void> {
+  await withHardTimeout(operation, timeoutMs).catch(() => undefined);
+}
+
+export async function withWorkflowDeadlineAndLateResource<T>(
+  operation: () => Promise<T>,
+  deadline: WorkflowDeadline,
+  onLateResource: (resource: T) => Promise<void>,
+): Promise<T> {
+  const timeoutMs = deadline.requireRemaining();
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const pending = Promise.resolve().then(operation);
+  void pending.then(
+    (resource) => {
+      if (timedOut) {
+        void Promise.resolve().then(() => onLateResource(resource)).catch(() => undefined);
+      }
+    },
+    () => undefined,
+  );
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        reject(new WorkflowDeadlineExceededError());
+      }, timeoutMs);
+    });
+    return await Promise.race([pending, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}

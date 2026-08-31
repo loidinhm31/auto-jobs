@@ -1,12 +1,11 @@
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
-import { isJenkinsArtifactPathForBuild } from '../../jenkins/url-identity.js';
-import type { BuildReference } from '../../types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
 import type {
   ClassifiedSourceLink,
   PageLinkCandidate,
 } from '../source-link-classifier.js';
+import { pushDiagnostic } from '../../workflow/diagnostics.js';
 import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
 
 export interface SonarLinkClassification {
@@ -50,41 +49,28 @@ function sonarHome(candidate: PageLinkCandidate, project: NormalizedProjectConfi
   };
 }
 
-
-function matchesSelectedBuild(
-  href: string,
-  project: NormalizedProjectConfig,
-  expectedBuild: BuildReference | undefined,
-): boolean {
-  if (expectedBuild === undefined) return true;
-  const candidateUrl = new URL(href);
-  const jenkinsOrigin = new URL(project.sourceOrigins.jenkins).origin;
-  return candidateUrl.origin !== jenkinsOrigin || !candidateUrl.pathname.includes('/artifact/') ||
-    isJenkinsArtifactPathForBuild(project.jobUrl, href, expectedBuild.number);
-}
-
 export function classifySonarLinks(
   candidates: readonly PageLinkCandidate[],
   project: NormalizedProjectConfig,
-  expectedBuild?: BuildReference,
 ): SonarLinkClassification {
   const warnings: string[] = [];
   const homes: ClassifiedSourceLink[] = [];
   for (const candidate of candidates) {
     const classified = sonarHome(candidate, project);
     if (classified === undefined) continue;
-    if (!matchesSelectedBuild(classified.href, project, expectedBuild)) {
-      warnings.push('an observed SonarQube link did not belong to the selected Jenkins build');
-      continue;
-    }
     try {
-      const href = assertAllowedUrl(classified.href, deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.sonarqube, 'observed SonarQube home');
+      const href = assertAllowedUrl(
+        classified.href,
+        deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl),
+        project.sourceOrigins.sonarqube,
+        'observed SonarQube home',
+      );
       homes.push({ ...classified, href });
     } catch {
-      warnings.push('an observed SonarQube home link was outside the configured origins');
+      pushDiagnostic(warnings, 'an observed SonarQube home link was outside the configured origins');
     }
   }
   const unique = [...new Map(homes.map((home) => [home.href, home])).values()];
-  if (unique.length > 1) warnings.push('ambiguous SonarQube home candidates were rejected');
+  if (unique.length > 1) pushDiagnostic(warnings, 'ambiguous SonarQube home candidates were rejected');
   return { ...(unique.length === 1 ? { home: unique[0] } : {}), warnings };
 }

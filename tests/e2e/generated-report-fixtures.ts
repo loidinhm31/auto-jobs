@@ -8,36 +8,31 @@ import { ArtifactPaths } from '../../src/artifacts/artifact-paths.js';
 import { writeAggregateDataPair } from '../../src/artifacts/aggregate-report-publisher.js';
 import { writeProjectResult } from '../../src/artifacts/result-writer.js';
 import type { ProjectRunManifest } from '../../src/artifacts/artifact-manifest.js';
-import type { AggregateReportResult, VulnerabilityReportResultV2 } from '../../src/result-types.js';
+import type { AggregateReportResult, VulnerabilityReportResultV3 } from '../../src/result-types.js';
 import { generatedReportImage } from './generated-report-image.js';
 
 const RUN_ID = '20260824t040000z-0000000000000042';
-const BUILD_NUMBER = 42;
 const OBSERVED_AT = '2026-08-24T04:00:00.000Z';
-const BUILD_URL = 'https://jenkins.example/job/service-a/42/';
+const JOB_URL = 'https://jenkins.example/job/service-a/';
 const SNYK_SCREENSHOT = 'snyk-test-report.png';
 const SONAR_OVERALL_SCREENSHOT = 'sonarqube-overall.png';
 const SONAR_ISSUES_SCREENSHOT = 'sonarqube-issues.png';
 const SCREENSHOTS = [SNYK_SCREENSHOT, SONAR_OVERALL_SCREENSHOT, SONAR_ISSUES_SCREENSHOT] as const;
 
-function generatedReportResult(): VulnerabilityReportResultV2 {
+function generatedReportResult(): VulnerabilityReportResultV3 {
   const navigation = {
-    'jenkins-build': { key: 'jenkins-build' as const, localAnchor: '#jenkins', state: 'found' as const, liveUrl: BUILD_URL },
+    'jenkins-job': { key: 'jenkins-job' as const, localAnchor: '#jenkins', state: 'found' as const, liveUrl: JOB_URL },
     'snyk-report': { key: 'snyk-report' as const, localAnchor: '#snyk-test-report', state: 'found' as const, liveUrl: 'https://snyk.example/org/service-a' },
     'sonarqube-home': { key: 'sonarqube-home' as const, localAnchor: '#sonarqube-home', state: 'found' as const, liveUrl: 'https://sonarqube.example/dashboard?id=service-a' },
     'sonarqube-overall': { key: 'sonarqube-overall' as const, localAnchor: '#sonarqube-overall', state: 'found' as const, liveUrl: 'https://sonarqube.example/overview?id=service-a' },
     'sonarqube-issues': { key: 'sonarqube-issues' as const, localAnchor: '#sonarqube-issues', state: 'found' as const, liveUrl: 'https://sonarqube.example/issues?id=service-a' },
   };
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     state: 'success',
     project: { id: 'service-a', name: 'Service <A>' },
     run: { runId: RUN_ID, observedAt: OBSERVED_AT },
-    jenkins: {
-      baseUrl: 'https://jenkins.example', jobPath: 'job/service-a', jobUrl: 'https://jenkins.example/job/service-a/',
-      buildNumber: BUILD_NUMBER, buildUrl: BUILD_URL, status: 'SUCCESS',
-      trigger: { capability: 'build_now', triggerAttempts: 1, build: { number: BUILD_NUMBER, url: BUILD_URL }, submittedAt: OBSERVED_AT, correlatedAt: OBSERVED_AT, warnings: [] },
-    },
+    jenkins: { jobUrl: JOB_URL },
     navigation,
     reports: {
       snyk: {
@@ -60,8 +55,8 @@ function generatedReportResult(): VulnerabilityReportResultV2 {
 
 function generatedManifest(): ProjectRunManifest {
   return {
-    kind: 'project-run', schemaVersion: 2, project: { id: 'service-a', name: 'Service <A>' }, run: { runId: RUN_ID, observedAt: OBSERVED_AT }, state: 'success',
-    jenkins: { buildNumber: BUILD_NUMBER, buildUrl: BUILD_URL, status: 'SUCCESS' },
+    kind: 'project-run', schemaVersion: 3, project: { id: 'service-a', name: 'Service <A>' }, run: { runId: RUN_ID, observedAt: OBSERVED_AT }, state: 'success',
+    jenkins: { jobUrl: JOB_URL },
     artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: SCREENSHOTS }, warnings: [],
   };
 }
@@ -87,9 +82,13 @@ async function listen(root: string): Promise<{ baseUrl: string; close: () => Pro
       response.writeHead(404).end('not found');
     }
   });
+  // The configured TypeScript lib predates Promise.withResolvers; Node callback APIs require an executor here.
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address() as AddressInfo;
-  return { baseUrl: `http://127.0.0.1:${address.port}`, close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())) };
+  const close = (): Promise<void> => new Promise((resolve, reject) => {
+    server.close((error) => error === undefined ? resolve() : reject(error));
+  });
+  return { baseUrl: `http://127.0.0.1:${address.port}`, close };
 }
 
 export async function createGeneratedReportFixture(): Promise<{ baseUrl: string; reportPath: string; close: () => Promise<void> }> {
@@ -97,16 +96,15 @@ export async function createGeneratedReportFixture(): Promise<{ baseUrl: string;
   const reportRoot = path.join(root, 'reports');
   const paths = new ArtifactPaths(reportRoot, path.join(root, 'staging'));
   await paths.initialize();
-  const runDirectory = await paths.allocateReport('service-a', BUILD_NUMBER, RUN_ID);
+  const runDirectory = await paths.allocateReport('service-a', RUN_ID);
   const image = generatedReportImage();
   await Promise.all(SCREENSHOTS.map((filename) => fs.writeFile(path.join(runDirectory, filename), image, { mode: 0o600 })));
-  const result = generatedReportResult();
-  await writeProjectResult(runDirectory, result, generatedManifest(), reportRoot);
-  const reportPath = `service-a/${BUILD_NUMBER}/${RUN_ID}/index.html`;
+  await writeProjectResult(runDirectory, generatedReportResult(), generatedManifest(), reportRoot);
+  const reportPath = `service-a/${RUN_ID}/index.html`;
   const aggregate: AggregateReportResult = {
-    schemaVersion: 2, generatedAt: OBSERVED_AT, warnings: [], projects: [{
-      projectId: 'service-a', name: 'Service <A>', state: 'success', buildNumber: BUILD_NUMBER, runId: RUN_ID, reportPath,
-      runs: [{ buildNumber: BUILD_NUMBER, runId: RUN_ID, state: 'success', manifestPath: `service-a/${BUILD_NUMBER}/${RUN_ID}/manifest.json`, reportPath, warnings: [] }], warnings: [],
+    schemaVersion: 3, generatedAt: OBSERVED_AT, warnings: [], projects: [{
+      projectId: 'service-a', name: 'Service <A>', state: 'success', runId: RUN_ID, reportPath,
+      runs: [{ runId: RUN_ID, state: 'success', manifestPath: `service-a/${RUN_ID}/manifest.json`, reportPath, warnings: [] }], warnings: [],
     }],
   };
   await writeAggregateDataPair(reportRoot, aggregate);

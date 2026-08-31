@@ -1,4 +1,5 @@
 import type { SnykSeverity, SnykSeverityCounts } from '../../result-types.js';
+import { isRecord } from '../../config-selectors.js';
 
 const SEVERITIES: readonly SnykSeverity[] = ['critical', 'high', 'medium', 'low'];
 const MAX_SUMMARY_COUNT = 10_000_000;
@@ -9,9 +10,6 @@ export interface ParsedSnykSummary {
   warnings: string[];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 export function parseSnykSummary(value: unknown): ParsedSnykSummary {
   if (!isRecord(value) || !isRecord(value.severity_counts)) {

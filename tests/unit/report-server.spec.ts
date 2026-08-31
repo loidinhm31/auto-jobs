@@ -25,11 +25,11 @@ test('serves the project report root in a browser without exposing unsafe paths'
   const symlinkRoot = path.join(reportRoot, 'linked-report.txt');
   try {
     fs.mkdirSync(path.join(reportRoot, 'assets'));
-    fs.mkdirSync(path.join(reportRoot, 'local-build-now', '1', 'run'), { recursive: true });
+    fs.mkdirSync(path.join(reportRoot, 'service-a', 'run-20260831'), { recursive: true });
     fs.writeFileSync(path.join(reportRoot, 'index.html'), '<!doctype html><title>Vulnerability report index</title><h1>Project report</h1>');
     fs.writeFileSync(path.join(reportRoot, 'assets', 'report.css'), 'body { color: #123456; }');
-    fs.writeFileSync(path.join(reportRoot, 'local-build-now', '1', 'run', 'data.json'), '{"state":"partial"}');
-    fs.writeFileSync(path.join(reportRoot, 'local-build-now', '1', 'run', 'snapshot.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    fs.writeFileSync(path.join(reportRoot, 'service-a', 'run-20260831', 'data.json'), '{"state":"partial"}');
+    fs.writeFileSync(path.join(reportRoot, 'service-a', 'run-20260831', 'snapshot.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     fs.writeFileSync(path.join(outsideRoot, 'secret.txt'), 'private outside content');
     fs.symlinkSync(path.join(outsideRoot, 'secret.txt'), symlinkRoot);
 
@@ -46,12 +46,12 @@ test('serves the project report root in a browser without exposing unsafe paths'
       expect(stylesheet.headers()['content-type']).toContain('text/css');
       expect(await stylesheet.text()).toContain('#123456');
 
-      const nestedJson = await page.request.get(`${server.url}local-build-now/1/run/data.json`);
+      const nestedJson = await page.request.get(`${server.url}service-a/run-20260831/data.json`);
       expect(nestedJson.status()).toBe(200);
       expect(nestedJson.headers()['content-type']).toContain('application/json');
       expect(await nestedJson.json()).toEqual({ state: 'partial' });
-      expect((await page.request.get(`${server.url}local-build-now/1/run/`)).status()).toBe(404);
-      expect((await page.request.get(`${server.url}local-build-now/1/run/snapshot.png`)).status()).toBe(200);
+      expect((await page.request.get(`${server.url}service-a/run-20260831/`)).status()).toBe(404);
+      expect((await page.request.get(`${server.url}service-a/run-20260831/snapshot.png`)).status()).toBe(200);
 
       const head = await page.request.fetch(`${server.url}index.html`, { method: 'HEAD' });
       expect(head.status()).toBe(200);

@@ -1,26 +1,21 @@
-import { type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 import { sanitizeUrl } from '../../config-errors.js';
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
-import type { BuildReference } from '../../types.js';
 import type {
   CaptureMetadata,
   NavigationTarget,
   SnykSourceEvidence,
 } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
-import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
+import { settleCleanup, WorkflowDeadlineExceededError, withWorkflowDeadline, withWorkflowDeadlineAndLateResource, type WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 import { boundedDiagnostics } from '../../workflow/diagnostics.js';
-import {
-  classifySnykLinks,
-} from '../source-link-classifier.js';
 import { extractSnykHtml } from './snyk-html-extractor.js';
 import { normalizeSnykEvidence } from './snyk-normalize.js';
 import {
   captureFailureMessage,
   openScriptSafePage,
-  pageLinkCandidates,
   readSummary,
   safeObservedUrl,
   screenshotReport,
@@ -29,7 +24,6 @@ import {
   SNYK_VIEWPORT,
   snykProjectIdentityWarning,
   waitForLandmark,
-  assertSnykUrlMatchesBuild,
 } from './snyk-capture-support.js';
 
 export interface SnykCaptureResult {
@@ -44,8 +38,20 @@ export type SnykSummaryReader = (
   summaryUrl: string,
   project: NormalizedProjectConfig,
   deadline: WorkflowDeadline,
-  expectedBuild?: BuildReference,
 ) => Promise<SnykSummaryEvidence>;
+
+
+async function settleRouteAction(
+  operation: () => Promise<void>,
+  deadline: WorkflowDeadline,
+): Promise<void> {
+  try {
+    await withWorkflowDeadline(operation, deadline);
+  } catch (error) {
+    if (!(error instanceof WorkflowDeadlineExceededError)) throw error;
+  }
+}
+
 
 function navigation(state: SnykSourceEvidence['state'], liveUrl?: string): NavigationTarget {
   return {
@@ -54,11 +60,6 @@ function navigation(state: SnykSourceEvidence['state'], liveUrl?: string): Navig
     state,
     ...(liveUrl === undefined ? {} : { liveUrl }),
   };
-}
-
-function terminalIdentity(value: string): string {
-  const url = new URL(value);
-  return `${url.origin}${url.pathname.replace(/\/+$/u, '')}${url.search}`;
 }
 
 function incompleteResult(
@@ -74,45 +75,42 @@ function incompleteResult(
   return { source, navigation: source.navigation[0] as NavigationTarget, screenshots: [], warnings: source.warnings };
 }
 
-/** Capture one validated Snyk report from terminal-build evidence. */
+/** Capture one URL selected from the exact Jenkins job page. */
 export async function captureSnykEvidence(input: {
   page: Page;
   project: NormalizedProjectConfig;
   deadline: WorkflowDeadline;
   outputDirectory: string;
-  terminalBuildUrl?: string;
-  expectedBuild?: BuildReference;
-  openSafePage?: (page: Page) => Promise<ScriptSafePage>;
+  reportUrl?: string;
+  summaryUrl?: string;
+  discoveryWarnings?: readonly string[];
+  openSafePage?: (page: Page, deadline: WorkflowDeadline) => Promise<ScriptSafePage>;
   readSummary?: SnykSummaryReader;
 }): Promise<SnykCaptureResult> {
-  let reportUrl: string | undefined;
-  let terminalUrl: string | undefined;
+  const reportUrl = input.reportUrl;
+  const jobPageUrl = input.page.url();
   let policyBlocked = false;
   let completedResult: SnykCaptureResult | undefined;
   try {
-    const currentTerminalUrl = assertAllowedUrl(input.page.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), [input.project.sourceOrigins.jenkins], 'Jenkins terminal URL');
-    terminalUrl = currentTerminalUrl;
-    if (input.terminalBuildUrl !== undefined) {
-      const expectedTerminalUrl = assertAllowedUrl(input.terminalBuildUrl, deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), [input.project.sourceOrigins.jenkins], 'terminal build URL');
-      if (terminalIdentity(currentTerminalUrl) !== terminalIdentity(expectedTerminalUrl)) {
-        throw new Error('Snyk capture did not start from the exact terminal Jenkins build');
-      }
-    }
-    const links = await pageLinkCandidates(input.page);
-    const classified = classifySnykLinks(links, input.project, input.expectedBuild);
-    reportUrl = classified.report?.href;
+    const discoveryWarnings = [...(input.discoveryWarnings ?? [])];
     if (reportUrl === undefined) {
-      const state = classified.warnings.length === 0 ? 'not_found' : 'incomplete';
-      const source: SnykSourceEvidence = {
-        state, captures: [], navigation: [navigation(state)], warnings: boundedDiagnostics(classified.warnings), findings: [],
-      };
-      return { source, navigation: source.navigation[0] as NavigationTarget, screenshots: [], warnings: source.warnings };
+      const sourceWarnings = discoveryWarnings.length === 0
+        ? ['Snyk report destination was not uniquely discovered']
+        : discoveryWarnings;
+      return incompleteResult(undefined, sourceWarnings);
+    }
+    if (input.summaryUrl === undefined) {
+      discoveryWarnings.push('Snyk summary destination was not uniquely discovered');
     }
 
-    const safeCapture = await (input.openSafePage ?? openScriptSafePage)(input.page);
+    const safeCapture = await withWorkflowDeadlineAndLateResource(
+      () => (input.openSafePage ?? openScriptSafePage)(input.page, input.deadline),
+      input.deadline,
+      (lateCapture) => settleCleanup(() => lateCapture.close()),
+    );
     const capturePage = safeCapture.page;
     try {
-      await capturePage.setViewportSize(SNYK_VIEWPORT);
+      await withWorkflowDeadline(() => capturePage.setViewportSize(SNYK_VIEWPORT), input.deadline);
       const routeHandler = async (route: Parameters<Parameters<Page['route']>[1]>[0]): Promise<void> => {
         const request = route.request();
         try {
@@ -124,19 +122,19 @@ export async function captureSnykEvidence(input: {
           );
         } catch {
           if (request.isNavigationRequest() && request.resourceType() === 'document') policyBlocked = true;
-          await route.abort('blockedbyclient');
+          await settleRouteAction(() => route.abort('blockedbyclient'), input.deadline);
           return;
         }
         const blocked = ['font', 'image', 'media', 'script', 'worker', 'websocket'].includes(request.resourceType());
-        if (blocked) await route.abort();
-        else await route.fallback();
+        if (blocked) await settleRouteAction(() => route.abort(), input.deadline);
+        else await settleRouteAction(() => route.fallback(), input.deadline);
       };
-      await capturePage.route('**/*', routeHandler);
+      await withWorkflowDeadline(() => capturePage.route('**/*', routeHandler), input.deadline);
       try {
-        const response = await capturePage.goto(reportUrl, {
+        const response = await withWorkflowDeadline(() => capturePage.goto(reportUrl, {
           waitUntil: 'domcontentloaded',
           timeout: input.deadline.requireRemaining(),
-        });
+        }), input.deadline);
         if (policyBlocked) throw new Error('Snyk request was blocked by the configured origin policy');
         const validatedFinalUrl = assertAllowedUrl(
           capturePage.url(),
@@ -144,19 +142,25 @@ export async function captureSnykEvidence(input: {
           input.project.sourceOrigins.snyk,
           'Snyk final URL',
         );
-        assertSnykUrlMatchesBuild(validatedFinalUrl, input.project, input.expectedBuild);
         const finalUrl = sanitizeUrl(validatedFinalUrl);
         if (response !== null && response.status() >= 400) throw new Error(`Snyk report returned HTTP ${response.status()}`);
         const landmark = await waitForLandmark(capturePage, input.project, input.deadline);
-        const html = await extractSnykHtml(capturePage);
-        let summaryEvidence: Awaited<ReturnType<typeof readSummary>> | undefined;
-        const warnings = [...classified.warnings];
+        const html = await withWorkflowDeadline(() => extractSnykHtml(capturePage), input.deadline);
+        let summaryEvidence: SnykSummaryEvidence | undefined;
+        const warnings = [...discoveryWarnings];
         const identityWarning = snykProjectIdentityWarning(html.metadata, input.project, finalUrl);
         if (identityWarning !== undefined) warnings.push(identityWarning);
-        if (classified.summary?.href !== undefined) {
+        if (input.summaryUrl !== undefined) {
           try {
-            const evidence = await (input.readSummary ?? readSummary)(capturePage, classified.summary.href, input.project, input.deadline, input.expectedBuild);
-            assertSnykUrlMatchesBuild(evidence.url, input.project, input.expectedBuild);
+            const evidence = await withWorkflowDeadline(
+              () => (input.readSummary ?? readSummary)(
+                capturePage,
+                input.summaryUrl as string,
+                input.project,
+                input.deadline,
+              ),
+              input.deadline,
+            );
             summaryEvidence = evidence;
           } catch (error) {
             warnings.push(`Snyk summary evidence failed: ${captureFailureMessage(error)}`);
@@ -168,7 +172,7 @@ export async function captureSnykEvidence(input: {
           warnings,
         });
         const capturedAt = new Date().toISOString();
-        const title = (await capturePage.title()).trim();
+        const title = (await withWorkflowDeadline(() => capturePage.title(), input.deadline)).trim();
         const capture: CaptureMetadata = {
           url: finalUrl,
           ...(title.length === 0 ? {} : { title: title.slice(0, 512) }),
@@ -212,15 +216,15 @@ export async function captureSnykEvidence(input: {
         };
         return completedResult;
       } finally {
-        await capturePage.unroute('**/*', routeHandler);
+        await settleCleanup(() => capturePage.unroute('**/*', routeHandler));
       }
     } finally {
       try {
-        await safeCapture.close();
+        await settleCleanup(() => safeCapture.close());
       } finally {
-        if (capturePage === input.page && terminalUrl !== undefined && input.page.url() !== terminalUrl) {
+        if (capturePage === input.page && input.page.url() !== jobPageUrl) {
           try {
-            await input.page.goto(terminalUrl, {
+            await input.page.goto(jobPageUrl, {
               waitUntil: 'domcontentloaded',
               timeout: input.deadline.requireRemaining(),
             });
@@ -247,6 +251,9 @@ export async function captureSnykEvidence(input: {
     const diagnostic = policyBlocked
       ? 'Snyk request blocked by the configured origin policy'
       : captureFailureMessage(error);
-    return incompleteResult(reportUrl === undefined ? safeObservedUrl(input.page, input.project) : sanitizeUrl(reportUrl), [diagnostic]);
+    return incompleteResult(
+      reportUrl === undefined ? safeObservedUrl(input.page, input.project) : sanitizeUrl(reportUrl),
+      [diagnostic],
+    );
   }
 }

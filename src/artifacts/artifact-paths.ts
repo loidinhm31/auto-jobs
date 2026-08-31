@@ -5,11 +5,45 @@ import * as path from 'node:path';
 import { acquireReportRootLock, type ReportRootLock, type ReportRootLockOptions } from './report-root-lock.js';
 import { cleanupOrphans, type OrphanCleanupOptions, type OrphanCleanupResult } from './orphan-cleanup.js';
 import { createStagingLease, releaseStagingLease } from './staging-lease.js';
-
-export const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
+import { WorkflowDeadlineExceededError, withWorkflowDeadline, type WorkflowDeadline } from '../workflow/workflow-deadline.js';
+import { SAFE_ID } from './artifact-identity.js';
 
 function assertSafeId(value: string, fieldName: string): void {
   if (!SAFE_ID.test(value)) throw new Error(`${fieldName} is not filesystem-safe`);
+}
+
+async function bounded<T>(operation: () => Promise<T>, deadline?: WorkflowDeadline): Promise<T> {
+  return deadline === undefined ? operation() : withWorkflowDeadline(operation, deadline);
+}
+
+
+const ALLOCATION_SETTLE_TIMEOUT_MS = 5_000;
+
+async function withHardTimeout<T>(operation: () => Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('artifact allocation operation did not settle')), timeoutMs);
+    });
+    return await Promise.race([operation(), timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function boundedAllocation<T>(
+  operation: () => Promise<T>,
+  deadline?: WorkflowDeadline,
+): Promise<T> {
+  if (deadline === undefined) return operation();
+  deadline.requireRemaining();
+  const pending = operation();
+  try {
+    return await withWorkflowDeadline(() => pending, deadline);
+  } catch (error) {
+    if (!(error instanceof WorkflowDeadlineExceededError)) throw error;
+    return withHardTimeout(() => pending, ALLOCATION_SETTLE_TIMEOUT_MS);
+  }
 }
 
 async function ensureCanonicalDirectory(directory: string): Promise<void> {
@@ -73,7 +107,7 @@ async function moveEmptyStagingDirectory(source: string, destination: string): P
   try {
     const stat = await fs.lstat(source);
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Staging run directory is unsafe');
-    if ((await fs.readdir(source)).length > 0) throw new Error('Staging run directory must be empty before build allocation');
+    if ((await fs.readdir(source)).length > 0) throw new Error('Staging run directory must be empty before report allocation');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;
@@ -83,9 +117,14 @@ async function moveEmptyStagingDirectory(source: string, destination: string): P
   return destination;
 }
 
-async function releaseStagingLeaseBestEffort(stagingRoot: string, projectId: string, runId: string): Promise<void> {
+async function releaseStagingLeaseBestEffort(
+  stagingRoot: string,
+  projectId: string,
+  runId: string,
+  deadline?: WorkflowDeadline,
+): Promise<void> {
   try {
-    await releaseStagingLease(stagingRoot, projectId, runId);
+    await bounded(() => releaseStagingLease(stagingRoot, projectId, runId), deadline);
   } catch {
     // A successful publication is recoverable even when its lease cleanup is not.
     // The bounded orphan reaper will preserve unsafe leases and remove expired safe ones.
@@ -121,50 +160,30 @@ export class ArtifactPaths {
     await ensureCanonicalDirectory(this.stagingRoot);
   }
 
-  public async allocateStaging(projectId: string, runId: string): Promise<string> {
+  public async allocateStaging(projectId: string, runId: string, deadline?: WorkflowDeadline): Promise<string> {
     assertSafeId(projectId, 'project ID');
     assertSafeId(runId, 'run ID');
-    const projectDirectory = await ensureChildDirectory(this.stagingRoot, projectId);
-    const directory = await allocateLeaf(projectDirectory, runId);
-    await createStagingLease(this.stagingRoot, projectId, runId);
+    const projectDirectory = await boundedAllocation(() => ensureChildDirectory(this.stagingRoot, projectId), deadline);
+    const directory = await boundedAllocation(() => allocateLeaf(projectDirectory, runId), deadline);
+    await boundedAllocation(() => createStagingLease(this.stagingRoot, projectId, runId), deadline);
+    deadline?.requireRemaining();
     return directory;
   }
 
   public async allocateReport(
     projectId: string,
-    buildNumber: number,
     runId: string,
+    deadline?: WorkflowDeadline,
   ): Promise<string> {
     assertSafeId(projectId, 'project ID');
     assertSafeId(runId, 'run ID');
-    if (!Number.isSafeInteger(buildNumber) || buildNumber < 1) {
-      throw new Error('build number must be a positive integer');
-    }
-    const projectDirectory = await ensureChildDirectory(this.reportRoot, projectId);
-    const buildDirectory = await ensureChildDirectory(projectDirectory, String(buildNumber));
-    const destination = path.join(buildDirectory, runId);
+    const projectDirectory = await boundedAllocation(() => ensureChildDirectory(this.reportRoot, projectId), deadline);
+    const destination = path.join(projectDirectory, runId);
     const stagingSource = path.join(this.stagingRoot, projectId, runId);
-    const moved = await moveEmptyStagingDirectory(stagingSource, destination);
-    await releaseStagingLeaseBestEffort(this.stagingRoot, projectId, runId);
-    return moved ?? allocateLeaf(buildDirectory, runId);
-  }
-
-  public async publishPreBuild(
-    projectId: string,
-    runId: string,
-  ): Promise<{ readonly directory: string; readonly manifestPath: string }> {
-    assertSafeId(projectId, 'project ID');
-    assertSafeId(runId, 'run ID');
-    const source = path.join(this.stagingRoot, projectId, runId);
-    const projectDirectory = await ensureChildDirectory(this.reportRoot, projectId);
-    const preBuildDirectory = await ensureChildDirectory(projectDirectory, 'pre-build');
-    const destination = path.join(preBuildDirectory, runId);
-    await assertDestinationAbsent(destination);
-    const sourceStat = await fs.lstat(source);
-    if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) throw new Error('Pre-build staging directory is unsafe');
-    await fs.rename(source, destination);
-    await releaseStagingLeaseBestEffort(this.stagingRoot, projectId, runId);
-    return { directory: destination, manifestPath: path.join(destination, 'manifest.json') };
+    const moved = await boundedAllocation(() => moveEmptyStagingDirectory(stagingSource, destination), deadline);
+    await releaseStagingLeaseBestEffort(this.stagingRoot, projectId, runId, deadline);
+    const allocated = moved ?? await boundedAllocation(() => allocateLeaf(projectDirectory, runId), deadline);
+    return allocated;
   }
 
   public relativeToReportRoot(directory: string): string {

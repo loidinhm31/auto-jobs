@@ -11,7 +11,7 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   reporter: process.env['CI'] ? 'blob' : 'html',
-  outputDir: 'test-results/templates',
+  outputDir: 'test-results/templates-webkit',
   use: {
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
@@ -23,5 +23,5 @@ export default defineConfig({
       ? {}
       : { launchOptions: { executablePath } }),
   },
-  projects: [{ name: 'chromium-template', use: { browserName: 'chromium' } }],
+  projects: [{ name: 'webkit-template', use: { browserName: 'webkit' } }],
 });

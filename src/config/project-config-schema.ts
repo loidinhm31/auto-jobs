@@ -146,7 +146,8 @@ function exactUrl(value: unknown, fieldName: string, issues: string[]): void {
   stringField(value, fieldName, issues);
   if (typeof value !== 'string' || value.trim().length === 0) return;
   try {
-    normalizeConfiguredUrl(value, fieldName);
+    const normalized = normalizeConfiguredUrl(value, fieldName);
+    if (new URL(normalized).search !== '') issues.push(`${fieldName} must not contain a query`);
   } catch (error) {
     if (error instanceof ConfigError && error.issues.length > 0) issues.push(...error.issues);
     else issues.push(`${fieldName} must be a credential-free absolute HTTP(S) URL`);
@@ -192,7 +193,10 @@ function selectors(value: unknown, fieldName: string, issues: string[]): void {
     if (SELECTOR_KEYS[key] !== true) continue;
     try {
       const defaultRequired = DEFAULT_SELECTORS[key as keyof typeof DEFAULT_SELECTORS]?.required ?? true;
-      parseSelectorValue(selector, `${fieldName}.${key}`, defaultRequired);
+      const parsedSelector = parseSelectorValue(selector, `${fieldName}.${key}`, defaultRequired);
+      if (key === 'authLandmark' && !parsedSelector.required) {
+        issues.push(`${fieldName}.authLandmark must be required for authenticated Jenkins navigation`);
+      }
     } catch {
       issues.push(`${fieldName}.${key} must be a valid selector`);
     }

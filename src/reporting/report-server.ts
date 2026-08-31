@@ -41,13 +41,14 @@ export async function createReportServer(
   reportRoot: string,
   options: ReportServerOptions = {},
 ): Promise<ReportServerHandle> {
-  const root = await assertReportRoot(reportRoot);
+  const rootReference = await assertReportRoot(reportRoot);
+  const root = rootReference.path;
   const host = validateHost(options.host ?? '127.0.0.1');
   const port = validatePort(options.port ?? 4_173);
   if (!isLoopbackHost(host) && options.allowLan !== true) throw new Error('Non-loopback report server binding requires explicit --allow-lan');
   const sockets = new Set<Socket>();
   const server = createServer((request, response) => {
-    void handleReportRequest(root, request, response).catch(() => {
+    void handleReportRequest(root, request, response, rootReference.identity).catch(() => {
       if (!response.headersSent) response.writeHead(500).end('unable to read report file\n');
       else response.destroy();
     });

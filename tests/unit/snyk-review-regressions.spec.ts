@@ -139,7 +139,7 @@ test('drops credential-like reference query values in both normalization and art
 
 test('preserves safe screenshot artifact references while sanitizing capture output', () => {
   const navigation = {
-    'jenkins-build': { key: 'jenkins-build', localAnchor: '#jenkins', state: 'found' },
+    'jenkins-job': { key: 'jenkins-job', localAnchor: '#jenkins', state: 'found' },
     'snyk-report': { key: 'snyk-report', localAnchor: '#snyk-test-report', state: 'found' },
     'sonarqube-home': { key: 'sonarqube-home', localAnchor: '#sonarqube-overall', state: 'incomplete' },
     'sonarqube-overall': { key: 'sonarqube-overall', localAnchor: '#sonarqube-overall', state: 'incomplete' },

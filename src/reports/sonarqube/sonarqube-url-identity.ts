@@ -10,5 +10,9 @@ export function hasCredentialFreeAuthority(url: URL): boolean {
 }
 
 export function isArchivedSonarqubeSnapshot(url: URL): boolean {
-  return /\/artifact\/(?:[^/]+\/)*sonarqube\/index\.html$/iu.test(url.pathname);
+  return isArchivedSonarqubeArtifact(url) && /\/sonarqube\/index\.html$/iu.test(url.pathname);
+}
+
+export function isArchivedSonarqubeArtifact(url: URL): boolean {
+  return /\/artifact\/(?:[^/]+\/)*sonarqube\/(?:index|overall|issues)\.html$/iu.test(url.pathname);
 }

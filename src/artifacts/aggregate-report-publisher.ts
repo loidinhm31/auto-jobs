@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import type { AggregateReportResult } from '../result-types.js';
 import { writeAggregateReportFile } from '../reporting/report-output.js';
+import { assertValidAggregateResult } from './result-validation.js';
 import {
   type AggregatePublicationJournal,
   recoverAggregatePublication,
@@ -67,6 +68,7 @@ export async function writeAggregateDataPair(
   reportRoot: string,
   aggregate: AggregateReportResult,
 ): Promise<string> {
+  assertValidAggregateResult(aggregate);
   const dataPath = path.join(reportRoot, 'aggregate-data.json');
   const reportPath = path.join(reportRoot, 'index.html');
   const stagedData = await writeTemporary(reportRoot, `${JSON.stringify(aggregate, null, 2)}\n`);
@@ -93,6 +95,7 @@ export async function writeAggregateDataPair(
   let journalWritten = false;
   let recoveryRequired = false;
   try {
+    assertValidAggregateResult(aggregate);
     await writeAggregateReportFile(reportRoot, aggregate, stagedReport);
     await writeAggregatePublicationJournal(journalPath, journal);
     journalWritten = true;

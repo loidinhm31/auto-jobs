@@ -8,6 +8,20 @@ const DIRECTORY_FLAGS = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.co
 const FILE_FLAGS = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
 const MAX_MARKER_SCAN_BYTES = 64 * 1_024;
 
+export interface ReportRootIdentity {
+  readonly dev: number;
+  readonly ino: number;
+}
+
+export interface ReportRootReference {
+  readonly path: string;
+  readonly identity: ReportRootIdentity;
+}
+
+function sameIdentity(left: ReportRootIdentity, right: ReportRootIdentity): boolean {
+  return left.ino === right.ino && (left.dev === right.dev || left.dev === 0 || right.dev === 0);
+}
+
 function descriptorPath(handle: fsp.FileHandle): Promise<string> {
   return fsp.realpath(`/proc/self/fd/${handle.fd}`);
 }
@@ -16,8 +30,64 @@ function descriptorChild(handle: fsp.FileHandle, segment: string): string {
   return path.join('/proc/self/fd', String(handle.fd), segment);
 }
 
-async function openCanonicalDirectory(directory: string): Promise<fsp.FileHandle> {
+interface OpenedDirectory {
+  readonly handle: fsp.FileHandle;
+  readonly path: string;
+  readonly root: string;
+  readonly rootIdentity: ReportRootIdentity;
+}
+
+async function windowsPathIsSafe(root: string, filename: string, handle?: fsp.FileHandle): Promise<boolean> {
+  try {
+    let current = path.parse(filename).root;
+    for (const segment of path.relative(current, filename).split(path.sep).filter(Boolean)) {
+      current = path.join(current, segment);
+      if ((await fsp.lstat(current)).isSymbolicLink()) return false;
+    }
+    const canonicalRoot = await fsp.realpath(root);
+    const canonicalFilename = await fsp.realpath(filename);
+    const relative = path.relative(canonicalRoot, canonicalFilename);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return false;
+    if (handle !== undefined) {
+      const [pathStat, handleStat] = await Promise.all([fsp.stat(filename), handle.stat()]);
+      if (!sameIdentity(pathStat, handleStat)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function windowsDirectoryIsStable(directory: OpenedDirectory): Promise<boolean> {
+  if (!(await windowsPathIsSafe(directory.root, directory.path, directory.handle))) return false;
+  if (directory.rootIdentity === undefined) return true;
+  const rootStat = await fsp.stat(directory.root);
+  return sameIdentity(rootStat, directory.rootIdentity);
+}
+
+function childPath(directory: OpenedDirectory, segment: string): string {
+  return process.platform === 'win32'
+    ? path.join(directory.path, segment)
+    : descriptorChild(directory.handle, segment);
+}
+
+async function openCanonicalDirectory(directory: string, expectedRootIdentity?: ReportRootIdentity): Promise<OpenedDirectory> {
   const resolved = path.resolve(directory);
+  if (process.platform === 'win32') {
+    if (!(await windowsPathIsSafe(resolved, resolved))) throw new Error('Report root changed while it was being opened');
+    const handle = await fsp.open(resolved, fs.constants.O_RDONLY);
+    try {
+      const stat = await handle.stat();
+      const identity = { dev: stat.dev, ino: stat.ino };
+      if (!stat.isDirectory() || !sameIdentity(identity, expectedRootIdentity ?? identity) || !(await windowsPathIsSafe(resolved, resolved, handle))) {
+        throw new Error('Report root changed while it was being opened');
+      }
+      return { handle, path: resolved, root: resolved, rootIdentity: expectedRootIdentity ?? identity };
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      throw error;
+    }
+  }
   const filesystemRoot = path.parse(resolved).root;
   let handle = await fsp.open(filesystemRoot, DIRECTORY_FLAGS);
   try {
@@ -27,7 +97,10 @@ async function openCanonicalDirectory(directory: string): Promise<fsp.FileHandle
       handle = child;
     }
     if (await descriptorPath(handle) !== resolved) throw new Error('Report root changed while it was being opened');
-    return handle;
+    const stat = await handle.stat();
+    const identity = { dev: stat.dev, ino: stat.ino };
+    if (!stat.isDirectory() || !sameIdentity(identity, expectedRootIdentity ?? identity)) throw new Error('Report root changed while it was being opened');
+    return { handle, path: resolved, root: resolved, rootIdentity: expectedRootIdentity ?? identity };
   } catch (error) {
     await handle.close().catch(() => undefined);
     throw error;
@@ -52,38 +125,49 @@ async function readMarkerPrefix(handle: fsp.FileHandle, expectedSize: number): P
   return Buffer.concat(chunks, total);
 }
 
-export async function assertReportRoot(reportRoot: string): Promise<string> {
-  const root = path.resolve(reportRoot);
+export async function assertReportRoot(reportRoot: string): Promise<ReportRootReference> {
+  const requestedRoot = path.resolve(reportRoot);
   let stat: Awaited<ReturnType<typeof fsp.lstat>>;
   try {
-    stat = await fsp.lstat(root);
+    stat = await fsp.lstat(requestedRoot);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`Report root does not exist: ${root}; run npm run report first`);
+      throw new Error(`Report root does not exist: ${requestedRoot}; run npm run report first`);
     }
     throw error;
   }
-  if (!stat.isDirectory() || stat.isSymbolicLink() || await fsp.realpath(root) !== root) {
+  const canonicalRoot = await fsp.realpath(requestedRoot);
+  const rootIsSafe = process.platform === 'win32'
+    ? await windowsPathIsSafe(canonicalRoot, requestedRoot)
+    : canonicalRoot === requestedRoot;
+  if (!stat.isDirectory() || stat.isSymbolicLink() || !rootIsSafe) {
     throw new Error('Report server root must be a real directory without symbolic-link components');
   }
+  const root = canonicalRoot;
   const handle = await openCanonicalDirectory(root);
   try {
-    const marker = await fsp.open(descriptorChild(handle, 'index.html'), FILE_FLAGS);
+    const markerPath = childPath(handle, 'index.html');
+    if (process.platform === 'win32' && (!(await windowsDirectoryIsStable(handle)) || !(await windowsPathIsSafe(handle.root, markerPath)))) {
+      throw new Error('Report server root must contain a generated aggregate index.html');
+    }
+    const marker = await fsp.open(markerPath, FILE_FLAGS);
     try {
       const markerStat = await marker.stat();
-      if (!markerStat.isFile() || markerStat.isSymbolicLink() || !(await readMarkerPrefix(marker, markerStat.size)).toString('utf8').includes(AGGREGATE_REPORT_MARKER)) {
+      if ((process.platform === 'win32' && (!(await windowsDirectoryIsStable(handle)) || !(await windowsPathIsSafe(handle.root, markerPath, marker)))) || !markerStat.isFile() || markerStat.isSymbolicLink() || !(await readMarkerPrefix(marker, markerStat.size)).toString('utf8').includes(AGGREGATE_REPORT_MARKER)) {
         throw new Error('Report server root must contain a generated aggregate index.html');
       }
     } finally {
       await marker.close();
     }
+    const rootStat = await handle.handle.stat();
+    if (!rootStat.isDirectory()) throw new Error('Report server root must be a real directory without symbolic-link components');
+    return { path: root, identity: { dev: rootStat.dev, ino: rootStat.ino } };
   } catch (error) {
-    await handle.close();
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('Report server root must contain a generated aggregate index.html');
     throw error;
+  } finally {
+    await handle.handle.close();
   }
-  await handle.close();
-  return root;
 }
 
 export interface OpenedReportFile {
@@ -104,23 +188,26 @@ async function closeHandles(handles: readonly fsp.FileHandle[]): Promise<void> {
   for (const handle of handles) await handle.close().catch(() => undefined);
 }
 
-export async function openReportFile(root: string, decodedPath: string): Promise<OpenedReportFile | undefined> {
+export async function openReportFile(root: string, decodedPath: string, expectedRootIdentity?: ReportRootIdentity): Promise<OpenedReportFile | undefined> {
   const segments = decodedPath.split('/').filter(Boolean);
   const handles: fsp.FileHandle[] = [];
-  let directory: fsp.FileHandle | undefined;
+  let directory: OpenedDirectory | undefined;
   try {
-    directory = await openCanonicalDirectory(root);
-    handles.push(directory);
+    directory = await openCanonicalDirectory(root, expectedRootIdentity);
+    handles.push(directory.handle);
     let filenameSegments = [...segments];
     for (let index = 0; index < segments.length; index += 1) {
       const segment = segments[index];
       if (segment === undefined || directory === undefined) return undefined;
-      const entry = await fsp.open(descriptorChild(directory, segment), FILE_FLAGS);
+      const entryPath = childPath(directory, segment);
+      if (process.platform === 'win32' && (!(await windowsDirectoryIsStable(directory)) || !(await windowsPathIsSafe(directory.root, entryPath)))) return undefined;
+      const entry = await fsp.open(entryPath, FILE_FLAGS);
       handles.push(entry);
       const stat = await entry.stat();
+      if (process.platform === 'win32' && (!(await windowsDirectoryIsStable(directory)) || !(await windowsPathIsSafe(directory.root, entryPath, entry)))) return undefined;
       if (index < segments.length - 1) {
         if (!stat.isDirectory()) return undefined;
-        directory = entry;
+        directory = { handle: entry, path: path.join(directory.path, segment), root: directory.root, rootIdentity: directory.rootIdentity };
         continue;
       }
       if (stat.isFile()) {
@@ -130,13 +217,16 @@ export async function openReportFile(root: string, decodedPath: string): Promise
         return { handle: entry, filename: expectedFile(filenameSegments), size: stat.size };
       }
       if (!stat.isDirectory()) return undefined;
-      directory = entry;
+      directory = { handle: entry, path: path.join(directory.path, segment), root: directory.root, rootIdentity: directory.rootIdentity };
       filenameSegments = [...segments, 'index.html'];
     }
     if (directory === undefined) return undefined;
-    const entry = await fsp.open(descriptorChild(directory, 'index.html'), FILE_FLAGS);
+    const entryPath = childPath(directory, 'index.html');
+    if (process.platform === 'win32' && (!(await windowsDirectoryIsStable(directory)) || !(await windowsPathIsSafe(directory.root, entryPath)))) return undefined;
+    const entry = await fsp.open(entryPath, FILE_FLAGS);
     handles.push(entry);
     const stat = await entry.stat();
+    if (process.platform === 'win32' && (!(await windowsDirectoryIsStable(directory)) || !(await windowsPathIsSafe(directory.root, entryPath, entry)))) return undefined;
     if (!stat.isFile() || stat.size > MAX_STATIC_FILE_BYTES) return undefined;
     handles.pop();
     await closeExcept(handles, entry);

@@ -26,7 +26,7 @@ export const DEFAULT_SELECTORS: SelectorConfig = {
     kind: 'role',
     value: 'link',
     name: 'Manage Jenkins',
-    required: false,
+    required: true,
   },
   sonarqubeReport: {
     kind: 'testId',

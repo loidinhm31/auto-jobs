@@ -11,19 +11,17 @@ import {
   overviewCandidates,
 } from './sonarqube-locators.js';
 import {
+  assertProjectUrl,
   captureFailureMessage,
   navigation,
   pageCaptureMetadata,
   screenshotRegion,
-  assertSonarqubeUrlMatchesBuild,
   SONAR_SCREENSHOTS,
 } from './sonarqube-capture-support.js';
 import {
   assertRenderedProjectIdentity,
   captureIssuesStep,
 } from './sonarqube-issues-capture-step.js';
-import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
-
 export type {
   SonarIssuesStepResult,
   SonarStepInput,
@@ -34,6 +32,7 @@ import type {
   SonarStepInput,
   SonarStepResult,
 } from './sonarqube-capture-step-types.js';
+import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeArtifact } from './sonarqube-url-identity.js';
 
 export type SonarNavigation = Pick<NavigationTargets, 'sonarqube-home' | 'sonarqube-overall' | 'sonarqube-issues'>;
 
@@ -45,30 +44,42 @@ async function visible(locator: Locator, deadline: WorkflowDeadline, message: st
   }
 }
 
-async function waitForOverallUrl(page: Page, expectedKey: string, deadline: WorkflowDeadline): Promise<string> {
-  await expect.poll(() => {
+function isOverallPath(url: URL, allowArchivedSnapshot: boolean): boolean {
+  return (url.pathname === '/dashboard' || url.pathname === '/dashboard/') ||
+    (allowArchivedSnapshot && isArchivedSonarqubeArtifact(url) && /\/sonarqube\/overall\.html$/iu.test(url.pathname));
+}
+
+async function waitForOverallUrl(
+  page: Page,
+  expectedKey: string,
+  deadline: WorkflowDeadline,
+  allowArchivedSnapshot: boolean,
+): Promise<string> {
+  await page.waitForURL((url) => {
     try {
-      const url = new URL(page.url());
-      return hasCredentialFreeAuthority(url) && exactQueryValue(url, 'id') === expectedKey && exactQueryValue(url, 'codeScope') === 'overall';
+      return hasCredentialFreeAuthority(url) &&
+        isOverallPath(url, allowArchivedSnapshot) &&
+        exactQueryValue(url, 'id') === expectedKey &&
+        exactQueryValue(url, 'codeScope') === 'overall';
     } catch {
       return false;
     }
-  }, { timeout: deadline.requireRemaining(), intervals: [50, 100, 250, 500] }).toBe(true);
+  }, { timeout: deadline.requireRemaining(), waitUntil: 'domcontentloaded' });
   return page.url();
 }
-
-function validatedStepUrl(input: SonarStepInput, value: string, label: 'overall'): string {
+function validatedStepUrl(
+  input: SonarStepInput,
+  value: string,
+  label: 'overall',
+  allowArchivedSnapshot: boolean,
+): string {
   const url = assertAllowedUrl(
     value,
     deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),
     input.project.sourceOrigins.sonarqube,
     `SonarQube ${label} URL`,
   );
-  const parsed = new URL(url);
-  if (!hasCredentialFreeAuthority(parsed) || exactQueryValue(parsed, 'id') !== input.expectedKey) throw new Error(`SonarQube ${label} has the wrong project identity`);
-  if (/\/login(?:\/|$)/iu.test(parsed.pathname)) throw new Error(`SonarQube ${label} redirected to login`);
-  assertSonarqubeUrlMatchesBuild(url, input.project, input.expectedBuild);
-  return url;
+  return assertProjectUrl(url, input.expectedKey, 'Overall', allowArchivedSnapshot);
 }
 
 export async function captureOverallStep(input: SonarStepInput): Promise<SonarStepResult> {
@@ -78,10 +89,10 @@ export async function captureOverallStep(input: SonarStepInput): Promise<SonarSt
   );
   await visible(control.locator, input.deadline, 'SonarQube Overall Code control was not visible');
   await control.locator.click({ timeout: input.deadline.requireRemaining() });
-  const url = validatedStepUrl(input, await waitForOverallUrl(input.page, input.expectedKey, input.deadline), 'overall');
+  const url = validatedStepUrl(input, await waitForOverallUrl(input.page, input.expectedKey, input.deadline, input.allowArchivedSnapshot ?? false), 'overall', input.allowArchivedSnapshot ?? false);
   const panel = await overallPanel(input.page, input.deadline);
   await visible(panel, input.deadline, 'SonarQube Overall panel was not visible');
-  const capture = await pageCaptureMetadata(input.page, url, control.strategy);
+  const capture = await pageCaptureMetadata(input.page, url, control.strategy, input.deadline);
   try {
     const screenshot = await screenshotRegion(input.page, panel, input.outputDirectory, SONAR_SCREENSHOTS.overall, input.deadline);
     return {

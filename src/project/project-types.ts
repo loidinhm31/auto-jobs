@@ -6,8 +6,9 @@ export type ProjectOutcomeState = 'success' | 'partial' | 'failed';
 export interface ProjectRunIdentity {
   readonly projectId: string;
   readonly projectName: string;
+  readonly jobUrl: string;
   readonly runId: string;
-  readonly stagingDirectory: string;
+  readonly runDirectory: string;
 }
 
 export interface ProjectOutcome {
@@ -15,7 +16,6 @@ export interface ProjectOutcome {
   readonly name: string;
   readonly state: ProjectOutcomeState;
   readonly runId: string;
-  readonly buildNumber?: number;
   readonly manifestPath?: string;
   readonly reportDirectory?: string;
   readonly warnings: readonly string[];

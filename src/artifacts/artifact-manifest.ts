@@ -2,14 +2,12 @@ import type { ProjectOutcomeState } from '../project/project-types.js';
 
 export interface ProjectRunManifest {
   readonly kind: 'project-run';
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly project: { readonly id: string; readonly name: string };
   readonly run: { readonly runId: string; readonly observedAt: string };
   readonly state: ProjectOutcomeState;
   readonly jenkins?: {
-    readonly buildNumber: number;
-    readonly buildUrl: string;
-    readonly status?: string;
+    readonly jobUrl: string;
   };
   readonly artifacts: {
     readonly manifest: 'manifest.json';
@@ -21,18 +19,18 @@ export interface ProjectRunManifest {
   readonly diagnostic?: string;
   readonly diagnostics?: {
     readonly lastSafeUrl?: string;
-    readonly status?: string;
     readonly observationErrors: readonly string[];
-    readonly reloadCount: number;
   };
 }
 
-export interface ProjectFailureResultV2 {
-  readonly schemaVersion: 2;
+export interface ProjectFailureResultV3 {
+  readonly schemaVersion: 3;
   readonly project: { readonly id: string; readonly name: string };
   readonly run: { readonly runId: string; readonly observedAt: string };
   readonly state: 'failed';
-  readonly jenkins?: { readonly buildNumber: number; readonly buildUrl: string };
+  readonly jenkins?: {
+    readonly jobUrl: string;
+  };
   readonly diagnostic: string;
   readonly warnings: readonly string[];
   readonly diagnostics?: ProjectRunManifest['diagnostics'];
@@ -48,4 +46,5 @@ export interface DiscoveredRunManifest {
 export interface ManifestDiscoveryResult {
   readonly manifests: readonly DiscoveredRunManifest[];
   readonly warnings: readonly string[];
+  readonly ignoredIncompatibleCount: number;
 }

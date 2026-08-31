@@ -1,8 +1,7 @@
 import type { NormalizedProjectConfig } from '../config/config-types.js';
-import { isJenkinsArtifactPathForBuild } from '../jenkins/url-identity.js';
-import type { BuildReference } from '../types.js';
 import { assertAllowedUrl } from '../security/url-policy.js';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
+import { pushDiagnostic } from '../workflow/diagnostics.js';
 
 export type SourcePublisher = 'jenkins' | 'snyk' | 'sonarqube' | 'unknown';
 
@@ -49,7 +48,12 @@ function canonicalArtifactUrl(href: string): string {
 
 function basename(href: string): string {
   try {
-    const pathname = decodeURIComponent(new URL(href).pathname);
+    let pathname = new URL(href).pathname;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const decoded = decodeURIComponent(pathname);
+      if (decoded === pathname) break;
+      pathname = decoded;
+    }
     return pathname.slice(pathname.lastIndexOf('/') + 1).toLowerCase();
   } catch {
     return '';
@@ -60,18 +64,6 @@ export function isArchivedSnykArtifact(href: string): boolean {
   const pathname = pathText(href);
   const artifactPath = pathname.split('/artifact/')[1] ?? '';
   return /(?:^|\/)snyk(?:[-\/]|$)/u.test(artifactPath);
-}
-
-function matchesSelectedBuild(
-  href: string,
-  project: NormalizedProjectConfig,
-  expectedBuild: BuildReference | undefined,
-): boolean {
-  if (expectedBuild === undefined) return true;
-  const candidateUrl = new URL(href);
-  const jenkinsOrigin = new URL(project.sourceOrigins.jenkins).origin;
-  return candidateUrl.origin !== jenkinsOrigin || !candidateUrl.pathname.includes('/artifact/') ||
-    isJenkinsArtifactPathForBuild(project.jobUrl, href, expectedBuild.number);
 }
 
 export function classifyPublisherLink(candidate: PageLinkCandidate): SourcePublisher {
@@ -107,7 +99,6 @@ function classifySnykCandidate(candidate: PageLinkCandidate): ClassifiedSourceLi
   };
 }
 
-
 function chooseSingle(
   candidates: readonly ClassifiedSourceLink[],
   label: string,
@@ -115,15 +106,38 @@ function chooseSingle(
 ): ClassifiedSourceLink | undefined {
   const unique = [...new Map(candidates.map((candidate) => [candidate.href, candidate])).values()];
   if (unique.length === 1) return unique[0];
-  if (unique.length > 1) warnings.push(`ambiguous ${label} candidates were rejected`);
+  if (unique.length > 1) pushDiagnostic(warnings, `ambiguous ${label} candidates were rejected`);
   return undefined;
 }
 
-/** Classify only publisher-shaped links from the exact terminal Jenkins page. */
+function artifactContext(href: string): string | undefined {
+  try {
+    const url = new URL(href);
+    const marker = url.pathname.toLowerCase().indexOf('/artifact/');
+    if (marker < 0) return undefined;
+    return `${url.origin}${url.pathname.slice(0, marker)}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function matchingArtifactContext(report: string, summary: string): boolean {
+  const reportContext = artifactContext(report);
+  const summaryContext = artifactContext(summary);
+  if (reportContext !== undefined || summaryContext !== undefined) {
+    return reportContext !== undefined && reportContext === summaryContext;
+  }
+  try {
+    return new URL(report).origin === new URL(summary).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** Classify publisher links from one exact Jenkins job page. */
 export function classifySnykLinks(
   candidates: readonly PageLinkCandidate[],
   project: NormalizedProjectConfig,
-  expectedBuild?: BuildReference,
 ): SnykLinkClassification {
   const warnings: string[] = [];
   const reports: ClassifiedSourceLink[] = [];
@@ -132,10 +146,6 @@ export function classifySnykLinks(
   for (const candidate of candidates) {
     const classified = classifySnykCandidate(candidate);
     if (classified === undefined) continue;
-    if (!matchesSelectedBuild(classified.href, project, expectedBuild)) {
-      warnings.push('an observed Snyk link did not belong to the selected Jenkins build');
-      continue;
-    }
     let validated: string;
     try {
       validated = assertAllowedUrl(
@@ -145,7 +155,7 @@ export function classifySnykLinks(
         'observed Snyk link',
       );
     } catch {
-      warnings.push('an observed Snyk link was outside the configured origins');
+      pushDiagnostic(warnings, 'an observed Snyk link was outside the configured origins');
       continue;
     }
     const safeCandidate = { ...classified, href: canonicalArtifactUrl(validated) };
@@ -153,15 +163,15 @@ export function classifySnykLinks(
     else if (safeCandidate.kind === 'report') reports.push(safeCandidate);
   }
 
+  const report = chooseSingle(reports, 'Snyk report', warnings);
+  let summary = chooseSingle(summaries, 'Snyk summary', warnings);
+  if (report !== undefined && summary !== undefined && !matchingArtifactContext(report.href, summary.href)) {
+    pushDiagnostic(warnings, 'Snyk report and summary links did not share one artifact context');
+    summary = undefined;
+  }
   return {
-    ...(() => {
-      const report = chooseSingle(reports, 'Snyk report', warnings);
-      return report === undefined ? {} : { report };
-    })(),
-    ...(() => {
-      const summary = chooseSingle(summaries, 'Snyk summary', warnings);
-      return summary === undefined ? {} : { summary };
-    })(),
+    ...(report === undefined ? {} : { report }),
+    ...(summary === undefined ? {} : { summary }),
     warnings,
   };
 }

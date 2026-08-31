@@ -1,4 +1,4 @@
-import type { ProjectFailureResultV2, ProjectRunManifest } from '../artifacts/artifact-manifest.js';
+import type { ProjectFailureResultV3, ProjectRunManifest } from '../artifacts/artifact-manifest.js';
 import type {
   CaptureMetadata,
   NavigationTarget,
@@ -6,11 +6,11 @@ import type {
   SnykFinding,
   SnykSourceEvidence,
   SonarSourceEvidence,
-  VulnerabilityReportResultV2,
+  VulnerabilityReportResultV3,
 } from '../result-types.js';
 
 export const REPORT_ANCHORS: Readonly<Record<NavigationTargetKey | 'artifacts', string>> = {
-  'jenkins-build': '#jenkins',
+  'jenkins-job': '#jenkins',
   'snyk-report': '#snyk-test-report',
   'sonarqube-home': '#sonarqube-home',
   'sonarqube-overall': '#sonarqube-overall',
@@ -22,7 +22,7 @@ export interface ProjectReportViewModel {
   readonly state: 'success' | 'partial' | 'failed';
   readonly project: { readonly id: string; readonly name: string };
   readonly run: { readonly runId: string; readonly observedAt: string };
-  readonly jenkins?: VulnerabilityReportResultV2['jenkins'];
+  readonly jenkins?: VulnerabilityReportResultV3['jenkins'];
   readonly navigation: readonly NavigationTarget[];
   readonly snyk?: SnykSourceEvidence;
   readonly sonarqube?: SonarSourceEvidence;
@@ -33,7 +33,7 @@ export interface ProjectReportViewModel {
 }
 
 const NAVIGATION_KEYS: readonly NavigationTargetKey[] = [
-  'jenkins-build', 'snyk-report', 'sonarqube-home', 'sonarqube-overall', 'sonarqube-issues',
+  'jenkins-job', 'snyk-report', 'sonarqube-home', 'sonarqube-overall', 'sonarqube-issues',
 ];
 const SEVERITY_ORDER: Readonly<Record<SnykFinding['severity'], number>> = {
   critical: 0, high: 1, medium: 2, low: 3,
@@ -81,8 +81,8 @@ function copySonar(value: SonarSourceEvidence): SonarSourceEvidence {
 }
 
 function isProjectResult(
-  value: VulnerabilityReportResultV2 | ProjectFailureResultV2,
-): value is VulnerabilityReportResultV2 {
+  value: VulnerabilityReportResultV3 | ProjectFailureResultV3,
+): value is VulnerabilityReportResultV3 {
   return 'navigation' in value;
 }
 
@@ -95,24 +95,19 @@ export function stateClass(state: ProjectReportViewModel['state'] | 'found' | 'n
 }
 
 export function createProjectReportViewModel(
-  result: VulnerabilityReportResultV2 | ProjectFailureResultV2,
+  result: VulnerabilityReportResultV3 | ProjectFailureResultV3,
   manifest: ProjectRunManifest,
 ): ProjectReportViewModel {
   const navigation = isProjectResult(result)
     ? NAVIGATION_KEYS.map((key) => ({ ...result.navigation[key], localAnchor: REPORT_ANCHORS[key] }))
     : NAVIGATION_KEYS.map((key) => ({ key, localAnchor: REPORT_ANCHORS[key], state: 'incomplete' as const }));
   const artifacts = [...manifest.artifacts.screenshots].sort(compareText);
-  const jenkins = isProjectResult(result) ? result.jenkins : result.jenkins === undefined ? undefined : {
-    baseUrl: '', jobPath: '', jobUrl: result.jenkins.buildUrl, buildNumber: result.jenkins.buildNumber,
-    buildUrl: result.jenkins.buildUrl, status: 'failed',
-    trigger: { capability: 'unknown' as const, triggerAttempts: 0, warnings: [] },
-  };
   const diagnostic = 'diagnostic' in result ? result.diagnostic : undefined;
   return {
     state: result.state,
     project: { ...result.project },
     run: { ...result.run },
-    ...(jenkins === undefined ? {} : { jenkins }),
+    ...(result.jenkins === undefined ? {} : { jenkins: { ...result.jenkins } }),
     navigation,
     ...(isProjectResult(result) ? { snyk: copySnyk(result.reports.snyk), sonarqube: copySonar(result.reports.sonarqube) } : {}),
     warnings: uniqueSorted([...result.warnings, ...manifest.warnings]),

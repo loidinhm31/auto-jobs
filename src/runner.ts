@@ -1,16 +1,17 @@
-import { chromium, firefox, webkit, type Browser } from '@playwright/test';
-import { formatDiagnostic } from './config-errors.js';
+import { chromium, firefox, webkit, type Browser, type BrowserContext } from '@playwright/test';
 
 import { ArtifactPaths } from './artifacts/artifact-paths.js';
 import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
 import { writeAggregateData } from './artifacts/result-writer.js';
 import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
+import { sanitizePersistedWarnings } from './artifacts/result-validation.js';
 import { loadProjectConfig } from './config/project-config-loader.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
 import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from './result-types.js';
 import { runProject, type ProjectRunnerDependencies } from './project/project-runner.js';
 import type { ProjectOutcome, RunnerExecutionResult } from './project/project-types.js';
 import type { BrowserName } from './types.js';
+import { CLEANUP_SETTLE_TIMEOUT_MS, withHardTimeout } from './workflow/workflow-deadline.js';
 
 type BrowserLauncher = (browserName: BrowserName, environment?: NodeJS.ProcessEnv) => Promise<Browser>;
 type ProjectExecutor = (
@@ -24,6 +25,7 @@ export interface RunnerDependencies {
   readonly runIdSuffix?: () => string;
   readonly launchBrowser?: BrowserLauncher;
   readonly executeProject?: ProjectExecutor;
+  readonly configureContext?: (context: BrowserContext) => Promise<void>;
 }
 
 function enabledConfiguration(projects: readonly NormalizedProjectConfig[]): {
@@ -64,58 +66,38 @@ async function defaultLaunch(browserName: BrowserName, environment: NodeJS.Proce
   return chromium.launch(launchOptions(environment));
 }
 
+interface HistoricalRun {
+  readonly relativeDirectory: string;
+  readonly projectId: string;
+  readonly runId: string;
+  readonly state: 'success' | 'partial' | 'failed';
+  readonly warnings: readonly string[];
+  readonly reportPath?: string;
+}
+
 function aggregateSummary(
   outcome: ProjectOutcome,
-  historical: readonly {
-    relativeDirectory: string;
-    projectId: string;
-    buildNumber: number | 'pre-build';
-    runId: string;
-    state: 'success' | 'partial' | 'failed';
-    warnings: readonly string[];
-    reportPath?: string;
-  }[],
+  historical: readonly HistoricalRun[],
 ): AggregateProjectSummary {
   const runs: AggregateRunSummary[] = historical
     .filter((item) => item.projectId === outcome.projectId)
     .map((item) => ({
-      buildNumber: item.buildNumber,
       runId: item.runId,
       state: item.state,
       manifestPath: `${item.relativeDirectory}/manifest.json`,
       ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
-      warnings: [...item.warnings],
+      warnings: sanitizePersistedWarnings(item.warnings),
     }));
-  const reportPath = runs.find((run) => run.runId === outcome.runId &&
-    (outcome.buildNumber === undefined ? run.buildNumber === 'pre-build' : run.buildNumber === outcome.buildNumber))?.reportPath;
+  const reportPath = runs.find((run) => run.runId === outcome.runId)?.reportPath;
   return {
     projectId: outcome.projectId,
     name: outcome.name,
     state: outcome.state,
-    ...(outcome.buildNumber === undefined ? {} : { buildNumber: outcome.buildNumber }),
     runId: outcome.runId,
     ...(reportPath === undefined ? {} : { reportPath }),
     runs,
-    warnings: [...outcome.warnings, ...(outcome.error === undefined ? [] : [outcome.error])],
+    warnings: sanitizePersistedWarnings([...outcome.warnings, ...(outcome.error === undefined ? [] : [outcome.error])]),
   };
-}
-
-async function publishPreBuildOutcome(
-  project: NormalizedProjectConfig,
-  outcome: ProjectOutcome,
-  artifacts: ArtifactPaths,
-): Promise<ProjectOutcome> {
-  if (outcome.state !== 'failed' || outcome.buildNumber !== undefined || outcome.manifestPath === undefined) return outcome;
-  try {
-    const published = await artifacts.publishPreBuild(project.id, outcome.runId);
-    return { ...outcome, reportDirectory: published.directory, manifestPath: published.manifestPath };
-  } catch (error) {
-    return {
-      ...outcome,
-      warnings: [...outcome.warnings, 'pre-build failure artifact publication failed'],
-      error: `${outcome.error ?? 'pre-build failure'}; ${formatDiagnostic(error)}`,
-    };
-  }
 }
 
 export async function runConfiguredProjects(
@@ -143,9 +125,10 @@ export async function runConfiguredProjects(
             ...(dependencies.runtimeEnvironment === undefined ? {} : { ['env']: dependencies.runtimeEnvironment }),
             ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
             ...(dependencies.runIdSuffix === undefined ? {} : { runIdSuffix: dependencies.runIdSuffix }),
+            ...(dependencies.configureContext === undefined ? {} : { configureContext: dependencies.configureContext }),
           });
-          outcomes.push(await publishPreBuildOutcome(project, outcome, artifacts));
-        } catch (error) {
+          outcomes.push(outcome);
+        } catch {
           outcomes.push({
             projectId: project.id,
             name: project.name,
@@ -158,29 +141,32 @@ export async function runConfiguredProjects(
       }
     } finally {
       try {
-        await browser.close();
+        await withHardTimeout(
+          () => browser.close(),
+          CLEANUP_SETTLE_TIMEOUT_MS,
+          'browser close exceeded workflow cleanup timeout',
+        );
       } catch { runtimeWarnings.push('browser close failed after project execution'); }
     }
 
     const finalCleanup = await artifacts.cleanupOrphans();
     runtimeWarnings.push(...finalCleanup.warnings);
     const discovery = await discoverRunManifests(config.reportRoot);
-    const historical = discovery.manifests.map((item) => ({
+    const historical: HistoricalRun[] = discovery.manifests.map((item) => ({
       relativeDirectory: item.relativeDirectory,
       projectId: item.manifest.project.id,
-      buildNumber: item.manifest.jenkins?.buildNumber ?? 'pre-build' as const,
       runId: item.manifest.run.runId,
       state: item.manifest.state,
-      warnings: item.manifest.warnings,
+      warnings: sanitizePersistedWarnings(item.manifest.warnings),
       ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
     }));
     const configuredIds = new Set(config.projects.map((project) => project.id));
     const orphanWarnings = historical.some((item) => !configuredIds.has(item.projectId))
       ? ['ignored historical manifests for unconfigured projects']
       : [];
-    const warnings = [...initialWarnings, ...runtimeWarnings, ...discovery.warnings, ...orphanWarnings];
+    const warnings = sanitizePersistedWarnings([...initialWarnings, ...runtimeWarnings, ...discovery.warnings, ...orphanWarnings]);
     const aggregate: AggregateReportResult = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatedAt: (dependencies.now ?? (() => new Date()))().toISOString(),
       projects: outcomes.map((outcome) => aggregateSummary(outcome, historical)),
       warnings,

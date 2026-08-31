@@ -1,8 +1,9 @@
 # Jenkins Playwright vulnerability reports
 
-This project collects bounded Snyk and SonarQube evidence from Jenkins builds
-and writes static vulnerability reports. The report command reads an explicit
-schema-v1 JSON configuration file; checked-in templates are test fixtures.
+This project collects bounded Snyk and SonarQube evidence from configured
+Jenkins job pages and writes static vulnerability reports. The report command
+reads an explicit schema-v1 JSON configuration file; checked-in templates are
+offline test fixtures.
 
 See [multi-project configuration](./docs/multi-project-configuration.md) for
 the schema-v1 contract, [architecture](./docs/architecture.md) for design and
@@ -13,10 +14,9 @@ validation matrix.
 
 - Node.js 24 or newer.
 - npm 11.13.0, declared by `package.json`.
-- A supported Chromium installation. `npm ci` installs the locked dependencies
-  and runs the package `install` lifecycle, which provisions Chromium through
-  `playwright install chromium`. If dependencies were installed with
-  `--ignore-scripts`, run `npm run install` explicitly.
+- A supported Chromium and WebKit installation. `npm ci` installs locked
+  dependencies; browser provisioning is explicit and does not run in the
+  install lifecycle. Run `npm run install:browsers` before native gates.
 
 From the repository root:
 
@@ -24,22 +24,23 @@ From the repository root:
 npm ci
 ```
 
-Firefox and WebKit are opt-in. Use `npx playwright install firefox` for local
-Firefox work. The WebKit release gate runs in the pinned Ubuntu container
-defined by `docker-compose.webkit.yml`; downloading WebKit alone does not make
-an arbitrary Linux host ABI-compatible.
+Firefox remains opt-in. Install it separately with `npx playwright install firefox`.
+The native Chromium template gate is `npm run test:e2e:templates`; the native
+WebKit template gate is `npm run test:release:webkit`.
 
 ## Offline template checks
 
-The checked-in templates are test fixtures, not a report CLI source mode:
+The checked-in templates are test fixtures, not a report CLI source mode. The
+template gate executes the production direct workflow through an exact,
+default-deny route map:
 
 ```sh
 npm run test:e2e:templates
 ```
 
-The fixture checks bounded Jenkins, Snyk, and SonarQube snapshot handling
-without contacting a live controller or vendor service. Use the explicit
-configuration command below for a Jenkins report.
+The same workflow is run natively by the WebKit release gate. Neither gate
+contacts a live controller or vendor service. Use the explicit configuration
+command below for a Jenkins report.
 
 ## Schema-v1 Jenkins walkthrough
 
@@ -86,11 +87,11 @@ arguments are rejected. See
 [multi-project configuration](./docs/multi-project-configuration.md) for
 source-origin and selector settings.
 
-The workflow authenticates through `loginUrl`, resolves `jobUrl`, submits a
-non-parameterized UI `Build Now`, correlates the resulting build, waits for
-terminal status, and captures publisher evidence. Parameterized jobs are
-detected before interaction and rejected. There is no configured existing-build
-or job-page capture mode.
+The workflow authenticates through the exact configured `loginUrl`, validates
+the authenticated page, opens the exact configured `jobUrl`, discovers publisher
+destinations once, and captures the configured Snyk and SonarQube evidence. It
+does not trigger builds, inspect queues or build identities, poll terminal
+status, or select another job.
 
 ### Windows PowerShell live run
 
@@ -144,36 +145,6 @@ standard username, password, and sign-in controls. SSO/MFA requires a
 dedicated authentication integration; do not put cookies or tokens in the
 project JSON.
 
-## Local Jenkins fixture
-
-The Compose fixture is disposable and loopback-bound. `JENKINS_PORT` is the
-host port; Compose maps `127.0.0.1:${JENKINS_PORT:-8080}` to container port
-`8080`:
-
-```sh
-export JENKINS_PORT=18080
-export JENKINS_USERNAME
-export JENKINS_PASSWORD
-docker compose config --quiet
-docker compose up -d --build
-docker compose ps
-```
-
-The same Compose files work with a Docker-compatible Podman setup. On Fedora,
-rootless Podman may need `XDG_RUNTIME_DIR` set and its socket available.
-
-The fixture seeds two jobs:
-
-- `playwright-vulnerability-report` is parameterized. Its
-  `FIXTURE_VARIANT` choices are `pass`, `failed`, `empty`, and `malformed`.
-  The first is the normal corpus; `failed` archives before failing, `empty`
-  removes publisher reports, and `malformed` substitutes malformed evidence.
-- `playwright-vulnerability-report-build-now` has no parameters and exercises
-  the supported Build Now correlation boundary with the normal corpus.
-
-The fixture does not run real Snyk or SonarQube scanners. Stop it with
-`docker compose down`; add `-v` only for an explicit reset that removes the
-`jenkins_home` volume and its build history.
 
 ## Report server
 
@@ -213,30 +184,24 @@ reports/
 ├── index.html                 # aggregate report
 ├── aggregate-data.json        # aggregate JSON
 ├── assets/report.css
-└── <project-id>/
-    ├── <build-number>/<run-id>/
-    │   ├── index.html
-    │   ├── data.json
-    │   ├── manifest.json
-    │   └── requested screenshots
-    └── pre-build/<run-id>/    # failed before Jenkins build identity
+└── <project-id>/<run-id>/
+    ├── index.html
+    ├── data.json
+    ├── manifest.json
+    └── requested screenshots
 ```
 
 `artifactDir` in the JSON selects the report root. The default is `reports/`.
-Run directories are project-local and cleaned on normal completion when safe.
-`test-results/`, `playwright-report/`, and `.runner-build/` are Playwright/build
-outputs, not application reports. A Playwright test trace is test-runner
-evidence; it is not the same thing as the runner's normalized report artifacts
-or requested vendor screenshots. An optional `trace.zip` reference is
-allowlisted only when a run manifest supplies it.
+Run directories are immutable and project-local. `test-results/`,
+`playwright-report/`, and `.runner-build/` are Playwright/build outputs, not
+application reports. A Playwright test trace is test-runner evidence; it is
+not the same thing as the runner's normalized report artifacts or requested
+vendor screenshots. An optional `trace.zip` reference is allowlisted only when
+a run manifest supplies it.
 
-A failure before Jenkins returns a build number is stored under `pre-build`
-without a fabricated Jenkins identity. It normally has failure JSON and a
-manifest, not a build-linked `index.html`; do not infer that a pre-build
-failure has a report or test trace. Failure artifact persistence is
-best-effort: the runner attempts to retain bounded diagnostics and available
-artifacts, but a write/render/publish failure can leave only the aggregate
-outcome and a warning.
+Failure state uses the same project/run identity as successful and partial
+runs. The runner persists bounded failure data with the workflow deadline,
+then uses a bounded fallback and records a warning if both attempts fail.
 
 ## Troubleshooting
 
@@ -245,14 +210,14 @@ outcome and a warning.
   `npm run report -- --config <config.json>` from the repository root, then
   serve the same root. Set `REPORT_ROOT` or `--root` if the report was written
   elsewhere.
-- Chromium cannot launch: run `npm run install`; if `npm ci --ignore-scripts`
-  was used, browser provisioning was intentionally skipped.
+- Chromium cannot launch: run `npm run install:browsers`; browser provisioning
+  is intentionally separate from `npm ci`.
 - File mode rejects configuration: check the explicit `--config` path, ensure
   the JSON is schema-v1, remove legacy structural inputs, and confirm every
   enabled project's referenced credential variables exist in the process
   environment.
-- Jenkins rejects the run: check the exact login and job URLs, credentials,
-  browser, and whether the selected job is parameterized.
+- Jenkins rejects the run: check the exact login and job URLs, credentials, and
+  browser configuration.
 - `Report root is locked by another live or unsafe process`: stop any other
   auto-jobs run using the same report root. New Windows lock owners include
   `processStartedAt`; expired locks are reclaimed only for a dead PID or a
@@ -271,8 +236,8 @@ outcome and a warning.
 
 | Command | Use |
 | --- | --- |
-| `npm ci` | install locked dependencies and run normal install lifecycle |
-| `npm run install` | explicitly provision Chromium |
+| `npm ci` | install locked dependencies without downloading browsers |
+| `npm run install:browsers` | explicitly provision Chromium and WebKit |
 | `npm run report -- --config <config.json>` | generate a Jenkins report from an explicit schema-v1 file |
 | `npm run test:e2e:templates` | run offline template fixture checks |
 | `npm run serve:report` | build and serve `reports/` on loopback |
@@ -280,7 +245,7 @@ outcome and a warning.
 | `npm run build` | compile the CLI/report server to `.runner-build/` |
 | `npm run test:unit` | run unit tests |
 | `npm run test:report` | run generated-report browser checks |
-| `npm run test:release` | run typecheck, build, unit, and report gates |
+| `npm run test:release:webkit` | run the native WebKit template gate |
 
 ## Security notes
 
@@ -295,9 +260,4 @@ outcome and a warning.
   uses bounded cleanup/publication, and serializes same-host report-root work.
   The lock owner record contains a token, PID, and hostname—not a UID—so the
   lock is not a same-UID authorization boundary or a distributed lock.
-- `docker compose config` renders interpolated values and can expose the
-  Jenkins password. Prefer `docker compose config --quiet`; never paste
-  rendered configuration or secret-bearing command output into logs/issues.
-- Do not run a no-build-number live flow against production, an untrusted fork,
-  or an unreviewed Jenkins job. This documentation pass did not verify live
-  Jenkins or browser execution.
+- This documentation does not claim live Jenkins or browser execution.

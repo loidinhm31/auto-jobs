@@ -20,7 +20,7 @@ export function renderArtifactSection(model: ProjectReportViewModel): string {
   if (model.trace !== undefined) files.push(model.trace);
   const diagnostic = model.diagnostic === undefined ? '' : `<div class="diagnostic"><h3>Diagnostic</h3><p>${escapeHtmlText(model.diagnostic)}</p></div>`;
   return `<section id="artifacts" aria-labelledby="artifacts-heading">
-    <div class="section-heading"><div><p class="eyebrow">Evidence</p><h2 id="artifacts-heading">Artifacts and warnings</h2></div><a href="${escapeHtmlAttribute(REPORT_ANCHORS['jenkins-build'])}">Back to Jenkins</a></div>
+    <div class="section-heading"><div><p class="eyebrow">Evidence</p><h2 id="artifacts-heading">Artifacts and warnings</h2></div><a href="${escapeHtmlAttribute(REPORT_ANCHORS['jenkins-job'])}">Back to Jenkins</a></div>
     <h3>Run files</h3><ul class="artifact-list">${files.map((file) => `<li>${artifactLink(file, [...files])}</li>`).join('')}</ul>
     ${diagnostic}<h3>Warnings</h3>${warningList(model.warnings)}
     <p class="security-note">When served over HTTP, add a response-header CSP with <code>frame-ancestors 'none'</code>; a meta policy cannot enforce that directive.</p>

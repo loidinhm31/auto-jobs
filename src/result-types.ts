@@ -1,26 +1,4 @@
-import type {
-  BuildReference,
-  Report,
-  ReportState,
-} from './types.js';
-
-export type TriggerCapability =
-  | 'existing_build'
-  | 'build_now'
-  | 'unsupported_parameterized'
-  | 'unknown';
-
-export interface TriggerEvidence {
-  capability: TriggerCapability;
-  triggerAttempts: number;
-  baselineBuildNumber?: number;
-  queueUrl?: string;
-  queueId?: string;
-  build?: BuildReference;
-  submittedAt?: string;
-  correlatedAt?: string;
-  warnings: string[];
-}
+import type { ReportState } from './types.js';
 
 export interface CaptureMetadata {
   url: string;
@@ -31,6 +9,7 @@ export interface CaptureMetadata {
   screenshotSha256?: string;
   viewport?: { width: number; height: number };
 }
+
 export type SnykSeverity = 'critical' | 'high' | 'medium' | 'low';
 
 export interface SnykSeverityCounts {
@@ -71,8 +50,9 @@ export interface SnykFinding {
   paths?: string[];
   references?: string[];
 }
+
 export type NavigationTargetKey =
-  | 'jenkins-build'
+  | 'jenkins-job'
   | 'snyk-report'
   | 'sonarqube-home'
   | 'sonarqube-overall'
@@ -86,7 +66,7 @@ export interface NavigationTarget {
 }
 
 export const REQUIRED_NAVIGATION_TARGET_KEYS: readonly NavigationTargetKey[] = [
-  'jenkins-build',
+  'jenkins-job',
   'snyk-report',
   'sonarqube-home',
   'sonarqube-overall',
@@ -94,7 +74,7 @@ export const REQUIRED_NAVIGATION_TARGET_KEYS: readonly NavigationTargetKey[] = [
 ];
 
 export interface NavigationTargets {
-  'jenkins-build': NavigationTarget;
+  'jenkins-job': NavigationTarget;
   'snyk-report': NavigationTarget;
   'sonarqube-home': NavigationTarget;
   'sonarqube-overall': NavigationTarget;
@@ -123,10 +103,13 @@ export function hasCompleteNavigationTargets(value: unknown): value is Navigatio
       candidate.key === key &&
       typeof candidate.localAnchor === 'string' &&
       candidate.localAnchor.length > 0 &&
-      (candidate.state === 'found' || candidate.state === 'not_found' || candidate.state === 'incomplete')
+      (candidate.state === 'found' ||
+        candidate.state === 'not_found' ||
+        candidate.state === 'incomplete')
     );
   });
 }
+
 export interface SourceEvidence {
   state: ReportState;
   captures: CaptureMetadata[];
@@ -153,34 +136,13 @@ export interface SnykSourceEvidence extends SourceEvidence {
   findings?: SnykFinding[];
 }
 
-export interface VulnerabilityReportResult {
-  schemaVersion: 1;
-  jenkins: {
-    baseUrl: string;
-    jobPath: string;
-    jobUrl: string;
-    buildNumber: number;
-    buildUrl: string;
-    status: string;
-  };
-  reports: { sonarqube: Report; snyk: Report };
-  triggered: boolean;
-  observedAt: string;
-}
-
-export interface VulnerabilityReportResultV2 {
-  schemaVersion: 2;
+export interface VulnerabilityReportResultV3 {
+  schemaVersion: 3;
   state: 'success' | 'partial';
   project: { id: string; name: string };
   run: { runId: string; observedAt: string };
   jenkins: {
-    baseUrl: string;
-    jobPath: string;
     jobUrl: string;
-    buildNumber: number;
-    buildUrl: string;
-    status: string;
-    trigger: TriggerEvidence;
   };
   navigation: NavigationTargets;
   reports: { sonarqube: SonarSourceEvidence; snyk: SnykSourceEvidence };
@@ -191,7 +153,6 @@ export interface AggregateProjectSummary {
   projectId: string;
   name: string;
   state: 'success' | 'partial' | 'failed';
-  buildNumber?: number;
   runId?: string;
   reportPath?: string;
   runs: AggregateRunSummary[];
@@ -199,8 +160,6 @@ export interface AggregateProjectSummary {
 }
 
 export interface AggregateRunSummary {
-  /** Numeric Jenkins identity, or the explicit non-build pre-build location. */
-  buildNumber: number | 'pre-build';
   runId: string;
   state: 'success' | 'partial' | 'failed';
   manifestPath: string;
@@ -209,7 +168,7 @@ export interface AggregateRunSummary {
 }
 
 export interface AggregateReportResult {
-  schemaVersion: 2;
+  schemaVersion: 3;
   generatedAt: string;
   projects: AggregateProjectSummary[];
   warnings: string[];

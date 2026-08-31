@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 
 import { redactText, sanitizeUrl } from '../config-errors.js';
 import type { NormalizedProjectConfig, ProjectSecrets } from '../config/config-types.js';
-import { isSafeScreenshotReference, MAX_CAPTURE_URL_LENGTH, MAX_RUN_ARTIFACT_COUNT } from '../artifacts/result-validation.js';
+import { isSafeScreenshotReference, MAX_CAPTURE_URL_LENGTH, MAX_RUN_OPTIONAL_ARTIFACT_COUNT } from '../artifacts/result-validation.js';
 import { safeSnykSource } from '../artifacts/snyk-result-sanitizer.js';
 import type {
   CaptureMetadata,
@@ -11,21 +11,20 @@ import type {
   SonarSourceEvidence,
   SourceEvidence,
 } from '../result-types.js';
-import { boundedDiagnostics } from '../workflow/diagnostics.js';
-import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
+import { boundedDiagnostics, pushDiagnostic } from '../workflow/diagnostics.js';
+import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
+import type { ProjectRunState } from './project-run-state.js';
 import type { ProjectWorkflowResult } from './project-workflow.js';
 import { captureSnykEvidence, type SnykSummaryReader } from '../reports/snyk/snyk-capture.js';
 import type { ScriptSafePage } from '../reports/snyk/snyk-capture-support.js';
 import { captureSonarqubeEvidence } from '../reports/sonarqube/sonarqube-capture.js';
 import { sanitizeSonarIssueFacets } from '../reports/sonarqube/sonarqube-issue-facets.js';
 import { assertAllowedUrl, assertSafeReferenceUrl } from '../security/url-policy.js';
-import { deriveJenkinsBaseUrl } from '../config-values.js';
-import { pageLinkCandidates } from '../reports/snyk/snyk-capture-support.js';
-import { classifySnykLinks, classifySonarLinks } from '../reports/source-link-classifier.js';
-import { pollUntil } from '../workflow/poll-until.js';
+import { pageLinkCandidatesWithStatus } from '../reports/snyk/snyk-capture-support.js';
+import { classifySnykLinks, classifySonarLinks, type SnykLinkClassification, type SonarLinkClassification } from '../reports/source-link-classifier.js';
 
-const ARTIFACT_LINK_SETTLE_MS = 5_000;
-const MAX_ARTIFACT_LINK_SETTLE_ATTEMPTS = 32;
+const LINK_DISCOVERY_TRUNCATED_WARNING = 'job page link discovery exceeded the bounded link limit; the one-Snyk/one-Sonar-per-job rule could not be proven';
+
 
 function publisherConfigured(
   project: NormalizedProjectConfig,
@@ -34,47 +33,22 @@ function publisherConfigured(
   const source = project.sources[publisher];
   return source.projectId !== undefined || source.allowedOrigins.length > 0;
 }
-
-
-async function settleTerminalArtifactLinks(
-  page: Page,
+function discoverWarnings(
   project: NormalizedProjectConfig,
-  deadline: WorkflowDeadline,
-  expectedBuild?: ProjectWorkflowResult['terminal']['build'],
-): Promise<void> {
-  const settleDeadline = new WorkflowDeadline(Math.min(ARTIFACT_LINK_SETTLE_MS, deadline.requireRemaining()));
-  const requiredPublishers = [
-    ...(publisherConfigured(project, 'snyk') ? ['snyk'] as const : []),
-    ...(publisherConfigured(project, 'sonarqube') ? ['sonarqube'] as const : []),
-  ];
-  if (requiredPublishers.length === 0) return;
-  try {
-    await pollUntil<boolean>({
-      deadline: settleDeadline,
-      intervalMs: 250,
-      maxObservations: 16,
-      maxAttempts: MAX_ARTIFACT_LINK_SETTLE_ATTEMPTS,
-      observe: async () => {
-        const links = await pageLinkCandidates(page);
-        const snyk = classifySnykLinks(links, project, expectedBuild);
-        const sonarqube = classifySonarLinks(links, project, expectedBuild);
-        const found = {
-          snyk: snyk.report !== undefined,
-          sonarqube: sonarqube.home !== undefined,
-        };
-        const ready = requiredPublishers.every((publisher) => found[publisher]);
-        if (ready) return true;
-        await page.reload({
-          waitUntil: 'domcontentloaded',
-          timeout: Math.min(deadline.requireRemaining(), settleDeadline.requireRemaining()),
-        });
-        return false;
-      },
-      accept: Boolean,
-    });
-  } catch {
-    // Optional publisher output may be absent; source capture retains not_found.
+  snyk: SnykLinkClassification,
+  sonarqube: SonarLinkClassification,
+  truncated: boolean,
+): string[] {
+  const warnings: string[] = [...snyk.warnings, ...sonarqube.warnings];
+  if (truncated) pushDiagnostic(warnings, LINK_DISCOVERY_TRUNCATED_WARNING);
+  if (publisherConfigured(project, 'snyk')) {
+    if (snyk.report === undefined) pushDiagnostic(warnings, 'Snyk report destination cardinality was not exactly one');
+    if (snyk.summary === undefined) pushDiagnostic(warnings, 'Snyk summary destination cardinality was not exactly one');
   }
+  if (publisherConfigured(project, 'sonarqube') && sonarqube.home === undefined) {
+    pushDiagnostic(warnings, 'SonarQube destination cardinality was not exactly one');
+  }
+  return boundedDiagnostics(warnings);
 }
 
 export interface CaptureResult {
@@ -84,27 +58,48 @@ export interface CaptureResult {
   readonly artifacts?: { readonly screenshots: readonly string[] };
 }
 
-
 export type EvidenceCapture = (input: {
   page: Page;
   project: NormalizedProjectConfig;
   workflow: ProjectWorkflowResult;
   deadline: WorkflowDeadline;
+  state: ProjectRunState;
   outputDirectory: string;
   snykSummaryReader?: SnykSummaryReader;
-  snykOpenSafePage?: (page: Page) => Promise<ScriptSafePage>;
+  snykOpenSafePage?: (page: Page, deadline: WorkflowDeadline) => Promise<ScriptSafePage>;
 }) => Promise<CaptureResult>;
 
-export const defaultCapture: EvidenceCapture = async ({ page, project, workflow, deadline, outputDirectory, snykSummaryReader, snykOpenSafePage }) => {
-  const expectedBuild = workflow.terminal.build;
-  await settleTerminalArtifactLinks(page, project, deadline, expectedBuild);
+export const defaultCapture: EvidenceCapture = async ({
+  page,
+  project,
+  workflow,
+  deadline,
+  state,
+  outputDirectory,
+  snykSummaryReader,
+  snykOpenSafePage,
+}) => {
+  const linkCollection = await pageLinkCandidatesWithStatus(page, deadline);
+  const links = linkCollection.truncated ? [] : linkCollection.candidates;
+  const truncationWarnings = linkCollection.truncated ? [LINK_DISCOVERY_TRUNCATED_WARNING] : [];
+  const snykLinks = classifySnykLinks(links, project);
+  const sonarqubeLinks = classifySonarLinks(links, project);
+  const discoveryWarnings = discoverWarnings(project, snykLinks, sonarqubeLinks, linkCollection.truncated);
+  state.transition('links_discovered');
+
   const snyk = await captureSnykEvidence({
     page,
     project,
     deadline,
     outputDirectory,
-    terminalBuildUrl: workflow.terminal.build.url,
-    expectedBuild,
+    ...(snykLinks.report === undefined ? {} : { reportUrl: snykLinks.report.href }),
+    ...(snykLinks.summary === undefined ? {} : { summaryUrl: snykLinks.summary.href }),
+    discoveryWarnings: [
+      ...snykLinks.warnings,
+      ...truncationWarnings,
+      ...(snykLinks.report === undefined ? ['Snyk report destination cardinality was not exactly one'] : []),
+      ...(snykLinks.summary === undefined ? ['Snyk summary destination cardinality was not exactly one'] : []),
+    ],
     ...(snykSummaryReader === undefined ? {} : { readSummary: snykSummaryReader }),
     ...(snykOpenSafePage === undefined ? {} : { openSafePage: snykOpenSafePage }),
   });
@@ -113,12 +108,17 @@ export const defaultCapture: EvidenceCapture = async ({ page, project, workflow,
     project,
     deadline,
     outputDirectory,
-    terminalBuildUrl: workflow.terminal.build.url,
-    expectedBuild,
+    ...(sonarqubeLinks.home === undefined ? {} : { homeUrl: sonarqubeLinks.home.href }),
+    discoveryWarnings: [
+      ...sonarqubeLinks.warnings,
+      ...truncationWarnings,
+      ...(sonarqubeLinks.home === undefined ? ['SonarQube destination cardinality was not exactly one'] : []),
+    ],
   });
+  state.transition('captured');
   return {
     navigation: {
-      'jenkins-build': { key: 'jenkins-build', localAnchor: '#jenkins', state: 'found', liveUrl: sanitizeUrl(workflow.terminal.build.url) },
+      'jenkins-job': { key: 'jenkins-job', localAnchor: '#jenkins', state: 'found', liveUrl: sanitizeUrl(workflow.jobUrl) },
       'snyk-report': snyk.navigation,
       ...sonarqube.navigation,
     },
@@ -126,11 +126,12 @@ export const defaultCapture: EvidenceCapture = async ({ page, project, workflow,
       snyk: snyk.source,
       sonarqube: sonarqube.source,
     },
-    warnings: [
-      ...workflow.trigger.warnings,
+    warnings: boundedDiagnostics([
+      ...(workflow.diagnostics?.observationErrors ?? []),
+      ...discoveryWarnings,
       ...snyk.warnings,
       ...sonarqube.warnings,
-    ],
+    ]),
     artifacts: { screenshots: [...snyk.screenshots, ...sonarqube.screenshots] },
   };
 };
@@ -185,7 +186,7 @@ function safeArtifacts(capture: CaptureResult): CaptureResult['artifacts'] | und
       if (!isSafeScreenshotReference(filename) || seen.has(filename)) return false;
       seen.add(filename);
       return true;
-    }).slice(0, MAX_RUN_ARTIFACT_COUNT),
+    }).slice(0, MAX_RUN_OPTIONAL_ARTIFACT_COUNT),
   };
 }
 
@@ -216,9 +217,7 @@ export function sanitizeProjectDiagnostics(
   if (diagnostics === undefined) return undefined;
   const secretValues = [secrets.username, secrets.password];
   return {
-    ...(diagnostics.lastSafeUrl === undefined ? {} : { lastSafeUrl: sanitizeUrl(redactText(diagnostics.lastSafeUrl, secretValues)) }),
-    ...(diagnostics.status === undefined ? {} : { status: redactText(diagnostics.status, secretValues).slice(0, 256) }),
+    ...(diagnostics.lastSafeUrl === undefined ? {} : { lastSafeUrl: safeSourceUrl(diagnostics.lastSafeUrl, secretValues) }),
     observationErrors: boundedDiagnostics(diagnostics.observationErrors.map((value) => redactText(value, secretValues))),
-    reloadCount: diagnostics.reloadCount,
   };
 }

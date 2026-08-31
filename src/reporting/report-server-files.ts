@@ -2,10 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as path from 'node:path';
 
 import { REPORT_CSP } from './report-server-constants.js';
-import { openReportFile, readBounded } from './report-server-file-io.js';
+import { openReportFile, readBounded, type ReportRootIdentity } from './report-server-file-io.js';
 
 function unsafeSegment(segment: string): boolean {
-  if (segment === '.' || segment === '..' || segment.startsWith('.')) return true;
+  if (segment === '.' || segment === '..' || segment.startsWith('.') || (process.platform === 'win32' && segment.includes(':'))) return true;
   try {
     const twiceDecoded = decodeURIComponent(segment);
     return twiceDecoded === '.' || twiceDecoded === '..' || twiceDecoded.startsWith('.') || twiceDecoded.includes('\\');
@@ -54,7 +54,7 @@ function respond(response: ServerResponse, status: number, body: string): void {
   response.end(body);
 }
 
-export async function handleReportRequest(root: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
+export async function handleReportRequest(root: string, request: IncomingMessage, response: ServerResponse, expectedRootIdentity?: ReportRootIdentity): Promise<void> {
   const method = request.method ?? 'GET';
   if (method !== 'GET' && method !== 'HEAD') {
     request.resume();
@@ -67,7 +67,7 @@ export async function handleReportRequest(root: string, request: IncomingMessage
     respond(response, 400, 'invalid report path\n');
     return;
   }
-  const file = await openReportFile(root, decodedPath);
+  const file = await openReportFile(root, decodedPath, expectedRootIdentity);
   if (file === undefined) {
     respond(response, 404, 'report file not found\n');
     return;

@@ -1,14 +1,11 @@
-import { type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
-import type { BuildReference } from '../../types.js';
-import type { CaptureMetadata, NavigationTargets, SonarSourceEvidence } from '../../result-types.js';
+import type { CaptureMetadata, SonarSourceEvidence } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import { boundedDiagnostics } from '../../workflow/diagnostics.js';
-import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
-import { pageLinkCandidates } from '../snyk/snyk-capture-support.js';
-import { classifySonarLinks } from '../source-link-classifier.js';
+import { settleCleanup, withWorkflowDeadline, withWorkflowDeadlineAndLateResource, type WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 import {
   captureFailureMessage,
   createRouteHandler,
@@ -16,9 +13,7 @@ import {
   pageCaptureMetadata,
   projectKeyFromHome,
   assertProjectUrl,
-  assertSonarqubeUrlMatchesBuild,
   SONAR_VIEWPORT,
-  terminalIdentity,
 } from './sonarqube-capture-support.js';
 import {
   assertHomeIdentity,
@@ -39,6 +34,8 @@ function emptyResult(state: 'not_found' | 'incomplete', warnings: readonly strin
   };
   return { source, navigation, screenshots: [], warnings: source.warnings };
 }
+
+
 
 function finalize(
   captures: readonly CaptureMetadata[],
@@ -70,12 +67,12 @@ export async function captureSonarqubeEvidence(input: {
   project: NormalizedProjectConfig;
   deadline: WorkflowDeadline;
   outputDirectory: string;
-  terminalBuildUrl?: string;
-  expectedBuild?: BuildReference;
+  homeUrl?: string;
+  discoveryWarnings?: readonly string[];
 }): Promise<SonarCaptureResult> {
   let capturePage: Page | undefined;
   let routeHandler: ReturnType<typeof createRouteHandler> | undefined;
-  const warnings: string[] = [];
+  const warnings: string[] = [...(input.discoveryWarnings ?? [])];
   const captures: CaptureMetadata[] = [];
   const screenshots: string[] = [];
   let facets: SonarSourceEvidence['facets'];
@@ -85,32 +82,34 @@ export async function captureSonarqubeEvidence(input: {
     'sonarqube-issues': sonarNavigation('sonarqube-issues', 'incomplete'),
   };
   try {
-    const terminalUrl = assertAllowedUrl(input.page.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), [input.project.sourceOrigins.jenkins], 'Jenkins terminal URL');
-    if (input.terminalBuildUrl !== undefined) {
-      const expected = assertAllowedUrl(input.terminalBuildUrl, deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), [input.project.sourceOrigins.jenkins], 'terminal build URL');
-      if (terminalIdentity(terminalUrl) !== terminalIdentity(expected)) throw new Error('SonarQube capture did not start from the exact terminal Jenkins build');
+    if (input.homeUrl === undefined) {
+      return emptyResult(warnings.length === 0 ? 'not_found' : 'incomplete', warnings.length === 0
+        ? ['SonarQube destination was not uniquely discovered']
+        : warnings);
     }
-    const links = await pageLinkCandidates(input.page);
-    const classified = classifySonarLinks(links, input.project, input.expectedBuild);
-    warnings.push(...classified.warnings);
-    if (classified.home === undefined) return emptyResult(warnings.length === 0 ? 'not_found' : 'incomplete', warnings);
-    const allowArchivedSnapshot = isArchivedSonarqubeSnapshot(new URL(classified.home.href));
-    const expectedKey = projectKeyFromHome(classified.home.href, input.project);
-    capturePage = await input.page.context().newPage();
-    await capturePage.setViewportSize(SONAR_VIEWPORT);
+    const allowArchivedSnapshot = isArchivedSonarqubeSnapshot(new URL(input.homeUrl));
+    const expectedKey = projectKeyFromHome(input.homeUrl, input.project);
+    capturePage = await withWorkflowDeadlineAndLateResource(
+      () => input.page.context().newPage(),
+      input.deadline,
+      (latePage) => settleCleanup(() => latePage.close()),
+    );
+    await withWorkflowDeadline(() => capturePage!.setViewportSize(SONAR_VIEWPORT), input.deadline);
     const routeState = { blocked: false };
-    routeHandler = createRouteHandler(input.project, routeState);
-    await capturePage.route('**/*', routeHandler);
-    const response = await capturePage.goto(classified.home.href, { waitUntil: 'domcontentloaded', timeout: input.deadline.requireRemaining() });
+    routeHandler = createRouteHandler(input.project, routeState, input.deadline);
+    await withWorkflowDeadline(() => capturePage!.route('**/*', routeHandler!), input.deadline);
+    const response = await withWorkflowDeadline(
+      () => capturePage!.goto(input.homeUrl as string, { waitUntil: 'domcontentloaded', timeout: input.deadline.requireRemaining() }),
+      input.deadline,
+    );
     if (routeState.blocked) throw new Error('SonarQube request was blocked by the configured origin policy');
     if (response !== null && response.status() >= 400) throw new Error(`SonarQube home returned HTTP ${response.status()}`);
-    const validatedInitialHomeUrl = assertProjectUrl(
+    assertProjectUrl(
       assertAllowedUrl(capturePage.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), input.project.sourceOrigins.sonarqube, 'SonarQube home URL'),
       expectedKey,
       'home',
       allowArchivedSnapshot,
     );
-    assertSonarqubeUrlMatchesBuild(validatedInitialHomeUrl, input.project, input.expectedBuild);
     const homeStrategy = await assertHomeIdentity(capturePage, expectedKey, input.deadline, input.project.name, allowArchivedSnapshot);
     const validatedHomeUrl = assertProjectUrl(
       assertAllowedUrl(capturePage.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), input.project.sourceOrigins.sonarqube, 'SonarQube Overview URL'),
@@ -118,12 +117,11 @@ export async function captureSonarqubeEvidence(input: {
       'Overview',
       allowArchivedSnapshot,
     );
-    assertSonarqubeUrlMatchesBuild(validatedHomeUrl, input.project, input.expectedBuild);
-    captures.push(await pageCaptureMetadata(capturePage, validatedHomeUrl, homeStrategy));
+    captures.push(await pageCaptureMetadata(capturePage, validatedHomeUrl, homeStrategy, input.deadline));
     navigation = { ...navigation, 'sonarqube-home': sonarNavigation('sonarqube-home', 'found', validatedHomeUrl) };
 
     try {
-      const overall = await captureOverallStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot, ...(input.expectedBuild === undefined ? {} : { expectedBuild: input.expectedBuild }) });
+      const overall = await captureOverallStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot });
       captures.push(overall.capture);
       if (overall.screenshot !== undefined) screenshots.push(overall.screenshot);
       warnings.push(...overall.warnings);
@@ -134,7 +132,7 @@ export async function captureSonarqubeEvidence(input: {
     }
 
     try {
-      const issues = await captureIssuesStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot, ...(input.expectedBuild === undefined ? {} : { expectedBuild: input.expectedBuild }) });
+      const issues = await captureIssuesStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot });
       captures.push(issues.capture);
       if (issues.screenshot !== undefined) screenshots.push(issues.screenshot);
       facets = issues.facets;
@@ -149,8 +147,8 @@ export async function captureSonarqubeEvidence(input: {
     return finalize(captures, navigation, screenshots, warnings, facets);
   } finally {
     if (capturePage !== undefined) {
-      if (routeHandler !== undefined) await capturePage.unroute('**/*', routeHandler).catch(() => undefined);
-      await capturePage.close().catch(() => undefined);
+      if (routeHandler !== undefined) await settleCleanup(() => capturePage!.unroute('**/*', routeHandler!));
+      await settleCleanup(() => capturePage!.close());
     }
   }
 }

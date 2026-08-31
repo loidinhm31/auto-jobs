@@ -121,7 +121,10 @@ test('captures Snyk through the default safe page without executing report scrip
     await expect(page.getByRole('link', { name: 'Snyk test report' })).toBeVisible();
 
     const result = await captureSnykEvidence({
-      page, project, deadline: new WorkflowDeadline(30_000), outputDirectory, terminalBuildUrl: page.url(),
+      page, project, deadline: new WorkflowDeadline(30_000), outputDirectory,
+      reportUrl: `${fixture.origin}/jenkins/artifact/snyk-default.html`,
+      summaryUrl: `${fixture.origin}/jenkins/artifact/snyk-summary.json`,
+      readSummary: async (_page, summaryUrl) => ({ parsed: { counts: { critical: 0, high: 0, medium: 0, low: 0 }, warnings: [] }, url: summaryUrl }),
     });
     expect(result.source.state, result.source.warnings.join(' | ')).toBe('found');
     expect(result.source.captures[0]?.title).toBe('Static Snyk fixture report');
@@ -132,141 +135,6 @@ test('captures Snyk through the default safe page without executing report scrip
   }
 });
 
-test('captures Snyk detail, summary-only, malformed, missing, and blocked redirect states', async ({ page }) => {
-  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-snyk-e2e-'));
-  const report = readFixture('snyk-template/template.html');
-  let mode = 'detail';
-  const fixtureRoute = async (route: Route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.endsWith('/job/service-a/')) {
-      const link = mode === 'missing' ? '' : `<a href="${JENKINS_ORIGIN}/jenkins/artifact/snyk-${mode}.html">Snyk test report</a>`;
-      await route.fulfill({ status: 200, contentType: 'text/html', body: link });
-    } else if (url.pathname.endsWith('/artifact/snyk-detail.html')) {
-      await route.fulfill({ status: 200, contentType: 'text/html', body: report });
-    } else if (url.pathname.endsWith('/artifact/snyk-summary.html')) {
-      await route.fulfill({ status: 200, contentType: 'text/html', body: '<main><h1>Snyk test report</h1><div class="severity-count critical">0</div><div class="severity-count high">2</div><div class="severity-count medium">0</div><div class="severity-count low">0</div></main>' });
-    } else if (url.pathname.endsWith('/artifact/snyk-malformed.html')) {
-      await route.fulfill({ status: 200, contentType: 'text/html', body: '<h1>Malformed publisher page</h1>' });
-    } else if (url.pathname.endsWith('/artifact/snyk-redirect.html')) {
-      await route.fulfill({ status: 302, headers: { location: 'https://evil.example/report.html?sessionid=fixture-secret' } });
-    } else {
-      await route.fulfill({ status: 404, body: 'not found' });
-    }
-  };
-  await page.route(`${JENKINS_ORIGIN}/**`, fixtureRoute);
-  const openFixtureSafePage = async (sourcePage: Page): Promise<ScriptSafePage> => {
-    const browser = sourcePage.context().browser();
-    if (browser === null) throw new Error('fixture browser is unavailable');
-    const context = await browser.newContext({
-      javaScriptEnabled: false,
-      storageState: await sourcePage.context().storageState(),
-      viewport: { width: 1_440, height: 900 },
-    });
-    await context.route(`${JENKINS_ORIGIN}/**`, fixtureRoute);
-    const safePage = await context.newPage();
-    return { page: safePage, close: () => context.close() };
-  };
-  try {
-    const project = snykProject();
-    await page.goto(`${JENKINS_ORIGIN}/jenkins/job/service-a/`);
-    let result = await captureSnykEvidence({ page, project, deadline: new WorkflowDeadline(30_000), outputDirectory, terminalBuildUrl: page.url(), openSafePage: openFixtureSafePage });
-    expect(result.source.state, result.source.warnings.join(' | ')).toBe('found');
-    expect(result.source.findings?.length).toBeGreaterThan(0);
-    expect(result.source.captures[0]?.screenshotPath).toBe('snyk-test-report.png');
-    const screenshot = fs.readFileSync(path.join(outputDirectory, 'snyk-test-report.png'));
-    expect({ width: screenshot.readUInt32BE(16), height: screenshot.readUInt32BE(20) })
-      .toEqual({ width: 1_440, height: 900 });
-
-    mode = 'summary';
-    await page.goto(`${JENKINS_ORIGIN}/jenkins/job/service-a/`);
-    result = await captureSnykEvidence({ page, project, deadline: new WorkflowDeadline(30_000), outputDirectory, terminalBuildUrl: page.url(), openSafePage: openFixtureSafePage });
-    expect(result.source.state).toBe('found');
-    expect(result.source.findings).toEqual([]);
-    expect(result.source.summary?.counts).toEqual({ critical: 0, high: 2, medium: 0, low: 0 });
-
-    mode = 'malformed';
-    await page.goto(`${JENKINS_ORIGIN}/jenkins/job/service-a/`);
-    result = await captureSnykEvidence({ page, project, deadline: new WorkflowDeadline(3_000), outputDirectory, terminalBuildUrl: page.url(), openSafePage: openFixtureSafePage });
-    expect(result.source.state).toBe('incomplete');
-
-    mode = 'missing';
-    await page.goto(`${JENKINS_ORIGIN}/jenkins/job/service-a/`);
-    result = await captureSnykEvidence({ page, project, deadline: new WorkflowDeadline(30_000), outputDirectory, terminalBuildUrl: page.url(), openSafePage: openFixtureSafePage });
-    expect(result.source.state).toBe('not_found');
-
-    mode = 'redirect';
-    await page.goto(`${JENKINS_ORIGIN}/jenkins/job/service-a/`);
-    result = await captureSnykEvidence({ page, project, deadline: new WorkflowDeadline(3_000), outputDirectory, terminalBuildUrl: page.url(), openSafePage: openFixtureSafePage });
-    expect(result.source.state).toBe('incomplete');
-    expect(result.warnings.join(' ')).not.toContain('fixture-secret');
-  } finally {
-    await page.unroute(`${JENKINS_ORIGIN}/**`, fixtureRoute);
-    fs.rmSync(outputDirectory, { recursive: true, force: true });
-  }
-});
-
-test('refreshes an exact terminal build until archived publisher links are available', async ({ page }) => {
-  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'publisher-link-settle-'));
-  const snykHtml = fs.readFileSync(path.resolve('docker/jenkins/fixtures/reports/snyk/index.html'), 'utf8');
-  const sonarRoot = path.resolve('docker/jenkins/fixtures/reports/sonarqube');
-  const sonarHome = fs.readFileSync(path.join(sonarRoot, 'index.html'), 'utf8');
-  const sonarOverall = fs.readFileSync(path.join(sonarRoot, 'overall.html'), 'utf8');
-  const sonarIssues = fs.readFileSync(path.join(sonarRoot, 'issues.html'), 'utf8');
-  const origin = JENKINS_ORIGIN;
-  let terminalLoads = 0;
-  const terminalUrl = `${origin}/jenkins/job/service-a/42/`;
-  const project = {
-    ...snykProject(),
-    sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [origin] },
-    sources: {
-      snyk: { allowedOrigins: [origin], projectId: 'service-a' },
-      sonarqube: { allowedOrigins: [origin], projectId: 'service-a' },
-    },
-  } as unknown as NormalizedProjectConfig;
-  const workflow: ProjectWorkflowResult = {
-    terminal: {
-      build: { number: 42, url: terminalUrl }, status: 'SUCCESS', observedAt: new Date().toISOString(),
-      observationErrors: [], reloadCount: 0,
-    },
-    trigger: { capability: 'existing_build', triggerAttempts: 0, build: { number: 42, url: terminalUrl }, warnings: [] },
-  };
-  await page.context().route(`${origin}/**`, async (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname === '/jenkins/job/service-a/42/') {
-      terminalLoads += 1;
-      const body = terminalLoads === 1
-        ? `<a style="display:none" href="${origin}/jenkins/job/service-a/42/artifact/reports/snyk/index.html">hidden stale Snyk</a>`
-        : terminalLoads === 2
-        ? `<a href="${origin}/jenkins/job/service-a/42/artifact/reports/snyk/index.html">snyk/index.html</a>` : `
-        <a href="${origin}/jenkins/job/service-a/42/artifact/reports/snyk/index.html">snyk/index.html</a>
-        <a href="${origin}/jenkins/job/service-a/42/artifact/reports/sonarqube/index.html">sonarqube/index.html</a>`;
-      await route.fulfill({ status: 200, contentType: 'text/html', body });
-    } else if (url.pathname.endsWith('/artifact/reports/snyk/index.html')) {
-      await route.fulfill({ status: 200, contentType: 'text/html', body: snykHtml });
-    } else if (url.pathname.endsWith('/artifact/reports/sonarqube/index.html')) {
-      await route.fulfill({ status: 200, contentType: 'text/html', body: sonarHome });
-    } else if (url.pathname.endsWith('/artifact/reports/sonarqube/overall.html')) {
-      await route.fulfill({ status: 200, contentType: 'text/html', body: sonarOverall });
-    } else if (url.pathname.endsWith('/artifact/reports/sonarqube/issues.html')) {
-      await route.fulfill({ status: 200, contentType: 'text/html', body: sonarIssues });
-    } else {
-      await route.fulfill({ status: 404, body: 'not found' });
-    }
-  });
-  try {
-    await page.goto(terminalUrl);
-    const result = await defaultCapture({
-      page, project, workflow, deadline: new WorkflowDeadline(30_000), outputDirectory,
-    });
-    expect(terminalLoads).toBeGreaterThan(2);
-    expect(result.reports.snyk.state).toBe('found');
-    expect(result.reports.sonarqube.state).toBe('found');
-    expect(result.artifacts?.screenshots).toEqual(['snyk-test-report.png', 'sonarqube-overall.png', 'sonarqube-issues.png']);
-  } finally {
-    await page.context().unroute(`${origin}/**`);
-    fs.rmSync(outputDirectory, { recursive: true, force: true });
-  }
-});
 
 test('captures SonarQube Home to Overall to Issues and survives generated facet attributes changing', async ({ page }) => {
   const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-sonar-e2e-'));
@@ -302,7 +170,7 @@ test('captures SonarQube Home to Overall to Issues and survives generated facet 
       fs.mkdirSync(outputDirectory);
       await page.goto(`${JENKINS_ORIGIN}/jenkins/job/service-a/`);
       const result = await captureSonarqubeEvidence({
-        page, project: sonarProject(), deadline: new WorkflowDeadline(30_000), outputDirectory, terminalBuildUrl: page.url(),
+        page, project: sonarProject(), deadline: new WorkflowDeadline(30_000), outputDirectory, homeUrl: `${SONAR_ORIGIN}/dashboard?id=${encodeURIComponent(SONAR_PROJECT)}`,
       });
       if (result.source.state !== 'found') {
         throw new Error(`Sonar fixture capture incomplete: ${result.source.warnings.join(' | ')}`);

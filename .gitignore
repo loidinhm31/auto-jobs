@@ -3,6 +3,7 @@
 .*env*
 config/*env*
 !config/ci-env.template
+config/*.local.json
 
 playwright/.auth/
 playwright-report/
@@ -16,11 +17,6 @@ reports/
 !src/reports/**
 .runner-build/
 .report-runtime*/
-!docker/
-!docker/jenkins/
-!docker/jenkins/fixtures/
-!docker/jenkins/fixtures/reports/
-!docker/jenkins/fixtures/reports/**
 *.trace.zip
 *.log
 

@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { expect, test } from '@playwright/test';
 
 import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
-import { readSummary } from '../../src/reports/snyk/snyk-capture-support.js';
+import { pageLinkCandidatesWithStatus, readSummary } from '../../src/reports/snyk/snyk-capture-support.js';
 import { MAX_SUMMARY_BYTES } from '../../src/reports/snyk/snyk-summary-parser.js';
 import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
 
@@ -33,6 +33,12 @@ test('follows only bounded same-origin summary redirects and rejects declared ov
       response.end(body);
       return;
     }
+    if (request.url === '/chunked') {
+      const body = JSON.stringify({ severity_counts: { critical: 1, high: 2, medium: 0, low: 0 } });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(body);
+      return;
+    }
     if (request.url === '/large') {
       const body = 'x'.repeat(MAX_SUMMARY_BYTES + 1);
       response.writeHead(200, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) });
@@ -55,7 +61,53 @@ test('follows only bounded same-origin summary redirects and rejects declared ov
     expect(summary.parsed.counts).toEqual({ critical: 1, high: 2, medium: 0, low: 0 });
     await expect(readSummary(page, `${origin}/large`, project(origin), new WorkflowDeadline(10_000)))
       .rejects.toThrow(/exceeds/u);
+    await expect(readSummary(page, `${origin}/chunked`, project(origin), new WorkflowDeadline(10_000)))
+      .rejects.toThrow(/Content-Length/iu);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+test('bounds a response body when Content-Length understates it', async ({ page }) => {
+  const originalFetch = globalThis.fetch;
+  const oversized = new Uint8Array(MAX_SUMMARY_BYTES + 1);
+  globalThis.fetch = (async (input) => ({
+    url: String(input),
+    status: 200,
+    headers: new Headers({
+      'content-type': 'application/json',
+      'content-length': '1',
+    }),
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(oversized);
+        controller.close();
+      },
+    }),
+  })) as typeof globalThis.fetch;
+  try {
+    await expect(readSummary(
+      page,
+      'https://jenkins.example/summary',
+      project('https://jenkins.example'),
+      new WorkflowDeadline(10_000),
+    )).rejects.toThrow(/exceeds/iu);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('fails closed when page link metadata exceeds field or total budgets', async ({ page }) => {
+  await page.setContent(`<a href="https://jenkins.example/job/service-a/">${'x'.repeat(2_049)}</a>`);
+  const oversizedField = await pageLinkCandidatesWithStatus(page);
+  expect(oversizedField.truncated).toBe(true);
+  expect(oversizedField.candidates).toEqual([]);
+
+  const anchors = Array.from({ length: 256 }, (_, index) =>
+    `<a href="https://jenkins.example/job/${index}" aria-label="${'a'.repeat(500)}" title="${'b'.repeat(500)}">${'c'.repeat(500)}</a>`,
+  ).join('');
+  await page.setContent(anchors);
+  const oversizedTotal = await pageLinkCandidatesWithStatus(page);
+  expect(oversizedTotal.truncated).toBe(true);
+  expect(oversizedTotal.candidates.length).toBeLessThan(256);
 });

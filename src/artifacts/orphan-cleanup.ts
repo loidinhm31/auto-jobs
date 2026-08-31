@@ -2,18 +2,18 @@ import type { Dirent, Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { readStagingLease, releaseStagingLease, STAGING_LEASE_DIRECTORY } from './staging-lease.js';
+import { SAFE_ID } from './artifact-identity.js';
 export const ORPHAN_MINIMUM_AGE_MS = 15 * 60 * 1_000;
 export const CLEANUP_MAX_ENTRIES = 4_096;
 export const CLEANUP_MAX_BYTES = 256 * 1_048_576;
 export const CLEANUP_MAX_REMOVALS = 256;
 
-const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
-const BUILD_DIRECTORY = /^(?:pre-build|[1-9]\d*)$/u;
 const PUBLICATION_DIRECTORY = /^(?:\.run-publication-|\.run-backup-)/u;
 const TEMP_ENTRY = /^(?:\.tmp-|\.bak-aggregate-|\.aggregate-publication-|\.report-root-lock-recovery-)/u;
 const STAGING_LEASE_TEMP = /^\.[a-z0-9][a-z0-9-]{0,80}\.lease\.[a-f\d]{16}\.tmp$/u;
 const STAGING_LEASE_FILE = /^([a-z0-9][a-z0-9-]{0,80})\.lease$/u;
 const MAX_WARNINGS = 32;
+const REPORT_INTERNAL_DIRECTORIES = new Set(['assets', '.report-root-lock']);
 export interface OrphanCleanupOptions {
   readonly now?: Date; readonly minimumAgeMs?: number; readonly maxEntries?: number;
   readonly maxBytes?: number; readonly maxRemovals?: number;
@@ -163,6 +163,30 @@ async function cleanupStagingRoot(root: string, state: CleanupState): Promise<vo
     }
   }
 }
+async function cleanupPublicationEntries(
+  directory: string,
+  root: string,
+  state: CleanupState,
+  label: string,
+): Promise<void> {
+  let candidates: Dirent[];
+  try { candidates = await entries(directory, state); }
+  catch (error) { addWarning(state, `publication inventory failed: ${label}: ${String(error)}`); return; }
+  for (const candidate of candidates) {
+    if (!PUBLICATION_DIRECTORY.test(candidate.name)) continue;
+    const candidatePath = safeChild(directory, candidate.name);
+    if (candidate.name.startsWith('.run-backup-')) {
+      addWarning(state, `preserved ambiguous publication backup: ${candidate.name}`);
+      continue;
+    }
+    if (!candidate.isDirectory() || candidate.isSymbolicLink()) {
+      addWarning(state, `preserved symlink or unsafe publication temporary: ${candidate.name}`);
+      continue;
+    }
+    await removeCandidate(candidatePath, root, state).catch((error) => addWarning(state, `publication inventory failed: ${String(error)}`));
+  }
+}
+
 async function cleanupReportRoot(root: string, state: CleanupState): Promise<void> {
   let rootEntries: Dirent[];
   try { rootEntries = await entries(root, state); } catch (error) { addWarning(state, `report root inventory failed: ${String(error)}`); return; }
@@ -173,27 +197,31 @@ async function cleanupReportRoot(root: string, state: CleanupState): Promise<voi
       else await removeCandidate(topLevel, root, state).catch((error) => addWarning(state, `report temporary inventory failed: ${String(error)}`));
       continue;
     }
-    if (!entry.isDirectory() || entry.isSymbolicLink() || !SAFE_ID.test(entry.name)) continue;
+    if (entry.isSymbolicLink()) {
+      addWarning(state, `preserved symlink report project entry: ${entry.name}`);
+      continue;
+    }
+    if (!entry.isDirectory() || REPORT_INTERNAL_DIRECTORIES.has(entry.name) || !SAFE_ID.test(entry.name)) {
+      if (entry.isDirectory() && !REPORT_INTERNAL_DIRECTORIES.has(entry.name)) {
+        addWarning(state, `ignored unsafe report project entry: ${entry.name}`);
+      }
+      continue;
+    }
     let projectEntries: Dirent[];
     try { projectEntries = await entries(topLevel, state); } catch (error) { addWarning(state, `report project inventory failed: ${entry.name}: ${String(error)}`); continue; }
-    for (const build of projectEntries) {
-      if (!build.isDirectory() || build.isSymbolicLink() || !BUILD_DIRECTORY.test(build.name)) continue;
-      const buildPath = safeChild(topLevel, build.name);
-      let candidates: Dirent[];
-      try { candidates = await entries(buildPath, state); } catch (error) { addWarning(state, `report build inventory failed: ${entry.name}/${build.name}: ${String(error)}`); continue; }
-      for (const candidate of candidates) {
-        if (!PUBLICATION_DIRECTORY.test(candidate.name)) continue;
-        const candidatePath = safeChild(buildPath, candidate.name);
-        if (candidate.name.startsWith('.run-backup-')) {
-          addWarning(state, `preserved ambiguous publication backup: ${candidate.name}`);
-          continue;
-        }
-        if (!candidate.isDirectory() || candidate.isSymbolicLink()) {
-          addWarning(state, `preserved symlink or unsafe publication temporary: ${candidate.name}`);
-          continue;
-        }
-        await removeCandidate(candidatePath, root, state).catch((error) => addWarning(state, `publication inventory failed: ${String(error)}`));
+    await cleanupPublicationEntries(topLevel, root, state, entry.name);
+    for (const run of projectEntries) {
+      if (run.isSymbolicLink()) {
+        addWarning(state, `preserved symlink report run entry: ${entry.name}/${run.name}`);
+        continue;
       }
+      if (!run.isDirectory()) continue;
+      if (!SAFE_ID.test(run.name)) {
+        addWarning(state, `ignored unsafe report run entry: ${entry.name}/${run.name}`);
+        continue;
+      }
+      const runPath = safeChild(topLevel, run.name);
+      await cleanupPublicationEntries(runPath, root, state, `${entry.name}/${run.name}`);
     }
   }
 }

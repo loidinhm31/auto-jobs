@@ -4,109 +4,64 @@ import type {
   NavigationTarget,
   SourceEvidence,
   SonarSourceEvidence,
-  TriggerEvidence,
-  VulnerabilityReportResultV2,
+  VulnerabilityReportResultV3,
 } from '../result-types.js';
-import type { ProjectFailureResultV2, ProjectRunManifest } from './artifact-manifest.js';
+import type { ProjectFailureResultV3, ProjectRunManifest } from './artifact-manifest.js';
 import {
   assertValidFailureResult,
   assertValidProjectResult,
   isSafePersistedUrl,
+  isValidManifestContract,
   MAX_CAPTURE_TITLE_LENGTH,
   MAX_CAPTURE_URL_LENGTH,
   MAX_PERSISTED_DIAGNOSTIC_LENGTH,
-  MAX_PERSISTED_WARNING_ITEMS,
-  MAX_PERSISTED_WARNING_LENGTH,
-  isSafeScreenshotReference,
-  MAX_RUN_ARTIFACT_COUNT,
+  sanitizePersistedWarnings,
 } from './result-validation.js';
 import { safeSnykSource } from './snyk-result-sanitizer.js';
 import { sanitizeSonarIssueFacets } from '../reports/sonarqube/sonarqube-issue-facets.js';
 import { assertSafeReferenceUrl } from '../security/url-policy.js';
 
-const MAX_WARNING_ITEMS = MAX_PERSISTED_WARNING_ITEMS;
-const MAX_WARNING_LENGTH = MAX_PERSISTED_WARNING_LENGTH;
-
-export function assertSafeBuildUrl(value: string): void {
-  try {
-    const url = new URL(value);
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('unsafe build URL');
-  } catch {
-    throw new Error('build URL must be an HTTP(S) URL without credentials or fragments');
-  }
-}
-
-function boundedText(value: unknown, maximum: number): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= maximum;
-}
-
 export function assertManifestContract(manifest: ProjectRunManifest): void {
-  if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest) ||
-    manifest.kind !== 'project-run' || manifest.schemaVersion !== 2 ||
-    typeof manifest.project !== 'object' || manifest.project === null ||
-    typeof manifest.project.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,62}$/u.test(manifest.project.id) || !boundedText(manifest.project.name, 256) ||
-    typeof manifest.run !== 'object' || manifest.run === null ||
-    typeof manifest.run.runId !== 'string' || !/^[a-z0-9][a-z0-9-]{0,80}$/u.test(manifest.run.runId) || !boundedText(manifest.run.observedAt, 128) ||
-    !['success', 'partial', 'failed'].includes(manifest.state) ||
-    typeof manifest.artifacts !== 'object' || manifest.artifacts === null ||
-    manifest.artifacts.manifest !== 'manifest.json' || manifest.artifacts.data !== 'data.json' ||
-    !Array.isArray(manifest.artifacts.screenshots) ||
-    !Array.isArray(manifest.warnings) || manifest.warnings.length > MAX_WARNING_ITEMS ||
-    manifest.warnings.some((warning) => typeof warning !== 'string' || warning.length > MAX_WARNING_LENGTH) ||
-    manifest.diagnostic !== undefined && (typeof manifest.diagnostic !== 'string' || manifest.diagnostic.length > MAX_PERSISTED_DIAGNOSTIC_LENGTH)) {
+  if (!isValidManifestContract(manifest, { allowUnsafeArtifactReferences: true })) {
     throw new Error('manifest contract is invalid');
-  }
-  if (manifest.jenkins !== undefined) {
-    if (typeof manifest.jenkins !== 'object' || manifest.jenkins === null ||
-      !Number.isSafeInteger(manifest.jenkins.buildNumber) || manifest.jenkins.buildNumber < 1 ||
-      typeof manifest.jenkins.buildUrl !== 'string' ||
-      manifest.jenkins.status !== undefined && typeof manifest.jenkins.status !== 'string') {
-      throw new Error('manifest Jenkins identity is invalid');
-    }
-    assertSafeBuildUrl(manifest.jenkins.buildUrl);
-  }
-  if (manifest.diagnostics !== undefined && (!Array.isArray(manifest.diagnostics.observationErrors) ||
-    manifest.diagnostics.observationErrors.length > MAX_WARNING_ITEMS ||
-    manifest.diagnostics.observationErrors.some((error) => typeof error !== 'string' || error.length > MAX_WARNING_LENGTH) ||
-    !Number.isSafeInteger(manifest.diagnostics.reloadCount) || manifest.diagnostics.reloadCount < 0 ||
-    manifest.diagnostics.lastSafeUrl !== undefined && !isSafePersistedUrl(manifest.diagnostics.lastSafeUrl) ||
-    manifest.diagnostics.status !== undefined && typeof manifest.diagnostics.status !== 'string')) {
-    throw new Error('manifest diagnostics are invalid');
   }
 }
 
 export function assertManifestShape(manifest: ProjectRunManifest): void {
-  assertManifestContract(manifest);
-  if (manifest.artifacts.trace !== undefined && manifest.artifacts.trace !== 'trace.zip' ||
-    manifest.artifacts.screenshots.length + (manifest.artifacts.trace === undefined ? 0 : 1) > MAX_RUN_ARTIFACT_COUNT ||
-    manifest.artifacts.screenshots.some((filename) => !isSafeScreenshotReference(filename)) ||
-    new Set(manifest.artifacts.screenshots).size !== manifest.artifacts.screenshots.length) {
-    throw new Error('manifest artifact references are invalid');
+  if (!isValidManifestContract(manifest, { allowUnsafeArtifactReferences: true })) {
+    throw new Error('manifest contract is invalid');
   }
+  if (!isValidManifestContract(manifest)) throw new Error('manifest artifact references are invalid');
+}
+function safeJobUrl(value: string): string {
+  const candidate = safeOptionalUrl(value);
+  if (candidate === undefined) throw new Error('Jenkins job URL is unsafe');
+  const url = new URL(candidate);
+  if (url.search || url.hash) throw new Error('Jenkins job URL must not contain query or fragment');
+  return candidate;
 }
 
 export function assertProjectIdentity(
   manifest: ProjectRunManifest,
-  result: { readonly project: { readonly id: string; readonly name: string }; readonly run: { readonly runId: string; readonly observedAt: string }; readonly state: string; readonly jenkins?: { readonly buildNumber: number; readonly buildUrl: string } },
+  result: Pick<VulnerabilityReportResultV3 | ProjectFailureResultV3, 'project' | 'run' | 'state' | 'jenkins'>,
   allowUnsafeArtifactReferences = false,
 ): void {
   if (allowUnsafeArtifactReferences) assertManifestContract(manifest);
   else assertManifestShape(manifest);
-  if (result.jenkins !== undefined) assertSafeBuildUrl(result.jenkins.buildUrl);
+  if (result.jenkins !== undefined) safeJobUrl(result.jenkins.jobUrl);
   if (manifest.project.id !== result.project.id || manifest.project.name !== result.project.name ||
     manifest.run.runId !== result.run.runId || manifest.run.observedAt !== result.run.observedAt || manifest.state !== result.state) {
     throw new Error('manifest and result identities do not match');
   }
   if (manifest.jenkins !== undefined || result.jenkins !== undefined) {
-    if (manifest.jenkins === undefined || result.jenkins === undefined ||
-      manifest.jenkins.buildNumber !== result.jenkins.buildNumber || manifest.jenkins.buildUrl !== result.jenkins.buildUrl) {
-      throw new Error('manifest and result build identities do not match');
+    if (manifest.jenkins === undefined || result.jenkins === undefined || manifest.jenkins.jobUrl !== result.jenkins.jobUrl) {
+      throw new Error('manifest and result Jenkins job identities do not match');
     }
   }
 }
 
 function safeWarnings(values: readonly string[]): string[] {
-  return values.slice(-MAX_WARNING_ITEMS).map((value) => redactText(value).slice(0, MAX_WARNING_LENGTH));
+  return sanitizePersistedWarnings(values);
 }
 
 function safeOptionalUrl(value: string | undefined): string | undefined {
@@ -156,51 +111,22 @@ function safeSonarSource(value: SonarSourceEvidence): SonarSourceEvidence {
   };
 }
 
-function safeTrigger(value: TriggerEvidence): TriggerEvidence {
-  const queueUrl = value.queueUrl === undefined ? undefined : safeOptionalUrl(value.queueUrl);
-  const build = value.build === undefined ? undefined : {
-    number: value.build.number,
-    url: safeOptionalUrl(value.build.url) ?? '',
-    ...(value.build.queueUrl === undefined ? {} : (() => {
-      const buildQueueUrl = safeOptionalUrl(value.build?.queueUrl);
-      return buildQueueUrl === undefined ? {} : { queueUrl: buildQueueUrl };
-    })()),
-  };
-  return {
-    capability: value.capability,
-    triggerAttempts: value.triggerAttempts,
-    ...(value.baselineBuildNumber === undefined ? {} : { baselineBuildNumber: value.baselineBuildNumber }),
-    ...(queueUrl === undefined ? {} : { queueUrl }),
-    ...(value.queueId === undefined ? {} : { queueId: redactText(value.queueId).slice(0, 128) }),
-    ...(build === undefined ? {} : { build }),
-    ...(value.submittedAt === undefined ? {} : { submittedAt: redactText(value.submittedAt).slice(0, 128) }),
-    ...(value.correlatedAt === undefined ? {} : { correlatedAt: redactText(value.correlatedAt).slice(0, 128) }),
-    warnings: safeWarnings(value.warnings),
-  };
-}
-
 function safeDiagnostics(value: NonNullable<ProjectRunManifest['diagnostics']>): NonNullable<ProjectRunManifest['diagnostics']> {
   const lastSafeUrl = value.lastSafeUrl === undefined ? undefined : safeOptionalUrl(value.lastSafeUrl);
   return {
     observationErrors: safeWarnings(value.observationErrors),
-    reloadCount: value.reloadCount,
     ...(lastSafeUrl === undefined ? {} : { lastSafeUrl }),
-    ...(value.status === undefined ? {} : { status: redactText(value.status).slice(0, 256) }),
   };
 }
 
 export function safeManifest(value: ProjectRunManifest): ProjectRunManifest {
   return {
-    kind: value.kind,
-    schemaVersion: value.schemaVersion,
+    kind: 'project-run',
+    schemaVersion: 3,
     project: { id: value.project.id, name: redactText(value.project.name).slice(0, 256) },
     run: { runId: value.run.runId, observedAt: redactText(value.run.observedAt).slice(0, 128) },
     state: value.state,
-    ...(value.jenkins === undefined ? {} : { jenkins: {
-      buildNumber: value.jenkins.buildNumber,
-      buildUrl: sanitizeUrl(value.jenkins.buildUrl).slice(0, MAX_CAPTURE_URL_LENGTH),
-      ...(value.jenkins.status === undefined ? {} : { status: redactText(value.jenkins.status).slice(0, 256) }),
-    } }),
+    ...(value.jenkins === undefined ? {} : { jenkins: { jobUrl: safeJobUrl(value.jenkins.jobUrl).slice(0, MAX_CAPTURE_URL_LENGTH) } }),
     artifacts: {
       manifest: 'manifest.json',
       data: 'data.json',
@@ -213,23 +139,15 @@ export function safeManifest(value: ProjectRunManifest): ProjectRunManifest {
   };
 }
 
-export function safeResult(value: VulnerabilityReportResultV2): VulnerabilityReportResultV2 {
+export function safeResult(value: VulnerabilityReportResultV3): VulnerabilityReportResultV3 {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     state: value.state,
     project: { id: value.project.id, name: redactText(value.project.name).slice(0, 256) },
     run: { runId: value.run.runId, observedAt: redactText(value.run.observedAt).slice(0, 128) },
-    jenkins: {
-      baseUrl: sanitizeUrl(value.jenkins.baseUrl).slice(0, MAX_CAPTURE_URL_LENGTH),
-      jobPath: redactText(value.jenkins.jobPath).slice(0, 256),
-      jobUrl: sanitizeUrl(value.jenkins.jobUrl).slice(0, MAX_CAPTURE_URL_LENGTH),
-      buildNumber: value.jenkins.buildNumber,
-      buildUrl: sanitizeUrl(value.jenkins.buildUrl).slice(0, MAX_CAPTURE_URL_LENGTH),
-      status: redactText(value.jenkins.status).slice(0, 256),
-      trigger: safeTrigger(value.jenkins.trigger),
-    },
+    jenkins: { jobUrl: safeJobUrl(value.jenkins.jobUrl).slice(0, MAX_CAPTURE_URL_LENGTH) },
     navigation: {
-      'jenkins-build': safeTarget(value.navigation['jenkins-build']),
+      'jenkins-job': safeTarget(value.navigation['jenkins-job']),
       'snyk-report': safeTarget(value.navigation['snyk-report']),
       'sonarqube-home': safeTarget(value.navigation['sonarqube-home']),
       'sonarqube-overall': safeTarget(value.navigation['sonarqube-overall']),
@@ -243,16 +161,13 @@ export function safeResult(value: VulnerabilityReportResultV2): VulnerabilityRep
   };
 }
 
-export function safeFailure(value: ProjectFailureResultV2): ProjectFailureResultV2 {
+export function safeFailure(value: ProjectFailureResultV3): ProjectFailureResultV3 {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     project: { id: value.project.id, name: redactText(value.project.name).slice(0, 256) },
     run: { runId: value.run.runId, observedAt: redactText(value.run.observedAt).slice(0, 128) },
     state: 'failed',
-    ...(value.jenkins === undefined ? {} : { jenkins: {
-      buildNumber: value.jenkins.buildNumber,
-      buildUrl: sanitizeUrl(value.jenkins.buildUrl).slice(0, MAX_CAPTURE_URL_LENGTH),
-    } }),
+    ...(value.jenkins === undefined ? {} : { jenkins: { jobUrl: safeJobUrl(value.jenkins.jobUrl).slice(0, MAX_CAPTURE_URL_LENGTH) } }),
     diagnostic: redactText(value.diagnostic).slice(0, MAX_PERSISTED_DIAGNOSTIC_LENGTH),
     warnings: safeWarnings(value.warnings),
     ...(value.diagnostics === undefined ? {} : { diagnostics: safeDiagnostics(value.diagnostics) }),

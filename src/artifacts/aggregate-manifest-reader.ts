@@ -3,92 +3,119 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { redactText, sanitizeUrl } from '../config-errors.js';
+import { isRecord } from '../config-selectors.js';
+import { SAFE_ID } from './artifact-identity.js';
 import type {
   DiscoveredRunManifest,
   ManifestDiscoveryResult,
   ProjectRunManifest,
 } from './artifact-manifest.js';
 import {
-  isSafePersistedUrl,
+  isSafeJenkinsJobUrl,
   isValidFailureResult,
+  isValidManifestContract,
   isValidProjectResult,
-  isSafeScreenshotReference,
   MAX_RUN_ARTIFACT_BYTES,
   MAX_RUN_ARTIFACT_COUNT,
+  MAX_RUN_OPTIONAL_ARTIFACT_COUNT,
   MAX_SINGLE_ARTIFACT_BYTES,
 } from './result-validation.js';
 import { assertRunArtifactAllowlist } from './failure-artifact-inventory.js';
+import { pushDiagnostic } from '../workflow/diagnostics.js';
 
-const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
 const MAX_MANIFESTS = 5_000;
 const MAX_MANIFEST_BYTES = 1_048_576;
 const MAX_DIAGNOSTICS = 32;
 const MAX_DIAGNOSTIC_LENGTH = 500;
+export const MAX_DISCOVERY_ARTIFACT_BYTES = 250 * 1_048_576;
+export const MAX_DISCOVERY_ARTIFACT_READS = 20_000;
 const INTERNAL_DIRECTORIES = new Set(['.report-root-lock']);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
-function validateManifest(
-  value: unknown,
-  projectId: string,
-  buildNumber: number | undefined,
-  runId: string,
-): value is ProjectRunManifest {
-  if (!isRecord(value) || value.kind !== 'project-run' || value.schemaVersion !== 2) return false;
-  if (!isRecord(value.project) || value.project.id !== projectId || typeof value.project.name !== 'string') return false;
-  if (!isRecord(value.run) || value.run.runId !== runId || typeof value.run.observedAt !== 'string') return false;
-  if (!['success', 'partial', 'failed'].includes(String(value.state))) return false;
-  if (buildNumber === undefined) {
-    if (value.state !== 'failed' || value.jenkins !== undefined) return false;
-  } else {
-    if (!Number.isSafeInteger(buildNumber) || buildNumber < 1 || !isRecord(value.jenkins) ||
-      value.jenkins.buildNumber !== buildNumber || typeof value.jenkins.buildUrl !== 'string' ||
-      (value.jenkins.status !== undefined && typeof value.jenkins.status !== 'string') ||
-      !isSafePersistedUrl(value.jenkins.buildUrl)) return false;
-  }
-  if (!isRecord(value.artifacts) || value.artifacts.manifest !== 'manifest.json' || value.artifacts.data !== 'data.json' || !Array.isArray(value.artifacts.screenshots)) return false;
-  if (!value.artifacts.screenshots.every((item) => typeof item === 'string' && isSafeScreenshotReference(item)) ||
-    new Set(value.artifacts.screenshots).size !== value.artifacts.screenshots.length) return false;
-  if (value.artifacts.trace !== undefined && value.artifacts.trace !== 'trace.zip') return false;
-  if (!Array.isArray(value.warnings) || value.warnings.length > MAX_DIAGNOSTICS || !value.warnings.every((item) => typeof item === 'string' && item.length <= MAX_DIAGNOSTIC_LENGTH)) return false;
-  if (value.diagnostic !== undefined && (typeof value.diagnostic !== 'string' || value.diagnostic.length > 2_000)) return false;
-  if (value.diagnostics !== undefined) {
-    if (!isRecord(value.diagnostics) || !Array.isArray(value.diagnostics.observationErrors) ||
-      value.diagnostics.observationErrors.length > MAX_DIAGNOSTICS ||
-      !value.diagnostics.observationErrors.every((item) => typeof item === 'string' && item.length <= MAX_DIAGNOSTIC_LENGTH) ||
-      (value.diagnostics.lastSafeUrl !== undefined && !isSafePersistedUrl(value.diagnostics.lastSafeUrl)) ||
-      (value.diagnostics.status !== undefined && typeof value.diagnostics.status !== 'string') ||
-      typeof value.diagnostics.reloadCount !== 'number' || !Number.isSafeInteger(value.diagnostics.reloadCount) || value.diagnostics.reloadCount < 0) return false;
-  }
-  return true;
-}
+
 
 interface DiscoveryBudget { remaining: number; exhausted: boolean }
+
+interface DiscoveryArtifactBudget {
+  count: number;
+  bytes: number;
+  exhausted: boolean;
+}
+
+function reserveDiscoveryArtifact(budget: DiscoveryArtifactBudget, size: number): void {
+  if (budget.exhausted || budget.count >= MAX_DISCOVERY_ARTIFACT_READS ||
+    budget.bytes > MAX_DISCOVERY_ARTIFACT_BYTES - size) {
+    budget.exhausted = true;
+    throw new Error('historical artifact discovery budget exceeded');
+  }
+  budget.count += 1;
+  budget.bytes += size;
+}
 
 async function safeDirectories(
   directory: string,
   budget: DiscoveryBudget,
+  onUnsafeEntry?: () => void,
 ): Promise<string[]> {
   const names: string[] = [];
   const entries = await fs.opendir(directory);
   for await (const entry of entries) {
     if (budget.remaining === 0) { budget.exhausted = true; break; }
     budget.remaining -= 1;
-    if (entry.isDirectory() && !entry.isSymbolicLink()) names.push(entry.name);
+    if (entry.isSymbolicLink()) {
+      onUnsafeEntry?.();
+      continue;
+    }
+    if (entry.isDirectory()) names.push(entry.name);
   }
   return names.sort();
 }
 
-async function readManifest(filePath: string): Promise<unknown> {
+async function readBoundedUtf8(handle: fs.FileHandle, expectedSize: number): Promise<string> {
+  const buffer = Buffer.allocUnsafe(expectedSize);
+  let offset = 0;
+  while (offset < expectedSize) {
+    const read = await handle.read(buffer, 0, expectedSize - offset, offset);
+    if (read.bytesRead === 0) throw new Error('artifact changed while being read');
+    offset += read.bytesRead;
+  }
+  const finalStat = await handle.stat();
+  if (!finalStat.isFile() || finalStat.size !== expectedSize) throw new Error('artifact changed while being read');
+  return buffer.toString('utf8');
+}
+
+async function readManifest(
+  filePath: string,
+  discoveryBudget?: DiscoveryArtifactBudget,
+): Promise<unknown> {
   const handle = await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || stat.size > MAX_MANIFEST_BYTES) throw new Error('manifest size is invalid');
-    return JSON.parse(await handle.readFile('utf8')) as unknown;
+    if (discoveryBudget !== undefined) reserveDiscoveryArtifact(discoveryBudget, stat.size);
+    return JSON.parse(await readBoundedUtf8(handle, stat.size)) as unknown;
   } finally {
     await handle.close();
+  }
+}
+ 
+interface ManifestReadResult {
+  readonly present: boolean;
+  readonly value?: unknown;
+  readonly invalid: boolean;
+}
+
+
+async function readManifestIfPresent(
+  filePath: string,
+  discoveryBudget?: DiscoveryArtifactBudget,
+): Promise<ManifestReadResult> {
+  try {
+    return { present: true, value: await readManifest(filePath, discoveryBudget), invalid: false };
+  } catch (error) {
+    if (discoveryBudget?.exhausted) return { present: true, invalid: true };
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { present: false, invalid: false };
+    return { present: true, invalid: true };
   }
 }
 
@@ -96,17 +123,20 @@ async function readArtifact(
   directory: string,
   filename: string,
   budget?: { count: number; bytes: number },
+  discoveryBudget?: DiscoveryArtifactBudget,
 ): Promise<unknown> {
+  if (discoveryBudget?.exhausted) throw new Error('historical artifact discovery budget exceeded');
   const filePath = path.join(directory, filename);
   const handle = await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || stat.size > MAX_SINGLE_ARTIFACT_BYTES) throw new Error('artifact size is invalid');
+    if (discoveryBudget !== undefined) reserveDiscoveryArtifact(discoveryBudget, stat.size);
     if (budget !== undefined) {
       budget.count += 1;
       budget.bytes += stat.size;
     }
-    if (filename === 'data.json') return JSON.parse(await handle.readFile('utf8')) as unknown;
+    if (filename === 'data.json') return JSON.parse(await readBoundedUtf8(handle, stat.size)) as unknown;
     return undefined;
   } finally {
     await handle.close();
@@ -132,18 +162,23 @@ async function optionalReportPath(directory: string): Promise<string | undefined
 
 function normalizedManifest(value: ProjectRunManifest): ProjectRunManifest {
   return {
-    ...value,
-    ...(value.jenkins === undefined ? {} : { jenkins: {
-      ...value.jenkins, buildUrl: sanitizeUrl(value.jenkins.buildUrl),
-      ...(value.jenkins.status === undefined ? {} : { status: redactText(value.jenkins.status).slice(0, 256) }),
-    } }),
+    kind: 'project-run',
+    schemaVersion: 3,
+    project: { id: value.project.id, name: redactText(value.project.name).slice(0, 256) },
+    run: { runId: value.run.runId, observedAt: value.run.observedAt },
+    state: value.state,
+    ...(value.jenkins === undefined ? {} : { jenkins: { jobUrl: sanitizeUrl(value.jenkins.jobUrl) } }),
+    artifacts: {
+      manifest: 'manifest.json',
+      data: 'data.json',
+      screenshots: [...value.artifacts.screenshots],
+      ...(value.artifacts.trace === undefined ? {} : { trace: 'trace.zip' as const }),
+    },
     warnings: value.warnings.map((item) => redactText(item).slice(0, MAX_DIAGNOSTIC_LENGTH)),
     ...(value.diagnostic === undefined ? {} : { diagnostic: redactText(value.diagnostic) }),
     ...(value.diagnostics === undefined ? {} : {
       diagnostics: {
-        ...value.diagnostics,
         ...(value.diagnostics.lastSafeUrl === undefined ? {} : { lastSafeUrl: sanitizeUrl(value.diagnostics.lastSafeUrl) }),
-        ...(value.diagnostics.status === undefined ? {} : { status: redactText(value.diagnostics.status).slice(0, 256) }),
         observationErrors: value.diagnostics.observationErrors.map((item) => redactText(item).slice(0, MAX_DIAGNOSTIC_LENGTH)),
       },
     }),
@@ -153,26 +188,27 @@ function normalizedManifest(value: ProjectRunManifest): ProjectRunManifest {
 async function validateReferencedArtifacts(
   directory: string,
   manifest: ProjectRunManifest,
+  discoveryBudget: DiscoveryArtifactBudget,
 ): Promise<void> {
   const budget = { count: 0, bytes: 0 };
-  const data = await readArtifact(directory, manifest.artifacts.data, budget);
+  const data = await readArtifact(directory, manifest.artifacts.data, budget, discoveryBudget);
   const dataRecord = isRecord(data) ? data : undefined;
   const dataJenkins = dataRecord !== undefined && isRecord(dataRecord.jenkins) ? dataRecord.jenkins : undefined;
-  const buildIdentityMatches = manifest.jenkins === undefined
-    ? dataRecord !== undefined && dataJenkins === undefined
-    : dataJenkins !== undefined && dataJenkins.buildNumber === manifest.jenkins.buildNumber && dataJenkins.buildUrl === manifest.jenkins.buildUrl;
-  if (dataRecord === undefined || dataRecord.schemaVersion !== 2 || !isRecord(dataRecord.project) || dataRecord.project.id !== manifest.project.id || dataRecord.project.name !== manifest.project.name ||
+  const jobIdentityMatches = manifest.jenkins === undefined
+    ? dataJenkins === undefined
+    : dataJenkins !== undefined && dataJenkins.jobUrl === manifest.jenkins.jobUrl;
+  if (dataRecord === undefined || dataRecord.schemaVersion !== 3 || !isRecord(dataRecord.project) || dataRecord.project.id !== manifest.project.id || dataRecord.project.name !== manifest.project.name ||
     !isRecord(dataRecord.run) || dataRecord.run.runId !== manifest.run.runId || dataRecord.run.observedAt !== manifest.run.observedAt || dataRecord.state !== manifest.state ||
-    !buildIdentityMatches) {
+    !jobIdentityMatches) {
     throw new Error('manifest data identity mismatch');
   }
-  if ((dataJenkins !== undefined && !isSafePersistedUrl(dataJenkins.buildUrl)) ||
+  if ((dataJenkins !== undefined && !isSafeJenkinsJobUrl(dataJenkins.jobUrl)) ||
     (manifest.state === 'failed' ? !isValidFailureResult(dataRecord) : !isValidProjectResult(dataRecord))) {
     throw new Error('invalid project result schema');
   }
-  if (manifest.artifacts.screenshots.length > MAX_RUN_ARTIFACT_COUNT) throw new Error('artifact count is invalid');
-  for (const screenshot of manifest.artifacts.screenshots) await readArtifact(directory, screenshot, budget);
-  if (manifest.artifacts.trace !== undefined) await readArtifact(directory, manifest.artifacts.trace, budget);
+  if (manifest.artifacts.screenshots.length > MAX_RUN_OPTIONAL_ARTIFACT_COUNT) throw new Error('artifact count is invalid');
+  for (const screenshot of manifest.artifacts.screenshots) await readArtifact(directory, screenshot, budget, discoveryBudget);
+  if (manifest.artifacts.trace !== undefined) await readArtifact(directory, manifest.artifacts.trace, budget, discoveryBudget);
   if (budget.count > MAX_RUN_ARTIFACT_COUNT || budget.bytes > MAX_RUN_ARTIFACT_BYTES) throw new Error('run artifact budget exceeded');
 }
 
@@ -187,51 +223,87 @@ export async function discoverRunManifests(
   const manifests: DiscoveredRunManifest[] = [];
   const warnings: string[] = [];
   const budget: DiscoveryBudget = { remaining: Math.max(100, maximum * 4), exhausted: false };
+  const artifactBudget: DiscoveryArtifactBudget = { count: 0, bytes: 0, exhausted: false };
   let inspected = 0;
-  for (const projectId of await safeDirectories(root, budget)) {
+  let ignoredIncompatibleCount = 0;
+  let incompatibleLimitReached = false;
+  const noteIncompatible = (): void => {
+    if (ignoredIncompatibleCount < MAX_DIAGNOSTICS) {
+      ignoredIncompatibleCount += 1;
+    } else {
+      incompatibleLimitReached = true;
+    }
+  };
+  const inspectLegacyContainer = async (container: string): Promise<void> => {
+    for (const runId of await safeDirectories(container, budget, noteIncompatible)) {
+      if (artifactBudget.exhausted) return;
+      if (inspected >= maximum) { warnings.push('manifest discovery limit reached'); return; }
+      const read = await readManifestIfPresent(path.join(container, runId, 'manifest.json'), artifactBudget);
+      if (artifactBudget.exhausted) return;
+      if (!read.present) continue;
+      inspected += 1;
+      noteIncompatible();
+    }
+  };
+
+  for (const projectId of await safeDirectories(root, budget, noteIncompatible)) {
+    if (artifactBudget.exhausted) break;
     if (INTERNAL_DIRECTORIES.has(projectId)) continue;
-    if (!SAFE_ID.test(projectId)) { warnings.push('ignored unsafe project artifact directory'); continue; }
-    for (const buildName of await safeDirectories(path.join(root, projectId), budget)) {
-      const isPreBuild = buildName === 'pre-build';
-      const buildNumber = Number(buildName);
-      if (!isPreBuild && (!/^\d+$/u.test(buildName) || !Number.isSafeInteger(buildNumber) || buildNumber < 1)) {
-        warnings.push(`ignored invalid build directory for ${projectId}`);
+    if (!SAFE_ID.test(projectId)) { pushDiagnostic(warnings, 'ignored unsafe project artifact directory'); continue; }
+    const projectDirectory = path.join(root, projectId);
+    for (const runId of await safeDirectories(projectDirectory, budget, noteIncompatible)) {
+      if (artifactBudget.exhausted) break;
+      if (inspected >= maximum) { warnings.push('manifest discovery limit reached'); return { manifests, warnings, ignoredIncompatibleCount }; }
+      const directory = path.join(projectDirectory, runId);
+      const manifestPath = path.join(directory, 'manifest.json');
+      const read = await readManifestIfPresent(manifestPath, artifactBudget);
+      if (artifactBudget.exhausted) break;
+      if (!read.present) {
+        await inspectLegacyContainer(directory);
         continue;
       }
-      for (const runId of await safeDirectories(path.join(root, projectId, buildName), budget)) {
-        if (inspected >= maximum) { warnings.push('manifest discovery limit reached'); return { manifests, warnings }; }
-        inspected += 1;
-        if (!SAFE_ID.test(runId)) { warnings.push(`ignored unsafe run directory for ${projectId}`); continue; }
-        const manifestPath = path.join(root, projectId, buildName, runId, 'manifest.json');
-        try {
-          const value = await readManifest(manifestPath);
-          if (!validateManifest(value, projectId, isPreBuild ? undefined : Number(buildName), runId)) throw new Error('manifest identity mismatch');
-          const directory = path.join(root, projectId, buildName, runId);
-          await validateReferencedArtifacts(directory, value);
-          await assertRunArtifactAllowlist(directory, value);
-          const reportFile = await optionalReportPath(directory);
-          manifests.push({
-            manifest: normalizedManifest(value),
-            relativeDirectory: [projectId, buildName, runId].join('/'),
-            manifestPath,
-            ...(reportFile === undefined ? {} : { reportPath: `${projectId}/${buildName}/${runId}/index.html` }),
-          });
-        } catch {
-          warnings.push(`ignored invalid manifest for ${projectId}/${buildName}/${runId}`);
-        }
+      inspected += 1;
+      if (read.invalid) {
+        noteIncompatible();
+        continue;
+      }
+      const value = read.value;
+      if (!SAFE_ID.test(runId)) {
+        noteIncompatible();
+        continue;
+      }
+      if (!isRecord(value) || value.schemaVersion !== 3) {
+        noteIncompatible();
+        continue;
+      }
+      try {
+        if (!isValidManifestContract(value, { expectedProjectId: projectId, expectedRunId: runId })) throw new Error('manifest identity mismatch');
+        await validateReferencedArtifacts(directory, value, artifactBudget);
+        await assertRunArtifactAllowlist(directory, value);
+        const reportFile = await optionalReportPath(directory);
+        manifests.push({
+          manifest: normalizedManifest(value),
+          relativeDirectory: [projectId, runId].join('/'),
+          manifestPath,
+          ...(reportFile === undefined ? {} : { reportPath: `${projectId}/${runId}/index.html` }),
+        });
+      } catch {
+        noteIncompatible();
+        pushDiagnostic(warnings, 'ignored invalid project run manifest');
       }
     }
   }
-  if (budget.exhausted) warnings.push('artifact directory discovery limit reached');
+  if (artifactBudget.exhausted) pushDiagnostic(warnings, 'historical artifact discovery budget reached');
+  if (budget.exhausted) pushDiagnostic(warnings, 'artifact directory discovery limit reached');
+  if (ignoredIncompatibleCount > 0) {
+    pushDiagnostic(
+      warnings,
+      `ignored ${incompatibleLimitReached ? `at least ${ignoredIncompatibleCount}` : ignoredIncompatibleCount} incompatible historical manifest(s)`,
+    );
+  }
   manifests.sort((left, right) => {
     const projectOrder = left.manifest.project.id.localeCompare(right.manifest.project.id);
-    if (projectOrder !== 0) return projectOrder;
-    const leftBuild = left.manifest.jenkins?.buildNumber;
-    const rightBuild = right.manifest.jenkins?.buildNumber;
-    if (leftBuild === undefined && rightBuild !== undefined) return -1;
-    if (leftBuild !== undefined && rightBuild === undefined) return 1;
-    if (leftBuild !== undefined && rightBuild !== undefined && leftBuild !== rightBuild) return leftBuild - rightBuild;
-    return left.manifest.run.runId.localeCompare(right.manifest.run.runId);
+    return projectOrder !== 0 ? projectOrder : left.manifest.run.runId.localeCompare(right.manifest.run.runId);
   });
-  return { manifests, warnings };
+  return { manifests, warnings, ignoredIncompatibleCount };
 }

@@ -24,7 +24,7 @@ export function renderProjectReport(model: ProjectReportViewModel): string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(REPORT_CSP)}">
   <title>${escapeHtmlText(title)}</title>
-  <link rel="stylesheet" href="../../../assets/report.css">
+  <link rel="stylesheet" href="../../assets/report.css">
 </head>
 <body>
   <header class="report-header">
@@ -39,7 +39,7 @@ export function renderProjectReport(model: ProjectReportViewModel): string {
     ${renderSonarqubeSection(model)}
     ${renderArtifactSection(model)}
   </main>
-  <footer><p>Generated from normalized schema-v2 evidence. No vendor HTML or executable resources are embedded.</p></footer>
+  <footer><p>Generated from normalized schema-v3 evidence. No vendor HTML or executable resources are embedded.</p></footer>
 </body>
 </html>
 `;

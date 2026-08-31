@@ -9,7 +9,6 @@ import type { AddressInfo } from 'node:net';
 import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
 import { classifySnykLinks } from '../../src/reports/source-link-classifier.js';
 import { captureSnykEvidence } from '../../src/reports/snyk/snyk-capture.js';
-import { assertSnykUrlMatchesBuild } from '../../src/reports/snyk/snyk-capture-support.js';
 import { extractSnykHtml, type SnykHtmlEvidence } from '../../src/reports/snyk/snyk-html-extractor.js';
 import { normalizeSnykEvidence } from '../../src/reports/snyk/snyk-normalize.js';
 import { parseSnykSummaryJson } from '../../src/reports/snyk/snyk-summary-parser.js';
@@ -127,29 +126,6 @@ test('classifies only Snyk-shaped allowed links and rejects ambiguity', () => {
   expect(ambiguous.warnings).toContain('ambiguous Snyk report candidates were rejected');
 });
 
-test('rejects archived Snyk links from a different selected build', () => {
-  const selectedBuild = { number: 42, url: 'https://jenkins.example/jenkins/job/service-a/42/' };
-  const result = classifySnykLinks([
-    { href: 'https://jenkins.example/jenkins/job/service-a/41/artifact/reports/snyk/index.html', text: 'Snyk test report' },
-    { href: 'https://jenkins.example/jenkins/job/service-a/42/artifact/reports/snyk/index.html', text: 'Snyk test report' },
-  ], project(), selectedBuild);
-  expect(result.report?.href).toBe(selectedBuild.url.replace('/42/', '/42/artifact/reports/snyk/index.html'));
-  expect(result.warnings).toContain('an observed Snyk link did not belong to the selected Jenkins build');
-});
-
-test('rejects a redirected archived Snyk URL from a different selected build', () => {
-  const selectedBuild = { number: 42, url: 'https://jenkins.example/jenkins/job/service-a/42/' };
-  expect(() => assertSnykUrlMatchesBuild(
-    'https://jenkins.example/jenkins/job/service-a/41/artifact/reports/snyk/index.html',
-    project(),
-    selectedBuild,
-  )).toThrow(/selected Jenkins build/u);
-  expect(() => assertSnykUrlMatchesBuild(
-    'https://snyk.example/report.html',
-    project({ sourceOrigins: { jenkins: 'https://jenkins.example', snyk: ['https://snyk.example'], sonarqube: [] } }),
-    selectedBuild,
-  )).not.toThrow();
-});
 
 test('captures a validated report section with fixed viewport and hashed screenshot', async ({ page }) => {
   const reportHtml = fs.readFileSync(templatePath, 'utf8');
@@ -158,12 +134,14 @@ test('captures a validated report section with fixed viewport and hashed screens
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
     const body = url.pathname.endsWith('/job/service-a/')
       ? '<a href="/jenkins/artifact/snyk-results.html">Snyk test report</a>'
-      : url.pathname.endsWith('/artifact/snyk-results.html') ? reportHtml : undefined;
+      : url.pathname.endsWith('/artifact/snyk-results.html') ? reportHtml
+        : url.pathname.endsWith('/artifact/snyk-sca-results-summary.json') ? fs.readFileSync(summaryPath, 'utf8')
+          : undefined;
     if (body === undefined) {
       response.writeHead(404).end('not found');
       return;
     }
-    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(body);
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(body) }).end(body);
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -183,7 +161,8 @@ test('captures a validated report section with fixed viewport and hashed screens
       project: configured,
       deadline: new WorkflowDeadline(30_000),
       outputDirectory,
-      terminalBuildUrl: `${origin}/jenkins/job/service-a/`,
+      reportUrl: `${origin}/jenkins/artifact/snyk-results.html`,
+      summaryUrl: `${origin}/jenkins/artifact/snyk-sca-results-summary.json`,
     });
     expect(result.source.state).toBe('found');
     expect(result.source.captures[0]?.screenshotPath).toBe('snyk-test-report.png');
@@ -196,50 +175,3 @@ test('captures a validated report section with fixed viewport and hashed screens
   }
 });
 
-test('captures the deterministic Jenkins archived Snyk fixture without a legacy source override', async ({ page }) => {
-  const reportHtml = fs.readFileSync(path.resolve('docker/jenkins/fixtures/reports/snyk/index.html'), 'utf8');
-  const summaryJson = fs.readFileSync(path.resolve('docker/jenkins/fixtures/reports/snyk/report.json'), 'utf8');
-  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'snyk-archived-fixture-'));
-  const server = http.createServer((request, response) => {
-    const url = new URL(request.url ?? '/', 'http://fixture');
-    const body = url.pathname.endsWith('/job/service-a/')
-      ? '<a href="/jenkins/job/service-a/42/artifact/reports/snyk/index.html">snyk/index.html</a><a href="/jenkins/job/service-a/42/artifact/reports/snyk/report.json">snyk/report.json</a>'
-      : url.pathname.endsWith('/artifact/reports/snyk/index.html') ? reportHtml
-        : url.pathname.endsWith('/artifact/reports/snyk/report.json') ? summaryJson
-          : undefined;
-    if (body === undefined) {
-      response.writeHead(404).end('not found');
-      return;
-    }
-    response.writeHead(200, {
-      'content-type': url.pathname.endsWith('.json') ? 'application/json' : 'text/html; charset=utf-8',
-    }).end(body);
-  });
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const configured = project({
-    loginUrl: `${origin}/jenkins/login`,
-    jobUrl: `${origin}/jenkins/job/service-a/`,
-    sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [] },
-    sources: { snyk: { allowedOrigins: [origin] }, sonarqube: { allowedOrigins: [] } },
-  });
-  try {
-    await page.goto(`${origin}/jenkins/job/service-a/`);
-    const result = await captureSnykEvidence({
-      page, project: configured,
-      deadline: new WorkflowDeadline(30_000),
-      outputDirectory,
-      terminalBuildUrl: `${origin}/jenkins/job/service-a/`,
-    });
-    expect(result.source.state).toBe('found');
-    expect(result.source.summary?.counts).toEqual({ critical: 0, high: 1, medium: 2, low: 1 });
-    expect(result.source.findings).toHaveLength(4);
-    expect(result.screenshots).toEqual(['snyk-test-report.png']);
-  } finally {
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-    fs.rmSync(outputDirectory, { recursive: true, force: true });
-  }
-});

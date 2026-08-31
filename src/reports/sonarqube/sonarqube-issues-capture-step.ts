@@ -19,7 +19,6 @@ import {
   pageCaptureMetadata,
   screenshotFacetRange,
   SONAR_SCREENSHOTS,
-  assertSonarqubeUrlMatchesBuild,
 } from './sonarqube-capture-support.js';
 import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
 
@@ -74,16 +73,15 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
   );
   await visible(control.locator, input, 'SonarQube Issues control was not visible');
   await control.locator.click({ timeout: input.deadline.requireRemaining() });
-  await expect.poll(() => {
+  await input.page.waitForURL((url) => {
     try {
-      const url = new URL(input.page.url());
       return hasCredentialFreeAuthority(url) && exactQueryValue(url, 'id') === input.expectedKey &&
         (/\/issues(?:\/|$)/iu.test(url.pathname) ||
-          (input.allowArchivedSnapshot && /\/artifact\/(?:[^/]+\/)*sonarqube\/issues\.html$/iu.test(url.pathname)));
+          (input.allowArchivedSnapshot === true && /\/artifact\/(?:[^/]+\/)*sonarqube\/issues\.html$/iu.test(url.pathname)));
     } catch {
       return false;
     }
-  }, { timeout: input.deadline.requireRemaining(), intervals: [50, 100, 250, 500] }).toBe(true);
+  }, { timeout: input.deadline.requireRemaining(), waitUntil: 'domcontentloaded' });
   const url = assertAllowedUrl(
     input.page.url(),
     deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),
@@ -97,8 +95,7 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
   if (/\/login(?:\/|$)/iu.test(parsedUrl.pathname)) {
     throw new Error('SonarQube issues redirected to login');
   }
-  assertSonarqubeUrlMatchesBuild(url, input.project, input.expectedBuild);
-  const baseCapture = await pageCaptureMetadata(input.page, url, control.strategy);
+  const baseCapture = await pageCaptureMetadata(input.page, url, control.strategy, input.deadline);
   const emptyFacets: SonarIssueFacets = { types: [], severities: [] };
   let identityStrategy: string;
   try {

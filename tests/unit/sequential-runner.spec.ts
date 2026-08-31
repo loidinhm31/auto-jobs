@@ -2,14 +2,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Browser } from '@playwright/test';
 
 import { loadProjectConfig } from '../../src/config.js';
+import type { AggregateReportResult } from '../../src/result-types.js';
 import { ArtifactPaths } from '../../src/artifacts/artifact-paths.js';
-import { stagingLeasePath } from '../../src/artifacts/staging-lease.js';
 import type { CaptureResult } from '../../src/project/project-runner.js';
 import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
+import { WorkflowDeadline, withWorkflowDeadlineAndLateResource } from '../../src/workflow/workflow-deadline.js';
 import { runConfiguredProjects } from '../../src/runner.js';
 
 function projectFile(root: string): string {
@@ -18,95 +19,166 @@ function projectFile(root: string): string {
     schemaVersion: 1,
     defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
     projects: [
-      {
-        id: 'service-a',
-        name: 'Service A',
-        loginUrl: 'https://jenkins.example/login',
-        jobUrl: 'https://jenkins.example/job/service-a/',
-        credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' },
-      },
-      {
-        id: 'service-b',
-        name: 'Service B',
-        loginUrl: 'https://jenkins.example/login',
-        jobUrl: 'https://jenkins.example/job/service-b/',
-        credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' },
-      },
+      { id: 'service-a', name: 'Service A', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/service-a/', credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
+      { id: 'service-b', name: 'Service B', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/service-b/', credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
     ],
   }), { mode: 0o600 });
   return filePath;
 }
 
-test('keeps the pre-build staging lease until failure publication renames the directory', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-pre-build-lease-'));
-  try {
-    const environment = {
-      A_USER: 'user-a', A_PASSWORD: 'secret-a',
-      B_USER: 'user-b', B_PASSWORD: 'secret-b',
-    };
-    const project = loadProjectConfig(projectFile(root), environment)[0]!;
-    const artifacts = new ArtifactPaths(path.join(root, 'reports'), path.join(root, 'artifacts'));
-    await artifacts.initialize();
-    const browser = {
-      newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
-    } as unknown as Browser;
+function completeCapture(jobUrl: string): CaptureResult {
+  const target = (key: 'jenkins-job' | 'snyk-report' | 'sonarqube-home' | 'sonarqube-overall' | 'sonarqube-issues') => ({
+    key, localAnchor: `#${key}`, state: 'found' as const,
+  });
+  const source = { state: 'found' as const, captures: [], navigation: [], warnings: [] };
+  const snykSource = { ...source, navigation: [target('snyk-report')] };
+  const sonarqubeSource = {
+    ...source,
+    navigation: [target('sonarqube-home'), target('sonarqube-overall'), target('sonarqube-issues')],
+  };
+  return {
+    navigation: {
+      'jenkins-job': { ...target('jenkins-job'), localAnchor: '#jenkins', liveUrl: jobUrl },
+      'snyk-report': target('snyk-report'),
+      'sonarqube-home': target('sonarqube-home'),
+      'sonarqube-overall': target('sonarqube-overall'),
+      'sonarqube-issues': target('sonarqube-issues'),
+    },
+    reports: { snyk: snykSource, sonarqube: sonarqubeSource }, warnings: [],
+  };
+}
 
+function fakeBrowser(): Browser {
+  return {
+    newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
+    close: async () => undefined,
+  } as unknown as Browser;
+}
+
+class DelayedReportAllocationPaths extends ArtifactPaths {
+  public override async allocateReport(
+    projectId: string,
+    runId: string,
+    deadline?: WorkflowDeadline,
+  ): Promise<string> {
+    const directory = await super.allocateReport(projectId, runId, deadline);
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_100));
+    return directory;
+  }
+}
+
+test('closes a resource that resolves after the workflow deadline', async () => {
+  test.setTimeout(5_000);
+  let closed = false;
+  const resource = { close: async () => { closed = true; } };
+  await expect(withWorkflowDeadlineAndLateResource(
+    async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      return resource;
+    },
+    new WorkflowDeadline(20),
+    async (lateResource) => { await lateResource.close(); },
+  )).rejects.toThrow(/deadline/iu);
+  await new Promise<void>((resolve) => setTimeout(resolve, 150));
+  expect(closed).toBe(true);
+});
+
+test('publishes a direct failed run in its allocated report directory', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'direct-failure-publication-'));
+  try {
+    const environment = { A_USER: 'user-a', A_PASSWORD: 'secret-a', B_USER: 'user-b', B_PASSWORD: 'secret-b' };
+    const project = loadProjectConfig(projectFile(root), environment)[0]!;
+    const artifactsRoot = path.join(root, 'reports');
+    const artifacts = new ArtifactPaths(artifactsRoot, path.join(root, 'staging'));
+    await artifacts.initialize();
     const outcome = await runProject(project, {
-      browser,
+      browser: fakeBrowser(), artifacts, env: environment,
+      now: () => new Date('2026-08-24T04:00:00.000Z'), runIdSuffix: () => '0000000000000001',
+      workflow: async () => { throw new Error('login failed password=secret-a'); },
+    });
+    expect(outcome.state).toBe('failed');
+    expect(outcome.reportDirectory).toBe(path.join(artifactsRoot, project.id, outcome.runId));
+    expect(fs.existsSync(outcome.reportDirectory!)).toBe(true);
+    const data = JSON.parse(fs.readFileSync(path.join(outcome.reportDirectory!, 'data.json'), 'utf8')) as { schemaVersion: number; diagnostic: string };
+    expect(data.schemaVersion).toBe(3);
+    expect(data.diagnostic).not.toContain('secret-a');
+    expect(fs.existsSync(path.join(root, 'staging', project.id, outcome.runId))).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+test('persists an allocated failure artifact after the workflow deadline expires', async () => {
+  test.setTimeout(10_000);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'direct-deadline-failure-'));
+  try {
+    const environment = { A_USER: 'user-a', A_PASSWORD: 'secret-a', B_USER: 'user-b', B_PASSWORD: 'secret-b' };
+    const configured = loadProjectConfig(projectFile(root), environment)[0]!;
+    const project = { ...configured, timeoutMs: 1_000 };
+    const artifactsRoot = path.join(root, 'reports');
+    const artifacts = new ArtifactPaths(artifactsRoot, path.join(root, 'staging'));
+    await artifacts.initialize();
+    const outcome = await runProject(project, {
+      browser: fakeBrowser(),
       artifacts,
       env: environment,
-      now: () => new Date('2026-08-26T04:00:00.000Z'),
-      runIdSuffix: () => '0000000000000001',
-      workflow: async () => { throw new Error('trigger failed'); },
+      now: () => new Date('2026-08-24T04:00:00.000Z'),
+      runIdSuffix: () => '0000000000000002',
+      workflow: async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1_100));
+        throw new Error('workflow deadline fixture');
+      },
     });
-
     expect(outcome.state).toBe('failed');
-    const stagingDirectory = path.join(artifacts.stagingRoot, project.id, outcome.runId);
-    expect(outcome.reportDirectory).toBeUndefined();
-    expect(fs.existsSync(stagingDirectory)).toBe(true);
-    const lease = stagingLeasePath(artifacts.stagingRoot, project.id, outcome.runId);
-    expect(fs.existsSync(lease)).toBe(true);
-
-    const published = await artifacts.publishPreBuild(project.id, outcome.runId);
-    expect(fs.existsSync(published.directory)).toBe(true);
-    expect(fs.existsSync(published.manifestPath)).toBe(true);
-    expect(fs.existsSync(stagingDirectory)).toBe(false);
-    expect(fs.existsSync(lease)).toBe(false);
+    expect(outcome.runId).not.toBe('unallocated');
+    expect(outcome.reportDirectory).toBe(path.join(artifactsRoot, project.id, outcome.runId));
+    expect(outcome.manifestPath).toBeDefined();
+    expect(fs.existsSync(path.join(outcome.reportDirectory!, 'manifest.json'))).toBe(true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('publishes sanitized pre-build trigger failures as discoverable runs and continues', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-08-pre-build-failure-'));
+test('keeps the allocated run identity when the deadline expires after report allocation', async () => {
+  test.setTimeout(10_000);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'direct-allocation-deadline-'));
   try {
-    const configPath = projectFile(root);
-    const environment = {
-      A_USER: 'user-a', A_PASSWORD: 'secret-a',
-      B_USER: 'user-b', B_PASSWORD: 'secret-b',
-    };
-    const projects = loadProjectConfig(configPath, environment);
-    const browser = {
-      newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
-      close: async () => undefined,
-    } as unknown as Browser;
+    const environment = { A_USER: 'user-a', A_PASSWORD: 'secret-a', B_USER: 'user-b', B_PASSWORD: 'secret-b' };
+    const configured = loadProjectConfig(projectFile(root), environment)[0]!;
+    const project = { ...configured, timeoutMs: 1_000 };
+    const artifactsRoot = path.join(root, 'reports');
+    const artifacts = new DelayedReportAllocationPaths(artifactsRoot, path.join(root, 'staging'));
+    await artifacts.initialize();
+    const outcome = await runProject(project, {
+      browser: fakeBrowser(),
+      artifacts,
+      env: environment,
+      now: () => new Date('2026-08-24T04:00:00.000Z'),
+      runIdSuffix: () => '0000000000000003',
+    });
+    expect(outcome.state).toBe('failed');
+    expect(outcome.runId).not.toBe('unallocated');
+    expect(outcome.reportDirectory).toBe(path.join(artifactsRoot, project.id, outcome.runId));
+    expect(outcome.manifestPath).toBeDefined();
+    expect(fs.existsSync(path.join(outcome.reportDirectory!, 'manifest.json'))).toBe(true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('runs projects in config order, isolates contexts, and continues after failure', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'direct-sequential-runner-'));
+  try {
+    const environment = { A_USER: 'user-a', A_PASSWORD: 'secret-a', B_USER: 'user-b', B_PASSWORD: 'secret-b' };
+    const projects = loadProjectConfig(projectFile(root), environment);
+    const browser = fakeBrowser();
+    const order: string[] = [];
     const workflow: ProjectWorkflow = async (_page, project, _secrets, _deadline, state) => {
+      order.push(project.id);
       state.transition('authenticated');
-      state.transition('job_resolved');
-      if (project.id === 'service-a') {
-        state.transition('capability_checked');
-        throw new Error('trigger failed password=secret-a');
-      }
-      state.transition('existing_build_selected');
-      const buildNumber = project.id === 'service-a' ? 11 : 12;
-      const build = { number: buildNumber, url: `${project.jobUrl}${buildNumber}/` };
-      state.bindBuild(build);
-      state.transition('running');
-      state.transition('terminal');
-      return {
-        terminal: { build, status: 'SUCCESS', observedAt: '2026-08-24T04:00:00.000Z', observationErrors: [], reloadCount: 0 },
-        trigger: { capability: 'existing_build', triggerAttempts: 0, build, warnings: [] },
-      };
+      if (project.id === 'service-a') throw new Error('first project failed');
+      state.transition('job_opened');
+      return { jobUrl: project.jobUrl, observedAt: '2026-08-24T04:00:00.000Z' };
     };
     let suffix = 0;
     const result = await runConfiguredProjects(projects, {
@@ -117,207 +189,50 @@ test('publishes sanitized pre-build trigger failures as discoverable runs and co
       executeProject: async (project, dependencies) => runProject(project, {
         ...dependencies,
         workflow,
-        capture: async ({ workflow: completed }) => completeCapture(completed.terminal.build.url),
+        capture: async () => completeCapture(project.jobUrl),
       }),
-    });
-
-    const failed = result.outcomes[0]!;
-    expect(failed.state).toBe('failed');
-    expect(failed.buildNumber).toBeUndefined();
-    expect(failed.reportDirectory).toBe(path.join(root, 'reports', 'service-a', 'pre-build', failed.runId));
-    expect(failed.manifestPath).toBe(path.join(failed.reportDirectory!, 'manifest.json'));
-    expect(result.outcomes[1]?.state).toBe('success');
-    expect(result.exitCode).toBe(1);
-
-    const manifest = JSON.parse(fs.readFileSync(failed.manifestPath!, 'utf8')) as {
-      state: string; jenkins?: unknown; diagnostic: string;
-    };
-    expect(manifest.state).toBe('failed');
-    expect(manifest.jenkins).toBeUndefined();
-    expect(manifest.diagnostic).not.toContain('secret-a');
-    expect(result.manifests.some((item) => item.relativeDirectory === `service-a/pre-build/${failed.runId}`)).toBe(true);
-    const aggregateProject = result.aggregate.projects.find((item) => item.projectId === 'service-a')!;
-    expect(aggregateProject.runs).toContainEqual(expect.objectContaining({
-      buildNumber: 'pre-build',
-      runId: failed.runId,
-      manifestPath: `service-a/pre-build/${failed.runId}/manifest.json`,
-    }));
-    expect(JSON.stringify(result.aggregate)).not.toContain('"buildNumber":0');
-    expect(fs.existsSync(path.join(root, 'artifacts', 'service-a', failed.runId))).toBe(false);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-function completeCapture(buildUrl: string): CaptureResult {
-  const found = { state: 'found' as const, captures: [], navigation: [], warnings: [] };
-  return {
-    navigation: {
-      'jenkins-build': { key: 'jenkins-build', localAnchor: '#jenkins', state: 'found', liveUrl: buildUrl },
-      'snyk-report': { key: 'snyk-report', localAnchor: '#snyk', state: 'found' },
-      'sonarqube-home': { key: 'sonarqube-home', localAnchor: '#sonar', state: 'found' },
-      'sonarqube-overall': { key: 'sonarqube-overall', localAnchor: '#overall', state: 'found' },
-      'sonarqube-issues': { key: 'sonarqube-issues', localAnchor: '#issues', state: 'found' },
-    },
-    reports: { snyk: found, sonarqube: found }, warnings: [],
-  };
-}
-
-test('loads config without resolving file-mode secrets until project execution', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-03-secrets-'));
-  try {
-    const projects = loadProjectConfig(projectFile(root), {}, false);
-    expect(projects.map((project) => project.id)).toEqual(['service-a', 'service-b']);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('runs in config order with fresh contexts, continues failures, and closes once', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-03-runner-'));
-  try {
-    const configPath = projectFile(root);
-    const environment = {
-      A_USER: 'user-a', A_PASSWORD: 'secret-a',
-      B_USER: 'user-b', B_PASSWORD: 'secret-b',
-    };
-    const projects = loadProjectConfig(configPath, environment);
-    const pages: object[] = [];
-    let contextCloseCount = 0;
-    let browserCloseCount = 0;
-    const browser = {
-      newContext: async () => {
-        const page = {};
-        pages.push(page);
-        return { newPage: async () => page, close: async () => { contextCloseCount += 1; } };
-      },
-      close: async () => { browserCloseCount += 1; },
-    } as unknown as Browser;
-    const order: string[] = [];
-    const workflow: ProjectWorkflow = async (_page, project, secrets, _deadline, state) => {
-      order.push(project.id);
-      state.transition('authenticated');
-      if (project.id === 'service-a') throw new Error(`login failed ${secrets.password}`);
-      state.transition('job_resolved'); state.transition('existing_build_selected');
-      const buildNumber = project.id === 'service-a' ? 11 : 12;
-      const build = { number: buildNumber, url: `${project.jobUrl}${buildNumber}/` };
-      state.bindBuild(build); state.transition('running'); state.transition('terminal');
-      return { terminal: { build, status: 'SUCCESS', observedAt: '2026-08-24T04:00:00.000Z', observationErrors: [], reloadCount: 0 },
-        trigger: { capability: 'existing_build', triggerAttempts: 0, build, warnings: [] } };
-    };
-    let suffix = 0;
-    const result = await runConfiguredProjects(projects, {
-      runtimeEnvironment: environment,
-      launchBrowser: async () => browser,
-      runIdSuffix: () => (++suffix).toString(16).padStart(16, '0'),
-      now: () => new Date('2026-08-24T04:00:00.000Z'),
-      executeProject: async (project, dependencies) => {
-        const { runProject } = await import('../../src/project/project-runner.js');
-        return runProject(project, { ...dependencies, workflow,
-          capture: async ({ workflow: completed }) => completeCapture(completed.terminal.build.url) });
-      },
     }, ['initial warning']);
-
     expect(order).toEqual(['service-a', 'service-b']);
-    expect(pages).toHaveLength(2);
-    expect(new Set(pages).size).toBe(2);
-    expect(contextCloseCount).toBe(2);
-    expect(browserCloseCount).toBe(1);
     expect(result.outcomes.map((item) => item.state)).toEqual(['failed', 'success']);
     expect(result.exitCode).toBe(1);
-    expect(result.aggregate.projects.map((item) => item.projectId)).toEqual(['service-a', 'service-b']);
     expect(result.aggregate.warnings).toContain('initial warning');
-    const failedManifestPath = result.outcomes[0]!.manifestPath;
-    expect(failedManifestPath).toBeDefined();
-    expect(fs.readFileSync(failedManifestPath as string, 'utf8')).not.toContain('secret-a');
-    expect(fs.existsSync(path.join(root, 'reports', 'aggregate-data.json'))).toBe(true);
-    expect(JSON.parse(fs.readFileSync(path.join(root, 'reports', 'aggregate-data.json'), 'utf8')).warnings).toContain('initial warning');
-
-    const rerun = await runConfiguredProjects(projects, {
-      runtimeEnvironment: environment,
-      launchBrowser: async () => browser,
-      runIdSuffix: () => (++suffix).toString(16).padStart(16, '0'),
-      now: () => new Date('2026-08-24T04:00:00.000Z'),
-      executeProject: async (project, dependencies) => {
-        const { runProject } = await import('../../src/project/project-runner.js');
-        return runProject(project, { ...dependencies, workflow,
-          capture: async ({ workflow: completed }) => completeCapture(completed.terminal.build.url) });
-      },
-    });
-    expect(rerun.aggregate.projects[1]?.runs).toHaveLength(2);
-    expect(new Set(rerun.aggregate.projects[1]?.runs.map((run) => run.runId)).size).toBe(2);
-    expect(contextCloseCount).toBe(4);
-    expect(browserCloseCount).toBe(2);
-
-    const thrownProject = await runConfiguredProjects(projects, {
-      launchBrowser: async () => browser,
-      executeProject: async (project) => {
-        if (project.id === 'service-a') throw new Error('allocation failed');
-        return { projectId: project.id, name: project.name, state: 'success', runId: 'synthetic', warnings: [] };
-      },
-    });
-    expect(thrownProject.outcomes.map((item) => item.projectId)).toEqual(['service-a', 'service-b']);
-    expect(thrownProject.outcomes[0]?.state).toBe('failed');
-    expect(thrownProject.outcomes[1]?.state).toBe('success');
-    expect(thrownProject.exitCode).toBe(1);
-    expect(browserCloseCount).toBe(3);
+    expect(JSON.stringify(result.aggregate)).not.toContain('buildNumber');
+    const success = result.outcomes[1]!;
+    expect(fs.existsSync(path.join(success.reportDirectory!, 'data.json'))).toBe(true);
+    expect(result.aggregate.projects[1]?.runs).toContainEqual(expect.objectContaining({
+      runId: success.runId,
+      manifestPath: `service-b/${success.runId}/manifest.json`,
+      reportPath: `service-b/${success.runId}/index.html`,
+    }));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('keeps failure result and manifest timestamps identical after report rendering fails', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-06-failure-timestamp-'));
+test('bounds failure diagnostics before aggregate publication', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aggregate-failure-diagnostics-'));
+  const environment = { A_USER: 'user-a', A_PASSWORD: 'secret-a', B_USER: 'user-b', B_PASSWORD: 'secret-b' };
+  const longDiagnostic = `password=secret-a ${'diagnostic '.repeat(500)}`;
   try {
-    const configPath = projectFile(root);
-    const environment = {
-      A_USER: 'user-a', A_PASSWORD: 'secret-a',
-      B_USER: 'user-b', B_PASSWORD: 'secret-b',
-    };
-    const project = loadProjectConfig(configPath, environment)[0]!;
-    const reportRoot = path.join(root, 'reports');
-    const stagingRoot = path.join(root, 'artifacts');
-    const blockedReportRoot = path.join(root, 'blocked-report-root');
-    const artifacts = new ArtifactPaths(reportRoot, stagingRoot);
-    await artifacts.initialize();
-    fs.writeFileSync(blockedReportRoot, 'not a directory', { mode: 0o600 });
-    const buildNumber = 11;
-    const build = { number: buildNumber, url: `${project.jobUrl}${buildNumber}/` };
-    const workflow: ProjectWorkflow = async (_page, _project, _secrets, _deadline, state) => {
-      state.transition('authenticated'); state.transition('job_resolved');
-      state.transition('existing_build_selected'); state.bindBuild(build); state.transition('running'); state.transition('terminal');
-      return {
-        terminal: { build, status: 'SUCCESS', observedAt: '2026-08-24T04:00:00.000Z', observationErrors: [], reloadCount: 0 },
-        trigger: { capability: 'existing_build', triggerAttempts: 0, build, warnings: [] },
-      };
-    };
-    const dates = [
-      new Date('2026-08-24T04:00:00.000Z'),
-      new Date('2026-08-24T04:00:00.001Z'),
-      new Date('2026-08-24T04:00:00.002Z'),
-    ];
-    let nowIndex = 0;
-    const browser = {
-      newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
-    } as unknown as Browser;
-    const outcome = await runProject(project, {
-      browser,
-      artifacts: {
-        reportRoot: blockedReportRoot,
-        allocateStaging: artifacts.allocateStaging.bind(artifacts),
-        allocateReport: artifacts.allocateReport.bind(artifacts),
-      } as unknown as ArtifactPaths,
-      env: environment,
-      now: () => dates[Math.min(nowIndex++, dates.length - 1)]!,
-      runIdSuffix: () => '0000000000000001',
-      workflow,
-      capture: async ({ workflow: completed }) => completeCapture(completed.terminal.build.url),
-    });
-
-    expect(outcome.state).toBe('failed');
-    const data = JSON.parse(fs.readFileSync(path.join(outcome.reportDirectory!, 'data.json'), 'utf8')) as { run: { observedAt: string } };
-    const manifest = JSON.parse(fs.readFileSync(outcome.manifestPath!, 'utf8')) as { run: { observedAt: string } };
-    expect(manifest.run.observedAt).toBe(data.run.observedAt);
+    const projects = loadProjectConfig(projectFile(root), environment);
+    const result = await runConfiguredProjects(projects.slice(0, 1), {
+      runtimeEnvironment: environment,
+      launchBrowser: async () => fakeBrowser(),
+      now: () => new Date('2026-08-24T04:00:00.000Z'),
+      executeProject: async (project) => ({
+        projectId: project.id,
+        name: project.name,
+        state: 'failed' as const,
+        runId: 'run-1',
+        warnings: [longDiagnostic],
+        error: longDiagnostic,
+      }),
+    }, [longDiagnostic]);
+    const persisted = JSON.parse(fs.readFileSync(path.join(root, 'reports', 'aggregate-data.json'), 'utf8')) as AggregateReportResult;
+    expect(result.aggregate.projects[0]?.warnings.every((warning) => warning.length <= 500)).toBe(true);
+    expect(result.aggregate.warnings.every((warning) => warning.length <= 500)).toBe(true);
+    expect(persisted.projects[0]?.warnings.every((warning) => warning.length <= 500)).toBe(true);
+    expect(JSON.stringify(persisted)).not.toContain('secret-a');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

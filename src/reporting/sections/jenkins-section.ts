@@ -3,7 +3,7 @@ import { localAnchorHref, safeExternalHref } from '../report-links.js';
 import { REPORT_ANCHORS, stateClass, stateLabel, type ProjectReportViewModel } from '../report-view-model.js';
 
 const NAVIGATION_LABELS: Readonly<Record<string, string>> = {
-  'jenkins-build': 'Jenkins build',
+  'jenkins-job': 'Jenkins job',
   'snyk-report': 'Snyk test report',
   'sonarqube-home': 'SonarQube home',
   'sonarqube-overall': 'SonarQube Overall',
@@ -32,19 +32,15 @@ function navigationLinks(model: ProjectReportViewModel): string {
 
 export function renderJenkinsSection(model: ProjectReportViewModel): string {
   const jenkins = model.jenkins;
-  const build = jenkins === undefined
-    ? '<p class="state-message">No terminal Jenkins build identity was captured.</p>'
+  const job = jenkins === undefined
+    ? '<p class="state-message">No Jenkins job identity was captured.</p>'
     : `<dl class="metadata-grid">
-      <div><dt>Job path</dt><dd>${escapeHtmlText(jenkins.jobPath)}</dd></div>
-      <div><dt>Build</dt><dd>#${jenkins.buildNumber}</dd></div>
-      <div><dt>Status</dt><dd>${escapeHtmlText(jenkins.status)}</dd></div>
+      <div><dt>Job URL</dt><dd>${externalAction(jenkins.jobUrl) || escapeHtmlText(jenkins.jobUrl)}</dd></div>
       <div><dt>Observed</dt><dd>${escapeHtmlText(model.run.observedAt)}</dd></div>
-      <div><dt>Trigger</dt><dd>${escapeHtmlText(jenkins.trigger.capability)} (${jenkins.trigger.triggerAttempts} attempt(s))</dd></div>
-    </dl>
-    <p class="source-line">Build URL: ${externalAction(jenkins.buildUrl) || escapeHtmlText(jenkins.buildUrl)}</p>`;
+    </dl>`;
   return `<section id="jenkins" aria-labelledby="jenkins-heading">
-    <div class="section-heading"><div><p class="eyebrow">Jenkins</p><h2 id="jenkins-heading">Build and navigation</h2></div>${stateBadge(model.state)}</div>
-    ${build}
+    <div class="section-heading"><div><p class="eyebrow">Jenkins</p><h2 id="jenkins-heading">Job and navigation</h2></div>${stateBadge(model.state)}</div>
+    ${job}
     <nav aria-label="Report sections"><h3>Evidence navigation</h3>${navigationLinks(model)}</nav>
   </section>`;
 }

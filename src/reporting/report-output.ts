@@ -3,24 +3,49 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { ProjectFailureResultV2, ProjectRunManifest } from '../artifacts/artifact-manifest.js';
-import type { AggregateReportResult, VulnerabilityReportResultV2 } from '../result-types.js';
+import type { ProjectFailureResultV3, ProjectRunManifest } from '../artifacts/artifact-manifest.js';
+import type { AggregateReportResult, VulnerabilityReportResultV3 } from '../result-types.js';
 import { renderAggregateReport } from './aggregate-report-renderer.js';
 import { renderProjectReport } from './project-report-renderer.js';
 import { createProjectReportViewModel } from './report-view-model.js';
+import { withWorkflowDeadline, type WorkflowDeadline } from '../workflow/workflow-deadline.js';
 
-type ProjectResult = VulnerabilityReportResultV2 | ProjectFailureResultV2;
+type ProjectResult = VulnerabilityReportResultV3 | ProjectFailureResultV3;
 
 const stylesheetUrl = new URL('./report.css', import.meta.url);
+function requireDeadline(deadline?: WorkflowDeadline): void {
+  deadline?.requireRemaining();
+}
 
-async function writeTemporary(directory: string, contents: string): Promise<string> {
-  const temporary = path.join(directory, `.tmp-report-${crypto.randomBytes(8).toString('hex')}`);
-  const handle = await fsp.open(temporary, 'wx', 0o600);
+async function bounded<T>(operation: () => Promise<T>, deadline?: WorkflowDeadline): Promise<T> {
+  return deadline === undefined ? operation() : withWorkflowDeadline(operation, deadline);
+}
+
+async function cleanupWithinRemaining<T>(operation: () => Promise<T>, deadline?: WorkflowDeadline): Promise<T> {
+  if (deadline === undefined) return operation();
+  const timeoutMs = Math.max(1, deadline.remainingMs());
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await handle.writeFile(contents, 'utf8');
-    await handle.sync();
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('report output cleanup exceeded workflow deadline')), timeoutMs);
+    });
+    return await Promise.race([operation(), timeout]);
   } finally {
-    await handle.close();
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+
+async function writeTemporary(directory: string, contents: string, deadline?: WorkflowDeadline): Promise<string> {
+  requireDeadline(deadline);
+  const temporary = path.join(directory, `.tmp-report-${crypto.randomBytes(8).toString('hex')}`);
+  const handle = await bounded(() => fsp.open(temporary, 'wx', 0o600), deadline);
+  try {
+    await bounded(() => handle.writeFile(contents, 'utf8'), deadline);
+    await bounded(() => handle.sync(), deadline);
+    requireDeadline(deadline);
+  } finally {
+    await cleanupWithinRemaining(() => handle.close(), deadline).catch(() => undefined);
   }
   return temporary;
 }
@@ -29,44 +54,55 @@ async function writeAtomic(
   filename: string,
   contents: string,
   replace: boolean,
+  deadline?: WorkflowDeadline,
 ): Promise<void> {
-  const temporary = await writeTemporary(path.dirname(filename), contents);
+  requireDeadline(deadline);
+  const temporary = await writeTemporary(path.dirname(filename), contents, deadline);
   try {
+    requireDeadline(deadline);
     if (replace) {
-      await fsp.rename(temporary, filename);
+      await bounded(() => fsp.rename(temporary, filename), deadline);
     } else {
-      await fsp.link(temporary, filename);
+      await bounded(() => fsp.link(temporary, filename), deadline);
     }
+    requireDeadline(deadline);
   } finally {
-    await fsp.unlink(temporary).catch(() => undefined);
+    await cleanupWithinRemaining(() => fsp.unlink(temporary), deadline).catch(() => undefined);
   }
 }
 
-async function readStylesheet(): Promise<string> {
+async function readStylesheet(deadline?: WorkflowDeadline): Promise<string> {
+  requireDeadline(deadline);
+  let stylesheet: string;
   try {
-    return await fsp.readFile(stylesheetUrl, 'utf8');
+    stylesheet = await bounded(() => fsp.readFile(stylesheetUrl, 'utf8'), deadline);
   } catch {
-    return fsp.readFile(path.resolve('src/reporting/report.css'), 'utf8');
+    stylesheet = await bounded(() => fsp.readFile(path.resolve('src/reporting/report.css'), 'utf8'), deadline);
   }
+  requireDeadline(deadline);
+  return stylesheet;
 }
 
-async function ensureStylesheet(reportRoot: string): Promise<void> {
+async function ensureStylesheet(reportRoot: string, deadline?: WorkflowDeadline): Promise<void> {
+  requireDeadline(deadline);
   const assets = path.join(reportRoot, 'assets');
-  await fsp.mkdir(assets, { recursive: true, mode: 0o700 });
-  const stat = await fsp.lstat(assets);
+  await bounded(() => fsp.mkdir(assets, { recursive: true, mode: 0o700 }), deadline);
+  requireDeadline(deadline);
+  const stat = await bounded(() => fsp.lstat(assets), deadline);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Report assets directory is unsafe');
   const filename = path.join(assets, 'report.css');
   try {
-    const existing = await fsp.lstat(filename);
+    const existing = await bounded(() => fsp.lstat(filename), deadline);
     if (existing.isSymbolicLink() || !existing.isFile()) throw new Error('Report stylesheet is unsafe');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  await writeAtomic(filename, await readStylesheet(), true);
+  requireDeadline(deadline);
+  await writeAtomic(filename, await readStylesheet(deadline), true, deadline);
 }
 
 function defaultReportRoot(directory: string): string {
-  return path.resolve(directory, '../../../');
+  return path.resolve(directory, '../../');
 }
 
 export async function writeProjectReportFiles(
@@ -75,10 +111,13 @@ export async function writeProjectReportFiles(
   manifest: ProjectRunManifest,
   reportRoot = defaultReportRoot(directory),
   filename = path.join(directory, 'index.html'),
+  deadline?: WorkflowDeadline,
 ): Promise<string> {
-  await ensureStylesheet(reportRoot);
+  await ensureStylesheet(reportRoot, deadline);
+  requireDeadline(deadline);
   const model = createProjectReportViewModel(result, manifest);
-  await writeAtomic(filename, renderProjectReport(model), false);
+  await writeAtomic(filename, renderProjectReport(model), false, deadline);
+  requireDeadline(deadline);
   return filename;
 }
 
