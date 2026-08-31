@@ -1,6 +1,8 @@
 import { type Page } from '@playwright/test';
 
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
+import { deriveJenkinsBaseUrl } from '../../config-values.js';
+import type { BuildReference } from '../../types.js';
 import type { CaptureMetadata, NavigationTargets, SonarSourceEvidence } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import { boundedDiagnostics } from '../../workflow/diagnostics.js';
@@ -14,6 +16,7 @@ import {
   pageCaptureMetadata,
   projectKeyFromHome,
   assertProjectUrl,
+  assertSonarqubeUrlMatchesBuild,
   SONAR_VIEWPORT,
   terminalIdentity,
 } from './sonarqube-capture-support.js';
@@ -68,6 +71,7 @@ export async function captureSonarqubeEvidence(input: {
   deadline: WorkflowDeadline;
   outputDirectory: string;
   terminalBuildUrl?: string;
+  expectedBuild?: BuildReference;
 }): Promise<SonarCaptureResult> {
   let capturePage: Page | undefined;
   let routeHandler: ReturnType<typeof createRouteHandler> | undefined;
@@ -81,13 +85,13 @@ export async function captureSonarqubeEvidence(input: {
     'sonarqube-issues': sonarNavigation('sonarqube-issues', 'incomplete'),
   };
   try {
-    const terminalUrl = assertAllowedUrl(input.page.url(), input.project.baseUrl, [input.project.sourceOrigins.jenkins], 'Jenkins terminal URL');
+    const terminalUrl = assertAllowedUrl(input.page.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), [input.project.sourceOrigins.jenkins], 'Jenkins terminal URL');
     if (input.terminalBuildUrl !== undefined) {
-      const expected = assertAllowedUrl(input.terminalBuildUrl, input.project.baseUrl, [input.project.sourceOrigins.jenkins], 'terminal build URL');
+      const expected = assertAllowedUrl(input.terminalBuildUrl, deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), [input.project.sourceOrigins.jenkins], 'terminal build URL');
       if (terminalIdentity(terminalUrl) !== terminalIdentity(expected)) throw new Error('SonarQube capture did not start from the exact terminal Jenkins build');
     }
     const links = await pageLinkCandidates(input.page);
-    const classified = classifySonarLinks(links, input.project);
+    const classified = classifySonarLinks(links, input.project, input.expectedBuild);
     warnings.push(...classified.warnings);
     if (classified.home === undefined) return emptyResult(warnings.length === 0 ? 'not_found' : 'incomplete', warnings);
     const allowArchivedSnapshot = isArchivedSonarqubeSnapshot(new URL(classified.home.href));
@@ -100,24 +104,26 @@ export async function captureSonarqubeEvidence(input: {
     const response = await capturePage.goto(classified.home.href, { waitUntil: 'domcontentloaded', timeout: input.deadline.requireRemaining() });
     if (routeState.blocked) throw new Error('SonarQube request was blocked by the configured origin policy');
     if (response !== null && response.status() >= 400) throw new Error(`SonarQube home returned HTTP ${response.status()}`);
-    assertProjectUrl(
-      assertAllowedUrl(capturePage.url(), input.project.baseUrl, input.project.sourceOrigins.sonarqube, 'SonarQube home URL'),
+    const validatedInitialHomeUrl = assertProjectUrl(
+      assertAllowedUrl(capturePage.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), input.project.sourceOrigins.sonarqube, 'SonarQube home URL'),
       expectedKey,
       'home',
       allowArchivedSnapshot,
     );
+    assertSonarqubeUrlMatchesBuild(validatedInitialHomeUrl, input.project, input.expectedBuild);
     const homeStrategy = await assertHomeIdentity(capturePage, expectedKey, input.deadline, input.project.name, allowArchivedSnapshot);
     const validatedHomeUrl = assertProjectUrl(
-      assertAllowedUrl(capturePage.url(), input.project.baseUrl, input.project.sourceOrigins.sonarqube, 'SonarQube Overview URL'),
+      assertAllowedUrl(capturePage.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), input.project.sourceOrigins.sonarqube, 'SonarQube Overview URL'),
       expectedKey,
       'Overview',
       allowArchivedSnapshot,
     );
+    assertSonarqubeUrlMatchesBuild(validatedHomeUrl, input.project, input.expectedBuild);
     captures.push(await pageCaptureMetadata(capturePage, validatedHomeUrl, homeStrategy));
     navigation = { ...navigation, 'sonarqube-home': sonarNavigation('sonarqube-home', 'found', validatedHomeUrl) };
 
     try {
-      const overall = await captureOverallStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot });
+      const overall = await captureOverallStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot, ...(input.expectedBuild === undefined ? {} : { expectedBuild: input.expectedBuild }) });
       captures.push(overall.capture);
       if (overall.screenshot !== undefined) screenshots.push(overall.screenshot);
       warnings.push(...overall.warnings);
@@ -128,7 +134,7 @@ export async function captureSonarqubeEvidence(input: {
     }
 
     try {
-      const issues = await captureIssuesStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot });
+      const issues = await captureIssuesStep({ page: capturePage, project: input.project, expectedKey, deadline: input.deadline, outputDirectory: input.outputDirectory, allowArchivedSnapshot, ...(input.expectedBuild === undefined ? {} : { expectedBuild: input.expectedBuild }) });
       captures.push(issues.capture);
       if (issues.screenshot !== undefined) screenshots.push(issues.screenshot);
       facets = issues.facets;

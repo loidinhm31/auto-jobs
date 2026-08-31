@@ -9,6 +9,7 @@ import type { AddressInfo } from 'node:net';
 import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
 import { classifySnykLinks } from '../../src/reports/source-link-classifier.js';
 import { captureSnykEvidence } from '../../src/reports/snyk/snyk-capture.js';
+import { assertSnykUrlMatchesBuild } from '../../src/reports/snyk/snyk-capture-support.js';
 import { extractSnykHtml, type SnykHtmlEvidence } from '../../src/reports/snyk/snyk-html-extractor.js';
 import { normalizeSnykEvidence } from '../../src/reports/snyk/snyk-normalize.js';
 import { parseSnykSummaryJson } from '../../src/reports/snyk/snyk-summary-parser.js';
@@ -21,8 +22,8 @@ const summaryPath = path.resolve('templates/snyk-template/snyk-sca-results-summa
 function project(overrides: Record<string, unknown> = {}): NormalizedProjectConfig {
   return {
     id: 'service-a', name: 'Service A', enabled: true, schemaVersion: 1,
-    baseUrl: 'https://jenkins.example/jenkins', jobPath: 'service-a', jobUrl: 'https://jenkins.example/jenkins/job/service-a/',
-    loginPath: '/login', triggerMode: 'ui', timeoutMs: 30_000, pollIntervalMs: 50,
+    loginUrl: 'https://jenkins.example/jenkins/login',
+    jobUrl: 'https://jenkins.example/jenkins/job/service-a/',
     browser: 'chromium', artifactDir: 'reports',
     credentialVariables: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
     sourceOrigins: { jenkins: 'https://jenkins.example', snyk: ['https://jenkins.example'], sonarqube: [] },
@@ -126,6 +127,30 @@ test('classifies only Snyk-shaped allowed links and rejects ambiguity', () => {
   expect(ambiguous.warnings).toContain('ambiguous Snyk report candidates were rejected');
 });
 
+test('rejects archived Snyk links from a different selected build', () => {
+  const selectedBuild = { number: 42, url: 'https://jenkins.example/jenkins/job/service-a/42/' };
+  const result = classifySnykLinks([
+    { href: 'https://jenkins.example/jenkins/job/service-a/41/artifact/reports/snyk/index.html', text: 'Snyk test report' },
+    { href: 'https://jenkins.example/jenkins/job/service-a/42/artifact/reports/snyk/index.html', text: 'Snyk test report' },
+  ], project(), selectedBuild);
+  expect(result.report?.href).toBe(selectedBuild.url.replace('/42/', '/42/artifact/reports/snyk/index.html'));
+  expect(result.warnings).toContain('an observed Snyk link did not belong to the selected Jenkins build');
+});
+
+test('rejects a redirected archived Snyk URL from a different selected build', () => {
+  const selectedBuild = { number: 42, url: 'https://jenkins.example/jenkins/job/service-a/42/' };
+  expect(() => assertSnykUrlMatchesBuild(
+    'https://jenkins.example/jenkins/job/service-a/41/artifact/reports/snyk/index.html',
+    project(),
+    selectedBuild,
+  )).toThrow(/selected Jenkins build/u);
+  expect(() => assertSnykUrlMatchesBuild(
+    'https://snyk.example/report.html',
+    project({ sourceOrigins: { jenkins: 'https://jenkins.example', snyk: ['https://snyk.example'], sonarqube: [] } }),
+    selectedBuild,
+  )).not.toThrow();
+});
+
 test('captures a validated report section with fixed viewport and hashed screenshot', async ({ page }) => {
   const reportHtml = fs.readFileSync(templatePath, 'utf8');
   const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'snyk-capture-'));
@@ -146,7 +171,7 @@ test('captures a validated report section with fixed viewport and hashed screens
   });
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const configured = project({
-    baseUrl: `${origin}/jenkins`,
+    loginUrl: `${origin}/jenkins/login`,
     jobUrl: `${origin}/jenkins/job/service-a/`,
     sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [] },
     sources: { snyk: { allowedOrigins: [origin] }, sonarqube: { allowedOrigins: [] } },
@@ -196,7 +221,7 @@ test('captures the deterministic Jenkins archived Snyk fixture without a legacy 
   });
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const configured = project({
-    baseUrl: `${origin}/jenkins`,
+    loginUrl: `${origin}/jenkins/login`,
     jobUrl: `${origin}/jenkins/job/service-a/`,
     sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [] },
     sources: { snyk: { allowedOrigins: [origin] }, sonarqube: { allowedOrigins: [] } },

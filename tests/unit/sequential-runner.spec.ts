@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
-import { parseProjectsConfig } from '../../src/config.js';
+import { loadProjectConfig } from '../../src/config.js';
 import { ArtifactPaths } from '../../src/artifacts/artifact-paths.js';
 import { stagingLeasePath } from '../../src/artifacts/staging-lease.js';
 import type { CaptureResult } from '../../src/project/project-runner.js';
@@ -12,17 +12,26 @@ import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
 import { runConfiguredProjects } from '../../src/runner.js';
 
-function projectFile(root: string, firstBuildNumber: number | undefined = 11): string {
+function projectFile(root: string): string {
   const filePath = path.join(root, 'projects.json');
   fs.writeFileSync(filePath, JSON.stringify({
     schemaVersion: 1,
-    defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000, pollIntervalMs: 50 },
+    defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
     projects: [
-      { id: 'service-a', name: 'Service A', baseUrl: 'https://jenkins.example', jobPath: 'service-a',
-        ...(firstBuildNumber === undefined ? {} : { buildNumber: firstBuildNumber }),
-        credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
-      { id: 'service-b', name: 'Service B', baseUrl: 'https://jenkins.example', jobPath: 'service-b',
-        buildNumber: 12, credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
+      {
+        id: 'service-a',
+        name: 'Service A',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/service-a/',
+        credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' },
+      },
+      {
+        id: 'service-b',
+        name: 'Service B',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/service-b/',
+        credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' },
+      },
     ],
   }), { mode: 0o600 });
   return filePath;
@@ -32,11 +41,10 @@ test('keeps the pre-build staging lease until failure publication renames the di
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-pre-build-lease-'));
   try {
     const environment = {
-      PROJECTS_CONFIG_PATH: projectFile(root, undefined),
       A_USER: 'user-a', A_PASSWORD: 'secret-a',
       B_USER: 'user-b', B_PASSWORD: 'secret-b',
     };
-    const project = parseProjectsConfig(environment).projects[0]!;
+    const project = loadProjectConfig(projectFile(root), environment)[0]!;
     const artifacts = new ArtifactPaths(path.join(root, 'reports'), path.join(root, 'artifacts'));
     await artifacts.initialize();
     const browser = {
@@ -72,13 +80,12 @@ test('keeps the pre-build staging lease until failure publication renames the di
 test('publishes sanitized pre-build trigger failures as discoverable runs and continues', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-08-pre-build-failure-'));
   try {
-    const configPath = projectFile(root, undefined);
+    const configPath = projectFile(root);
     const environment = {
-      PROJECTS_CONFIG_PATH: configPath,
       A_USER: 'user-a', A_PASSWORD: 'secret-a',
       B_USER: 'user-b', B_PASSWORD: 'secret-b',
     };
-    const projects = parseProjectsConfig(environment).projects;
+    const projects = loadProjectConfig(configPath, environment);
     const browser = {
       newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
       close: async () => undefined,
@@ -91,7 +98,8 @@ test('publishes sanitized pre-build trigger failures as discoverable runs and co
         throw new Error('trigger failed password=secret-a');
       }
       state.transition('existing_build_selected');
-      const build = { number: project.buildNumber as number, url: `${project.jobUrl}${project.buildNumber}/` };
+      const buildNumber = project.id === 'service-a' ? 11 : 12;
+      const build = { number: buildNumber, url: `${project.jobUrl}${buildNumber}/` };
       state.bindBuild(build);
       state.transition('running');
       state.transition('terminal');
@@ -155,11 +163,11 @@ function completeCapture(buildUrl: string): CaptureResult {
   };
 }
 
-test('defers file-mode secret lookup until each project becomes active', () => {
+test('loads config without resolving file-mode secrets until project execution', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-03-secrets-'));
   try {
-    const result = parseProjectsConfig({ PROJECTS_CONFIG_PATH: projectFile(root) });
-    expect(result.projects.map((project) => project.id)).toEqual(['service-a', 'service-b']);
+    const projects = loadProjectConfig(projectFile(root), {}, false);
+    expect(projects.map((project) => project.id)).toEqual(['service-a', 'service-b']);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -170,11 +178,10 @@ test('runs in config order with fresh contexts, continues failures, and closes o
   try {
     const configPath = projectFile(root);
     const environment = {
-      PROJECTS_CONFIG_PATH: configPath,
       A_USER: 'user-a', A_PASSWORD: 'secret-a',
       B_USER: 'user-b', B_PASSWORD: 'secret-b',
     };
-    const projects = parseProjectsConfig(environment).projects;
+    const projects = loadProjectConfig(configPath, environment);
     const pages: object[] = [];
     let contextCloseCount = 0;
     let browserCloseCount = 0;
@@ -192,7 +199,8 @@ test('runs in config order with fresh contexts, continues failures, and closes o
       state.transition('authenticated');
       if (project.id === 'service-a') throw new Error(`login failed ${secrets.password}`);
       state.transition('job_resolved'); state.transition('existing_build_selected');
-      const build = { number: project.buildNumber as number, url: `${project.jobUrl}${project.buildNumber}/` };
+      const buildNumber = project.id === 'service-a' ? 11 : 12;
+      const build = { number: buildNumber, url: `${project.jobUrl}${buildNumber}/` };
       state.bindBuild(build); state.transition('running'); state.transition('terminal');
       return { terminal: { build, status: 'SUCCESS', observedAt: '2026-08-24T04:00:00.000Z', observationErrors: [], reloadCount: 0 },
         trigger: { capability: 'existing_build', triggerAttempts: 0, build, warnings: [] } };
@@ -263,18 +271,18 @@ test('keeps failure result and manifest timestamps identical after report render
   try {
     const configPath = projectFile(root);
     const environment = {
-      PROJECTS_CONFIG_PATH: configPath,
       A_USER: 'user-a', A_PASSWORD: 'secret-a',
       B_USER: 'user-b', B_PASSWORD: 'secret-b',
     };
-    const project = parseProjectsConfig(environment).projects[0]!;
+    const project = loadProjectConfig(configPath, environment)[0]!;
     const reportRoot = path.join(root, 'reports');
     const stagingRoot = path.join(root, 'artifacts');
     const blockedReportRoot = path.join(root, 'blocked-report-root');
     const artifacts = new ArtifactPaths(reportRoot, stagingRoot);
     await artifacts.initialize();
     fs.writeFileSync(blockedReportRoot, 'not a directory', { mode: 0o600 });
-    const build = { number: project.buildNumber as number, url: `${project.jobUrl}${project.buildNumber}/` };
+    const buildNumber = 11;
+    const build = { number: buildNumber, url: `${project.jobUrl}${buildNumber}/` };
     const workflow: ProjectWorkflow = async (_page, _project, _secrets, _deadline, state) => {
       state.transition('authenticated'); state.transition('job_resolved');
       state.transition('existing_build_selected'); state.bindBuild(build); state.transition('running'); state.transition('terminal');

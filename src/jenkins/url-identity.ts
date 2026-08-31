@@ -1,4 +1,4 @@
-import { assertAllowedUrl, isWithinBasePath } from '../config.js';
+import { assertAllowedUrl, isWithinBasePath } from '../security/url-policy.js';
 import type { BuildReference, QueueReference } from '../types.js';
 
 function pathname(url: string): string {
@@ -61,6 +61,38 @@ export function parseBuildReference(
   const match = new RegExp(`^${escapeRegex(pathname(jobUrl))}/(\\d+)$`).exec(pathname(safeUrl));
   const number = match === null ? undefined : parsePositiveSafeInteger(match[1]!);
   return number === undefined ? undefined : { number, url: safeUrl };
+}
+
+export function isJenkinsArtifactForBuild(
+  jobUrl: string,
+  candidateUrl: string,
+  buildNumber: number,
+): boolean {
+  if (!Number.isSafeInteger(buildNumber) || buildNumber < 1) return false;
+  try {
+    const job = new URL(jobUrl);
+    const candidate = new URL(candidateUrl);
+    if (job.origin !== candidate.origin || candidate.search || candidate.hash) return false;
+    return isJenkinsArtifactPathForBuild(jobUrl, candidateUrl, buildNumber);
+  } catch {
+    return false;
+  }
+}
+
+export function isJenkinsArtifactPathForBuild(
+  jobUrl: string,
+  candidateUrl: string,
+  buildNumber: number,
+): boolean {
+  if (!Number.isSafeInteger(buildNumber) || buildNumber < 1) return false;
+  try {
+    const job = new URL(jobUrl);
+    const candidate = new URL(candidateUrl);
+    return job.origin === candidate.origin &&
+      candidate.pathname.startsWith(`${pathname(jobUrl)}/${buildNumber}/artifact/`);
+  } catch {
+    return false;
+  }
 }
 
 function escapeRegex(value: string): string {

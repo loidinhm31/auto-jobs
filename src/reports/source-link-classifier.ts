@@ -1,5 +1,8 @@
 import type { NormalizedProjectConfig } from '../config/config-types.js';
+import { isJenkinsArtifactPathForBuild } from '../jenkins/url-identity.js';
+import type { BuildReference } from '../types.js';
 import { assertAllowedUrl } from '../security/url-policy.js';
+import { deriveJenkinsBaseUrl } from '../config-values.js';
 
 export type SourcePublisher = 'jenkins' | 'snyk' | 'sonarqube' | 'unknown';
 
@@ -53,9 +56,22 @@ function basename(href: string): string {
   }
 }
 
-function isArchivedSnykArtifact(href: string): boolean {
+export function isArchivedSnykArtifact(href: string): boolean {
   const pathname = pathText(href);
-  return pathname.includes('/artifact/') && /(?:^|\/)snyk\//u.test(pathname);
+  const artifactPath = pathname.split('/artifact/')[1] ?? '';
+  return /(?:^|\/)snyk(?:[-\/]|$)/u.test(artifactPath);
+}
+
+function matchesSelectedBuild(
+  href: string,
+  project: NormalizedProjectConfig,
+  expectedBuild: BuildReference | undefined,
+): boolean {
+  if (expectedBuild === undefined) return true;
+  const candidateUrl = new URL(href);
+  const jenkinsOrigin = new URL(project.sourceOrigins.jenkins).origin;
+  return candidateUrl.origin !== jenkinsOrigin || !candidateUrl.pathname.includes('/artifact/') ||
+    isJenkinsArtifactPathForBuild(project.jobUrl, href, expectedBuild.number);
 }
 
 export function classifyPublisherLink(candidate: PageLinkCandidate): SourcePublisher {
@@ -91,24 +107,6 @@ function classifySnykCandidate(candidate: PageLinkCandidate): ClassifiedSourceLi
   };
 }
 
-function configuredLink(
-  href: string | undefined,
-  kind: ClassifiedSourceLink['kind'],
-  project: NormalizedProjectConfig,
-): ClassifiedSourceLink | undefined {
-  if (href === undefined) return undefined;
-  try {
-    const validated = assertAllowedUrl(
-      canonicalArtifactUrl(href),
-      project.baseUrl,
-      project.sourceOrigins.snyk,
-      'configured Snyk destination',
-    );
-    return { href: validated, publisher: 'snyk', kind, signal: 'configured' };
-  } catch {
-    return undefined;
-  }
-}
 
 function chooseSingle(
   candidates: readonly ClassifiedSourceLink[],
@@ -125,21 +123,24 @@ function chooseSingle(
 export function classifySnykLinks(
   candidates: readonly PageLinkCandidate[],
   project: NormalizedProjectConfig,
+  expectedBuild?: BuildReference,
 ): SnykLinkClassification {
   const warnings: string[] = [];
-  const configuredReport = configuredLink(project.sources.snyk.reportPath, 'report', project)
-    ?? configuredLink(project.sources.snyk.homeUrl, 'report', project);
-  const reports: ClassifiedSourceLink[] = configuredReport === undefined ? [] : [configuredReport];
+  const reports: ClassifiedSourceLink[] = [];
   const summaries: ClassifiedSourceLink[] = [];
 
   for (const candidate of candidates) {
     const classified = classifySnykCandidate(candidate);
     if (classified === undefined) continue;
+    if (!matchesSelectedBuild(classified.href, project, expectedBuild)) {
+      warnings.push('an observed Snyk link did not belong to the selected Jenkins build');
+      continue;
+    }
     let validated: string;
     try {
       validated = assertAllowedUrl(
         candidate.href,
-        project.baseUrl,
+        deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl),
         project.sourceOrigins.snyk,
         'observed Snyk link',
       );
@@ -153,13 +154,10 @@ export function classifySnykLinks(
   }
 
   return {
-    ...(configuredReport === undefined ? {} : { report: configuredReport }),
-    ...(configuredReport === undefined
-      ? (() => {
-        const report = chooseSingle(reports, 'Snyk report', warnings);
-        return report === undefined ? {} : { report };
-      })()
-      : {}),
+    ...(() => {
+      const report = chooseSingle(reports, 'Snyk report', warnings);
+      return report === undefined ? {} : { report };
+    })(),
     ...(() => {
       const summary = chooseSingle(summaries, 'Snyk summary', warnings);
       return summary === undefined ? {} : { summary };

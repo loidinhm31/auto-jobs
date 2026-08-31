@@ -1,89 +1,129 @@
-import * as path from 'node:path';
-
 import { expect, test } from '@playwright/test';
+import type { ProjectConfigDocumentV1 } from '../../src/config/config-types.js';
 
 import {
+  assertProjectConfigDocument,
+  deriveJenkinsBaseUrl,
   formatDiagnostic,
-  normalizeBaseUrl,
-  parseConfig,
-  parseSelector,
+  normalizeConfiguredUrl,
+  normalizeProjectConfigDocument,
 } from '../../src/config.js';
+import { parseReportArguments } from '../../src/cli.js';
 
-function validEnvironment(): NodeJS.ProcessEnv {
+function validDocument(): ProjectConfigDocumentV1 {
   return {
-    JENKINS_BASE_URL: 'http://127.0.0.1:8080/',
-    JENKINS_USERNAME: 'local-admin',
-    JENKINS_PASSWORD: 'super-secret-password',
-    JENKINS_JOB_PATH: '/folder/Playwright vulnerability report/',
-    SONAR_REPORT_SELECTOR:
-      '{"kind":"testId","value":"sonarqube-report","required":false}',
-    SNYK_REPORT_SELECTOR:
-      '{"kind":"testId","value":"snyk-report","required":false}',
+    schemaVersion: 1,
+    defaults: {
+      credentials: {
+        usernameVariable: 'JENKINS_USERNAME',
+        passwordVariable: 'JENKINS_PASSWORD',
+      },
+      timeoutMs: 30_000,
+      browser: 'chromium',
+      artifactDir: 'reports',
+    },
+    projects: [{
+      id: 'service-a',
+      name: 'Service A',
+      loginUrl: 'https://jenkins.example/jenkins/login',
+      jobUrl: 'https://jenkins.example/jenkins/job/service-a/',
+      sourceOrigins: {
+        jenkins: ['https://jenkins.example'],
+        snyk: ['https://snyk.example'],
+        sonarqube: ['https://sonar.example'],
+      },
+      selectors: {
+        authLandmark: {
+          kind: 'role',
+          value: 'link',
+          name: 'Manage Jenkins',
+          required: false,
+        },
+      },
+      snyk: { projectId: 'service-a' },
+      sonarqube: { projectId: 'service-a' },
+    }],
   };
 }
 
-test('parses a valid environment once and normalizes public paths', () => {
-  const config = parseConfig(validEnvironment());
+const secrets = {
+  JENKINS_USERNAME: 'local-admin',
+  JENKINS_PASSWORD: 'super-secret-password',
+};
 
-  expect(config.baseUrl).toBe('http://127.0.0.1:8080');
-  expect(config.jobPath).toBe('folder/Playwright%20vulnerability%20report');
-  expect(config.loginPath).toBe('/login');
-  expect(config.triggerMode).toBe('ui');
-  expect(config.browser).toBe('chromium');
-  expect(config.timeoutMs).toBe(300_000);
-  expect(config.pollIntervalMs).toBe(1_000);
-  expect(config.artifactDir).toBe(path.resolve('reports'));
-  expect(config.selectors.authLandmark.required).toBe(false);
-  expect(config.selectors.sonarqubeReport.required).toBe(false);
-  expect(config.selectors.snykReport.kind).toBe('testId');
+test('normalizes exact URLs, defaults, selectors, and runtime-only credentials', () => {
+  const [config] = normalizeProjectConfigDocument(validDocument(), secrets);
+
+  expect(config?.loginUrl).toBe('https://jenkins.example/jenkins/login');
+  expect(config?.jobUrl).toBe('https://jenkins.example/jenkins/job/service-a/');
+  expect(config?.timeoutMs).toBe(30_000);
+  expect(config?.browser).toBe('chromium');
+  expect(config?.artifactDir).toMatch(/reports$/u);
+  expect(config?.selectors.authLandmark.required).toBe(false);
+  expect(config?.selectors.sonarqubeReport.value).toBe('sonarqube-report');
+  expect(config?.selectors.snykReport.value).toBe('snyk-report');
+  expect(config).not.toHaveProperty('baseUrl');
+  expect(config).not.toHaveProperty('username');
+  expect(config).not.toHaveProperty('password');
 });
 
-test('supports an existing build without requiring a trigger', () => {
-  const environment = validEnvironment();
-  environment.JENKINS_BUILD_NUMBER = '12';
-
-  expect(parseConfig(environment).buildNumber).toBe(12);
+test('parses only an explicit config path', () => {
+  expect(parseReportArguments(['--config', 'config/projects.json'])).toEqual({
+    configPath: 'config/projects.json',
+  });
+  expect(() => parseReportArguments([])).toThrow(/--config <path>/u);
+  expect(() => parseReportArguments(['--config', 'one.json', '--config', 'two.json'])).toThrow(
+    /duplicate/u,
+  );
+  expect(() => parseReportArguments(['--unknown', 'value'])).toThrow(/unknown option/u);
+  expect(() => parseReportArguments(['config/projects.json'])).toThrow(/positional/u);
+  expect(() => parseReportArguments(['--config'])).toThrow(/requires a path/u);
 });
 
-test('rejects URL credentials, queries, and fragments', () => {
-  expect(() => normalizeBaseUrl('https://user:password@example.test')).toThrow(
-    /credentials/u,
-  );
-  expect(() => normalizeBaseUrl('https://example.test/?token=secret')).toThrow(
-    /query/u,
-  );
-  expect(() => normalizeBaseUrl('https://example.test/#secret')).toThrow(
-    /query/u,
-  );
+test('requires credential-free HTTP(S) URLs and a shared Jenkins context', () => {
+  expect(deriveJenkinsBaseUrl(
+    'https://jenkins.example/jenkins/login',
+    'https://jenkins.example/jenkins/job/service-a/',
+  )).toBe('https://jenkins.example/jenkins');
+  expect(() => normalizeConfiguredUrl(
+    'https://user:password@example.test/jenkins/login',
+    'loginUrl',
+  )).toThrow(/credentials/u);
+  expect(() => normalizeConfiguredUrl(
+    'https://example.test/jenkins/job/service-a?token=secret',
+    'jobUrl',
+  )).toThrow(/credential-like/u);
+  expect(() => normalizeConfiguredUrl(
+    'https://example.test/jenkins/login#secret',
+    'loginUrl',
+  )).toThrow(/fragment/u);
+  expect(() => deriveJenkinsBaseUrl(
+    'https://jenkins.example/jenkins/login',
+    'https://jenkins.example/other/job/service-a/',
+  )).toThrow(/base context/u);
 });
 
-test('rejects invalid durations, enums, and selector shapes', () => {
-  const environment = validEnvironment();
-  environment.JENKINS_TIMEOUT_MS = '0';
-  environment.JENKINS_POLL_INTERVAL_MS = '-1';
-  environment.JENKINS_TRIGGER_MODE = 'api';
-  environment.PLAYWRIGHT_BROWSER = 'safari';
-  environment.SONAR_REPORT_SELECTOR = '{"kind":"unsupported","value":"x"}';
-
-  expect(() => parseConfig(environment)).toThrow(/invalid/u);
-  expect(() => parseSelector('{"kind":"css"}', 'REPORT_SELECTOR')).toThrow(
-    /value/u,
-  );
-});
-
-test('rejects invalid job paths and preserves no secret in config errors', () => {
-  const environment = validEnvironment();
-  environment.JENKINS_JOB_PATH = 'https://jenkins.example/job/demo?token=secret';
-
-  let message = '';
-  try {
-    parseConfig(environment);
-  } catch (error) {
-    message = error instanceof Error ? error.message : String(error);
-  }
-
-  expect(message).toContain('JENKINS_JOB_PATH');
-  expect(message).not.toContain(environment.JENKINS_PASSWORD ?? '');
+test('rejects legacy fields, invalid options, and unsafe selectors', () => {
+  const document = validDocument();
+  expect(() => assertProjectConfigDocument({
+    ...document,
+    projects: [{
+      ...document.projects[0],
+      baseUrl: 'https://jenkins.example',
+      jobPath: 'service-a',
+    }],
+  })).toThrow(/not supported/u);
+  expect(() => assertProjectConfigDocument({
+    ...document,
+    defaults: { ...document.defaults, browser: 'safari' },
+  })).toThrow(/browser/u);
+  expect(() => assertProjectConfigDocument({
+    ...document,
+    projects: [{
+      ...document.projects[0],
+      selectors: { authLandmark: { kind: 'css' } },
+    }],
+  })).toThrow(/selector/u);
 });
 
 test('redacts supplied secrets and sensitive URL data from diagnostics', () => {

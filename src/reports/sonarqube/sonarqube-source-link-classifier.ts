@@ -1,5 +1,8 @@
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
+import { isJenkinsArtifactPathForBuild } from '../../jenkins/url-identity.js';
+import type { BuildReference } from '../../types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
+import { deriveJenkinsBaseUrl } from '../../config-values.js';
 import type {
   ClassifiedSourceLink,
   PageLinkCandidate,
@@ -20,14 +23,7 @@ function candidateText(candidate: PageLinkCandidate): string {
 
 function configuredProjectId(project: NormalizedProjectConfig): string | undefined {
   const projectId = project.sources.sonarqube.projectId?.trim();
-  if (projectId !== undefined && projectId.length > 0) return projectId;
-  const homeUrl = project.sources.sonarqube.homeUrl;
-  if (homeUrl === undefined) return undefined;
-  try {
-    return exactQueryValue(new URL(homeUrl), 'id');
-  } catch {
-    return undefined;
-  }
+  return projectId === undefined || projectId.length === 0 ? undefined : projectId;
 }
 
 function sonarHome(candidate: PageLinkCandidate, project: NormalizedProjectConfig): ClassifiedSourceLink | undefined {
@@ -40,7 +36,7 @@ function sonarHome(candidate: PageLinkCandidate, project: NormalizedProjectConfi
   const expectedProjectId = configuredProjectId(project);
   const archivedSnapshot = isArchivedSonarqubeSnapshot(url);
   if (hasProjectIdParameter && projectId === undefined) return undefined;
-  const snapshotProjectId = projectId ?? (archivedSnapshot ? expectedProjectId ?? project.id : undefined);
+  const snapshotProjectId = projectId ?? (archivedSnapshot ? expectedProjectId : undefined);
   const configuredOrigin = project.sourceOrigins.sonarqube.some((origin) => {
     try { return new URL(origin).origin === url.origin; } catch { return false; }
   });
@@ -54,40 +50,41 @@ function sonarHome(candidate: PageLinkCandidate, project: NormalizedProjectConfi
   };
 }
 
-function configuredHome(href: string | undefined, project: NormalizedProjectConfig): ClassifiedSourceLink | undefined {
-  if (href === undefined) return undefined;
-  try {
-    const validated = assertAllowedUrl(href, project.baseUrl, project.sourceOrigins.sonarqube, 'configured SonarQube home');
-    const url = new URL(validated);
-    const projectId = exactQueryValue(url, 'id');
-    const expectedProjectId = configuredProjectId(project);
-    if (!hasCredentialFreeAuthority(url) || !url.pathname.toLowerCase().replace(/\/+$/u, '').endsWith('/dashboard') || projectId === undefined ||
-      (expectedProjectId !== undefined && projectId !== expectedProjectId)) return undefined;
-    return { href: validated, publisher: 'sonarqube', kind: 'home', signal: 'configured' };
-  } catch {
-    return undefined;
-  }
+
+function matchesSelectedBuild(
+  href: string,
+  project: NormalizedProjectConfig,
+  expectedBuild: BuildReference | undefined,
+): boolean {
+  if (expectedBuild === undefined) return true;
+  const candidateUrl = new URL(href);
+  const jenkinsOrigin = new URL(project.sourceOrigins.jenkins).origin;
+  return candidateUrl.origin !== jenkinsOrigin || !candidateUrl.pathname.includes('/artifact/') ||
+    isJenkinsArtifactPathForBuild(project.jobUrl, href, expectedBuild.number);
 }
 
 export function classifySonarLinks(
   candidates: readonly PageLinkCandidate[],
   project: NormalizedProjectConfig,
+  expectedBuild?: BuildReference,
 ): SonarLinkClassification {
   const warnings: string[] = [];
-  const configured = configuredHome(project.sources.sonarqube.homeUrl, project);
-  const homes: ClassifiedSourceLink[] = configured === undefined ? [] : [configured];
+  const homes: ClassifiedSourceLink[] = [];
   for (const candidate of candidates) {
     const classified = sonarHome(candidate, project);
     if (classified === undefined) continue;
+    if (!matchesSelectedBuild(classified.href, project, expectedBuild)) {
+      warnings.push('an observed SonarQube link did not belong to the selected Jenkins build');
+      continue;
+    }
     try {
-      const href = assertAllowedUrl(classified.href, project.baseUrl, project.sourceOrigins.sonarqube, 'observed SonarQube home');
+      const href = assertAllowedUrl(classified.href, deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.sonarqube, 'observed SonarQube home');
       homes.push({ ...classified, href });
     } catch {
       warnings.push('an observed SonarQube home link was outside the configured origins');
     }
   }
   const unique = [...new Map(homes.map((home) => [home.href, home])).values()];
-  if (configured !== undefined) return { home: configured, warnings };
   if (unique.length > 1) warnings.push('ambiguous SonarQube home candidates were rejected');
   return { ...(unique.length === 1 ? { home: unique[0] } : {}), warnings };
 }

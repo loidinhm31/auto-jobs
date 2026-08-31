@@ -1,14 +1,37 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-import { formatDiagnostic } from './config-errors.js';
-import { runFromEnvironment } from './runner.js';
-import { runFromTemplates } from './templates/template-report-runner.js';
+import { ConfigError, formatDiagnostic } from './config-errors.js';
+import { runFromConfig } from './runner.js';
 
-function reportSource(): 'templates' | 'jenkins' {
-  const source = process.env['REPORT_SOURCE']?.trim() || 'templates';
-  if (source === 'templates' || source === 'jenkins') return source;
-  throw new Error('REPORT_SOURCE must be templates or jenkins');
+export interface ReportArguments {
+  readonly configPath: string;
+}
+
+export function parseReportArguments(args: readonly string[] = process.argv.slice(2)): ReportArguments {
+  const issues: string[] = [];
+  let configPath: string | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === undefined) continue;
+    if (argument === '--config') {
+      if (configPath !== undefined) issues.push('duplicate --config option');
+      const candidate = args[index + 1];
+      if (candidate === undefined || candidate.length === 0 || candidate.startsWith('--')) {
+        issues.push('--config requires a path');
+        continue;
+      }
+      configPath = candidate;
+      index += 1;
+      continue;
+    }
+    if (argument.startsWith('--')) issues.push(`unknown option ${argument}`);
+    else issues.push(`unexpected positional argument ${argument}`);
+  }
+  if (configPath === undefined) issues.push('--config <path> is required');
+  if (issues.length > 0) throw new ConfigError(issues);
+  return { configPath: configPath as string };
 }
 
 function terminalText(value: string, maximum = 512): string {
@@ -70,10 +93,12 @@ async function reportSummary(reportDirectory: string): Promise<string | undefine
   }
 }
 
-try {
-  const source = reportSource();
-  const result = source === 'templates' ? await runFromTemplates() : await runFromEnvironment();
-  if (source === 'templates') console.log('report source: checked-in templates (no Jenkins job was run)');
+export async function main(
+  args: readonly string[] = process.argv.slice(2),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const { configPath } = parseReportArguments(args);
+  const result = await runFromConfig(configPath, env);
   for (const outcome of result.outcomes) {
     const projectId = terminalText(outcome.projectId, 128);
     console.log(`${projectId}: ${terminalText(outcome.state, 32)}`);
@@ -88,7 +113,13 @@ try {
   for (const warning of result.warnings) console.warn(terminalText(warning));
   console.log(`aggregate report: ${terminalText(path.join(result.reportRoot, 'index.html'))}`);
   process.exitCode = result.exitCode;
-} catch (error) {
-  console.error(terminalText(formatDiagnostic(error)));
-  process.exitCode = 1;
+}
+
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    await main();
+  } catch (error) {
+    console.error(terminalText(formatDiagnostic(error)));
+    process.exitCode = 1;
+  }
 }

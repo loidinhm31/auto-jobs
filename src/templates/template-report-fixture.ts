@@ -46,7 +46,37 @@ async function descriptorPath(fileDescriptor: number): Promise<string> {
   return fs.realpath(path.join('/proc/self/fd', String(fileDescriptor)));
 }
 
-async function readTemplate(root: string, relativePath: string): Promise<string> {
+interface FileIdentity {
+  readonly dev: number;
+  readonly ino: number;
+}
+
+function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+async function windowsPathIsSafe(root: string, filename: string, handle?: fs.FileHandle): Promise<boolean> {
+  try {
+    let current = path.parse(filename).root;
+    for (const segment of path.relative(current, filename).split(path.sep).filter(Boolean)) {
+      current = path.join(current, segment);
+      if ((await fs.lstat(current)).isSymbolicLink()) return false;
+    }
+    const canonicalRoot = await fs.realpath(root);
+    const canonicalFilename = await fs.realpath(filename);
+    const relative = path.relative(canonicalRoot, canonicalFilename);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return false;
+    if (handle !== undefined) {
+      const [pathStat, handleStat] = await Promise.all([fs.stat(filename), handle.stat()]);
+      if (pathStat.dev !== handleStat.dev || pathStat.ino !== handleStat.ino) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readTemplate(root: string, relativePath: string, expectedRootIdentity: FileIdentity): Promise<string> {
   const target = path.resolve(root, relativePath);
   const relative = path.relative(root, target);
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('Template path escapes the configured template root');
@@ -55,17 +85,28 @@ async function readTemplate(root: string, relativePath: string): Promise<string>
     fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
   );
   try {
-    const openedRoot = await descriptorPath(rootHandle.fd);
+    const openedRoot = process.platform === 'win32' ? root : await descriptorPath(rootHandle.fd);
     if (openedRoot !== root) throw new Error('Template root changed while it was being opened');
+    if (process.platform === 'win32' && (!(await windowsPathIsSafe(root, root)) || !(await windowsPathIsSafe(root, root, rootHandle)) || !sameIdentity(await rootHandle.stat(), expectedRootIdentity))) {
+      throw new Error('Template root changed while it was being opened');
+    }
+    if (process.platform === 'win32' && !(await windowsPathIsSafe(root, target))) {
+      throw new Error(`Template source contains an unsafe path: ${relativePath}`);
+    }
     const templateHandle = await fs.open(
-      path.join('/proc/self/fd', String(rootHandle.fd), relativePath),
+      process.platform === 'win32' ? target : path.join('/proc/self/fd', String(rootHandle.fd), relativePath),
       fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
     );
     try {
       const stat = await templateHandle.stat();
       const expectedPath = path.resolve(openedRoot, relativePath);
-      const openedPath = await descriptorPath(templateHandle.fd);
-      if (openedPath !== expectedPath) throw new Error(`Template source contains an unsafe path: ${relativePath}`);
+      if (process.platform === 'win32') {
+        if (!(await windowsPathIsSafe(root, root, rootHandle)) || !sameIdentity(await rootHandle.stat(), expectedRootIdentity) || !(await windowsPathIsSafe(root, target, templateHandle))) {
+          throw new Error(`Template source contains an unsafe path: ${relativePath}`);
+        }
+      } else if (await descriptorPath(templateHandle.fd) !== expectedPath) {
+        throw new Error(`Template source contains an unsafe path: ${relativePath}`);
+      }
       if (!stat.isFile() || stat.size > MAX_TEMPLATE_BYTES) {
         throw new Error(`Template source is not a regular file under ${MAX_TEMPLATE_BYTES} bytes: ${relativePath}`);
       }
@@ -130,17 +171,23 @@ export async function loadTemplateReportFixture(
   origin = TEMPLATE_REPORT_ORIGIN,
 ): Promise<TemplateReportFixture> {
   const configuredRoot = env['TEMPLATES_DIR']?.trim() || path.join(REPOSITORY_ROOT, 'templates');
-  const root = path.resolve(configuredRoot);
-  const rootStat = await fs.lstat(root);
-  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || await fs.realpath(root) !== root) {
+  const configuredRootPath = path.resolve(configuredRoot);
+  const rootStat = await fs.lstat(configuredRootPath);
+  const canonicalRoot = await fs.realpath(configuredRootPath);
+  const rootIsSafe = process.platform === 'win32'
+    ? await windowsPathIsSafe(canonicalRoot, configuredRootPath)
+    : canonicalRoot === configuredRootPath;
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || !rootIsSafe) {
     throw new Error('Template root must be a real directory without symbolic-link components');
   }
-  const jenkinsHtml = await readTemplate(root, 'jenkins-template/template.html');
-  const snykHtml = await readTemplate(root, 'snyk-template/template.html');
-  const snykSummary = await readTemplate(root, 'snyk-template/snyk-sca-results-summary.json');
-  const sonarqubeHomeRaw = await readTemplate(root, 'sonarqube-template/template-home.html');
-  const sonarqubeOverallRaw = await readTemplate(root, 'sonarqube-template/template-overall.html');
-  const sonarqubeIssuesRaw = await readTemplate(root, 'sonarqube-template/template-issues.html');
+  const root = canonicalRoot;
+  const rootIdentity = { dev: rootStat.dev, ino: rootStat.ino };
+  const jenkinsHtml = await readTemplate(root, 'jenkins-template/template.html', rootIdentity);
+  const snykHtml = await readTemplate(root, 'snyk-template/template.html', rootIdentity);
+  const snykSummary = await readTemplate(root, 'snyk-template/snyk-sca-results-summary.json', rootIdentity);
+  const sonarqubeHomeRaw = await readTemplate(root, 'sonarqube-template/template-home.html', rootIdentity);
+  const sonarqubeOverallRaw = await readTemplate(root, 'sonarqube-template/template-overall.html', rootIdentity);
+  const sonarqubeIssuesRaw = await readTemplate(root, 'sonarqube-template/template-issues.html', rootIdentity);
   const projectName = env['PROJECT_NAME']?.trim() || 'Template reports';
   const sonarqubeProjectId = projectIdFromSonarqubeHtml(sonarqubeHomeRaw);
   const terminalPath = `/job/template-report/${buildNumber}/`;
@@ -239,29 +286,24 @@ export function templateProjectDocument(
   const artifactDir = env['ARTIFACT_DIR']?.trim() || 'reports';
   const origin = new URL(fixture.terminalUrl).origin;
   const timeoutMs = parsePositiveInteger(env['TEMPLATE_TIMEOUT_MS']?.trim() || '300000', 'TEMPLATE_TIMEOUT_MS');
-  const pollIntervalMs = parsePositiveInteger(env['TEMPLATE_POLL_INTERVAL_MS']?.trim() || '100', 'TEMPLATE_POLL_INTERVAL_MS');
   return {
     schemaVersion: 1,
     projects: [{
       id: projectId,
       name: projectName,
       enabled: true,
-      baseUrl: origin,
-      jobPath: 'template-report',
-      buildNumber: fixture.buildNumber,
+      loginUrl: `${origin}/login`,
+      jobUrl: fixture.terminalUrl,
       timeoutMs,
-      pollIntervalMs,
       browser: parseBrowserName(env['PLAYWRIGHT_BROWSER']?.trim()),
       artifactDir,
       credentials: { usernameVariable: 'TEMPLATE_FIXTURE_USERNAME', passwordVariable: 'TEMPLATE_FIXTURE_PASSWORD' },
-      sourceOrigins: { snyk: [origin], sonarqube: [origin] },
+      sourceOrigins: { jenkins: [origin], snyk: [origin], sonarqube: [origin] },
       snyk: {
         allowedOrigins: [origin],
-        reportPath: new URL(fixture.snykReportUrl).pathname,
       },
       sonarqube: {
         allowedOrigins: [origin],
-        homeUrl: fixture.sonarqubeHomeUrl,
         projectId: fixture.sonarqubeProjectId,
       },
     }],

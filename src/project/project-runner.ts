@@ -1,9 +1,10 @@
 import type { Browser, Page } from '@playwright/test';
 
 import { formatDiagnostic, sanitizeUrl } from '../config-errors.js';
+import { deriveJenkinsBaseUrl } from '../config-values.js';
 import { resolveProjectSecrets } from '../config.js';
-import { assertAllowedUrl } from '../security/url-policy.js';
 import type { NormalizedProjectConfig, ProjectSecrets } from '../config/config-types.js';
+import { assertAllowedUrl } from '../security/url-policy.js';
 import type { ArtifactPaths } from '../artifacts/artifact-paths.js';
 import { createRunId } from '../artifacts/artifact-paths.js';
 import type { ProjectFailureResultV2 } from '../artifacts/artifact-manifest.js';
@@ -28,12 +29,29 @@ export interface ProjectRunnerDependencies {
   readonly capture?: EvidenceCapture;
 }
 
+function projectBaseUrl(project: NormalizedProjectConfig): string {
+  return deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl);
+}
+
+function projectJobPath(project: NormalizedProjectConfig): string {
+  const basePath = new URL(projectBaseUrl(project)).pathname.replace(/\/+$/u, '');
+  const jobPath = new URL(project.jobUrl).pathname.replace(/\/+$/u, '');
+  const relative = jobPath.startsWith(`${basePath}/`) ? jobPath.slice(basePath.length + 1) : jobPath.replace(/^\/+/u, '');
+  const segments = relative.split('/').filter(Boolean);
+  const names: string[] = [];
+  for (let index = 0; index < segments.length; index += 2) {
+    if (segments[index] !== 'job' || segments[index + 1] === undefined) return relative;
+    names.push(segments[index + 1]!);
+  }
+  return names.join('/');
+}
+
 function safePageUrl(page: Page | undefined, project: NormalizedProjectConfig): string | undefined {
   if (page === undefined) return undefined;
   try {
     return assertAllowedUrl(
       sanitizeUrl(page.url()),
-      project.baseUrl,
+      projectBaseUrl(project),
       [project.sourceOrigins.jenkins, ...project.sourceOrigins.snyk, ...project.sourceOrigins.sonarqube],
       'diagnostic page URL',
     );
@@ -47,7 +65,7 @@ export async function runProject(
   const now = dependencies.now ?? (() => new Date());
   const runId = createRunId(now(), dependencies.runIdSuffix?.());
   const stagingDirectory = await dependencies.artifacts.allocateStaging(project.id, runId);
-  const state = new ProjectRunState({ projectId: project.id, projectName: project.name, runId, stagingDirectory });
+  const state = new ProjectRunState({ projectId: project.id, projectName: project.name, jobUrl: project.jobUrl, runId, stagingDirectory });
   let outputDirectory = stagingDirectory;
   let reportDirectory: string | undefined;
   let context: Awaited<ReturnType<typeof dependencies.browser.newContext>> | undefined;
@@ -104,6 +122,7 @@ export async function runProject(
       schemaVersion: 2, project: { id: project.id, name: project.name },
       run: { runId, observedAt }, state: 'failed',
       ...(state.build === undefined ? {} : { jenkins: {
+        baseUrl: projectBaseUrl(project), jobPath: projectJobPath(project), jobUrl: project.jobUrl,
         buildNumber: state.build.number, buildUrl: state.build.url,
       } }),
       diagnostic, warnings: [],
@@ -119,7 +138,7 @@ export async function runProject(
   const result: VulnerabilityReportResultV2 = {
     schemaVersion: 2, state: resultState, project: { id: project.id, name: project.name },
     run: { runId, observedAt: workflowResult.terminal.observedAt },
-    jenkins: { baseUrl: project.baseUrl, jobPath: project.jobPath, jobUrl: project.jobUrl,
+    jenkins: { baseUrl: projectBaseUrl(project), jobPath: projectJobPath(project), jobUrl: project.jobUrl,
       buildNumber: workflowResult.terminal.build.number, buildUrl: workflowResult.terminal.build.url,
       status: workflowResult.terminal.status, trigger: workflowResult.trigger },
     navigation: captureResult.navigation, reports: captureResult.reports,
@@ -142,7 +161,10 @@ export async function runProject(
     const failureResult: ProjectFailureResultV2 = {
       schemaVersion: 2, project: { id: project.id, name: project.name },
       run: { runId, observedAt: failureObservedAt }, state: 'failed',
-      jenkins: { buildNumber: result.jenkins.buildNumber, buildUrl: result.jenkins.buildUrl },
+      jenkins: {
+        baseUrl: projectBaseUrl(project), jobPath: projectJobPath(project), jobUrl: project.jobUrl,
+        buildNumber: result.jenkins.buildNumber, buildUrl: result.jenkins.buildUrl,
+      },
       diagnostic, warnings: result.warnings,
       ...(diagnostics === undefined ? {} : { diagnostics }),
     };

@@ -3,45 +3,49 @@ import type { AddressInfo } from 'node:net';
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { parseConfig } from '../../src/config.js';
+import { normalizeProjectConfigDocument } from '../../src/config.js';
 import { formatJenkinsFailure } from '../../src/jenkins/errors.js';
-import { loginToJenkins } from '../../src/jenkins/auth.js';
+import { submitJenkinsLogin } from '../../src/jenkins/auth.js';
 import { openExistingBuild, resolveQueuedBuild, waitForTerminalBuild } from '../../src/jenkins/build.js';
 import { resolveJenkinsJob, type JenkinsJobReference } from '../../src/jenkins/job.js';
 import { UiBuildTrigger } from '../../src/jenkins/trigger.js';
 import { parseBuildReference, parseQueueReference } from '../../src/jenkins/url-identity.js';
 import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
 import { pollUntil } from '../../src/workflow/poll-until.js';
+import { executeJenkinsWorkflow } from '../../src/project/project-workflow.js';
+import { ProjectRunState } from '../../src/project/project-run-state.js';
+import {
+  DEFAULT_JENKINS_RUNNER_SELECTORS,
+  type JenkinsRunnerConfig,
+} from '../../src/jenkins/runner-config.js';
 
-function config(baseUrl = 'https://jenkins.example/jenkins') {
-  return parseConfig({
-    JENKINS_BASE_URL: baseUrl,
-    JENKINS_USERNAME: 'user',
-    JENKINS_PASSWORD: 'password',
-    JENKINS_JOB_PATH: 'service-a',
-    JENKINS_TIMEOUT_MS: '1000',
-    JENKINS_POLL_INTERVAL_MS: '1',
-    JENKINS_BUILD_URL_SELECTOR: JSON.stringify({ kind: 'css', value: 'a[href]', required: true }),
-  });
+function config(baseUrl = 'https://jenkins.example/jenkins'): JenkinsRunnerConfig {
+  return {
+    baseUrl,
+    loginUrl: `${baseUrl}/login`,
+    jobUrl: `${baseUrl}/job/service-a/`,
+    username: 'user',
+    password: 'password',
+    timeoutMs: 1_000,
+    pollIntervalMs: 1,
+    browser: 'chromium',
+    artifactDir: 'reports',
+    selectors: {
+      ...DEFAULT_JENKINS_RUNNER_SELECTORS,
+      buildUrl: { kind: 'css', value: 'a[href]', required: true },
+    },
+  };
 }
 
+function configWithoutBuildHooks(baseUrl = 'https://jenkins.example/jenkins'): JenkinsRunnerConfig {
+  return { ...config(baseUrl), selectors: DEFAULT_JENKINS_RUNNER_SELECTORS };
+}
 function job(baseUrl = 'https://jenkins.example/jenkins'): JenkinsJobReference {
   return {
     name: 'service-a',
     path: 'service-a',
     url: `${baseUrl}/job/service-a/`,
   };
-}
-
-function configWithoutBuildHooks(baseUrl = 'https://jenkins.example/jenkins') {
-  return parseConfig({
-    JENKINS_BASE_URL: baseUrl,
-    JENKINS_USERNAME: 'user',
-    JENKINS_PASSWORD: 'password',
-    JENKINS_JOB_PATH: 'service-a',
-    JENKINS_TIMEOUT_MS: '1000',
-    JENKINS_POLL_INTERVAL_MS: '1',
-  });
 }
 
 async function serve(page: Page, body: string) {
@@ -92,11 +96,91 @@ test('parses only exact same-context queue and build references', () => {
 
 test('rejects login and job navigation responses with HTTP errors', async ({ page }) => {
   await page.route('https://jenkins.example/jenkins/login', (route) => route.fulfill({ status: 404, body: '<label>Username</label>' }));
-  await expect(loginToJenkins(page, config(), new WorkflowDeadline(500))).rejects.toThrow(/login failed/u);
+  await expect(submitJenkinsLogin(page, config(), new WorkflowDeadline(500))).rejects.toThrow(/login failed/u);
 
   await page.unrouteAll();
   await page.route(job().url, (route) => route.fulfill({ status: 403, body: '<h1>service-a</h1>' }));
   await expect(resolveJenkinsJob(page, config(), new WorkflowDeadline(500))).rejects.toThrow(/job resolution failed/u);
+});
+
+test('submits /login and resolves the job on the same page', async ({ page }) => {
+  let submittedCredentials: string | undefined;
+  let issueSessionCookie = true;
+  const server = createServer(async (request, response) => {
+    const requestUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (request.method === 'GET' && requestUrl.pathname === '/jenkins/login') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(`
+        <form method="post" action="/jenkins/j_spring_security_check">
+          <label>Username<input name="j_username" /></label>
+          <label>Password<input name="j_password" type="password" /></label>
+          <button type="submit">Sign in</button>
+        </form>
+      `);
+      return;
+    }
+    if (request.method === 'POST' && requestUrl.pathname === '/jenkins/j_spring_security_check') {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      await new Promise<void>((resolve) => request.once('end', resolve));
+      const form = new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+      const username = form.get('j_username');
+      const password = form.get('j_password');
+      submittedCredentials = `${username ?? ''}:${password ?? ''}`;
+      if (username === null || username.length === 0 || password === null || password.length === 0) {
+        response.writeHead(401);
+        response.end('credentials required');
+        return;
+      }
+      response.writeHead(302, {
+        ...(issueSessionCookie ? { 'set-cookie': 'JSESSIONID=fixture-session; Path=/jenkins' } : {}),
+        location: '/jenkins/home/',
+      });
+      response.end();
+      return;
+    }
+    if (request.method === 'GET' && requestUrl.pathname === '/jenkins/home/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<h1>Signed in</h1>');
+      return;
+    }
+    if (request.method === 'GET' && requestUrl.pathname === '/jenkins/job/service-a/') {
+      if (!request.headers.cookie?.includes('JSESSIONID=fixture-session')) {
+        response.writeHead(403);
+        response.end('authentication required');
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<h1>service-a</h1>');
+      return;
+    }
+    response.writeHead(404);
+    response.end('not found');
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  try {
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}/jenkins`;
+    const runnerConfig = { ...config(baseUrl), username: 'any-user', password: 'any-password' };
+    await submitJenkinsLogin(page, runnerConfig, new WorkflowDeadline(500));
+    expect(page.url()).toBe(`${baseUrl}/home/`);
+    const resolved = await resolveJenkinsJob(page, runnerConfig, new WorkflowDeadline(500));
+
+    expect(resolved.url).toBe(job(baseUrl).url);
+    expect(page.url()).toBe(job(baseUrl).url);
+    expect(submittedCredentials).toBe('any-user:any-password');
+
+    issueSessionCookie = false;
+    await page.context().clearCookies();
+    await submitJenkinsLogin(page, runnerConfig, new WorkflowDeadline(500));
+    await expect(resolveJenkinsJob(page, runnerConfig, new WorkflowDeadline(500)))
+      .rejects.toThrow(/job resolution failed/u);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 test('redacts configured secrets that appear in diagnostic URL paths', async ({ page }) => {

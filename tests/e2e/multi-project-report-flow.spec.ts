@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { expect, test, type Browser } from '@playwright/test';
 
-import { parseProjectsConfig } from '../../src/config.js';
+import { loadProjectConfig } from '../../src/config.js';
 import type { CaptureResult } from '../../src/project/project-runner.js';
 import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
@@ -16,10 +16,10 @@ function writeConfig(root: string): string {
   const filename = path.join(root, 'projects.json');
   fs.writeFileSync(filename, JSON.stringify({
     schemaVersion: 1,
-    defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000, pollIntervalMs: 50 },
+    defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
     projects: [
-      { id: 'service-a', name: 'Service A', baseUrl: 'https://jenkins.example', jobPath: 'service-a', buildNumber: 11, credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
-      { id: 'service-b', name: 'Service B', baseUrl: 'https://jenkins.example', jobPath: 'service-b', buildNumber: 12, credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
+      { id: 'service-a', name: 'Service A', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/service-a/', credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
+      { id: 'service-b', name: 'Service B', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/service-b/', credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
     ],
   }), { mode: 0o600 });
   return filename;
@@ -44,12 +44,12 @@ test('runs two projects in order with fresh browser state and later-project cont
   test.setTimeout(60_000);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-multi-project-e2e-'));
   const environment = {
-    PROJECTS_CONFIG_PATH: writeConfig(root), A_USER: 'user-a', A_PASSWORD: 'password-a',
+    A_USER: 'user-a', A_PASSWORD: 'password-a',
     B_USER: 'user-b', B_PASSWORD: 'password-b',
   };
   let runnerBrowser: Browser | undefined;
   try {
-    const projects = parseProjectsConfig(environment).projects;
+    const projects = loadProjectConfig(writeConfig(root), environment);
     runnerBrowser = await browser.browserType().launch();
     const order: string[] = [];
     const observations: Array<{ projectId: string; cookies: string[] }> = [];
@@ -65,7 +65,8 @@ test('runs two projects in order with fresh browser state and later-project cont
       await page.context().addCookies([{ name: 'project', value: project.id, url: 'http://fixture.test/' }]);
       state.transition('authenticated');
       if (project.id === 'service-a') throw new Error('fixture parameterized project rejected');
-      const build = { number: project.buildNumber as number, url: `${project.jobUrl}${project.buildNumber}/` };
+      const buildNumber = project.id === 'service-a' ? 11 : 12;
+      const build = { number: buildNumber, url: `${project.jobUrl}${buildNumber}/` };
       state.transition('job_resolved'); state.transition('existing_build_selected');
       state.bindBuild(build); state.transition('running'); state.transition('terminal');
       return {

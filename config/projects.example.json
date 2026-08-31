@@ -6,7 +6,6 @@
       "passwordVariable": "JENKINS_PASSWORD"
     },
     "timeoutMs": 300000,
-    "pollIntervalMs": 1000,
     "browser": "chromium",
     "artifactDir": "reports"
   },
@@ -14,39 +13,39 @@
     {
       "id": "service-a",
       "name": "Service A",
-      "baseUrl": "https://jenkins.example.invalid/jenkins",
-      "jobPath": "Container Platform/service-a/release%252Fsit",
+      "loginUrl": "https://jenkins.example.invalid/jenkins/login",
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
       "sourceOrigins": {
+        "jenkins": ["https://jenkins.example.invalid"],
         "snyk": ["https://snyk.example.invalid"],
         "sonarqube": ["https://sonarqube.example.invalid"]
       },
       "snyk": {
-        "reportPath": "artifact/snyk-results.html",
         "projectId": "service-a"
       },
       "sonarqube": {
-        "homeUrl": "https://sonarqube.example.invalid/dashboard?id=service-a"
+        "projectId": "service-a"
       }
     },
     {
       "id": "service-b",
       "name": "Service B",
-      "baseUrl": "https://jenkins.example.invalid/jenkins",
-      "jobPath": "Container Platform/service-b/main",
+      "loginUrl": "https://jenkins.example.invalid/jenkins/login",
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-b/job/main/",
       "credentials": {
         "usernameVariable": "SERVICE_B_JENKINS_USERNAME",
         "passwordVariable": "SERVICE_B_JENKINS_PASSWORD"
       },
       "sourceOrigins": {
+        "jenkins": ["https://jenkins.example.invalid"],
         "snyk": ["https://snyk.example.invalid"],
         "sonarqube": ["https://sonarqube.example.invalid"]
       },
       "snyk": {
-        "reportPath": "artifact/snyk-results.html",
         "projectId": "service-b"
       },
       "sonarqube": {
-        "homeUrl": "https://sonarqube.example.invalid/dashboard?id=service-b"
+        "projectId": "service-b"
       }
     }
   ]

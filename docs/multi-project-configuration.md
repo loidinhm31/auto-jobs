@@ -7,20 +7,15 @@ implementation is in `src/config/project-config-schema.ts`,
 
 ## Source selection
 
-`REPORT_SOURCE` accepts `templates` or `jenkins` and defaults to `templates`.
+The report command always reads one explicit schema-v1 JSON document supplied
+with `--config`. There is no source-mode switch and no environment-selected
+configuration path.
 
-- Template mode creates its own synthetic schema-v1 project from the checked-in
-  files under `templates/`. It does not parse `PROJECTS_CONFIG_PATH`, use
-  Jenkins credentials, or contact Jenkins.
-- Jenkins mode calls the project-config loader. In this mode,
-  `PROJECTS_CONFIG_PATH` is honored and selects file mode; when it is absent,
-  legacy environment inputs are adapted into one project.
-
-File mode and legacy structural inputs are mutually exclusive. Do not set
-`PROJECTS_CONFIG_PATH` together with inputs such as `JENKINS_BASE_URL`,
-`JENKINS_JOB_PATH`, `JENKINS_BUILD_NUMBER`, or `ARTIFACT_DIR`. Credential
-environment variables referenced by the JSON are resolved at run time and are
-not themselves configuration structure.
+Structural environment inputs such as `REPORT_SOURCE`,
+`PROJECTS_CONFIG_PATH`, `JENKINS_BASE_URL`, `JENKINS_JOB_PATH`,
+`JENKINS_BUILD_NUMBER`, and `ARTIFACT_DIR` are rejected. Credential
+environment variables named by the JSON remain runtime secret inputs and are
+resolved only when the referenced project runs.
 
 ## Schema-v1 document
 
@@ -29,30 +24,34 @@ at least one enabled project. Each project requires:
 
 - a unique lowercase filesystem-safe `id`;
 - a display `name`;
-- `baseUrl` (or the compatibility alias `jenkinsUrl`); and
-- a relative `jobPath`.
+- an exact absolute HTTP(S) `loginUrl`; and
+- an exact absolute HTTP(S) `jobUrl`.
+
+`loginUrl` and `jobUrl` must be credential-free, fragment-free, and on the same
+Jenkins origin and base context. `baseUrl`, `jobPath`, `loginPath`,
+`triggerMode`, `buildNumber`, `captureFrom`, and other legacy structural keys
+are not accepted.
 
 `enabled: false` retains an entry without executing it. Optional project and
-`defaults` fields cover `loginPath`, `triggerMode` (`ui` only), bounded
-timeouts/poll intervals, `browser`, `artifactDir`, selectors, origin policy,
-credential references, `buildNumber`, and source settings for `snyk` and
+`defaults` fields cover `timeoutMs`, `browser`, `artifactDir`, selectors,
+origin policy, credential references, and source settings for `snyk` and
 `sonarqube`.
 
 The checked-in [projects.example.json](../config/projects.example.json) shows
-two projects with source paths, source origins, identities, and per-project
-credential references. A minimal valid document is also shown in the root
-[README](../README.md).
+two projects with exact Jenkins URLs, source origins, identities, and
+per-project credential references. A minimal valid document is also shown
+below.
 
 The checked-in example uses `.invalid` placeholder hosts and is not a runnable
-Jenkins configuration. Replace its Jenkins/vendor URLs and job paths with
-authorized values before using it for a live collection.
+Jenkins configuration. Replace its Jenkins/vendor URLs with authorized values
+before using it for a live collection.
 
 ### Credentials
 
-Use either `credentials` with `usernameVariable`/`passwordVariable`, or the
-compatibility `credentialVariables` shape with `username`/`password`. Both
-shapes name environment variables; neither accepts secret values. If omitted,
-the loader falls back to `JENKINS_USERNAME` and `JENKINS_PASSWORD`.
+Use `credentials` with `usernameVariable` and `passwordVariable` to name the
+environment variables containing a project's Jenkins credentials. If omitted,
+the loader uses `JENKINS_USERNAME` and `JENKINS_PASSWORD`. Neither the JSON
+nor its selectors may contain secret values.
 
 ```json
 {
@@ -61,14 +60,17 @@ the loader falls back to `JENKINS_USERNAME` and `JENKINS_PASSWORD`.
     "credentials": {
       "usernameVariable": "JENKINS_USERNAME",
       "passwordVariable": "JENKINS_PASSWORD"
-    }
+    },
+    "timeoutMs": 300000,
+    "browser": "chromium",
+    "artifactDir": "reports"
   },
   "projects": [
     {
       "id": "service-a",
       "name": "Service A",
-      "baseUrl": "https://jenkins.example.invalid/jenkins",
-      "jobPath": "service-a"
+      "loginUrl": "https://jenkins.example.invalid/jenkins/login",
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/service-a/"
     }
   ]
 }
@@ -89,45 +91,40 @@ Source settings are optional but useful for complete evidence:
     "sonarqube": ["https://sonarqube.example.invalid"]
   },
   "snyk": {
-    "reportPath": "artifact/snyk-results.html",
     "projectId": "service-a"
   },
   "sonarqube": {
-    "homeUrl": "https://sonarqube.example.invalid/dashboard?id=service-a",
     "projectId": "service-a"
   }
 }
 ```
 
 The snippet is an extension to a project entry, not a standalone document.
-`reportPath` must remain within the Jenkins base context. `homeUrl` and all
-observed redirects must be HTTP(S), credential-free, and within the Jenkins
-base context or an explicit allowed origin. Origin values are bare origins,
-not paths. Credential-like query keys/values, traversal, unsafe job paths,
-queries/fragments in base URLs, and duplicate or invalid SonarQube project IDs
-are rejected.
+`allowedOrigins` and `sourceOrigins` contain bare origins, not paths.
+Observed redirects and publisher links must be HTTP(S), credential-free, and
+within the Jenkins base context or an explicitly allowed origin. Credential-
+like query keys/values, traversal, unsafe selectors, URL fragments, duplicate
+IDs, and invalid project identities are rejected.
 
-The loader validates the JSON before a browser is launched. A file is a regular
-JSON file no larger than 1 MiB. Timeouts, poll intervals, origins, selectors,
-artifact identities, and report data are bounded. Enabled projects must share
-one browser and one global `artifactDir` for the sequential runner.
+The loader validates the JSON before a browser is launched. A file is a
+regular JSON file no larger than 1 MiB. Timeouts, origins, selectors, artifact
+identities, and report data are bounded. Enabled projects must share one
+browser and one global `artifactDir` for the sequential runner.
 
 ## Execution and output
 
 Run file mode explicitly:
 
 ```sh
-REPORT_SOURCE=jenkins \
-PROJECTS_CONFIG_PATH="$PWD/config/projects.example.json" \
-npm run report
+npm run report -- --config config/projects.example.json
 ```
 
 The command above is illustrative only until the `.invalid` placeholders in
 the example are replaced. Provide the environment variables named by the
-document separately. The CLI
-exits nonzero if a project fails, while the aggregate keeps outcomes for
-projects that did complete. A failed publisher capture is represented as
-`partial`; a workflow or persistence failure is `failed`.
+document separately. The CLI exits nonzero if a project fails, while the
+aggregate keeps outcomes for projects that did complete. A failed publisher
+capture is represented as `partial`; a workflow or persistence failure is
+`failed`.
 
 The default report root is `reports/`, or the configured `artifactDir`. Each
 run is immutable and uses:
@@ -159,25 +156,14 @@ complete run directory.
 
 Enabled projects run one at a time through one browser process, with a fresh
 Playwright context per project and one absolute workflow deadline per project.
-Existing-build mode performs no trigger action. Without `buildNumber`, Jenkins
-V1 supports only a non-parameterized UI `Build Now`; parameterized jobs are
+Each project authenticates through its exact `loginUrl`, resolves its exact
+`jobUrl`, submits the non-parameterized UI `Build Now` action, correlates the
+resulting build, and captures terminal evidence. Parameterized jobs are
 detected before interaction and rejected.
 
-The runner uses a private report-root filesystem lease to serialize concurrent
-work through discovery and aggregate publication. The owner record contains a
-random token, PID, hostname, acquisition time, and expiry; it has no UID field.
-Therefore “same-host/same-UID” is not an authorization guarantee. Recovery is
-limited to an expired same-host owner whose PID is demonstrably dead (or a
-bounded incomplete claim); foreign-host, malformed, live-owner, and symlinked
-locks fail closed. Distributed filesystems and uncoordinated foreign-host
-writers are outside V1.
-
-Report and staging roots must be canonical, non-overlapping directories.
-Project/build/run path segments are validated, temporary publication uses
-atomic replacement/rollback, and cleanup inspects only the exact configured
-roots within entry, byte, age, lease, and removal budgets. Unsafe, malformed,
-active, oversized, symlinked, or ambiguous entries are preserved with bounded
-warnings.
+The schema has no existing-build mode, job-page capture mode, build-number
+override, or polling/source-switch environment inputs. These behaviors are
+internal workflow details rather than configuration contracts.
 
 ## Disposable Jenkins fixture
 
@@ -202,14 +188,15 @@ Do not use fixture credentials outside disposable local development. Stop with
 `docker compose down`; use `docker compose down -v` only when intentionally
 discarding the named `jenkins_home` volume and its history.
 
-## Offline template source
+## Offline capture fixtures
 
-Template mode reads six bounded inputs: the Jenkins snapshot, Snyk HTML and
-summary JSON, and SonarQube home, Overall, and Issues HTML. It installs bounded
-Playwright context routes at a synthetic origin and invokes the same capture,
-normalization, artifact, and rendering boundaries as the Jenkins workflow.
-No Jenkins controller, pipeline, vendor service, or Jenkins credential is
-needed. `PROJECTS_CONFIG_PATH` is not consulted in this mode.
+Offline fixture tests read six bounded inputs: the Jenkins snapshot, Snyk HTML
+and summary JSON, and SonarQube home, Overall, and Issues HTML. They install
+bounded Playwright context routes at a synthetic origin and invoke the same
+capture, normalization, artifact, and rendering boundaries as the Jenkins
+workflow. No Jenkins controller, pipeline, vendor service, or Jenkins
+credential is needed. These fixtures are test inputs, not report CLI source
+modes.
 
 The checked-in template Snyk page and summary describe six findings (critical
 2, high 4); the Docker Jenkins fixture is a separate four-finding corpus

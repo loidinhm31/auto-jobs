@@ -1,36 +1,35 @@
 export {
   ConfigError,
   formatDiagnostic,
-  getOptionalBaseUrl,
-  normalizeBaseUrl,
-  normalizeJobPath,
-  normalizeLoginPath,
-  parseBrowserName,
-  parseConfig,
-  parsePositiveInteger,
-  parseSelector,
   redactText,
-  resolveBasePathUrl,
-  resolveJenkinsJobUrl,
   sanitizeUrl,
-} from './config/legacy-runner-config.js';
-export type { RunnerConfig } from './config/legacy-runner-config.js';
+} from './config-errors.js';
+
+export {
+  deriveJenkinsBaseUrl,
+  normalizeConfiguredUrl,
+  parseBrowserName,
+  parsePositiveInteger,
+} from './config-values.js';
 
 export {
   loadProjectConfig,
-  loadProjectConfigs,
   normalizeProjectConfigDocument,
-  parseProjectsConfig,
   resolveProjectSecrets,
 } from './config/project-config-loader.js';
+
 export type {
-  ProjectConfigLoadMode,
-  ProjectConfigLoadResult,
-} from './config/project-config-loader.js';
-export {
-  normalizeLegacyProjectConfig,
-  hasLegacyProjectInputs,
-} from './config/legacy-project-config.js';
+  NormalizedProjectConfig,
+  NormalizedSourceConfig,
+  ProjectConfigDefaults,
+  ProjectConfigDocumentV1,
+  ProjectConfigInput,
+  ProjectCredentialReferences,
+  ProjectOriginPolicies,
+  ProjectSecrets,
+  ProjectSourceInput,
+} from './config/config-types.js';
+
 export {
   assertProjectConfigDocument,
   PROJECT_CONFIG_LIMITS,

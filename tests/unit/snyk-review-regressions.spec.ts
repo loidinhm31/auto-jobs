@@ -18,8 +18,8 @@ import { snykProjectIdentityWarning } from '../../src/reports/snyk/snyk-capture-
 function project(overrides: Record<string, unknown> = {}): NormalizedProjectConfig {
   return {
     id: 'service-a', name: 'Service A', enabled: true, schemaVersion: 1,
-    baseUrl: 'https://jenkins.example/jenkins', jobPath: 'service-a', jobUrl: 'https://jenkins.example/jenkins/job/service-a/',
-    loginPath: '/login', triggerMode: 'ui', timeoutMs: 30_000, pollIntervalMs: 50,
+    loginUrl: 'https://jenkins.example/jenkins/login',
+    jobUrl: 'https://jenkins.example/jenkins/job/service-a/',
     browser: 'chromium', artifactDir: 'reports',
     credentialVariables: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
     sourceOrigins: { jenkins: 'https://jenkins.example', snyk: ['https://jenkins.example'], sonarqube: [] },
@@ -90,7 +90,7 @@ test('reconciles summary and details per severity', () => {
 });
 
 test('validates Snyk project identity when the source config declares one', () => {
-  const configured = project({ sources: { snyk: { homeUrl: 'https://snyk.example/project?id=service-a' }, sonarqube: { allowedOrigins: [] } } });
+  const configured = project({ sources: { snyk: { projectId: 'service-a' }, sonarqube: { allowedOrigins: [] } } });
   expect(snykProjectIdentityWarning({ project: 'service-b' }, configured, 'https://jenkins.example/jenkins/artifact/snyk-results.html')).toContain('did not match');
   expect(snykProjectIdentityWarning({ project: 'service-a' }, configured, 'https://jenkins.example/jenkins/artifact/snyk-results.html')).toBeUndefined();
 });

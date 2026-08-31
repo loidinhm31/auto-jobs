@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { expect, test, type Page, type Route } from '@playwright/test';
 import type { AddressInfo } from 'node:net';
 
+import { normalizeProjectConfigDocument } from '../../src/config.js';
 import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
 import { captureSonarqubeEvidence } from '../../src/reports/sonarqube/sonarqube-capture.js';
 import { captureSnykEvidence } from '../../src/reports/snyk/snyk-capture.js';
@@ -44,27 +45,35 @@ test('captures the first viewport after the source page has been scrolled', asyn
 });
 
 function snykProject(): NormalizedProjectConfig {
-  return {
-    id: 'service-a', name: 'Service A', enabled: true, schemaVersion: 1,
-    baseUrl: `${JENKINS_ORIGIN}/jenkins`, jobPath: 'service-a', jobUrl: `${JENKINS_ORIGIN}/jenkins/job/service-a/`,
-    loginPath: '/login', triggerMode: 'ui', timeoutMs: 30_000, pollIntervalMs: 50, browser: 'chromium', artifactDir: 'reports',
-    credentialVariables: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
-    sourceOrigins: { jenkins: JENKINS_ORIGIN, snyk: [JENKINS_ORIGIN], sonarqube: [] },
-    sources: { snyk: { allowedOrigins: [JENKINS_ORIGIN] }, sonarqube: { allowedOrigins: [] } },
-    selectors: { snykReport: { kind: 'testId', value: 'snyk-report', required: false } },
-  } as unknown as NormalizedProjectConfig;
+  const [project] = normalizeProjectConfigDocument({
+    schemaVersion: 1,
+    projects: [{
+      id: 'service-a',
+      name: 'Service A',
+      loginUrl: `${JENKINS_ORIGIN}/jenkins/login`,
+      jobUrl: `${JENKINS_ORIGIN}/jenkins/job/service-a/`,
+      sourceOrigins: { jenkins: [JENKINS_ORIGIN], snyk: [JENKINS_ORIGIN], sonarqube: [] },
+      snyk: { allowedOrigins: [JENKINS_ORIGIN] },
+    }],
+  });
+  if (project === undefined) throw new Error('Snyk test project was not normalized');
+  return project;
 }
 
 function sonarProject(): NormalizedProjectConfig {
-  return {
-    id: 'service-a', name: 'com.example-domain.example-package.service', enabled: true, schemaVersion: 1,
-    baseUrl: `${JENKINS_ORIGIN}/jenkins`, jobPath: 'service-a', jobUrl: `${JENKINS_ORIGIN}/jenkins/job/service-a/`,
-    loginPath: '/login', triggerMode: 'ui', timeoutMs: 30_000, pollIntervalMs: 50, browser: 'chromium', artifactDir: 'reports',
-    credentialVariables: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
-    sourceOrigins: { jenkins: JENKINS_ORIGIN, snyk: [], sonarqube: [SONAR_ORIGIN] },
-    sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: [SONAR_ORIGIN], projectId: SONAR_PROJECT } },
-    selectors: {},
-  } as unknown as NormalizedProjectConfig;
+  const [project] = normalizeProjectConfigDocument({
+    schemaVersion: 1,
+    projects: [{
+      id: 'service-a',
+      name: 'com.example-domain.example-package.service',
+      loginUrl: `${JENKINS_ORIGIN}/jenkins/login`,
+      jobUrl: `${JENKINS_ORIGIN}/jenkins/job/service-a/`,
+      sourceOrigins: { jenkins: [JENKINS_ORIGIN], snyk: [], sonarqube: [SONAR_ORIGIN] },
+      sonarqube: { allowedOrigins: [SONAR_ORIGIN], projectId: SONAR_PROJECT },
+    }],
+  });
+  if (project === undefined) throw new Error('SonarQube test project was not normalized');
+  return project;
 }
 
 async function startDefaultSafePageFixture(): Promise<{ origin: string; close: () => Promise<void> }> {
@@ -103,7 +112,7 @@ test('captures Snyk through the default safe page without executing report scrip
   try {
     const project = {
       ...snykProject(),
-      baseUrl: `${fixture.origin}/jenkins`,
+      loginUrl: `${fixture.origin}/jenkins/login`,
       jobUrl: `${fixture.origin}/jenkins/job/service-a/`,
       sourceOrigins: { jenkins: fixture.origin, snyk: [fixture.origin], sonarqube: [] },
       sources: { snyk: { allowedOrigins: [fixture.origin] }, sonarqube: { allowedOrigins: [] } },

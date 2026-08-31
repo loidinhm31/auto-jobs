@@ -80,7 +80,7 @@ async function main() {
       if (build.code !== 0 || activeSignal !== undefined) {
         exitCode = activeSignal === undefined ? build.code : signalExitCode(activeSignal);
       } else {
-        const report = await run(process.execPath, ['.runner-build/cli.js'], environment, runtime.projectRoot);
+        const report = await run(process.execPath, ['.runner-build/cli.js', ...process.argv.slice(2)], environment, runtime.projectRoot);
         exitCode = activeSignal === undefined ? report.code : signalExitCode(activeSignal);
       }
     }

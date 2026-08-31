@@ -2,7 +2,6 @@ export type ReportState = 'found' | 'not_found' | 'incomplete';
 export type SourceName = 'snyk' | 'sonarqube';
 export type SelectorKind = 'role' | 'label' | 'testId' | 'text' | 'css';
 export type BrowserName = 'chromium' | 'firefox' | 'webkit';
-export type TriggerMode = 'ui';
 
 export interface LocatorSelector {
   kind: SelectorKind;
@@ -12,11 +11,7 @@ export interface LocatorSelector {
 }
 
 export interface SelectorConfig {
-  trigger: LocatorSelector;
   authLandmark: LocatorSelector;
-  queueUrl: LocatorSelector;
-  buildStatus: LocatorSelector;
-  buildUrl: LocatorSelector;
   sonarqubeReport: LocatorSelector;
   snykReport: LocatorSelector;
 }
@@ -91,7 +86,7 @@ export type {
   ProjectConfigDocumentV1,
   ProjectConfigInput,
   ProjectCredentialReferences,
-  ProjectCredentialVariablesInput,
+  ProjectOriginPolicies,
   ProjectSecrets,
   ProjectSourceInput,
 } from './config/config-types.js';

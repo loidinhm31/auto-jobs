@@ -18,7 +18,8 @@ import { captureSnykEvidence, type SnykSummaryReader } from '../reports/snyk/sny
 import type { ScriptSafePage } from '../reports/snyk/snyk-capture-support.js';
 import { captureSonarqubeEvidence } from '../reports/sonarqube/sonarqube-capture.js';
 import { sanitizeSonarIssueFacets } from '../reports/sonarqube/sonarqube-issue-facets.js';
-import { assertSafeReferenceUrl } from '../security/url-policy.js';
+import { assertAllowedUrl, assertSafeReferenceUrl } from '../security/url-policy.js';
+import { deriveJenkinsBaseUrl } from '../config-values.js';
 import { pageLinkCandidates } from '../reports/snyk/snyk-capture-support.js';
 import { classifySnykLinks, classifySonarLinks } from '../reports/source-link-classifier.js';
 import { pollUntil } from '../workflow/poll-until.js';
@@ -31,14 +32,15 @@ function publisherConfigured(
   publisher: 'snyk' | 'sonarqube',
 ): boolean {
   const source = project.sources[publisher];
-  return source.projectId !== undefined || source.reportPath !== undefined || source.homeUrl !== undefined ||
-    source.allowedOrigins.length > 0;
+  return source.projectId !== undefined || source.allowedOrigins.length > 0;
 }
+
 
 async function settleTerminalArtifactLinks(
   page: Page,
   project: NormalizedProjectConfig,
   deadline: WorkflowDeadline,
+  expectedBuild?: ProjectWorkflowResult['terminal']['build'],
 ): Promise<void> {
   const settleDeadline = new WorkflowDeadline(Math.min(ARTIFACT_LINK_SETTLE_MS, deadline.requireRemaining()));
   const requiredPublishers = [
@@ -49,20 +51,18 @@ async function settleTerminalArtifactLinks(
   try {
     await pollUntil<boolean>({
       deadline: settleDeadline,
-      intervalMs: Math.min(Math.max(project.pollIntervalMs, 50), 250),
+      intervalMs: 250,
       maxObservations: 16,
       maxAttempts: MAX_ARTIFACT_LINK_SETTLE_ATTEMPTS,
       observe: async () => {
         const links = await pageLinkCandidates(page);
-        const snyk = classifySnykLinks(links, project);
-        const sonarqube = classifySonarLinks(links, project);
+        const snyk = classifySnykLinks(links, project, expectedBuild);
+        const sonarqube = classifySonarLinks(links, project, expectedBuild);
         const found = {
           snyk: snyk.report !== undefined,
           sonarqube: sonarqube.home !== undefined,
         };
-        const ready = requiredPublishers.length === 0
-          ? found.snyk || found.sonarqube
-          : requiredPublishers.every((publisher) => found[publisher]);
+        const ready = requiredPublishers.every((publisher) => found[publisher]);
         if (ready) return true;
         await page.reload({
           waitUntil: 'domcontentloaded',
@@ -84,6 +84,7 @@ export interface CaptureResult {
   readonly artifacts?: { readonly screenshots: readonly string[] };
 }
 
+
 export type EvidenceCapture = (input: {
   page: Page;
   project: NormalizedProjectConfig;
@@ -95,13 +96,15 @@ export type EvidenceCapture = (input: {
 }) => Promise<CaptureResult>;
 
 export const defaultCapture: EvidenceCapture = async ({ page, project, workflow, deadline, outputDirectory, snykSummaryReader, snykOpenSafePage }) => {
-  await settleTerminalArtifactLinks(page, project, deadline);
+  const expectedBuild = workflow.terminal.build;
+  await settleTerminalArtifactLinks(page, project, deadline, expectedBuild);
   const snyk = await captureSnykEvidence({
     page,
     project,
     deadline,
     outputDirectory,
     terminalBuildUrl: workflow.terminal.build.url,
+    expectedBuild,
     ...(snykSummaryReader === undefined ? {} : { readSummary: snykSummaryReader }),
     ...(snykOpenSafePage === undefined ? {} : { openSafePage: snykOpenSafePage }),
   });
@@ -111,6 +114,7 @@ export const defaultCapture: EvidenceCapture = async ({ page, project, workflow,
     deadline,
     outputDirectory,
     terminalBuildUrl: workflow.terminal.build.url,
+    expectedBuild,
   });
   return {
     navigation: {
@@ -122,7 +126,11 @@ export const defaultCapture: EvidenceCapture = async ({ page, project, workflow,
       snyk: snyk.source,
       sonarqube: sonarqube.source,
     },
-    warnings: [...snyk.warnings, ...sonarqube.warnings],
+    warnings: [
+      ...workflow.trigger.warnings,
+      ...snyk.warnings,
+      ...sonarqube.warnings,
+    ],
     artifacts: { screenshots: [...snyk.screenshots, ...sonarqube.screenshots] },
   };
 };

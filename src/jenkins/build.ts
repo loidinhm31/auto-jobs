@@ -1,6 +1,6 @@
 import { type APIResponse, type Page } from '@playwright/test';
 
-import { type RunnerConfig } from '../config.js';
+import type { JenkinsRunnerConfig } from './runner-config.js';
 import type { BuildReference, QueueReference } from '../types.js';
 import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import { pollUntil } from '../workflow/poll-until.js';
@@ -28,12 +28,12 @@ function sameBuild(left: BuildReference, right: BuildReference): boolean {
   return left.number === right.number && left.url === right.url;
 }
 
-function usesDefaultBuildUrlSelector(config: RunnerConfig): boolean {
+function usesDefaultBuildUrlSelector(config: JenkinsRunnerConfig): boolean {
   const selector = config.selectors.buildUrl;
   return selector.kind === 'testId' && selector.value === 'jenkins-build-url';
 }
 
-function usesDefaultBuildStatusSelector(config: RunnerConfig): boolean {
+function usesDefaultBuildStatusSelector(config: JenkinsRunnerConfig): boolean {
   const selector = config.selectors.buildStatus;
   return selector.kind === 'testId' && selector.value === 'jenkins-build-status';
 }
@@ -64,7 +64,7 @@ function sameApiEndpoint(actualUrl: string, expectedUrl: string): boolean {
 function assertApiResponseIdentity(
   response: APIResponse,
   expectedUrl: string,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   label: string,
 ): void {
   try {
@@ -79,7 +79,7 @@ function assertApiResponseIdentity(
 
 async function readQueueApiBuild(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   job: JenkinsJobReference,
   queue: QueueReference,
   baselineBuildNumber: number | undefined,
@@ -142,7 +142,7 @@ async function readQueueApiBuild(
 
 async function readBuildApiStatus(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   build: BuildReference,
   deadline: WorkflowDeadline,
 ): Promise<string | null> {
@@ -185,7 +185,7 @@ async function readBuildApiStatus(
 
 async function readCorrelatedBuild(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   job: JenkinsJobReference,
   baselineBuildNumber: number | undefined,
   queue: QueueReference | undefined,
@@ -218,7 +218,7 @@ async function readCorrelatedBuild(
 
 async function readRedirectedBuildWithQueueProof(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   job: JenkinsJobReference,
   queue: QueueReference,
   baselineBuildNumber: number | undefined,
@@ -230,7 +230,7 @@ async function readRedirectedBuildWithQueueProof(
   return apiBuild !== undefined && sameBuild(apiBuild, directBuild) ? apiBuild : undefined;
 }
 
-async function readBuildStatus(page: Page, config: RunnerConfig): Promise<string | null> {
+async function readBuildStatus(page: Page, config: JenkinsRunnerConfig): Promise<string | null> {
   const configuredLocator = locatorFor(page, config.selectors.buildStatus).first();
   if (await configuredLocator.count() > 0) {
     const configured = await configuredLocator.textContent();
@@ -266,7 +266,7 @@ async function reloadSuccessful(page: Page, deadline: WorkflowDeadline): Promise
 
 async function assertCurrentBuildIdentity(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   job: JenkinsJobReference,
   expected: BuildReference,
   deadline: WorkflowDeadline,
@@ -288,7 +288,7 @@ async function assertCurrentBuildIdentity(
 
 export async function openExistingBuild(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   job: JenkinsJobReference,
   deadline: WorkflowDeadline,
 ): Promise<BuildReference> {
@@ -314,7 +314,7 @@ export async function openExistingBuild(
 /** Follows one already-correlated queue item until its configured build reference appears. */
 export async function resolveQueuedBuild(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   job: JenkinsJobReference,
   queue: QueueReference,
   baselineBuildNumber: number | undefined,
@@ -389,7 +389,7 @@ function isTerminalStatus(status: string): boolean {
 /** Navigates to and proves the exact build page before polling its terminal status. */
 export async function waitForTerminalBuild(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   job: JenkinsJobReference,
   build: BuildReference,
   deadline: WorkflowDeadline,

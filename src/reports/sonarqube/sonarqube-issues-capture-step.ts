@@ -1,6 +1,7 @@
 import { expect, type Locator } from '@playwright/test';
 
 import type { SonarIssueFacets } from '../../result-types.js';
+import { deriveJenkinsBaseUrl } from '../../config-values.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import type { SonarIssuesStepResult, SonarStepInput } from './sonarqube-capture-step-types.js';
 import {
@@ -18,6 +19,7 @@ import {
   pageCaptureMetadata,
   screenshotFacetRange,
   SONAR_SCREENSHOTS,
+  assertSonarqubeUrlMatchesBuild,
 } from './sonarqube-capture-support.js';
 import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
 
@@ -84,7 +86,7 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
   }, { timeout: input.deadline.requireRemaining(), intervals: [50, 100, 250, 500] }).toBe(true);
   const url = assertAllowedUrl(
     input.page.url(),
-    input.project.baseUrl,
+    deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),
     input.project.sourceOrigins.sonarqube,
     'SonarQube issues URL',
   );
@@ -95,6 +97,7 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
   if (/\/login(?:\/|$)/iu.test(parsedUrl.pathname)) {
     throw new Error('SonarQube issues redirected to login');
   }
+  assertSonarqubeUrlMatchesBuild(url, input.project, input.expectedBuild);
   const baseCapture = await pageCaptureMetadata(input.page, url, control.strategy);
   const emptyFacets: SonarIssueFacets = { types: [], severities: [] };
   let identityStrategy: string;

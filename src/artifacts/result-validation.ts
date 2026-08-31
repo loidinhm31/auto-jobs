@@ -8,6 +8,7 @@ import type {
 } from '../result-types.js';
 import type { ProjectFailureResultV2 } from './artifact-manifest.js';
 import { isSafeReferenceUrl } from '../security/url-policy.js';
+import { resolveSafeRelativeUrl } from '../security/relative-url-policy.js';
 
 export const MAX_PERSISTED_WARNING_ITEMS = 32;
 export const MAX_PERSISTED_WARNING_LENGTH = 500;
@@ -75,18 +76,86 @@ function validWarnings(value: unknown): value is string[] {
     value.every((item) => boundedString(item, MAX_PERSISTED_WARNING_LENGTH));
 }
 
-function validBuild(value: unknown): boolean {
+function validBuild(value: unknown, baseUrl: string): boolean {
   if (!isRecord(value) || !positiveInteger(value.number) || !isSafePersistedUrl(value.url)) return false;
-  return value.queueUrl === undefined || isSafePersistedUrl(value.queueUrl);
+  return value.queueUrl === undefined || (isSafePersistedUrl(value.queueUrl) && sameJenkinsContextUrl(value.queueUrl, baseUrl));
 }
 
-function validTrigger(value: unknown): value is TriggerEvidence {
-  if (!isRecord(value) || !['existing_build', 'build_now', 'unsupported_parameterized', 'unknown'].includes(String(value.capability)) ||
+function sameJenkinsContextUrl(candidateUrl: string, baseUrl: string): boolean {
+  try {
+    const candidate = new URL(candidateUrl);
+    const base = new URL(baseUrl);
+    const basePath = base.pathname.replace(/\/+$/u, '');
+    const contextPath = basePath === '' ? '/' : `${basePath}/`;
+    return candidate.origin === base.origin && !base.username && !base.password && !base.search && !base.hash &&
+      !candidate.username && !candidate.password && !candidate.search && !candidate.hash &&
+      (basePath === '' || candidate.pathname === basePath || candidate.pathname.startsWith(contextPath));
+  } catch {
+    return false;
+  }
+}
+
+function sameJenkinsJobIdentity(actualUrl: string, expectedUrl: string): boolean {
+  try {
+    const actual = new URL(actualUrl);
+    const expected = new URL(expectedUrl);
+    return actual.origin === expected.origin && !actual.username && !actual.password &&
+      !expected.username && !expected.password && !actual.search && !actual.hash &&
+      !expected.search && !expected.hash &&
+      actual.pathname.replace(/\/+$/u, '') === expected.pathname.replace(/\/+$/u, '');
+  } catch {
+    return false;
+  }
+}
+
+function expectedJenkinsJobUrl(baseUrl: string, jobPath: string): string | undefined {
+  try {
+    const jobSegments = jobPath
+      .split('/')
+      .filter((segment) => segment.length > 0)
+      .map((segment) => `job/${segment}`)
+      .join('/');
+    return resolveSafeRelativeUrl(baseUrl, `/${jobSegments}/`);
+  } catch {
+    return undefined;
+  }
+}
+
+function sameJenkinsBuildIdentity(
+  jobUrl: string,
+  buildNumber: number,
+  buildUrl: string,
+): boolean {
+  try {
+    const job = new URL(jobUrl);
+    const build = new URL(buildUrl);
+    const jobPath = job.pathname.replace(/\/+$/u, '');
+    return job.origin === build.origin && !job.search && !job.hash && !build.search && !build.hash &&
+      build.pathname.replace(/\/+$/u, '') === `${jobPath}/${buildNumber}`;
+  } catch {
+    return false;
+  }
+}
+
+function validJenkinsResult(value: unknown): boolean {
+  if (!isRecord(value) || !isSafePersistedUrl(value.baseUrl) || !boundedString(value.jobPath, 256) ||
+    !isSafePersistedUrl(value.jobUrl) || !positiveInteger(value.buildNumber) || !isSafePersistedUrl(value.buildUrl) ||
+    !boundedString(value.status, 256) || !validTrigger(value.trigger, value.baseUrl) ||
+    !sameJenkinsContextUrl(value.jobUrl, value.baseUrl) ||
+    !sameJenkinsJobIdentity(value.jobUrl, expectedJenkinsJobUrl(value.baseUrl, value.jobPath) ?? '') ||
+    !sameJenkinsBuildIdentity(value.jobUrl, value.buildNumber, value.buildUrl)) return false;
+  if (!isRecord(value.trigger) || value.trigger.build === undefined) return true;
+  return isRecord(value.trigger.build) && value.trigger.build.number === value.buildNumber &&
+    value.trigger.build.url === value.buildUrl;
+}
+
+function validTrigger(value: unknown, baseUrl: string): value is TriggerEvidence {
+  if (!isRecord(value) || !['existing_build', 'build_now', 'job_page', 'unsupported_parameterized', 'unknown'].includes(String(value.capability)) ||
     typeof value.triggerAttempts !== 'number' || !Number.isSafeInteger(value.triggerAttempts) || value.triggerAttempts < 0 || value.triggerAttempts > 64 || !validWarnings(value.warnings)) return false;
   if (value.baselineBuildNumber !== undefined && !positiveInteger(value.baselineBuildNumber)) return false;
-  if (value.queueUrl !== undefined && !isSafePersistedUrl(value.queueUrl)) return false;
+  if (value.queueUrl !== undefined && (!isSafePersistedUrl(value.queueUrl) || !sameJenkinsContextUrl(value.queueUrl, baseUrl))) return false;
   if (value.queueId !== undefined && !boundedString(value.queueId, 128)) return false;
-  if (value.build !== undefined && !validBuild(value.build)) return false;
+  if (value.build !== undefined && !validBuild(value.build, baseUrl)) return false;
   return optionalString(value.submittedAt, 128) && optionalString(value.correlatedAt, 128);
 }
 
@@ -193,17 +262,27 @@ function validCommon(value: Record<string, unknown>): boolean {
 
 export function isValidProjectResult(value: unknown): value is VulnerabilityReportResultV2 {
   if (!isRecord(value) || !validCommon(value) || !['success', 'partial'].includes(String(value.state)) ||
-    !isRecord(value.jenkins) || !isSafePersistedUrl(value.jenkins.baseUrl) || !boundedString(value.jenkins.jobPath, 256) ||
-    !isSafePersistedUrl(value.jenkins.jobUrl) || !positiveInteger(value.jenkins.buildNumber) ||
-    !isSafePersistedUrl(value.jenkins.buildUrl) || !boundedString(value.jenkins.status, 256) || !validTrigger(value.jenkins.trigger) ||
-    !validNavigation(value.navigation) || !isRecord(value.reports) || !validSnyk(value.reports.snyk) ||
-    !validSonar(value.reports.sonarqube)) return false;
+    !validJenkinsResult(value.jenkins) || !validNavigation(value.navigation) || !isRecord(value.reports) ||
+    !validSnyk(value.reports.snyk) || !validSonar(value.reports.sonarqube)) return false;
   return true;
+}
+
+function validFailureJenkins(value: unknown): boolean {
+  if (!isRecord(value) || !positiveInteger(value.buildNumber) || !isSafePersistedUrl(value.buildUrl)) return false;
+  const hasBaseUrl = value.baseUrl !== undefined;
+  const hasJobPath = value.jobPath !== undefined;
+  const hasJobUrl = value.jobUrl !== undefined;
+  if (!hasBaseUrl && !hasJobPath && !hasJobUrl) return true;
+  if (!hasBaseUrl || !hasJobPath || !hasJobUrl || !isSafePersistedUrl(value.baseUrl) ||
+    !boundedString(value.jobPath, 256) || !isSafePersistedUrl(value.jobUrl)) return false;
+  return sameJenkinsContextUrl(value.jobUrl, value.baseUrl) &&
+    sameJenkinsJobIdentity(value.jobUrl, expectedJenkinsJobUrl(value.baseUrl, value.jobPath) ?? '') &&
+    sameJenkinsBuildIdentity(value.jobUrl, value.buildNumber, value.buildUrl);
 }
 
 export function isValidFailureResult(value: unknown): value is ProjectFailureResultV2 {
   if (!isRecord(value) || !validCommon(value) || value.state !== 'failed' || !boundedString(value.diagnostic, MAX_PERSISTED_DIAGNOSTIC_LENGTH)) return false;
-  return value.jenkins === undefined || (isRecord(value.jenkins) && positiveInteger(value.jenkins.buildNumber) && isSafePersistedUrl(value.jenkins.buildUrl));
+  return value.jenkins === undefined || validFailureJenkins(value.jenkins);
 }
 
 export function assertValidProjectResult(value: unknown): asserts value is VulnerabilityReportResultV2 {

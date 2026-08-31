@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import type { NavigationTargets } from '../../result-types.js';
+import { deriveJenkinsBaseUrl } from '../../config-values.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 import {
@@ -14,6 +15,7 @@ import {
   navigation,
   pageCaptureMetadata,
   screenshotRegion,
+  assertSonarqubeUrlMatchesBuild,
   SONAR_SCREENSHOTS,
 } from './sonarqube-capture-support.js';
 import {
@@ -58,13 +60,14 @@ async function waitForOverallUrl(page: Page, expectedKey: string, deadline: Work
 function validatedStepUrl(input: SonarStepInput, value: string, label: 'overall'): string {
   const url = assertAllowedUrl(
     value,
-    input.project.baseUrl,
+    deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),
     input.project.sourceOrigins.sonarqube,
     `SonarQube ${label} URL`,
   );
   const parsed = new URL(url);
   if (!hasCredentialFreeAuthority(parsed) || exactQueryValue(parsed, 'id') !== input.expectedKey) throw new Error(`SonarQube ${label} has the wrong project identity`);
   if (/\/login(?:\/|$)/iu.test(parsed.pathname)) throw new Error(`SonarQube ${label} redirected to login`);
+  assertSonarqubeUrlMatchesBuild(url, input.project, input.expectedBuild);
   return url;
 }
 

@@ -10,8 +10,8 @@ import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
 function project(origin: string): NormalizedProjectConfig {
   return {
     id: 'service-a', name: 'Service A', enabled: true, schemaVersion: 1,
-    baseUrl: origin, jobPath: 'service-a', jobUrl: `${origin}/job/service-a/`,
-    loginPath: '/login', triggerMode: 'ui', timeoutMs: 30_000, pollIntervalMs: 50,
+    loginUrl: `${origin}/login`,
+    jobUrl: `${origin}/job/service-a/`,
     browser: 'chromium', artifactDir: 'reports',
     credentialVariables: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
     sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [] },

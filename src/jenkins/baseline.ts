@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import type { RunnerConfig } from '../config.js';
+import type { JenkinsRunnerConfig } from './runner-config.js';
 import type { JenkinsBaseline, QueueReference } from '../types.js';
 import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import { latestBuildNumber as readLatestBuildNumber, type JenkinsJobReference } from './job.js';
@@ -14,7 +14,7 @@ function uniqueQueues(queues: readonly QueueReference[]): QueueReference[] {
 /** Captures only pre-click evidence; callers must not reuse it after a submission. */
 export async function captureJenkinsBaseline(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   job: JenkinsJobReference,
   deadline: WorkflowDeadline,
 ): Promise<JenkinsBaseline> {

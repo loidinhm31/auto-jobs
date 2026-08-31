@@ -6,9 +6,12 @@ import type { Locator, Page, Route } from '@playwright/test';
 
 import { formatDiagnostic } from '../../config-errors.js';
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
+import { deriveJenkinsBaseUrl } from '../../config-values.js';
+import type { BuildReference } from '../../types.js';
 import type { CaptureMetadata, NavigationTarget } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
+import { isJenkinsArtifactPathForBuild } from '../../jenkins/url-identity.js';
 import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
 
 export const SONAR_VIEWPORT = { width: 1_440, height: 900 } as const;
@@ -20,6 +23,20 @@ export const SONAR_SCREENSHOTS = {
 export function terminalIdentity(value: string): string {
   const url = new URL(value);
   return `${url.origin}${url.pathname.replace(/\/+$/u, '')}${url.search}`;
+}
+
+export function assertSonarqubeUrlMatchesBuild(
+  value: string,
+  project: NormalizedProjectConfig,
+  expectedBuild?: BuildReference,
+): void {
+  if (expectedBuild === undefined) return;
+  const candidate = new URL(value);
+  const jenkinsOrigin = new URL(project.sourceOrigins.jenkins).origin;
+  if (candidate.origin === jenkinsOrigin && candidate.pathname.includes('/artifact/') &&
+    !isJenkinsArtifactPathForBuild(project.jobUrl, value, expectedBuild.number)) {
+    throw new Error('SonarQube evidence did not belong to the selected Jenkins build');
+  }
 }
 
 export function projectKeyFromHome(
@@ -142,7 +159,7 @@ export function createRouteHandler(
     try {
       assertAllowedUrl(
         route.request().url(),
-        project.baseUrl,
+        deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl),
         project.sourceOrigins.sonarqube,
         'SonarQube request URL',
       );

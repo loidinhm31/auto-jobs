@@ -3,9 +3,8 @@ import type { Page } from '@playwright/test';
 import {
   formatDiagnostic,
   sanitizeUrl,
-  resolveBasePathUrl,
-} from '../config.js';
-import type { RunnerConfig } from '../config.js';
+} from '../config-errors.js';
+import type { JenkinsRunnerConfig } from './runner-config.js';
 
 export class JenkinsFlowError extends Error {
   constructor(message: string) {
@@ -16,7 +15,7 @@ export class JenkinsFlowError extends Error {
 
 export function formatJenkinsObservation(
   error: unknown,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
 ): string {
   return formatDiagnostic(error, [config.username, config.password]);
 }
@@ -24,9 +23,9 @@ export function formatJenkinsObservation(
 export function formatJenkinsFailure(
   action: string,
   error: unknown,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   page: Page,
-  fallbackUrl = resolveBasePathUrl(config.baseUrl, config.loginPath),
+  fallbackUrl = config.loginUrl,
   observations: readonly string[] = [],
 ): string {
   const currentUrl = page.url().trim() || fallbackUrl;

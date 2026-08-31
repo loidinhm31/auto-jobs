@@ -17,6 +17,7 @@ import {
 } from '../../src/reports/sonarqube/sonarqube-locators.js';
 import {
   assertProjectUrl,
+  assertSonarqubeUrlMatchesBuild,
   screenshotFacetRange,
 } from '../../src/reports/sonarqube/sonarqube-capture-support.js';
 import { normalizeSonarIssueFacets } from '../../src/reports/sonarqube/sonarqube-issue-facets.js';
@@ -26,9 +27,11 @@ import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
 function project(overrides: Record<string, unknown> = {}): NormalizedProjectConfig {
   return {
     id: 'service-a', name: 'Service A', enabled: true, schemaVersion: 1,
-    baseUrl: 'https://jenkins.example', jobPath: 'service-a', jobUrl: 'https://jenkins.example/job/service-a/',
-    loginPath: '/login', triggerMode: 'ui', timeoutMs: 30_000, pollIntervalMs: 50,
-    browser: 'chromium', artifactDir: 'reports',
+    loginUrl: 'https://jenkins.example/login',
+    jobUrl: 'https://jenkins.example/job/service-a/',
+    timeoutMs: 30_000,
+    browser: 'chromium',
+    artifactDir: 'reports',
     credentialVariables: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
     sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: ['https://sonar.example'] },
     sources: {
@@ -80,6 +83,36 @@ test('classifies one allowlisted Sonar dashboard and rejects ambiguity', () => {
     .toBeUndefined();
   expect(classifySonarLinks([{ href: 'https://sonar.example/artifact/reports/sonarqube/index.html?id=service-a&id=service-a' }], configured).home)
     .toBeUndefined();
+});
+
+test('rejects archived SonarQube links from a different selected build', () => {
+  const selectedBuild = { number: 42, url: 'https://jenkins.example/job/service-a/42/' };
+  const result = classifySonarLinks([
+    { href: 'https://jenkins.example/job/service-a/41/artifact/reports/sonarqube/index.html', text: 'SonarQube Quality Gate' },
+    { href: 'https://jenkins.example/job/service-a/42/artifact/reports/sonarqube/index.html', text: 'SonarQube Quality Gate' },
+  ], project({ sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: ['https://jenkins.example'] }, sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: ['https://jenkins.example'], projectId: 'service-a' } } }), selectedBuild);
+  expect(result.home?.href).toBe('https://jenkins.example/job/service-a/42/artifact/reports/sonarqube/index.html?id=service-a');
+  expect(result.warnings).toContain('an observed SonarQube link did not belong to the selected Jenkins build');
+  const withoutIdentity = project({
+    sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: ['https://jenkins.example'] },
+    sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: ['https://jenkins.example'] } },
+  });
+  expect(classifySonarLinks([
+    { href: 'https://jenkins.example/job/service-a/42/artifact/reports/sonarqube/index.html', text: 'SonarQube Quality Gate' },
+  ], withoutIdentity, selectedBuild).home).toBeUndefined();
+});
+test('rejects redirected archived SonarQube pages from a different selected build', () => {
+  const selectedBuild = { number: 42, url: 'https://jenkins.example/job/service-a/42/' };
+  expect(() => assertSonarqubeUrlMatchesBuild(
+    'https://jenkins.example/job/service-a/41/artifact/reports/sonarqube/overall.html?id=service-a',
+    project(),
+    selectedBuild,
+  )).toThrow(/selected Jenkins build/u);
+  expect(() => assertSonarqubeUrlMatchesBuild(
+    'https://sonar.example/dashboard?id=service-a',
+    project(),
+    selectedBuild,
+  )).not.toThrow();
 });
 
 test('requires home and Overview identities to remain on a Sonar dashboard', () => {
@@ -208,7 +241,7 @@ test('captures the deterministic Jenkins archived SonarQube fixture through visi
   const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-archived-fixture-'));
   const configured = project({
     sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: [] },
-    sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: [] } },
+    sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: [], projectId: 'service-a' } },
   });
   await page.context().route('https://jenkins.example/**', async (route) => {
     const url = new URL(route.request().url());

@@ -8,10 +8,8 @@ import {
   assertAllowedUrl,
   assertProjectConfigDocument,
   canonicalizeBaseUrl,
-  normalizeJobPath,
-  normalizeLoginPath,
   loadProjectConfig,
-  parseProjectsConfig,
+  normalizeConfiguredUrl,
   resolveProjectSecrets,
 } from '../../src/config.js';
 import {
@@ -33,8 +31,11 @@ function project(overrides: Record<string, unknown> = {}) {
       {
         id: 'service-a',
         name: 'Service A',
-        baseUrl: 'https://jenkins.example/jenkins',
-        jobPath: 'service-a',
+        loginUrl: 'https://jenkins.example/jenkins/login',
+        jobUrl: 'https://jenkins.example/jenkins/job/service-a/',
+        sourceOrigins: {
+          jenkins: ['https://jenkins.example'],
+        },
         ...overrides,
       },
     ],
@@ -53,15 +54,10 @@ test('rejects raw and encoded traversal before URL normalization', () => {
     'https://jenkins.example/jenkins',
     ['https://jenkins.example'],
   )).toThrow(/traversal/u);
-  expect(() => canonicalizeBaseUrl(
+  expect(() => normalizeConfiguredUrl(
     'https://jenkins.example/jenkins/%2525252525252e%2525252525252e/admin',
+    'jobUrl',
   )).toThrow(/traversal/u);
-  expect(() => normalizeJobPath('folder/%2525252525252e%2525252525252e/job')).toThrow(
-    /invalid path segment/u,
-  );
-  expect(() => normalizeLoginPath('/login/%5c..%5cadmin')).toThrow(
-    /invalid path segment/u,
-  );
 });
 
 test('rejects credential-like query keys without echoing values', () => {
@@ -104,9 +100,9 @@ test('prefers trimmed per-project credential variables over default references',
       },
     },
     projects: [project({
-      credentialVariables: {
-        username: ' PROJECT_USER ',
-        password: ' PROJECT_PASS ',
+      credentials: {
+        usernameVariable: ' PROJECT_USER ',
+        passwordVariable: ' PROJECT_PASS ',
       },
     }).projects[0]],
   });
@@ -152,12 +148,12 @@ test('inherits the default requiredness for selector overrides', () => {
   }
   expect(() => assertProjectConfigDocument(project({
     selectors: {
-      trigger: { kind: 'role', value: 'button', unknown: true },
+      authLandmark: { kind: 'role', value: 'link', unknown: true },
     },
-  }))).toThrow(/valid selector/u);
+  }))).toThrow(/selector/u);
 });
 
-test('rejects file mode mixed with every legacy configuration family', () => {
+test('rejects file mode mixed with legacy structural environment inputs', () => {
   const filePath = writeConfig(project());
   try {
     for (const key of [
@@ -167,10 +163,9 @@ test('rejects file mode mixed with every legacy configuration family', () => {
       'JENKINS_USERNAME_VARIABLE',
       'PROJECT_ID',
     ]) {
-      expect(() => parseProjectsConfig({
-        PROJECTS_CONFIG_PATH: filePath,
+      expect(() => loadProjectConfig(filePath, {
         [key]: key === 'SNYK_ALLOWED_ORIGINS' ? 'https://snyk.example' : 'legacy-value',
-      })).toThrow(/combined/u);
+      }, false)).toThrow(/legacy environment configuration/u);
     }
   } finally {
     fs.rmSync(path.dirname(filePath), { recursive: true, force: true });

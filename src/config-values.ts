@@ -1,11 +1,7 @@
 import type { BrowserName } from './types.js';
 
 import { ConfigError } from './config-errors.js';
-import {
-  canonicalizeBaseUrl,
-  containsPathTraversal,
-} from './security/url-policy.js';
-import { resolveSafeRelativeUrl } from './security/relative-url-policy.js';
+import { assertAllowedUrl } from './security/url-policy.js';
 
 const BROWSER_NAMES: readonly BrowserName[] = [
   'chromium',
@@ -13,92 +9,53 @@ const BROWSER_NAMES: readonly BrowserName[] = [
   'webkit',
 ];
 
-function normalizePathSegment(segment: string, fieldName: string): string {
-  if (containsPathTraversal(segment)) {
-    throw new ConfigError([`${fieldName} contains an invalid path segment`]);
-  }
-  let decoded: string;
+const LOGIN_ENDPOINTS: Record<string, true> = {
+  login: true,
+  signin: true,
+  'sign-in': true,
+  j_spring_security_check: true,
+  j_acegi_security_check: true,
+};
+
+export function normalizeConfiguredUrl(value: string, fieldName = 'URL'): string {
+  const input = value.trim();
+  let parsed: URL;
   try {
-    decoded = decodeURIComponent(segment);
+    parsed = new URL(input);
   } catch {
-    throw new ConfigError([`${fieldName} contains an invalid encoded segment`]);
+    throw new ConfigError([`${fieldName} must be an absolute HTTP(S) URL`]);
   }
-  if (
-    decoded === '.' ||
-    decoded === '..' ||
-    decoded.length === 0 ||
-    /[\u0000-\u001f\u007f]/u.test(decoded)
-  ) {
-    throw new ConfigError([`${fieldName} contains an invalid path segment`]);
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new ConfigError([`${fieldName} must use http or https`]);
   }
-  return encodeURIComponent(decoded);
-}
-
-export function normalizeBaseUrl(value: string): string {
-  return canonicalizeBaseUrl(value, 'JENKINS_BASE_URL');
-}
-
-export function resolveBasePathUrl(
-  baseUrl: string,
-  relativePath: string,
-): string {
-  return resolveSafeRelativeUrl(baseUrl, relativePath, 'relative path');
-}
-
-export function resolveJenkinsJobUrl(baseUrl: string, jobPath: string): string {
-  const jobSegments = jobPath
-    .split('/')
-    .filter((segment) => segment.length > 0)
-    .map((segment) => `job/${segment}`)
-    .join('/');
-  return resolveBasePathUrl(baseUrl, `/${jobSegments}/`);
-}
-
-export function getOptionalBaseUrl(value: string | undefined): string | undefined {
-  const input = value?.trim();
-  return input === undefined || input.length === 0
-    ? undefined
-    : normalizeBaseUrl(input);
-}
-
-export function normalizeLoginPath(value: string): string {
-  const input = value.trim();
-  if (
-    !input.startsWith('/') ||
-    input.startsWith('//') ||
-    input.includes('?') ||
-    input.includes('#')
-  ) {
-    throw new ConfigError(['JENKINS_LOGIN_PATH must be a relative path']);
+  if (parsed.hash) {
+    throw new ConfigError([`${fieldName} must not contain a fragment`]);
   }
-
-  const segments = input
-    .split('/')
-    .filter((segment) => segment.length > 0)
-    .map((segment) => normalizePathSegment(segment, 'JENKINS_LOGIN_PATH'));
-  return `/${segments.join('/')}`;
+  return assertAllowedUrl(input, parsed.origin, [], fieldName);
 }
 
-export function normalizeJobPath(value: string): string {
-  const input = value.trim();
-  if (
-    input.length === 0 ||
-    input.includes('?') ||
-    input.includes('#') ||
-    /^https?:\/\//iu.test(input)
-  ) {
-    throw new ConfigError(['JENKINS_JOB_PATH must be a relative job path']);
+/**
+ * Derive one Jenkins context path shared by the login endpoint and job page.
+ */
+export function deriveJenkinsBaseUrl(loginUrl: string, jobUrl: string): string {
+  const login = new URL(normalizeConfiguredUrl(loginUrl, 'loginUrl'));
+  const job = new URL(normalizeConfiguredUrl(jobUrl, 'jobUrl'));
+  if (login.origin !== job.origin) {
+    throw new ConfigError(['loginUrl and jobUrl must share one Jenkins origin']);
   }
-
-  const segments = input
-    .split('/')
-    .filter((segment) => segment.length > 0)
-    .map((segment) => normalizePathSegment(segment, 'JENKINS_JOB_PATH'));
-  if (segments.length === 0) {
-    throw new ConfigError(['JENKINS_JOB_PATH must contain a job name']);
+  const loginSegments = login.pathname.split('/').filter(Boolean);
+  const jobSegments = job.pathname.split('/').filter(Boolean);
+  const lastLoginSegment = loginSegments.at(-1)?.toLowerCase();
+  const baseSegments = lastLoginSegment !== undefined && LOGIN_ENDPOINTS[lastLoginSegment] === true
+    ? loginSegments.slice(0, -1)
+    : loginSegments;
+  if (!baseSegments.every((segment, index) => jobSegments[index] === segment)) {
+    throw new ConfigError(['loginUrl and jobUrl must share one Jenkins base context']);
   }
-  return segments.join('/');
+  const basePath = baseSegments.length === 0 ? '' : `/${baseSegments.join('/')}`;
+  return `${login.origin}${basePath}`;
 }
+
 
 export function parsePositiveInteger(
   value: string,

@@ -5,30 +5,24 @@ import {
   type Page,
 } from '@playwright/test';
 
-import {
-  resolveBasePathUrl,
-  type RunnerConfig,
-} from '../config.js';
+import type { JenkinsRunnerConfig } from './runner-config.js';
 import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import { pollUntil } from '../workflow/poll-until.js';
 import { locatorFor } from './locators.js';
 import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
-import { resolveJenkinsJob } from './job.js';
 import { validateJenkinsUrl } from './url-identity.js';
 
-export interface AuthenticatedSession {
+export interface JenkinsSession {
   context: BrowserContext;
   page: Page;
   deadline: WorkflowDeadline;
 }
 
-function loginPathname(config: RunnerConfig): string {
-  return new URL(
-    resolveBasePathUrl(config.baseUrl, config.loginPath),
-  ).pathname;
+function loginPathname(config: JenkinsRunnerConfig): string {
+  return new URL(config.loginUrl).pathname;
 }
 
-function isLoginLocation(config: RunnerConfig, currentUrl: string): boolean {
+function isLoginLocation(config: JenkinsRunnerConfig, currentUrl: string): boolean {
   let pathname: string;
   try {
     pathname = new URL(currentUrl).pathname;
@@ -45,16 +39,19 @@ function isLoginLocation(config: RunnerConfig, currentUrl: string): boolean {
   );
 }
 
-/** Log in through Jenkins' form UI without persisting storage state. */
-export async function loginToJenkins(
+/** Submit Jenkins' login form without persisting storage state. */
+export async function submitJenkinsLogin(
   page: Page,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   deadline: WorkflowDeadline,
 ): Promise<void> {
-  const loginUrl = resolveBasePathUrl(config.baseUrl, config.loginPath);
+  const loginUrl = config.loginUrl;
 
   try {
-    const response = await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: deadline.requireRemaining() });
+    const response = await page.goto(loginUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: deadline.requireRemaining(),
+    });
     if (response === null || (response !== undefined && !response.ok())) {
       throw new JenkinsFlowError(`Jenkins login navigation returned HTTP ${response?.status() ?? 'no response'}`);
     }
@@ -74,9 +71,7 @@ export async function loginToJenkins(
     const landmark = locatorFor(page, config.selectors.authLandmark);
     if (config.selectors.authLandmark.required) {
       await expect(landmark).toBeVisible({ timeout: deadline.requireRemaining() });
-      return;
     }
-    await resolveJenkinsJob(page, config, deadline);
   } catch (error) {
     throw new JenkinsFlowError(
       formatJenkinsFailure('Jenkins login failed', error, config, page, loginUrl),
@@ -84,16 +79,16 @@ export async function loginToJenkins(
   }
 }
 
-/** Create an ephemeral context and close it if authentication fails. */
-export async function createAuthenticatedSession(
+/** Create an ephemeral Jenkins context and close it if login submission fails. */
+export async function createJenkinsSession(
   browser: Browser,
-  config: RunnerConfig,
+  config: JenkinsRunnerConfig,
   deadline = new WorkflowDeadline(config.timeoutMs),
-): Promise<AuthenticatedSession> {
+): Promise<JenkinsSession> {
   const context = await browser.newContext();
   const page = await context.newPage();
   try {
-    await loginToJenkins(page, config, deadline);
+    await submitJenkinsLogin(page, config, deadline);
     return { context, page, deadline };
   } catch (error) {
     await context.close();

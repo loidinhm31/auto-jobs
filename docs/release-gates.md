@@ -53,31 +53,35 @@ runs `npm ci --ignore-scripts`, and then runs `npm run test:release`. The image
 provides the browser and publishes no ports. A host WebKit download does not
 install the system-library ABI required by this image's browser.
 
-## Offline report gate
+## Report gate
 
-The report command is offline by default:
+The report command requires an explicit schema-v1 configuration path:
 
 ```sh
-npm run report
-npm run serve:report
+npm run report -- --config config/projects.example.json
 ```
 
-`REPORT_SOURCE` defaults to `templates`. The runner reads six bounded
-checked-in inputs: the Jenkins snapshot, Snyk HTML and summary JSON, and
-SonarQube home/overall/issues HTML. It uses synthetic-origin Playwright routes,
-not Jenkins or a vendor service. It writes `reports/index.html` plus project
-runs under `reports/` by default.
+The checked-in example uses `.invalid` placeholders and is not a live
+controller check. Before an authorized run, replace the placeholders and
+export the credential values named by `usernameVariable` and
+`passwordVariable`. The JSON stores variable names only.
 
-`PROJECTS_CONFIG_PATH` is not consulted in template mode. It is honored when
-`REPORT_SOURCE=jenkins` selects the Jenkins collector. See
-[multi-project-configuration.md](./multi-project-configuration.md) for the
-schema-v1 file mode and secret references.
+`--config` is required exactly once. `REPORT_SOURCE`,
+`PROJECTS_CONFIG_PATH`, legacy `JENKINS_*` project settings, positional
+arguments, and legacy structural keys (`baseUrl`, `jobPath`, `captureFrom`,
+and `buildNumber`) are rejected. `loginUrl` and `jobUrl` must be exact,
+absolute, credential-free HTTP(S) URLs on one Jenkins origin and base context.
 
-The checked-in template corpus contains six Snyk findings with critical/high
-counts `2/4`. The Docker Jenkins corpus is separate and contains four findings
-with critical/high/medium/low counts `0/1/2/1`. These are fixture facts, not
-live service measurements. A mismatch in arbitrary external evidence remains
-visible as partial evidence.
+The template-navigation gate remains test-only:
+
+```sh
+npm run test:e2e:templates
+```
+
+It fulfills exact configured and discovered URLs from checked-in templates
+with blocked unmatched network requests. It does not contact Jenkins or
+vendors and does not claim live execution. Generated reports are served
+separately with `npm run serve:report`.
 
 The report runner uses a project-local `.report-runtime-*` directory for
 managed temporary files and attempts bounded cleanup after completion. The
@@ -129,24 +133,21 @@ REPORT_ALLOW_LAN=1 npm run serve:report
 Non-loopback hosts fail without explicit LAN permission. `0.0.0.0` binds all
 IPv4 interfaces. The server is read-only, unauthenticated, and serves only
 GET/HEAD requests below a canonical root containing the generated aggregate
-`index.html`. Use a firewall and a trusted network; this is not a public
-hosting service.
+`index.html`. Use a firewall and a trusted network; this is not public
+hosting.
 
 ## Disposable Jenkins fixture gate
 
-The optional fixture gate exercises Jenkins login, job resolution, and report
-capture against a local controller. It is not a remote or production gate.
-The Compose mapping is:
+The optional Compose fixture is test-only. It exercises the local Jenkins
+fixture suites and is not a report CLI source mode or a production gate. The
+mapping is:
 
 ```text
 127.0.0.1:${JENKINS_PORT:-8080}  ->  container port 8080
 ```
 
-`JENKINS_PORT` changes the host port only. The E2E scripts derive their default
-`JENKINS_BASE_URL` from that host port when no explicit URL is supplied.
-
-Validate Compose without printing its interpolated configuration, then start
-the fixture:
+Validate Compose without printing interpolated secrets, then start the
+fixture:
 
 ```sh
 export JENKINS_PORT=18080
@@ -157,36 +158,24 @@ docker compose up -d --build
 docker compose ps
 ```
 
-The fixture seeds:
+The fixture seeds a parameterized
+`playwright-vulnerability-report` job with `FIXTURE_VARIANT` values
+`pass`, `failed`, `empty`, and `malformed`, plus a non-parameterized
+`playwright-vulnerability-report-build-now` job. Neither job runs a real
+Snyk or SonarQube scanner.
 
-- `playwright-vulnerability-report`: parameterized, with
-  `FIXTURE_VARIANT` values `pass`, `failed`, `empty`, and `malformed`;
-- `playwright-vulnerability-report-build-now`: no parameters, for the
-  non-parameterized Build Now correlation path.
-
-The parameterized job's `failed` variant archives reports before failing,
-`empty` removes publisher directories, and `malformed` substitutes malformed
-publisher files. The Build Now job uses the normal corpus. Neither job runs a
-real Snyk or SonarQube scanner. The WebKit Compose service is unrelated to this
-controller and publishes no ports.
-
-Run the fixture-backed suites only when the disposable controller is intended:
+Run fixture-backed tests only when the disposable controller is intended:
 
 ```sh
-JENKINS_JOB_PATH=playwright-vulnerability-report npm run test:e2e
+npm run test:e2e
 npm run test:e2e:build-now
 ```
 
-Stop with `docker compose down`. Use `docker compose down -v` only to
-intentionally remove the named `jenkins_home` volume and all fixture build
-history. A Docker-compatible rootless Podman setup may be used; on Fedora it
-may require `XDG_RUNTIME_DIR` and an available Podman socket.
-
-Do not run a no-build-number live flow against this fixture unless the
-mutating Build Now behavior is intended. A schema-v1 run with `buildNumber`
-selects an existing build and performs no trigger action. Legacy mode without
-that value can submit Build Now on a non-parameterized job; parameterized jobs
-are rejected before interaction.
+These scripts' `JENKINS_BASE_URL` and `JENKINS_JOB_PATH` values configure the
+test harness only; they are not accepted as report configuration. Stop with
+`docker compose down`; use `docker compose down -v` only to intentionally
+remove fixture history. This documentation does not claim live Jenkins or
+browser execution.
 
 ## Artifact verification
 

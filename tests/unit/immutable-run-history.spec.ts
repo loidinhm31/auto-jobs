@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { expect, test, type Browser } from '@playwright/test';
 
-import { parseProjectsConfig } from '../../src/config.js';
+import { loadProjectConfig } from '../../src/config.js';
 import type { CaptureResult } from '../../src/project/project-runner.js';
 import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
@@ -14,10 +14,13 @@ function writeConfig(root: string): string {
   const filename = path.join(root, 'projects.json');
   fs.writeFileSync(filename, JSON.stringify({
     schemaVersion: 1,
-    defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000, pollIntervalMs: 50 },
+    defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
     projects: [{
-      id: 'service-a', name: 'Service A', baseUrl: 'https://jenkins.example', jobPath: 'service-a',
-      buildNumber: 42, credentials: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
+      id: 'service-a',
+      name: 'Service A',
+      loginUrl: 'https://jenkins.example/login',
+      jobUrl: 'https://jenkins.example/job/service-a/',
+      credentials: { usernameVariable: 'USER', passwordVariable: 'PASSWORD' },
     }],
   }), { mode: 0o600 });
   return filename;
@@ -44,16 +47,17 @@ function completeCapture(buildUrl: string): CaptureResult {
 test('keeps exact same-build reruns in immutable report folders and aggregate links', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-07-run-history-'));
   try {
+    const configPath = writeConfig(root);
     const environment = {
-      PROJECTS_CONFIG_PATH: writeConfig(root), USER: 'fixture-user', PASSWORD: 'fixture-password',
+      USER: 'fixture-user', PASSWORD: 'fixture-password',
     };
-    const project = parseProjectsConfig(environment).projects[0]!;
+    const project = loadProjectConfig(configPath, environment)[0]!;
     const browser = {
       newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
       close: async () => undefined,
     } as unknown as Browser;
     const workflow: ProjectWorkflow = async (_page, currentProject, _secrets, _deadline, state) => {
-      const build = { number: currentProject.buildNumber as number, url: `${currentProject.jobUrl}${currentProject.buildNumber}/` };
+      const build = { number: 42, url: `${currentProject.jobUrl}42/` };
       state.transition('authenticated');
       state.transition('job_resolved');
       state.transition('existing_build_selected');

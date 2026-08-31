@@ -13,36 +13,20 @@ const SELECTOR_KINDS: readonly SelectorKind[] = [
   'text',
   'css',
 ];
-const SELECTOR_FIELDS = new Set(['kind', 'value', 'name', 'required']);
+const SELECTOR_FIELDS: Record<string, true> = {
+  kind: true,
+  value: true,
+  name: true,
+  required: true,
+};
 const MAX_SELECTOR_TEXT_LENGTH = 512;
 
 export const DEFAULT_SELECTORS: SelectorConfig = {
-  trigger: {
-    kind: 'role',
-    value: 'button',
-    name: 'Build Now',
-    required: true,
-  },
   authLandmark: {
     kind: 'role',
     value: 'link',
     name: 'Manage Jenkins',
     required: false,
-  },
-  queueUrl: {
-    kind: 'css',
-    value: 'a[href*="/queue/item/"]',
-    required: false,
-  },
-  buildStatus: {
-    kind: 'testId',
-    value: 'jenkins-build-status',
-    required: true,
-  },
-  buildUrl: {
-    kind: 'testId',
-    value: 'jenkins-build-url',
-    required: true,
   },
   sonarqubeReport: {
     kind: 'testId',
@@ -60,31 +44,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function cloneSelector(selector: LocatorSelector): LocatorSelector {
-  const copy: LocatorSelector = {
-    kind: selector.kind,
-    value: selector.value,
-    required: selector.required,
-  };
-  if (selector.name !== undefined) {
-    copy.name = selector.name;
-  }
-  return copy;
-}
-
-export function parseSelector(
-  value: string,
-  fieldName = 'selector',
-  defaultRequired = true,
-): LocatorSelector {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value) as unknown;
-  } catch {
-    throw new ConfigError([`${fieldName} must be valid JSON`]);
-  }
-  return parseSelectorValue(parsed, fieldName, defaultRequired);
-}
 
 export function parseSelectorValue(
   parsed: unknown,
@@ -96,7 +55,7 @@ export function parseSelectorValue(
   }
 
   for (const key of Object.keys(parsed)) {
-    if (!SELECTOR_FIELDS.has(key)) {
+    if (SELECTOR_FIELDS[key] !== true) {
       throw new ConfigError([`${fieldName}.${key} is not supported`]);
     }
   }
@@ -147,25 +106,3 @@ export function parseSelectorValue(
   return selector;
 }
 
-export function parseSelectorEnv(
-  env: NodeJS.ProcessEnv,
-  key: string,
-  issues: string[],
-  defaultSelector: LocatorSelector,
-  requiredEnv: boolean,
-  readOptional: (source: NodeJS.ProcessEnv, name: string) => string | undefined,
-): LocatorSelector {
-  const raw = readOptional(env, key);
-  if (raw === undefined) {
-    if (requiredEnv) {
-      issues.push(`${key} is required`);
-    }
-    return cloneSelector(defaultSelector);
-  }
-  try {
-    return parseSelector(raw, key, defaultSelector.required);
-  } catch {
-    issues.push(`${key} must be a valid supported selector object`);
-    return cloneSelector(defaultSelector);
-  }
-}

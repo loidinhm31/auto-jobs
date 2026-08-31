@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test';
 import { parseBrowserName } from './src/config.js';
 
 const browserName = parseBrowserName(process.env['PLAYWRIGHT_BROWSER']);
+const executablePath = process.env['PLAYWRIGHT_EXECUTABLE_PATH']?.trim();
 
 export default defineConfig({
   testDir: './tests',
@@ -23,6 +24,9 @@ export default defineConfig({
     screenshot: 'off',
     video: 'off',
     headless: true,
+    ...(executablePath === undefined || executablePath.length === 0
+      ? {}
+      : { launchOptions: { executablePath } }),
   },
   projects: [
     {

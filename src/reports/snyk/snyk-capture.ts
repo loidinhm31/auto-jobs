@@ -2,6 +2,8 @@ import { type Page } from '@playwright/test';
 
 import { sanitizeUrl } from '../../config-errors.js';
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
+import { deriveJenkinsBaseUrl } from '../../config-values.js';
+import type { BuildReference } from '../../types.js';
 import type {
   CaptureMetadata,
   NavigationTarget,
@@ -27,6 +29,7 @@ import {
   SNYK_VIEWPORT,
   snykProjectIdentityWarning,
   waitForLandmark,
+  assertSnykUrlMatchesBuild,
 } from './snyk-capture-support.js';
 
 export interface SnykCaptureResult {
@@ -41,6 +44,7 @@ export type SnykSummaryReader = (
   summaryUrl: string,
   project: NormalizedProjectConfig,
   deadline: WorkflowDeadline,
+  expectedBuild?: BuildReference,
 ) => Promise<SnykSummaryEvidence>;
 
 function navigation(state: SnykSourceEvidence['state'], liveUrl?: string): NavigationTarget {
@@ -77,23 +81,25 @@ export async function captureSnykEvidence(input: {
   deadline: WorkflowDeadline;
   outputDirectory: string;
   terminalBuildUrl?: string;
+  expectedBuild?: BuildReference;
   openSafePage?: (page: Page) => Promise<ScriptSafePage>;
   readSummary?: SnykSummaryReader;
 }): Promise<SnykCaptureResult> {
   let reportUrl: string | undefined;
   let terminalUrl: string | undefined;
   let policyBlocked = false;
+  let completedResult: SnykCaptureResult | undefined;
   try {
-    const currentTerminalUrl = assertAllowedUrl(input.page.url(), input.project.baseUrl, [input.project.sourceOrigins.jenkins], 'Jenkins terminal URL');
+    const currentTerminalUrl = assertAllowedUrl(input.page.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), [input.project.sourceOrigins.jenkins], 'Jenkins terminal URL');
     terminalUrl = currentTerminalUrl;
     if (input.terminalBuildUrl !== undefined) {
-      const expectedTerminalUrl = assertAllowedUrl(input.terminalBuildUrl, input.project.baseUrl, [input.project.sourceOrigins.jenkins], 'terminal build URL');
+      const expectedTerminalUrl = assertAllowedUrl(input.terminalBuildUrl, deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), [input.project.sourceOrigins.jenkins], 'terminal build URL');
       if (terminalIdentity(currentTerminalUrl) !== terminalIdentity(expectedTerminalUrl)) {
         throw new Error('Snyk capture did not start from the exact terminal Jenkins build');
       }
     }
     const links = await pageLinkCandidates(input.page);
-    const classified = classifySnykLinks(links, input.project);
+    const classified = classifySnykLinks(links, input.project, input.expectedBuild);
     reportUrl = classified.report?.href;
     if (reportUrl === undefined) {
       const state = classified.warnings.length === 0 ? 'not_found' : 'incomplete';
@@ -112,7 +118,7 @@ export async function captureSnykEvidence(input: {
         try {
           assertAllowedUrl(
             request.url(),
-            input.project.baseUrl,
+            deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),
             input.project.sourceOrigins.snyk,
             'Snyk request URL',
           );
@@ -134,10 +140,11 @@ export async function captureSnykEvidence(input: {
         if (policyBlocked) throw new Error('Snyk request was blocked by the configured origin policy');
         const validatedFinalUrl = assertAllowedUrl(
           capturePage.url(),
-          input.project.baseUrl,
+          deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),
           input.project.sourceOrigins.snyk,
           'Snyk final URL',
         );
+        assertSnykUrlMatchesBuild(validatedFinalUrl, input.project, input.expectedBuild);
         const finalUrl = sanitizeUrl(validatedFinalUrl);
         if (response !== null && response.status() >= 400) throw new Error(`Snyk report returned HTTP ${response.status()}`);
         const landmark = await waitForLandmark(capturePage, input.project, input.deadline);
@@ -148,7 +155,9 @@ export async function captureSnykEvidence(input: {
         if (identityWarning !== undefined) warnings.push(identityWarning);
         if (classified.summary?.href !== undefined) {
           try {
-            summaryEvidence = await (input.readSummary ?? readSummary)(capturePage, classified.summary.href, input.project, input.deadline);
+            const evidence = await (input.readSummary ?? readSummary)(capturePage, classified.summary.href, input.project, input.deadline, input.expectedBuild);
+            assertSnykUrlMatchesBuild(evidence.url, input.project, input.expectedBuild);
+            summaryEvidence = evidence;
           } catch (error) {
             warnings.push(`Snyk summary evidence failed: ${captureFailureMessage(error)}`);
           }
@@ -195,12 +204,13 @@ export async function captureSnykEvidence(input: {
           summary: normalized.summary,
           findings: normalized.findings,
         };
-        return {
+        completedResult = {
           source,
           navigation: source.navigation[0] as NavigationTarget,
           screenshots: screenshot === undefined ? [] : [screenshot.filename],
           warnings: finalWarnings,
         };
+        return completedResult;
       } finally {
         await capturePage.unroute('**/*', routeHandler);
       }
@@ -209,10 +219,27 @@ export async function captureSnykEvidence(input: {
         await safeCapture.close();
       } finally {
         if (capturePage === input.page && terminalUrl !== undefined && input.page.url() !== terminalUrl) {
-          await input.page.goto(terminalUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: input.deadline.requireRemaining(),
-          });
+          try {
+            await input.page.goto(terminalUrl, {
+              waitUntil: 'domcontentloaded',
+              timeout: input.deadline.requireRemaining(),
+            });
+          } catch (error) {
+            const warning = `Snyk source page restore failed: ${captureFailureMessage(error)}`;
+            if (completedResult !== undefined) {
+              const warnings = boundedDiagnostics([...new Set([...completedResult.warnings, warning])]);
+              completedResult.warnings = warnings;
+              completedResult.source = {
+                ...completedResult.source,
+                state: 'incomplete',
+                navigation: [navigation('incomplete', completedResult.navigation.liveUrl)],
+                warnings,
+              };
+              completedResult.navigation = completedResult.source.navigation[0] as NavigationTarget;
+            } else {
+              throw error;
+            }
+          }
         }
       }
     }

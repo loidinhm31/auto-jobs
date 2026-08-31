@@ -5,14 +5,14 @@ import { ArtifactPaths } from './artifacts/artifact-paths.js';
 import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
 import { writeAggregateData } from './artifacts/result-writer.js';
 import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
-import { parseProjectsConfig } from './config.js';
+import { loadProjectConfig } from './config/project-config-loader.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
 import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from './result-types.js';
 import { runProject, type ProjectRunnerDependencies } from './project/project-runner.js';
 import type { ProjectOutcome, RunnerExecutionResult } from './project/project-types.js';
 import type { BrowserName } from './types.js';
 
-type BrowserLauncher = (browserName: BrowserName) => Promise<Browser>;
+type BrowserLauncher = (browserName: BrowserName, environment?: NodeJS.ProcessEnv) => Promise<Browser>;
 type ProjectExecutor = (
   project: NormalizedProjectConfig,
   dependencies: ProjectRunnerDependencies,
@@ -43,10 +43,25 @@ function enabledConfiguration(projects: readonly NormalizedProjectConfig[]): {
   return { projects: enabled, browserName: first.browser, reportRoot: first.artifactDir };
 }
 
-async function defaultLaunch(browserName: BrowserName): Promise<Browser> {
+function launchOptions(environment: NodeJS.ProcessEnv): { executablePath?: string; headless?: boolean } {
+  const executablePath = environment['PLAYWRIGHT_EXECUTABLE_PATH']?.trim();
+  const headlessValue = environment['PLAYWRIGHT_HEADLESS']?.trim().toLowerCase();
+  let headless: boolean | undefined;
+  if (headlessValue !== undefined && headlessValue !== '') {
+    if (['1', 'true', 'yes'].includes(headlessValue)) headless = true;
+    else if (['0', 'false', 'no'].includes(headlessValue)) headless = false;
+    else throw new Error('PLAYWRIGHT_HEADLESS must be true or false');
+  }
+  return {
+    ...(executablePath === undefined || executablePath === '' ? {} : { executablePath }),
+    ...(headless === undefined ? {} : { headless }),
+  };
+}
+
+async function defaultLaunch(browserName: BrowserName, environment: NodeJS.ProcessEnv = process.env): Promise<Browser> {
   if (browserName === 'firefox') return firefox.launch();
   if (browserName === 'webkit') return webkit.launch();
-  return chromium.launch();
+  return chromium.launch(launchOptions(environment));
 }
 
 function aggregateSummary(
@@ -118,7 +133,7 @@ export async function runConfiguredProjects(
     await recoverAggregatePublication(config.reportRoot);
     const initialCleanup = await artifacts.cleanupOrphans();
     runtimeWarnings.push(...initialCleanup.warnings);
-    const browser = await (dependencies.launchBrowser ?? defaultLaunch)(config.browserName);
+    const browser = await (dependencies.launchBrowser ?? defaultLaunch)(config.browserName, dependencies.runtimeEnvironment);
     try {
       for (const project of config.projects) {
         try {
@@ -184,10 +199,11 @@ export async function runConfiguredProjects(
   }
 }
 
-export async function runFromEnvironment(
+export async function runFromConfig(
+  filePath: string,
   env: NodeJS.ProcessEnv = process.env,
   dependencies: Omit<RunnerDependencies, 'runtimeEnvironment'> = {},
 ): Promise<RunnerExecutionResult> {
-  const loaded = parseProjectsConfig(env);
-  return runConfiguredProjects(loaded.projects, { ...dependencies, runtimeEnvironment: env }, loaded.diagnostics);
+  const projects = loadProjectConfig(filePath, env);
+  return runConfiguredProjects(projects, { ...dependencies, runtimeEnvironment: env });
 }

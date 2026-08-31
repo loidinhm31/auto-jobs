@@ -5,15 +5,18 @@ import * as path from 'node:path';
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
+import type { BuildReference } from '../../types.js';
 import { formatDiagnostic, sanitizeUrl } from '../../config-errors.js';
 import type { CaptureMetadata, SnykScanMetadata } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
+import { deriveJenkinsBaseUrl } from '../../config-values.js';
 import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 import {
   locatorFor,
   selectorDescription,
 } from '../../jenkins/locators.js';
 import type { PageLinkCandidate } from '../source-link-classifier.js';
+import { isJenkinsArtifactPathForBuild } from '../../jenkins/url-identity.js';
 import { MAX_SUMMARY_BYTES, parseSnykSummaryJson, type ParsedSnykSummary } from './snyk-summary-parser.js';
 
 export const SNYK_VIEWPORT = { width: 1_440, height: 900 } as const;
@@ -105,7 +108,7 @@ export async function waitForLandmark(
 
 export function safeObservedUrl(page: Page, project: NormalizedProjectConfig): string | undefined {
   try {
-    return sanitizeUrl(assertAllowedUrl(page.url(), project.baseUrl, project.sourceOrigins.snyk, 'Snyk observed URL'));
+    return sanitizeUrl(assertAllowedUrl(page.url(), deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.snyk, 'Snyk observed URL'));
   } catch { return undefined; }
 }
 
@@ -118,15 +121,8 @@ export function snykProjectIdentityWarning(
   project: NormalizedProjectConfig,
   finalUrl: string,
 ): string | undefined {
-  const configuredHome = project.sources.snyk.homeUrl;
-  const expectedFromHome = configuredHome === undefined ? undefined : (() => {
-    const url = new URL(configuredHome);
-    return ['id', 'project', 'projectId']
-      .map((key) => url.searchParams.get(key))
-      .find((value): value is string => value !== null && value.trim().length > 0);
-  })();
-  const expected = project.sources.snyk.projectId ?? expectedFromHome;
-  if (expected === undefined && new URL(finalUrl).origin !== new URL(project.baseUrl).origin) {
+  const expected = project.sources.snyk.projectId;
+  if (expected === undefined && new URL(finalUrl).origin !== new URL(deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl)).origin) {
     return 'Snyk project identity is not configured for external evidence';
   }
   if (expected === undefined) return undefined;
@@ -138,23 +134,41 @@ export function snykProjectIdentityWarning(
     : 'Snyk report project identity did not match the configured project';
 }
 
+export function assertSnykUrlMatchesBuild(
+  value: string,
+  project: NormalizedProjectConfig,
+  expectedBuild?: BuildReference,
+): void {
+  if (expectedBuild === undefined) return;
+  const candidate = new URL(value);
+  const jenkinsOrigin = new URL(project.sourceOrigins.jenkins).origin;
+  if (candidate.origin === jenkinsOrigin && candidate.pathname.includes('/artifact/') &&
+    !isJenkinsArtifactPathForBuild(project.jobUrl, value, expectedBuild.number)) {
+    throw new Error('Snyk evidence did not belong to the selected Jenkins build');
+  }
+}
+
 export async function readSummary(
   page: Page,
   summaryUrl: string,
   project: NormalizedProjectConfig,
   deadline: WorkflowDeadline,
+  expectedBuild?: BuildReference,
 ): Promise<SnykSummaryEvidence> {
-  let nextUrl = assertAllowedUrl(summaryUrl, project.baseUrl, project.sourceOrigins.snyk, 'Snyk summary URL');
+  let nextUrl = assertAllowedUrl(summaryUrl, deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.snyk, 'Snyk summary URL');
+  assertSnykUrlMatchesBuild(nextUrl, project, expectedBuild);
   for (let redirect = 0; redirect <= MAX_SUMMARY_REDIRECTS; redirect += 1) {
     const response = await page.request.get(nextUrl, {
       timeout: deadline.requireRemaining(),
       maxRedirects: 0,
     });
-    const responseUrl = assertAllowedUrl(response.url(), project.baseUrl, project.sourceOrigins.snyk, 'Snyk summary URL');
+    const responseUrl = assertAllowedUrl(response.url(), deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.snyk, 'Snyk summary URL');
+    assertSnykUrlMatchesBuild(responseUrl, project, expectedBuild);
     if (response.status() >= 300 && response.status() < 400) {
       const location = response.headers().location;
       if (location === undefined) throw new Error('Snyk summary redirect has no Location header');
-      nextUrl = assertAllowedUrl(new URL(location, responseUrl).toString(), project.baseUrl, project.sourceOrigins.snyk, 'Snyk summary redirect');
+      nextUrl = assertAllowedUrl(new URL(location, responseUrl).toString(), deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.snyk, 'Snyk summary redirect');
+      assertSnykUrlMatchesBuild(nextUrl, project, expectedBuild);
       continue;
     }
     if (response.status() >= 400) throw new Error(`Snyk summary returned HTTP ${response.status()}`);

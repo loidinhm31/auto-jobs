@@ -9,8 +9,9 @@ import {
   assertProjectConfigDocument,
   canonicalizeBaseUrl,
   canonicalizeOrigin,
+  deriveJenkinsBaseUrl,
   loadProjectConfig,
-  parseProjectsConfig,
+  normalizeConfiguredUrl,
   resolveProjectSecrets,
   resolveSafeRelativeUrl,
 } from '../../src/config.js';
@@ -32,27 +33,27 @@ function validDocument() {
         passwordVariable: 'JENKINS_PASSWORD',
       },
       timeoutMs: 30_000,
-      pollIntervalMs: 100,
     },
     projects: [
       {
         id: 'service-a',
         name: 'Service A',
-        baseUrl: 'https://jenkins.example/jenkins/',
-        jobPath: 'Container Platform/service-a/release%252Fsit',
+        loginUrl: 'https://jenkins.example/jenkins/login',
+        jobUrl: 'https://jenkins.example/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/',
         sourceOrigins: {
+          jenkins: ['https://jenkins.example'],
           snyk: ['https://snyk.example'],
           sonarqube: ['https://sonar.example'],
         },
         sonarqube: {
-          homeUrl: 'https://sonar.example/dashboard?id=service-a',
+          projectId: 'service-a',
         },
       },
       {
         id: 'service-b',
         name: 'Service B',
-        baseUrl: 'https://jenkins.example/jenkins',
-        jobPath: 'service-b',
+        loginUrl: 'https://jenkins.example/jenkins/login',
+        jobUrl: 'https://jenkins.example/jenkins/job/service-b/',
         credentials: {
           usernameVariable: 'SERVICE_B_USER',
           passwordVariable: 'SERVICE_B_PASSWORD',
@@ -69,11 +70,12 @@ const secrets = {
   SERVICE_B_PASSWORD: 'password-b',
 };
 
-test('loads enabled projects in declared order and normalizes nested Jenkins paths', () => {
+test('loads enabled projects in declared order with exact Jenkins URLs', () => {
   const filePath = writeConfig(validDocument());
   try {
     const projects = loadProjectConfig(filePath, secrets);
     expect(projects.map((project) => project.id)).toEqual(['service-a', 'service-b']);
+    expect(projects[0]?.loginUrl).toBe('https://jenkins.example/jenkins/login');
     expect(projects[0]?.jobUrl).toBe(
       'https://jenkins.example/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/',
     );
@@ -94,10 +96,8 @@ test('loads the committed two-project example with runtime-only secret values', 
   });
   expect(projects.map((project) => project.id)).toEqual(['service-a', 'service-b']);
   expect(projects.every((project) => Object.isFrozen(project))).toBe(true);
-  expect(projects[0]?.sources.snyk.reportPath).toBe(
-    'https://jenkins.example.invalid/jenkins/artifact/snyk-results.html',
-  );
   expect(projects[0]?.sources.snyk.projectId).toBe('service-a');
+  expect(projects[0]?.sources.snyk).not.toHaveProperty('reportPath');
 });
 
 test('uses per-project credential variable overrides and keeps values ephemeral', () => {
@@ -121,10 +121,10 @@ test('uses per-project credential variable overrides and keeps values ephemeral'
 test('rejects missing secret references without exposing values', () => {
   const filePath = writeConfig(validDocument());
   try {
-    expect(() => loadProjectConfig(filePath, { JENKINS_USERNAME: 'user-a' })).toThrow(
+    expect(() => loadProjectConfig(filePath, { JENKINS_USERNAME: 'user-a' }, true)).toThrow(
       /JENKINS_PASSWORD/u,
     );
-    expect(() => loadProjectConfig(filePath, { JENKINS_USERNAME: 'user-a' })).not.toThrow(
+    expect(() => loadProjectConfig(filePath, { JENKINS_USERNAME: 'user-a' }, true)).not.toThrow(
       'password-a',
     );
   } finally {
@@ -132,57 +132,73 @@ test('rejects missing secret references without exposing values', () => {
   }
 });
 
-test('rejects unsafe schema, embedded credentials, and mixed modes', () => {
+test('rejects schema-v2 documents, legacy fields, duplicate IDs, and mixed environment modes', () => {
   expect(() => assertProjectConfigDocument({ schemaVersion: 2, projects: [] })).toThrow(
     /schemaVersion/u,
   );
   expect(() => assertProjectConfigDocument({
     schemaVersion: 1,
     projects: [
-      { id: '../escape', name: 'bad', baseUrl: 'https://jenkins.example', jobPath: 'job' },
-      { id: 'same', name: 'one', baseUrl: 'https://jenkins.example', jobPath: 'one', credentials: { username: 'secret' } },
-      { id: 'same', name: 'two', baseUrl: 'https://jenkins.example', jobPath: 'two' },
+      {
+        id: '../escape',
+        name: 'bad',
+        baseUrl: 'https://jenkins.example',
+        jobPath: 'job',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job',
+      },
+      {
+        id: 'same',
+        name: 'one',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/one/',
+        credentials: { username: 'secret' },
+      },
+      {
+        id: 'same',
+        name: 'two',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/two/',
+      },
     ],
-  })).toThrow(/credential values|safe characters|duplicate/u);
+  })).toThrow(/not supported|safe characters|duplicate/u);
 
   const filePath = writeConfig(validDocument());
   try {
-    expect(() => parseProjectsConfig({
+    expect(() => loadProjectConfig(filePath, {
+      ...secrets,
       PROJECTS_CONFIG_PATH: filePath,
-      JENKINS_BASE_URL: 'https://legacy.example',
-    })).toThrow(/combined/u);
+    })).toThrow(/legacy environment configuration/u);
+    expect(() => loadProjectConfig(filePath, {
+      ...secrets,
+      REPORT_SOURCE: 'templates',
+    })).toThrow(/legacy environment configuration/u);
   } finally {
     fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
   }
 });
 
-test('normalizes legacy inputs into one project and records deprecation', () => {
-  const result = parseProjectsConfig({
-    JENKINS_BASE_URL: 'https://jenkins.example/jenkins',
-    JENKINS_USERNAME: 'legacy-user',
-    JENKINS_PASSWORD: 'legacy-password',
-    JENKINS_JOB_PATH: 'folder/release%252Fsit',
-    PROJECT_ID: 'legacy-service',
-    PROJECT_NAME: 'Legacy Service',
-  });
-  expect(result.mode).toBe('legacy');
-  expect(result.projects).toHaveLength(1);
-  expect(result.projects[0]?.id).toBe('legacy-service');
-  expect(result.diagnostics[0]).toMatch(/deprecated/u);
-});
-
-test('preserves optional legacy vendor identities separately from the runner project id', () => {
-  const result = parseProjectsConfig({
-    JENKINS_BASE_URL: 'https://jenkins.example/jenkins',
-    JENKINS_USERNAME: 'legacy-user',
-    JENKINS_PASSWORD: 'legacy-password',
-    JENKINS_JOB_PATH: 'service-a',
-    PROJECT_ID: 'local-build-now',
-    SNYK_PROJECT_ID: 'service-a',
-    SONARQUBE_PROJECT_ID: 'service-a',
-  });
-  expect(result.projects[0]?.sources.snyk.projectId).toBe('service-a');
-  expect(result.projects[0]?.sources.sonarqube.projectId).toBe('service-a');
+test('requires credential-free exact URLs and one Jenkins base context', () => {
+  expect(deriveJenkinsBaseUrl(
+    'https://jenkins.example/jenkins/login',
+    'https://jenkins.example/jenkins/job/service-a/',
+  )).toBe('https://jenkins.example/jenkins');
+  expect(() => normalizeConfiguredUrl(
+    'https://user:password@jenkins.example/jenkins/login',
+    'loginUrl',
+  )).toThrow(/credentials/u);
+  expect(() => normalizeConfiguredUrl(
+    'https://jenkins.example/jenkins/job/service-a?token=secret',
+    'jobUrl',
+  )).toThrow(/credential-like/u);
+  expect(() => normalizeConfiguredUrl(
+    'https://jenkins.example/jenkins/login#fragment',
+    'loginUrl',
+  )).toThrow(/fragment/u);
+  expect(() => deriveJenkinsBaseUrl(
+    'https://jenkins.example/jenkins/login',
+    'https://jenkins.example/other/job/service-a/',
+  )).toThrow(/base context/u);
 });
 
 test('canonicalizes origins and contains relative navigation', () => {

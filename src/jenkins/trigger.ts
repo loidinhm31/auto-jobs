@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, type Response } from '@playwright/test';
 
-import { sanitizeUrl, type RunnerConfig } from '../config.js';
+import { sanitizeUrl } from '../config-errors.js';
+import type { JenkinsRunnerConfig } from './runner-config.js';
 import type { BuildTrigger, BuildTriggerResult, ProjectTriggerState, QueueReference } from '../types.js';
 import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import { pushDiagnostic } from '../workflow/diagnostics.js';
@@ -16,7 +17,7 @@ interface Correlation {
   build?: BuildTriggerResult['build'];
 }
 
-function isDefaultTrigger(selector: RunnerConfig['selectors']['trigger']): boolean {
+function isDefaultTrigger(selector: JenkinsRunnerConfig['selectors']['trigger']): boolean {
   return selector.kind === 'role' && selector.value === 'button' &&
     selector.name === 'Build Now' && selector.required;
 }
@@ -35,7 +36,7 @@ async function hasParameterizedTrigger(page: Page): Promise<boolean> {
   ].map(hasVisible))).some(Boolean);
 }
 
-async function buildNowLocator(page: Page, config: RunnerConfig): Promise<Locator> {
+async function buildNowLocator(page: Page, config: JenkinsRunnerConfig): Promise<Locator> {
   if (!isDefaultTrigger(config.selectors.trigger)) return locatorFor(page, config.selectors.trigger).first();
   const controls = [
     page.getByRole('button', { name: 'Build Now', exact: true }),
@@ -61,7 +62,7 @@ export class UiBuildTrigger implements BuildTrigger {
 
   public constructor(
     private readonly page: Page,
-    private readonly config: RunnerConfig,
+    private readonly config: JenkinsRunnerConfig,
     private readonly job: JenkinsJobReference,
     private readonly deadline: WorkflowDeadline,
   ) {}
