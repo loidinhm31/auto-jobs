@@ -2,6 +2,15 @@ import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
 const executablePath = environment['PLAYWRIGHT_EXECUTABLE_PATH']?.trim();
+const headlessRaw = environment['PLAYWRIGHT_HEADLESS']?.trim().toLowerCase();
+const headedRaw = (environment['PLAYWRIGHT_HEADED'] ?? environment['HEADED'])?.trim().toLowerCase();
+const headless = (headlessRaw === '0' || headlessRaw === 'false' || headlessRaw === 'no' || headedRaw === '1' || headedRaw === 'true' || headedRaw === 'yes')
+  ? false
+  : true;
+const slowMoRaw = (environment['PLAYWRIGHT_SLOW_MO'] ?? environment['PLAYWRIGHT_ACTION_DELAY'])?.trim();
+const slowMo = slowMoRaw !== undefined && slowMoRaw !== '' && Number.isFinite(Number(slowMoRaw)) && Number(slowMoRaw) >= 0
+  ? Number(slowMoRaw)
+  : undefined;
 
 export default defineConfig({
   testDir: './tests',
@@ -21,10 +30,13 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'off',
     video: 'off',
-    headless: true,
-    ...(executablePath === undefined || executablePath.length === 0
-      ? {}
-      : { launchOptions: { executablePath } }),
+    headless,
+    launchOptions: {
+      ...(executablePath === undefined || executablePath.length === 0
+        ? {}
+        : { executablePath }),
+      ...(slowMo === undefined ? {} : { slowMo }),
+    },
   },
   projects: [
     {

@@ -11,7 +11,7 @@ import type { CaptureResult } from '../../src/project/project-runner.js';
 import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
 import { WorkflowDeadline, withWorkflowDeadlineAndLateResource } from '../../src/workflow/workflow-deadline.js';
-import { runConfiguredProjects } from '../../src/runner.js';
+import { launchOptions, runConfiguredProjects } from '../../src/runner.js';
 
 function projectFile(root: string): string {
   const filePath = path.join(root, 'projects.json');
@@ -236,4 +236,22 @@ test('bounds failure diagnostics before aggregate publication', async () => {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('configures launchOptions with executablePath, headless, and slowMo action delay', () => {
+  expect(launchOptions({})).toEqual({});
+  expect(launchOptions({ PLAYWRIGHT_EXECUTABLE_PATH: '  C:\\bin\\chrome.exe  ' })).toEqual({
+    executablePath: 'C:\\bin\\chrome.exe',
+  });
+  expect(launchOptions({ PLAYWRIGHT_HEADLESS: 'true' })).toEqual({ headless: true });
+  expect(launchOptions({ PLAYWRIGHT_HEADLESS: 'false' })).toEqual({ headless: false });
+  expect(launchOptions({ PLAYWRIGHT_HEADED: '1' })).toEqual({ headless: false });
+  expect(launchOptions({ HEADED: 'true' })).toEqual({ headless: false });
+  expect(launchOptions({ PLAYWRIGHT_SLOW_MO: '250' })).toEqual({ slowMo: 250 });
+  expect(launchOptions({ PLAYWRIGHT_ACTION_DELAY: '500' })).toEqual({ slowMo: 500 });
+  expect(launchOptions({ PLAYWRIGHT_SLOW_MO: '100', PLAYWRIGHT_ACTION_DELAY: '500' })).toEqual({ slowMo: 100 });
+  expect(() => launchOptions({ PLAYWRIGHT_SLOW_MO: '-5' })).toThrow(/non-negative/iu);
+  expect(() => launchOptions({ PLAYWRIGHT_SLOW_MO: 'abc' })).toThrow(/non-negative/iu);
+  expect(() => launchOptions({ PLAYWRIGHT_SLOW_MO: '12.5' })).toThrow(/non-negative/iu);
+  expect(() => launchOptions({ PLAYWRIGHT_HEADLESS: 'invalid' })).toThrow(/true or false/iu);
 });

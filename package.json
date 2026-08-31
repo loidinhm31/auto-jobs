@@ -12,14 +12,15 @@
     "install:browsers": "playwright install chromium webkit",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-report-css.mjs",
     "report": "node scripts/run-report.mjs",
+    "report:template": "node scripts/run-template-report.mjs",
     "serve:report": " npm run build &&  node .runner-build/reporting/report-server-cli.js",
     "typecheck": " tsc --noEmit",
     "test:unit": " node scripts/run-playwright.mjs playwright test tests/unit --config=playwright.unit.config.ts --pass-with-no-tests",
     "test:report": "node scripts/run-playwright.mjs --env PLAYWRIGHT_REPORT_ONLY=1 playwright test tests/e2e/generated-report.spec.ts --pass-with-no-tests",
     "test:release": " npm run typecheck &&  npm run build &&  npm run test:unit &&  npm run test:e2e:templates &&  npm run test:report &&  npm run test:release:webkit",
     "test:release:webkit": "node scripts/run-playwright.mjs playwright test tests/e2e/template-navigation.spec.ts --config=playwright.webkit.config.ts",
-    "test:e2e:templates": " node scripts/run-playwright.mjs playwright test tests/e2e/template-navigation.spec.ts --config=playwright.template.config.ts",
-    "test:e2e": " node scripts/run-playwright.mjs playwright test tests/e2e/vendor-template-capture.spec.ts tests/e2e/multi-project-report-flow.spec.ts --config=playwright.config.ts --pass-with-no-tests",
+    "test:e2e:templates": "node scripts/run-playwright.mjs --env PLAYWRIGHT_HEADLESS=false --env PLAYWRIGHT_SLOW_MO=500 playwright test tests/e2e/template-navigation.spec.ts --config=playwright.template.config.ts",
+    "test:e2e": "node scripts/run-playwright.mjs --env PLAYWRIGHT_HEADLESS=false --env PLAYWRIGHT_SLOW_MO=500 playwright test tests/e2e/vendor-template-capture.spec.ts tests/e2e/multi-project-report-flow.spec.ts --config=playwright.config.ts --pass-with-no-tests",
     "test": " npm run typecheck &&  npm run test:unit &&  npm run test:e2e"
   },
   "devDependencies": {
