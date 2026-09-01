@@ -49,6 +49,38 @@ function canonicalArtifactUrl(href: string): string {
   url.pathname = url.pathname.replace(/\/(?:\*fingerprint\*|\*view\*)\/?$/iu, '');
   return url.toString();
 }
+function canonicalJenkinsArtifactHref(href: string, jobUrl: string): string {
+  try {
+    const url = new URL(href);
+    const job = new URL(jobUrl);
+    if (url.origin === job.origin && url.pathname.includes('/artifact/')) {
+      const artifactMarker = url.pathname.indexOf('/artifact/');
+      const candidateJobPath = url.pathname.slice(0, artifactMarker).replace(/\/+$/u, '');
+      const configuredJobPath = job.pathname.replace(/\/+$/u, '');
+      if (candidateJobPath.length > 0 && configuredJobPath.length > 0) {
+        const decodeAll = (val: string): string => {
+          let res = val;
+          for (let i = 0; i < 4; i += 1) {
+            try {
+              const next = decodeURIComponent(res);
+              if (next === res) break;
+              res = next;
+            } catch { break; }
+          }
+          return res;
+        };
+        if (decodeAll(candidateJobPath) === decodeAll(configuredJobPath)) {
+          const artifactPath = url.pathname.slice(artifactMarker + 1);
+          const normalizedJobUrl = jobUrl.endsWith('/') ? jobUrl : `${jobUrl}/`;
+          return new URL(artifactPath, normalizedJobUrl).toString();
+        }
+      }
+    }
+  } catch {
+    // ignore malformed URLs
+  }
+  return href;
+}
 
 function basename(href: string): string {
   try {
@@ -170,7 +202,8 @@ export function classifySnykLinks(
       pushDiagnostic(warnings, 'an observed Snyk link was outside the configured origins');
       continue;
     }
-    const safeCandidate = { ...classified, href: canonicalArtifactUrl(validated) };
+    const canonicalHref = canonicalJenkinsArtifactHref(canonicalArtifactUrl(validated), project.jobUrl);
+    const safeCandidate = { ...classified, href: canonicalHref };
     if (safeCandidate.kind === 'summary') summaries.push(safeCandidate);
     else if (safeCandidate.kind === 'report') reports.push(safeCandidate);
   }

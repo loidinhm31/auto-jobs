@@ -135,6 +135,20 @@ test('classifies only Snyk-shaped allowed links and rejects ambiguity', () => {
   expect(fileListDisambiguation.summary?.href).toBe('https://jenkins.example/jenkins/artifact/snyk-sca-results-summary.json');
   expect(fileListDisambiguation.warnings).toEqual([]);
 });
+test('canonicalizes multibranch pipeline Snyk artifact links using double-encoded project.jobUrl', () => {
+  const multibranchProject = project({
+    jobUrl: 'https://jenkins.example/jenkins/job/folder/job/service-a/job/release%252Fsit/',
+    sourceOrigins: { jenkins: 'https://jenkins.example', snyk: ['https://jenkins.example'], sonarqube: [] },
+    sources: { snyk: { allowedOrigins: ['https://jenkins.example'] }, sonarqube: { allowedOrigins: [] } },
+  });
+  const classified = classifySnykLinks([
+    { href: 'https://jenkins.example/jenkins/job/folder/job/service-a/job/release/sit/artifact/snyk-results.html', text: 'Snyk test report' },
+    { href: 'https://jenkins.example/jenkins/job/folder/job/service-a/job/release/sit/artifact/snyk-sca-results-summary.json', text: 'Snyk summary' },
+  ], multibranchProject);
+  expect(classified.report?.href).toBe('https://jenkins.example/jenkins/job/folder/job/service-a/job/release%252Fsit/artifact/snyk-results.html');
+  expect(classified.summary?.href).toBe('https://jenkins.example/jenkins/job/folder/job/service-a/job/release%252Fsit/artifact/snyk-sca-results-summary.json');
+});
+
 
 
 test('captures a validated report section with fixed viewport and hashed screenshot', async ({ page }) => {
