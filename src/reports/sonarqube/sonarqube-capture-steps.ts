@@ -123,6 +123,5 @@ export async function assertHomeIdentity(
   if (!/;role:(?:link|button|tab):Overview$/u.test(overview.strategy)) {
     throw new Error('SonarQube Overview navigation control was not actionable');
   }
-  await overview.locator.click({ timeout: deadline.requireRemaining() });
   return `${identityStrategy};${overview.strategy}`;
 }

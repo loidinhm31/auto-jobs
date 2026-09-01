@@ -156,6 +156,14 @@ export async function captureSonarqubeEvidence(input: SonarCaptureInput): Promis
       }
       await submitSonarqubeLogin(capturePage!, input.secrets, input.deadline);
       if (routeState.blocked) throw new Error('SonarQube request was blocked by the configured origin policy');
+      try {
+        assertProjectUrl(capturePage!.url(), expectedKey, 'home', allowArchivedSnapshot);
+      } catch {
+        await withWorkflowDeadline(
+          () => capturePage!.goto(input.homeUrl as string, { waitUntil: 'domcontentloaded', timeout: input.deadline.requireRemaining() }),
+          input.deadline,
+        );
+      }
     }
 
     assertProjectUrl(

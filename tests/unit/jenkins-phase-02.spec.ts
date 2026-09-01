@@ -440,7 +440,6 @@ test('routes checked-in templates through the production direct workflow', async
       `GET ${fixture.sonarqubeHomeUrl}`,
       `POST ${fixture.sonarqubeLoginActionUrl}`,
       `GET ${fixture.sonarqubeHomeUrl}`,
-      `GET ${fixture.sonarqubeHomeUrl}`,
       `GET ${fixture.sonarqubeOverallUrl}`,
       `GET ${fixture.sonarqubeIssuesUrl}`,
     ];

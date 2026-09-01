@@ -614,5 +614,138 @@ test('authenticates through SonarQube when SPA client-side router triggers delay
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
+test('authenticates through SonarQube and preserves branch query parameter through Overall and Issues capture', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-branch-login-'));
+  const targetBranchUrl = 'https://sonar.example/dashboard?id=service-a&branch=release%2Fsit';
+  const spaLoadingHtml = '<!doctype html><title>SonarQube</title><div id="root">Loading...</div><script>setTimeout(()=>{location.href="https://sonar.example/sessions/new?return_to=%2Fdashboard%3Fid%3Dservice-a%26branch%3Drelease%252Fsit";}, 150);</script>';
+  const loginHtml = '<!doctype html><title>Log in - SonarQube</title><form action="/sessions/new" method="POST"><input id="login-input" name="login" type="text" /><input id="password-input" name="password" type="password" /><button type="submit">Log in</button></form>';
+  const homeHtml = '<!doctype html><title>Service A Overview</title><nav aria-label="Project"><a href="https://sonar.example/dashboard?id=service-a">Overview</a><a href="https://sonar.example/project/issues?id=service-a&branch=release%2Fsit">Issues</a></nav><header data-component="project-content-header"><h1>Overview</h1><a role="link" href="https://sonar.example/dashboard?id=service-a">service-a</a></header><main><button role="tab" aria-selected="false">Overall Code</button></main><script>document.querySelector("[role=tab]").onclick=()=>location.href="https://sonar.example/dashboard?id=service-a&branch=release%2Fsit&codeScope=overall";</script>';
+  const overallHtml = '<!doctype html><title>Service A Overall</title><header data-component="project-content-header"><a href="https://sonar.example/dashboard?id=service-a">service-a</a></header><nav aria-label="Project"><a href="https://sonar.example/project/issues?id=service-a&branch=release%2Fsit">Issues</a></nav><main><h1>Overview</h1><div id="tabpanel-overall">overall content</div></main>';
+  const issuesHtml = '<!doctype html><title>Service A Issues</title><header data-component="project-content-header"><a href="https://sonar.example/dashboard?id=service-a">service-a</a></header><h1>Issues</h1><nav data-testid="issues-nav-bar" aria-label="Filters"><div data-component="facet-box" data-property="types"><button aria-label="Type" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="BUG" aria-label="Bug 1"><span class="name">Bug</span><span class="stat">1</span></button></div></div><div data-component="facet-box" data-property="severities"><button aria-label="Severity" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="CRITICAL" title="Critical"><span class="name">Critical</span><span class="stat">1</span></button></div></div></nav>';
+
+  let authenticated = false;
+  await page.context().route('https://sonar.example/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === 'POST' && url.pathname === '/sessions/new') {
+      authenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: `<!doctype html><meta http-equiv="refresh" content="0; url=${targetBranchUrl}"><a href="${targetBranchUrl}">Continue</a>`,
+      });
+      return;
+    }
+    if (url.pathname === '/sessions/new') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: loginHtml });
+      return;
+    }
+    if (url.pathname === '/dashboard' && !authenticated) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: spaLoadingHtml });
+      return;
+    }
+    if (url.pathname === '/project/issues') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: issuesHtml });
+      return;
+    }
+    if (url.pathname === '/dashboard') {
+      const body = url.searchParams.get('codeScope') === 'overall' ? overallHtml : homeHtml;
+      await route.fulfill({ status: 200, contentType: 'text/html', body });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'text/html', body: 'Not found' });
+  });
+
+  try {
+    const result = await captureSonarqubeEvidence({
+      page,
+      project: project(),
+      deadline: new WorkflowDeadline(30_000),
+      outputDirectory,
+      homeUrl: targetBranchUrl,
+      secrets: { username: 'test-user', password: 'test-password' },
+    });
+    expect(result.source.state, result.warnings.join(' | ')).toBe('found');
+    expect(result.navigation['sonarqube-home'].state).toBe('found');
+    expect(result.navigation['sonarqube-home'].liveUrl).toContain('branch=release');
+    expect(result.navigation['sonarqube-overall'].state).toBe('found');
+    expect(result.navigation['sonarqube-overall'].liveUrl).toContain('branch=release');
+    expect(result.navigation['sonarqube-overall'].liveUrl).toContain('codeScope=overall');
+    expect(result.navigation['sonarqube-issues'].state).toBe('found');
+    expect(result.navigation['sonarqube-issues'].liveUrl).toContain('branch=release');
+    expect(result.screenshots).toEqual(['sonarqube-overall.png', 'sonarqube-issues.png']);
+    expect(fs.existsSync(path.join(outputDirectory, 'sonarqube-overall.png'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDirectory, 'sonarqube-issues.png'))).toBe(true);
+  } finally {
+    await page.context().unroute('https://sonar.example/**');
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
+
+test('re-navigates to target homeUrl when post-login redirect drops on generic landing page', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-generic-redirect-'));
+  const targetBranchUrl = 'https://sonar.example/dashboard?id=service-a&branch=release%2Fsit';
+  const loginHtml = '<!doctype html><title>Log in - SonarQube</title><form action="/sessions/new" method="POST"><input id="login-input" name="login" type="text" /><input id="password-input" name="password" type="password" /><button type="submit">Log in</button></form>';
+  const homeHtml = '<!doctype html><title>Service A Overview</title><nav aria-label="Project"><a href="https://sonar.example/dashboard?id=service-a">Overview</a><a href="https://sonar.example/project/issues?id=service-a&branch=release%2Fsit">Issues</a></nav><header data-component="project-content-header"><h1>Overview</h1><a role="link" href="https://sonar.example/dashboard?id=service-a">service-a</a></header><main><button role="tab" aria-selected="false">Overall Code</button></main><script>document.querySelector("[role=tab]").onclick=()=>location.href="https://sonar.example/dashboard?id=service-a&branch=release%2Fsit&codeScope=overall";</script>';
+  const overallHtml = '<!doctype html><title>Service A Overall</title><header data-component="project-content-header"><a href="https://sonar.example/dashboard?id=service-a">service-a</a></header><nav aria-label="Project"><a href="https://sonar.example/project/issues?id=service-a&branch=release%2Fsit">Issues</a></nav><main><h1>Overview</h1><div id="tabpanel-overall">overall content</div></main>';
+  const issuesHtml = '<!doctype html><title>Service A Issues</title><header data-component="project-content-header"><a href="https://sonar.example/dashboard?id=service-a">service-a</a></header><h1>Issues</h1><nav data-testid="issues-nav-bar" aria-label="Filters"><div data-component="facet-box" data-property="types"><button aria-label="Type" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="BUG" aria-label="Bug 1"><span class="name">Bug</span><span class="stat">1</span></button></div></div><div data-component="facet-box" data-property="severities"><button aria-label="Severity" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="CRITICAL" title="Critical"><span class="name">Critical</span><span class="stat">1</span></button></div></div></nav>';
+  const projectsLandingHtml = '<!doctype html><title>Projects - SonarQube</title><h1>Projects</h1>';
+
+  let authenticated = false;
+  await page.context().route('https://sonar.example/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === 'POST' && url.pathname === '/sessions/new') {
+      authenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><meta http-equiv="refresh" content="0; url=https://sonar.example/projects"><a href="https://sonar.example/projects">Continue</a>',
+      });
+      return;
+    }
+    if (url.pathname === '/sessions/new') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: loginHtml });
+      return;
+    }
+    if (url.pathname === '/projects') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: projectsLandingHtml });
+      return;
+    }
+    if (url.pathname === '/dashboard' && !authenticated) {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: loginHtml });
+      return;
+    }
+    if (url.pathname === '/project/issues') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: issuesHtml });
+      return;
+    }
+    if (url.pathname === '/dashboard') {
+      const body = url.searchParams.get('codeScope') === 'overall' ? overallHtml : homeHtml;
+      await route.fulfill({ status: 200, contentType: 'text/html', body });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'text/html', body: 'Not found' });
+  });
+
+  try {
+    const result = await captureSonarqubeEvidence({
+      page,
+      project: project(),
+      deadline: new WorkflowDeadline(30_000),
+      outputDirectory,
+      homeUrl: targetBranchUrl,
+      secrets: { username: 'test-user', password: 'test-password' },
+    });
+    expect(result.source.state, result.warnings.join(' | ')).toBe('found');
+    expect(result.navigation['sonarqube-home'].state).toBe('found');
+    expect(result.navigation['sonarqube-home'].liveUrl).toContain('branch=release');
+    expect(result.navigation['sonarqube-overall'].state).toBe('found');
+    expect(result.navigation['sonarqube-overall'].liveUrl).toContain('branch=release');
+    expect(result.navigation['sonarqube-issues'].state).toBe('found');
+    expect(result.navigation['sonarqube-issues'].liveUrl).toContain('branch=release');
+  } finally {
+    await page.context().unroute('https://sonar.example/**');
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
 
 
