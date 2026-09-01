@@ -184,4 +184,56 @@ test('captures a validated report section with fixed viewport and hashed screens
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
+test('captures and retains double-encoded branch in Snyk report and summary capture URLs', async ({ page }) => {
+  const reportHtml = fs.readFileSync(templatePath, 'utf8');
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'snyk-branch-capture-'));
+  const server = http.createServer((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (url.pathname.includes('/artifact/snyk-results.html')) {
+      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(reportHtml) }).end(reportHtml);
+      return;
+    }
+    if (url.pathname.includes('/artifact/snyk-sca-results-summary.json')) {
+      const summary = fs.readFileSync(summaryPath, 'utf8');
+      response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(summary) }).end(summary);
+      return;
+    }
+    response.writeHead(404).end('not found');
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const branchJobUrl = `${origin}/jenkins/job/folder/job/service-a/job/release%252Fsit/`;
+  const branchReportUrl = `${branchJobUrl}artifact/snyk-results.html`;
+  const branchSummaryUrl = `${branchJobUrl}artifact/snyk-sca-results-summary.json`;
+  const configured = project({
+    loginUrl: `${origin}/jenkins/login`,
+    jobUrl: branchJobUrl,
+    sourceOrigins: { jenkins: origin, snyk: [origin], sonarqube: [] },
+    sources: { snyk: { allowedOrigins: [origin] }, sonarqube: { allowedOrigins: [] } },
+  });
+  try {
+    await page.goto(branchJobUrl).catch(() => undefined);
+    const result = await captureSnykEvidence({
+      page,
+      project: configured,
+      deadline: new WorkflowDeadline(30_000),
+      outputDirectory,
+      reportUrl: branchReportUrl,
+      summaryUrl: branchSummaryUrl,
+    });
+    expect(result.source.state).toBe('found');
+    expect(result.source.captures[0]?.url).toBe(branchReportUrl);
+    expect(result.source.captures[0]?.url).toContain('release%252Fsit');
+    expect(result.source.captures[1]?.url).toBe(branchSummaryUrl);
+    expect(result.source.captures[1]?.url).toContain('release%252Fsit');
+    expect(result.navigation.liveUrl).toBe(branchReportUrl);
+    expect(result.navigation.liveUrl).toContain('release%252Fsit');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
 

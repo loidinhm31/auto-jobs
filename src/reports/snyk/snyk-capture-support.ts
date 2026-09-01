@@ -308,12 +308,12 @@ export async function readSummary(
   try {
     for (let redirect = 0; redirect <= MAX_SUMMARY_REDIRECTS; redirect += 1) {
       const response = await fetchSummaryResponse(page, nextUrl, controller, deadline);
-      const responseUrl = assertAllowedUrl(response.url, deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.snyk, 'Snyk summary URL');
+      assertAllowedUrl(response.url, deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.snyk, 'Snyk summary URL');
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location');
         if (location === null) throw new Error('Snyk summary redirect has no Location header');
         if (response.body !== null) void response.body.cancel().catch(() => undefined);
-        nextUrl = assertAllowedUrl(new URL(location, responseUrl).toString(), deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.snyk, 'Snyk summary redirect');
+        nextUrl = assertAllowedUrl(new URL(location, nextUrl).toString(), deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl), project.sourceOrigins.snyk, 'Snyk summary redirect');
         continue;
       }
       if (response.status >= 400) throw new Error(`Snyk summary returned HTTP ${response.status}`);
@@ -329,7 +329,7 @@ export async function readSummary(
       if (body.byteLength > MAX_SUMMARY_BYTES) {
         throw new Error(`Snyk summary exceeds the ${MAX_SUMMARY_BYTES}-byte limit`);
       }
-      return { parsed: parseSnykSummaryJson(new TextDecoder().decode(body)), url: responseUrl };
+      return { parsed: parseSnykSummaryJson(new TextDecoder().decode(body)), url: nextUrl };
     }
     throw new Error('Snyk summary exceeded the redirect limit');
   } finally {

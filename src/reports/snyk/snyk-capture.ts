@@ -136,13 +136,13 @@ export async function captureSnykEvidence(input: {
           timeout: input.deadline.requireRemaining(),
         }), input.deadline);
         if (policyBlocked) throw new Error('Snyk request was blocked by the configured origin policy');
-        const validatedFinalUrl = assertAllowedUrl(
+        assertAllowedUrl(
           capturePage.url(),
           deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),
           input.project.sourceOrigins.snyk,
           'Snyk final URL',
         );
-        const finalUrl = sanitizeUrl(validatedFinalUrl);
+        const finalUrl = sanitizeUrl(reportUrl);
         if (response !== null && response.status() >= 400) throw new Error(`Snyk report returned HTTP ${response.status()}`);
         const landmark = await waitForLandmark(capturePage, input.project, input.deadline);
         const html = await withWorkflowDeadline(() => extractSnykHtml(capturePage), input.deadline);
