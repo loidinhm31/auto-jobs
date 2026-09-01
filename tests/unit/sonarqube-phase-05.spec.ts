@@ -747,5 +747,44 @@ test('re-navigates to target homeUrl when post-login redirect drops on generic l
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
+test('captures SonarQube Enterprise dashboard using Overall tab and panel attribute variants', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-enterprise-'));
+  const targetBranchUrl = 'https://sonar.example/dashboard?id=service-a&branch=release%2Fsit';
+  const homeHtml = '<!doctype html><title>Service A Overview</title><nav aria-label="Project"><a href="https://sonar.example/dashboard?id=service-a">Overview</a><a href="https://sonar.example/project/issues?id=service-a&branch=release%2Fsit">Issues</a></nav><div class="project-header"><h1>Service A</h1></div><main><div role="tablist"><button role="tab" id="tab-new" aria-selected="true">New Code</button><button role="tab" id="tab-overall" data-value="overall" aria-controls="tabpanel-overall" aria-selected="false">Overall</button></div></main><script>document.getElementById("tab-overall").onclick=()=>location.href="https://sonar.example/dashboard?id=service-a&branch=release%2Fsit&codeScope=overall";</script>';
+  const overallHtml = '<!doctype html><title>Service A Overall</title><div class="project-header"><h1>Service A</h1></div><nav aria-label="Project"><a href="https://sonar.example/project/issues?id=service-a&branch=release%2Fsit">Issues</a></nav><main><div role="tablist"><button role="tab" id="tab-overall" aria-selected="true">Overall</button></div><div id="tabpanel-overall" role="tabpanel">overall measures content</div></main>';
+  const issuesHtml = '<!doctype html><title>Service A Issues</title><div class="project-header"><h1>Service A</h1></div><h1>Issues</h1><nav data-testid="issues-nav-bar" aria-label="Filters"><div data-component="facet-box" data-property="types"><button aria-label="Type" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="BUG" aria-label="Bug 1"><span class="name">Bug</span><span class="stat">1</span></button></div></div><div data-component="facet-box" data-property="severities"><button aria-label="Severity" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="CRITICAL" title="Critical"><span class="name">Critical</span><span class="stat">1</span></button></div></div></nav>';
+
+  await page.context().route('https://sonar.example/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/project/issues') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: issuesHtml });
+      return;
+    }
+    if (url.pathname === '/dashboard') {
+      const body = url.searchParams.get('codeScope') === 'overall' ? overallHtml : homeHtml;
+      await route.fulfill({ status: 200, contentType: 'text/html', body });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'text/html', body: 'Not found' });
+  });
+
+  try {
+    const result = await captureSonarqubeEvidence({
+      page,
+      project: project(),
+      deadline: new WorkflowDeadline(30_000),
+      outputDirectory,
+      homeUrl: targetBranchUrl,
+    });
+    expect(result.source.state, result.warnings.join(' | ')).toBe('found');
+    expect(result.navigation['sonarqube-home'].state).toBe('found');
+    expect(result.navigation['sonarqube-overall'].state).toBe('found');
+    expect(result.navigation['sonarqube-issues'].state).toBe('found');
+    expect(result.screenshots).toEqual(['sonarqube-overall.png', 'sonarqube-issues.png']);
+  } finally {
+    await page.context().unroute('https://sonar.example/**');
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
 
 

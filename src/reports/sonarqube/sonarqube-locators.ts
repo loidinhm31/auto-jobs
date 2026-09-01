@@ -64,11 +64,16 @@ function projectContentRoot(page: Page): Locator {
 }
 async function hasVisibleProjectIdentity(scope: Locator, names: readonly string[]): Promise<boolean> {
   for (const name of names) {
-    const identity = new RegExp(`^${escapeRegex(name)}$`, 'u');
+    const exactPattern = new RegExp(`^${escapeRegex(name)}$`, 'iu');
+    const wordPattern = new RegExp(`\\b${escapeRegex(name)}\\b`, 'iu');
     const candidates = [
       scope.getByRole('link', { name, exact: true }),
-      scope.getByRole('heading', { name: identity }),
+      scope.getByRole('link', { name: exactPattern }),
+      scope.getByRole('heading', { name: exactPattern }),
+      scope.getByRole('heading', { name: wordPattern }),
       scope.getByText(name, { exact: true }),
+      scope.getByText(exactPattern),
+      scope.getByText(wordPattern),
     ];
     for (const candidate of candidates) {
       const count = await candidate.count();
@@ -116,21 +121,24 @@ async function isProjectAction(
   pathKind: 'home' | 'overall' = 'home',
   allowArchivedSnapshot = false,
 ): Promise<boolean> {
-  if (!(await hasVisibleProjectIdentity(scope, [projectKey, ...(displayName === undefined ? [] : [displayName])]))) return false;
+  const scopeCount = await scope.count().catch(() => 0);
+  if (scopeCount > 0 && !(await hasVisibleProjectIdentity(scope, [projectKey, ...(displayName === undefined ? [] : [displayName])]))) return false;
   const href = await locator.getAttribute('href');
   return href === null || await hasExpectedProjectHref(page, locator, projectKey, pathKind, allowArchivedSnapshot);
 }
 
 function scopedActionCandidates(
   scopes: readonly Locator[],
-  label: string,
+  label: string | RegExp,
   scopeNames: readonly string[],
   validate?: (locator: Locator) => Promise<boolean>,
 ): SonarLocator[] {
+  const labelText = typeof label === 'string' ? label : label.source;
+  const isExact = typeof label === 'string';
   return scopes.flatMap((scope, index) => [
-    { locator: scope.getByRole('link', { name: label, exact: true }), strategy: `scope:${scopeNames[index]};role:link:${label}`, ...(validate === undefined ? {} : { validate }) },
-    { locator: scope.getByRole('button', { name: label, exact: true }), strategy: `scope:${scopeNames[index]};role:button:${label}`, ...(validate === undefined ? {} : { validate }) },
-    { locator: scope.getByRole('tab', { name: label, exact: true }), strategy: `scope:${scopeNames[index]};role:tab:${label}`, ...(validate === undefined ? {} : { validate }) },
+    { locator: isExact ? scope.getByRole('link', { name: label, exact: true }) : scope.getByRole('link', { name: label }), strategy: `scope:${scopeNames[index]};role:link:${labelText}`, ...(validate === undefined ? {} : { validate }) },
+    { locator: isExact ? scope.getByRole('button', { name: label, exact: true }) : scope.getByRole('button', { name: label }), strategy: `scope:${scopeNames[index]};role:button:${labelText}`, ...(validate === undefined ? {} : { validate }) },
+    { locator: isExact ? scope.getByRole('tab', { name: label, exact: true }) : scope.getByRole('tab', { name: label }), strategy: `scope:${scopeNames[index]};role:tab:${labelText}`, ...(validate === undefined ? {} : { validate }) },
   ]);
 }
 
@@ -153,12 +161,30 @@ export function overviewCandidates(page: Page, projectKey: string, displayName?:
 
 export function overallControlCandidates(page: Page, projectKey: string, displayName?: string, allowArchivedSnapshot = false): SonarLocator[] {
   const root = projectContentRoot(page);
-  return scopedActionCandidates(
-    [root],
-    'Overall Code',
-    ['project-content'],
-    (locator) => isProjectAction(page, root, locator, projectKey, displayName, 'overall', allowArchivedSnapshot),
-  );
+  const main = page.locator('main');
+  const actionValidator = (scope: Locator) => (locator: Locator) => isProjectAction(page, scope, locator, projectKey, displayName, 'overall', allowArchivedSnapshot);
+  const hrefValidator = (locator: Locator) => hasExpectedProjectHref(page, locator, projectKey, 'overall', allowArchivedSnapshot);
+  return [
+    ...scopedActionCandidates(
+      [root],
+      'Overall Code',
+      ['project-content'],
+      actionValidator(root),
+    ),
+    ...scopedActionCandidates(
+      [root, main],
+      /^overall(?:\s*code)?$/iu,
+      ['project-content', 'main'],
+      actionValidator(root),
+    ),
+    { locator: page.locator('#tab-overall'), strategy: 'id:tab-overall' },
+    { locator: page.locator('button[data-value="overall"], [role="tab"][data-value="overall"], button[data-tab="overall"]'), strategy: 'attr:data-value:overall' },
+    { locator: page.locator('[aria-controls="tabpanel-overall"]'), strategy: 'attr:aria-controls:tabpanel-overall' },
+    { locator: page.getByRole('tab', { name: /^overall(?:\s*code)?$/iu }), strategy: 'role:tab:Overall' },
+    { locator: page.getByRole('button', { name: /^overall(?:\s*code)?$/iu }), strategy: 'role:button:Overall' },
+    { locator: page.getByRole('link', { name: /^overall(?:\s*code)?$/iu }), strategy: 'role:link:Overall', validate: hrefValidator },
+    { locator: page.locator('a[href*="codeScope=overall"]'), strategy: 'href:codeScope=overall', validate: hrefValidator },
+  ];
 }
 
 export async function overallPanel(page: Page, deadline?: WorkflowDeadline): Promise<Locator> {
@@ -166,6 +192,11 @@ export async function overallPanel(page: Page, deadline?: WorkflowDeadline): Pro
   const candidates = [
     root.locator('[data-component="overall-code-measures-panel"]'),
     root.locator('#tabpanel-overall'),
+    page.locator('[data-component="overall-code-measures-panel"]'),
+    page.locator('#tabpanel-overall'),
+    page.locator('[role="tabpanel"][id*="overall"]'),
+    page.locator('[role="tabpanel"][aria-labelledby*="overall"]'),
+    page.locator('main [data-component*="measures"]'),
   ];
   let result: Locator | undefined;
   const resolve = async (): Promise<boolean> => {

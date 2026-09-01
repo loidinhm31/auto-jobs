@@ -15,19 +15,30 @@ function projectIdentityScopes(page: Page): readonly Locator[] {
     page.locator('[data-component="project-content-header"]'),
     page.getByRole('navigation', { name: 'Project', exact: true }),
     page.locator('header'),
+    page.locator('.project-header, [data-component*="header"], [data-testid*="header"], div[class*="header"]'),
+    page.locator('main'),
   ];
 }
 
 export function projectIdentityCandidates(page: Page, projectKey: string, displayName?: string): SonarLocator[] {
-  const names = [...new Set([projectKey, displayName].filter((value): value is string => value !== undefined && value.trim().length > 0))];
+  const rawNames = [...new Set([projectKey, displayName].filter((value): value is string => value !== undefined && value.trim().length > 0))];
+  const names = [...new Set([
+    ...rawNames,
+    ...rawNames.map((n) => n.replace(/[-_]/gu, ' ')),
+    ...rawNames.map((n) => n.replace(/\s+/gu, '-')),
+  ])];
   return projectIdentityScopes(page).flatMap((scope, scopeIndex) => names.flatMap((name) => {
-    const pattern = new RegExp(`^${escapeRegex(name)}$`, 'u');
+    const exactPattern = new RegExp(`^${escapeRegex(name)}$`, 'iu');
+    const wordPattern = new RegExp(`\\b${escapeRegex(name)}\\b`, 'iu');
     const suffix = name === projectKey ? 'project-key' : 'project-display-name';
-    const scopeName = scopeIndex === 0 ? 'project-content-header' : scopeIndex === 1 ? 'project-navigation' : 'header';
+    const scopeName = scopeIndex === 0 ? 'project-content-header' : scopeIndex === 1 ? 'project-navigation' : scopeIndex === 2 ? 'header' : scopeIndex === 3 ? 'project-header-variant' : 'main';
     return [
       { locator: scope.getByRole('link', { name, exact: true }), strategy: `scope:${scopeName};role:link:${suffix}` },
-      { locator: scope.getByRole('heading', { name: pattern }), strategy: `scope:${scopeName};role:heading:${suffix}` },
+      { locator: scope.getByRole('link', { name: exactPattern }), strategy: `scope:${scopeName};role:link:${suffix}` },
+      { locator: scope.getByRole('heading', { name: exactPattern }), strategy: `scope:${scopeName};role:heading:${suffix}` },
+      { locator: scope.getByRole('heading', { name: wordPattern }), strategy: `scope:${scopeName};role:heading:${suffix}` },
       { locator: scope.getByText(name, { exact: true }), strategy: `scope:${scopeName};text:${suffix}` },
+      { locator: scope.getByText(exactPattern), strategy: `scope:${scopeName};text:${suffix}` },
     ];
   }));
 }
