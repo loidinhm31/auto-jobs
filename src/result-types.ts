@@ -162,6 +162,8 @@ export interface AggregateProjectSummary {
 export interface AggregateRunSummary {
   runId: string;
   state: 'success' | 'partial' | 'failed';
+  jobId?: string;
+  branch?: string;
   manifestPath: string;
   reportPath?: string;
   warnings: string[];

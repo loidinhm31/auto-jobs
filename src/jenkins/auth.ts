@@ -9,7 +9,7 @@ import type { JenkinsRunnerConfig } from './runner-config.js';
 import { settleCleanup, WorkflowDeadline, withWorkflowDeadline, withWorkflowDeadlineAndLateResource } from '../workflow/workflow-deadline.js';
 import { locatorFor } from './locators.js';
 import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
-import { isExactJobUrl, normalizedPathname, validateJenkinsUrl } from './url-identity.js';
+import { decodeJenkinsJobSegment, isExactJobUrl, jenkinsJobPathSegments, normalizedPathname, validateJenkinsUrl } from './url-identity.js';
 
 export interface JenkinsSession {
   context: BrowserContext;
@@ -63,27 +63,16 @@ function isLoginLocation(config: JenkinsRunnerConfig, currentUrl: string): boole
   );
 }
 
-function decodeJobSegment(value: string): string {
-  let decoded = value;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      const next = decodeURIComponent(decoded);
-      if (next === decoded) return decoded;
-      decoded = next;
-    } catch {
-      return decoded;
-    }
-  }
-  return decoded;
-}
 
 function configuredJobName(jobUrl: string): string {
-  const segments = new URL(jobUrl).pathname.split('/').filter(Boolean);
-  const jobIndex = segments.findLastIndex((segment) => segment === 'job');
-  const rawName = jobIndex >= 0
-    ? segments[jobIndex + 1]
-    : segments.at(-1);
-  return rawName === undefined ? '' : decodeJobSegment(rawName);
+  const pathnameSegments = new URL(jobUrl).pathname.split('/').filter(Boolean);
+  const lastJobMarker = pathnameSegments.findLastIndex((segment) => segment === 'job');
+  if (lastJobMarker >= 0 && pathnameSegments[lastJobMarker + 1] === undefined) return '';
+  const jobSegments = jenkinsJobPathSegments(jobUrl);
+  const finalJobSegment = jobSegments.at(-1);
+  if (finalJobSegment !== undefined) return finalJobSegment;
+  const rawName = pathnameSegments.at(-1);
+  return rawName === undefined ? '' : decodeJenkinsJobSegment(rawName);
 }
 
 async function assertLoginFormAction(page: Page, config: JenkinsRunnerConfig, deadline: WorkflowDeadline): Promise<void> {

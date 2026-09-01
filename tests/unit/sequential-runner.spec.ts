@@ -208,6 +208,40 @@ test('runs projects in config order, isolates contexts, and continues after fail
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+test('omits overlong history labels without rejecting aggregate publication', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aggregate-display-bound-'));
+  try {
+    const environment = { A_USER: 'user-a', A_PASSWORD: 'secret-a' };
+    const configured = loadProjectConfig(projectFile(root), environment)[0]!;
+    const longJobId = 'x'.repeat(257);
+    const project = {
+      ...configured,
+      jobUrl: `https://jenkins.example/job/folder/job/folder-name/job/${longJobId}/job/release%252Fsit/`,
+    };
+    const result = await runConfiguredProjects([project], {
+      runtimeEnvironment: environment,
+      launchBrowser: async () => fakeBrowser(),
+      runIdSuffix: () => '0000000000000005',
+      now: () => new Date('2026-08-24T04:00:00.000Z'),
+      executeProject: async (currentProject, dependencies) => runProject(currentProject, {
+        ...dependencies,
+        workflow: async (_page, workflowProject, _secrets, _deadline, state) => {
+          state.transition('authenticated');
+          state.transition('job_opened');
+          return { jobUrl: workflowProject.jobUrl, observedAt: '2026-08-24T04:00:00.000Z' };
+        },
+        capture: async () => completeCapture(currentProject.jobUrl),
+      }),
+    });
+    const run = result.aggregate.projects[0]?.runs[0];
+    expect(result.exitCode).toBe(0);
+    expect(run).toMatchObject({ branch: 'release/sit' });
+    expect(run).not.toHaveProperty('jobId');
+    expect(fs.existsSync(path.join(root, 'reports', 'aggregate-data.json'))).toBe(true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('bounds failure diagnostics before aggregate publication', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aggregate-failure-diagnostics-'));

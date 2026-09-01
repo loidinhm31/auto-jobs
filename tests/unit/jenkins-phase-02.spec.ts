@@ -10,6 +10,7 @@ import { expect, test, type BrowserContext, type Page, type Route } from '@playw
 import { normalizeProjectConfigDocument } from '../../src/config.js';
 import { formatJenkinsFailure } from '../../src/jenkins/errors.js';
 import { openJenkinsJob, submitJenkinsLogin } from '../../src/jenkins/auth.js';
+import { jenkinsJobPathSegments } from '../../src/jenkins/url-identity.js';
 import {
   DEFAULT_JENKINS_RUNNER_SELECTORS,
   type JenkinsRunnerConfig,
@@ -269,6 +270,34 @@ test('accepts the exact job heading or the Jenkins body landmark, never a simila
   await page.route(runnerConfig.jobUrl, (route) => route.fulfill({ body: '<body id="jenkins"><h1>service-a-old</h1></body>' }));
   await expect(openJenkinsJob(page, runnerConfig, new WorkflowDeadline(500))).resolves.toBe(runnerConfig.jobUrl);
 });
+test('extracts nested Jenkins job segments and repeatedly decodes values', () => {
+  const canonicalUrl = 'https://jenkins.example/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/';
+  expect(jenkinsJobPathSegments(canonicalUrl)).toEqual([
+    'Container Platform',
+    'ID',
+    'job-id',
+    'Service Name',
+    'Build',
+    'Build ID Service Name',
+    'release/sit',
+  ]);
+  expect(jenkinsJobPathSegments('https://jenkins.example/job/folder/job/job/job/job-id/job/release%252Fsit/')).toEqual([
+    'folder',
+    'job',
+    'job-id',
+    'release/sit',
+  ]);
+});
+test('retains exact Jenkins heading checks for simple job paths', async ({ page }) => {
+  const runnerConfig = { ...config(), jobUrl: 'https://jenkins.example/jenkins/service-a' };
+  await page.route(runnerConfig.jobUrl, (route) => route.fulfill({ body: '<h1>service-a</h1>' }));
+  await expect(openJenkinsJob(page, runnerConfig, new WorkflowDeadline(500))).resolves.toBe(runnerConfig.jobUrl);
+});
+test('does not treat incomplete Jenkins job markers as exact headings', async ({ page }) => {
+  const runnerConfig = { ...config(), jobUrl: 'https://jenkins.example/jenkins/job' };
+  await page.route(runnerConfig.jobUrl, (route) => route.fulfill({ body: '<h1>job</h1>' }));
+  await expect(openJenkinsJob(page, runnerConfig, new WorkflowDeadline(500))).rejects.toThrow(/job navigation failed/u);
+});
 
 test('returns direct job identity and direct run phases without a trigger or build', async ({ page }) => {
   const server = await listen((request, response) => {
@@ -414,7 +443,10 @@ test('routes checked-in templates through the production direct workflow', async
       `GET ${fixture.sonarqubeIssuesUrl}`,
     ];
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual(expectedRequests);
-    expect(requests.some((request) => /(?:queue|build|trigger|api\/json|lastBuild)/iu.test(request.url))).toBe(false);
+    expect(requests.some((request) => {
+      const pathAfterJob = request.url.startsWith(fixture.jobUrl) ? request.url.slice(fixture.jobUrl.length) : request.url;
+      return /(?:queue|build|trigger|api\/json|lastBuild)/iu.test(pathAfterJob);
+    })).toBe(false);
   } finally {
     fs.rmSync(reportRoot, { recursive: true, force: true });
   }

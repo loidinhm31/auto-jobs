@@ -33,7 +33,7 @@ test('generates a meaningful report from the checked-in Snyk and SonarQube templ
       warnings: string[];
     };
     expect(data.project).toEqual({ id: 'template-report-fixture', name: 'Template Fixture Report' });
-    expect(data.jenkins).toEqual({ jobUrl: 'https://templates.invalid/job/template-report/' });
+    expect(data.jenkins).toEqual({ jobUrl: 'https://templates.invalid/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/' });
     expect(data.reports.snyk).toMatchObject({
       state: 'found',
       summary: {
@@ -56,6 +56,19 @@ test('generates a meaningful report from the checked-in Snyk and SonarQube templ
     expect(html).toContain('Template Fixture Report');
     expect(html).toContain('Improper Certificate Validation');
     expect(html).toContain('Code Smell');
+    const aggregate = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8')) as {
+      projects: Array<{ runs: Array<{ runId: string; jobId?: string; branch?: string; reportPath?: string }> }>;
+    };
+    expect(aggregate.projects).toHaveLength(1);
+    const aggregateRun = aggregate.projects[0]?.runs[0];
+    expect(aggregate.projects[0]?.runs).toHaveLength(1);
+    expect(aggregateRun).toMatchObject({ jobId: 'job-id', branch: 'release/sit' });
+    expect(aggregateRun?.reportPath).toBe(`template-report-fixture/${aggregateRun?.runId}/index.html`);
+    const aggregateHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
+    expect(aggregateHtml).toContain('>Job ID</th>');
+    expect(aggregateHtml).toContain('>Branch</th>');
+    expect(aggregateHtml).toContain('job-id');
+    expect(aggregateHtml).toContain('release/sit');
     expect(fs.existsSync(path.join(reportRoot, 'index.html'))).toBe(true);
   } finally {
     fs.rmSync(reportRoot, { recursive: true, force: true });

@@ -59,7 +59,7 @@ const PROJECT_RESULT_KEYS = ['schemaVersion', 'state', 'project', 'run', 'jenkin
 const REPORTS_KEYS = ['snyk', 'sonarqube'] as const;
 const AGGREGATE_KEYS = ['schemaVersion', 'generatedAt', 'projects', 'warnings'] as const;
 const AGGREGATE_PROJECT_KEYS = ['projectId', 'name', 'state', 'runId', 'reportPath', 'runs', 'warnings'] as const;
-const AGGREGATE_RUN_KEYS = ['runId', 'state', 'manifestPath', 'reportPath', 'warnings'] as const;
+const AGGREGATE_RUN_KEYS = ['runId', 'state', 'jobId', 'branch', 'manifestPath', 'reportPath', 'warnings'] as const;
 const MAX_AGGREGATE_PROJECTS = 50;
 const MAX_AGGREGATE_RUNS_PER_PROJECT = 5_000;
 const MAX_AGGREGATE_TOTAL_RUNS = 5_000;
@@ -350,9 +350,13 @@ function validAggregateRun(value: unknown, projectId: string): value is Aggregat
   if (!hasOnlyKeys(value, AGGREGATE_RUN_KEYS)) return false;
   const runId = value.runId;
   const state = value.state;
+  const jobId = value.jobId;
+  const branch = value.branch;
   const manifestPath = value.manifestPath;
   const reportPath = value.reportPath;
   if (!boundedString(runId, 96) || !SAFE_ID.test(runId) || !validAggregateState(state) ||
+    (jobId !== undefined && !boundedString(jobId, 256)) ||
+    (branch !== undefined && !boundedString(branch, 256)) ||
     manifestPath !== aggregateArtifactPath(projectId, runId, 'manifest.json') ||
     (reportPath !== undefined && reportPath !== aggregateArtifactPath(projectId, runId, 'index.html')) ||
     !validWarnings(value.warnings)) return false;

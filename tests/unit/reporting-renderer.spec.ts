@@ -64,15 +64,20 @@ test('renders inert direct evidence with stable anchors and state-aware images',
   expect(partial).toContain('Snyk screenshot unavailable');
 });
 
-test('renders aggregate projects in order without build fields or unsafe links', () => {
+test('renders aggregate identity columns in order without unsafe links', () => {
   const aggregate: AggregateReportResult = {
     schemaVersion: 3, generatedAt: OBSERVED_AT, warnings: ['ignored invalid manifest'], projects: [
-      { projectId: 'service-z', name: 'Zed', state: 'partial', reportPath: 'service-z/run-z/index.html', runs: [{ runId: 'run-z', state: 'partial', manifestPath: 'service-z/run-z/manifest.json', reportPath: 'service-z/run-z/index.html', warnings: [] }], warnings: [] },
+      { projectId: 'service-z', name: 'Zed', state: 'partial', reportPath: 'service-z/run-z/index.html', runs: [{ runId: 'run-z', jobId: 'job<id>', branch: 'release/sit & <prod>', state: 'partial', manifestPath: 'service-z/run-z/manifest.json', reportPath: 'service-z/run-z/index.html', warnings: [] }], warnings: [] },
       { projectId: 'service-a', name: 'Alpha', state: 'failed', reportPath: '../escape/index.html', runs: [{ runId: 'run-a', state: 'failed', manifestPath: 'service-a/run-a/manifest.json', warnings: ['failed before report'] }], warnings: ['failed before report'] },
     ],
   };
   const html = renderAggregateReport(aggregate);
   expect(html.indexOf('Zed')).toBeLessThan(html.indexOf('Alpha'));
+  expect(html).toContain('<th scope="col">Run</th><th scope="col">Job ID</th><th scope="col">Branch</th><th scope="col">State</th><th scope="col">Artifacts</th>');
+  expect(html).toContain('<code>run-z</code>');
+  expect(html).toContain('job&lt;id&gt;');
+  expect(html).toContain('release/sit &amp; &lt;prod&gt;');
+  expect(html).toContain('<span class="muted">Unavailable</span>');
   expect(html).toContain('service-z/run-z/index.html');
   expect(html).toContain('service-a/run-a/manifest.json');
   expect(html).not.toContain('escape/index.html');

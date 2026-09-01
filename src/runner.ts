@@ -6,6 +6,7 @@ import { writeAggregateData } from './artifacts/result-writer.js';
 import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
 import { sanitizePersistedWarnings } from './artifacts/result-validation.js';
 import { loadProjectConfig } from './config/project-config-loader.js';
+import { jenkinsJobPathSegments } from './jenkins/url-identity.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
 import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from './result-types.js';
 import { runProject, type ProjectRunnerDependencies } from './project/project-runner.js';
@@ -91,6 +92,8 @@ interface HistoricalRun {
   readonly runId: string;
   readonly state: 'success' | 'partial' | 'failed';
   readonly warnings: readonly string[];
+  readonly jobId?: string;
+  readonly branch?: string;
   readonly reportPath?: string;
 }
 
@@ -103,6 +106,8 @@ function aggregateSummary(
     .map((item) => ({
       runId: item.runId,
       state: item.state,
+      ...(item.jobId === undefined ? {} : { jobId: item.jobId }),
+      ...(item.branch === undefined ? {} : { branch: item.branch }),
       manifestPath: `${item.relativeDirectory}/manifest.json`,
       ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
       warnings: sanitizePersistedWarnings(item.warnings),
@@ -171,14 +176,26 @@ export async function runConfiguredProjects(
     const finalCleanup = await artifacts.cleanupOrphans();
     runtimeWarnings.push(...finalCleanup.warnings);
     const discovery = await discoverRunManifests(config.reportRoot);
-    const historical: HistoricalRun[] = discovery.manifests.map((item) => ({
-      relativeDirectory: item.relativeDirectory,
-      projectId: item.manifest.project.id,
-      runId: item.manifest.run.runId,
-      state: item.manifest.state,
-      warnings: sanitizePersistedWarnings(item.manifest.warnings),
-      ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
-    }));
+    const historical: HistoricalRun[] = discovery.manifests.map((item) => {
+      const jobSegments = item.manifest.jenkins?.jobUrl === undefined
+        ? []
+        : jenkinsJobPathSegments(item.manifest.jenkins.jobUrl);
+      const rawJobId = jobSegments[2];
+      const jobId = rawJobId === undefined || rawJobId.length > 256 ? undefined : rawJobId;
+      const finalJobSegment = jobSegments.at(-1);
+      const branch = jobSegments.length >= 4 && finalJobSegment !== rawJobId &&
+        finalJobSegment !== undefined && finalJobSegment.length <= 256 ? finalJobSegment : undefined;
+      return {
+        relativeDirectory: item.relativeDirectory,
+        projectId: item.manifest.project.id,
+        runId: item.manifest.run.runId,
+        state: item.manifest.state,
+        warnings: sanitizePersistedWarnings(item.manifest.warnings),
+        ...(jobId === undefined ? {} : { jobId }),
+        ...(branch === undefined ? {} : { branch }),
+        ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
+      };
+    });
     const configuredIds = new Set(config.projects.map((project) => project.id));
     const orphanWarnings = historical.some((item) => !configuredIds.has(item.projectId))
       ? ['ignored historical manifests for unconfigured projects']

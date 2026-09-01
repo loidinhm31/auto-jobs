@@ -447,7 +447,7 @@ export async function loadTemplateReportFixture(
   }
 
   const projectName = env['PROJECT_NAME']?.trim() || 'Template reports';
-  const jobUrl = new URL('/job/template-report/', targetOrigin).toString();
+  const jobUrl = remapOrigin(jenkinsCanonical, targetOrigin);
   const snykReportUrl = new URL(`artifact/${report.filename}`, jobUrl).toString();
   const snykSummaryUrl = new URL(`artifact/${summary.filename}`, jobUrl).toString();
   const sonarqubeHomeUrl = remapOrigin(savedSonarqubeHome, targetOrigin);

@@ -13,7 +13,7 @@ import { generatedReportImage } from './generated-report-image.js';
 
 const RUN_ID = '20260824t040000z-0000000000000042';
 const OBSERVED_AT = '2026-08-24T04:00:00.000Z';
-const JOB_URL = 'https://jenkins.example/job/service-a/';
+const JOB_URL = 'https://jenkins.example/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/';
 const SNYK_SCREENSHOT = 'snyk-test-report.png';
 const SONAR_OVERALL_SCREENSHOT = 'sonarqube-overall.png';
 const SONAR_ISSUES_SCREENSHOT = 'sonarqube-issues.png';
@@ -104,7 +104,7 @@ export async function createGeneratedReportFixture(): Promise<{ baseUrl: string;
   const aggregate: AggregateReportResult = {
     schemaVersion: 3, generatedAt: OBSERVED_AT, warnings: [], projects: [{
       projectId: 'service-a', name: 'Service <A>', state: 'success', runId: RUN_ID, reportPath,
-      runs: [{ runId: RUN_ID, state: 'success', manifestPath: `service-a/${RUN_ID}/manifest.json`, reportPath, warnings: [] }], warnings: [],
+      runs: [{ runId: RUN_ID, jobId: 'job-id', branch: 'release/sit', state: 'success', manifestPath: `service-a/${RUN_ID}/manifest.json`, reportPath, warnings: [] }], warnings: [],
     }],
   };
   await writeAggregateDataPair(reportRoot, aggregate);

@@ -77,6 +77,8 @@ function completeAggregate(runId: string): AggregateReportResult {
       runs: [{
         runId,
         state: 'success',
+        jobId: 'job-id',
+        branch: 'release/sit',
         manifestPath: `service-a/${runId}/manifest.json`,
         reportPath: `service-a/${runId}/index.html`,
         warnings: [],
@@ -118,6 +120,8 @@ test('preserves existing aggregate publication when nested keys fail validation'
   const aggregate = completeAggregate(runId);
   try {
     await writeAggregateData(root, aggregate);
+    const published = JSON.parse(fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8')) as AggregateReportResult;
+    expect(published.projects[0]?.runs[0]).toMatchObject({ jobId: 'job-id', branch: 'release/sit' });
     const previousData = fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8');
     const previousReport = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
     const projectSummary = aggregate.projects[0];
@@ -130,6 +134,16 @@ test('preserves existing aggregate publication when nested keys fail validation'
       }],
     } as unknown as AggregateReportResult;
     await expect(writeAggregateData(root, malformed)).rejects.toThrow(/aggregate result schema/iu);
+    expect(fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8')).toBe(previousData);
+    expect(fs.readFileSync(path.join(root, 'index.html'), 'utf8')).toBe(previousReport);
+    const overlong = {
+      ...aggregate,
+      projects: [{
+        ...projectSummary,
+        runs: [{ ...projectSummary.runs[0]!, jobId: 'x'.repeat(257) }],
+      }],
+    } as unknown as AggregateReportResult;
+    await expect(writeAggregateData(root, overlong)).rejects.toThrow(/aggregate result schema/iu);
     expect(fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8')).toBe(previousData);
     expect(fs.readFileSync(path.join(root, 'index.html'), 'utf8')).toBe(previousReport);
   } finally {

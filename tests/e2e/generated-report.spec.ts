@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
 import { createGeneratedReportFixture } from './generated-report-fixtures.js';
+const RUN_ID = '20260824t040000z-0000000000000042';
 
 let fixture: Awaited<ReturnType<typeof createGeneratedReportFixture>>;
 
@@ -80,8 +81,18 @@ test.describe('generated offline reports', () => {
   test('keeps the aggregate index linkable from the same HTTP server', async ({ page, request }) => {
     await page.goto(`${fixture.baseUrl}/reports/index.html`, { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'Vulnerability report index' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Run' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Job ID' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Branch' })).toBeVisible();
+    const runRow = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: RUN_ID }) });
+    await expect(runRow).toContainText('job-id');
+    await expect(runRow).toContainText('release/sit');
     const reportLink = page.getByRole('link', { name: 'Open current report' });
     await expect(reportLink).toHaveAttribute('href', 'service-a/20260824t040000z-0000000000000042/index.html');
     expect((await request.get(new URL(await reportLink.getAttribute('href') ?? '', page.url()).toString())).status()).toBe(200);
+    await reportLink.click();
+    await expect(page).toHaveTitle('Service <A> vulnerability report');
+    await expect(page.getByRole('heading', { name: 'Snyk test report' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overall and Issues evidence' })).toBeVisible();
   });
 });
