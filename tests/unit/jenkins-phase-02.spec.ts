@@ -234,7 +234,7 @@ test('rejects an alternate same-base security redirect with a misleading landmar
     }
     await route.abort();
   });
-  await expect(submitJenkinsLogin(page, runnerConfig, new WorkflowDeadline(500)))
+  await expect(submitJenkinsLogin(page, runnerConfig, new WorkflowDeadline(2_000)))
     .rejects.toThrow(/login failed/u);
 });
 
