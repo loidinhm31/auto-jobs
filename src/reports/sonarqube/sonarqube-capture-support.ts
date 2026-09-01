@@ -18,6 +18,31 @@ export const SONAR_SCREENSHOTS = {
   issues: 'sonarqube-issues.png',
 } as const;
 
+export async function dismissSonarqubeModals(page: Page): Promise<void> {
+  const dismissCandidates = [
+    page.getByRole('button', { name: /^got\s*it$/iu }),
+    page.getByRole('dialog').getByRole('button', { name: /^got\s*it$/iu }),
+    page.getByRole('dialog').getByRole('button', { name: /^dismiss$/iu }),
+    page.getByRole('dialog').getByRole('button', { name: /^close$/iu }),
+    page.locator('[role="dialog"] button, [data-component*="modal"] button, .sw-modal button').filter({ hasText: /^got\s*it$/iu }),
+    page.locator('[role="dialog"] button, [data-component*="modal"] button, .sw-modal button').filter({ hasText: /^(?:dismiss|close)$/iu }),
+    page.locator('button').filter({ hasText: /^got\s*it$/iu }),
+  ];
+
+  for (const candidate of dismissCandidates) {
+    try {
+      const count = await candidate.count().catch(() => 0);
+      for (let index = 0; index < Math.min(count, 5); index += 1) {
+        const button = candidate.nth(index);
+        if (await button.isVisible().catch(() => false) && await button.isEnabled().catch(() => false)) {
+          await button.click({ timeout: 1_000 }).catch(() => undefined);
+        }
+      }
+    } catch {
+      // Ignore dismiss errors and continue
+    }
+  }
+}
 
 export function projectKeyFromHome(
   homeUrl: string,

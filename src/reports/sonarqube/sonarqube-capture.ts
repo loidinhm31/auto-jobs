@@ -9,6 +9,7 @@ import { settleCleanup, withWorkflowDeadline, withWorkflowDeadlineAndLateResourc
 import {
   captureFailureMessage,
   createRouteHandler,
+  dismissSonarqubeModals,
   navigation as sonarNavigation,
   pageCaptureMetadata,
   projectKeyFromHome,
@@ -166,6 +167,7 @@ export async function captureSonarqubeEvidence(input: SonarCaptureInput): Promis
       }
     }
 
+    await dismissSonarqubeModals(capturePage!);
     assertProjectUrl(
       assertAllowedUrl(capturePage.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), input.project.sourceOrigins.sonarqube, 'SonarQube home URL'),
       expectedKey,

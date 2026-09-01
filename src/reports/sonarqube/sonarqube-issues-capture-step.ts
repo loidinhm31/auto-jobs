@@ -15,6 +15,7 @@ import {
 import { normalizeSonarIssueFacets } from './sonarqube-issue-facets.js';
 import {
   captureFailureMessage,
+  dismissSonarqubeModals,
   navigation,
   pageCaptureMetadata,
   screenshotFacetRange,
@@ -67,6 +68,7 @@ export async function assertRenderedProjectIdentity(
 }
 
 export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIssuesStepResult> {
+  await dismissSonarqubeModals(input.page);
   const control = await firstAvailable(
     () => issuesControlCandidates(input.page, input.expectedKey, input.allowArchivedSnapshot),
     input.deadline,
@@ -82,6 +84,7 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
       return false;
     }
   }, { timeout: input.deadline.requireRemaining(), waitUntil: 'domcontentloaded' });
+  await dismissSonarqubeModals(input.page);
   const url = assertAllowedUrl(
     input.page.url(),
     deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),

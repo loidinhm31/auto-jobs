@@ -13,6 +13,7 @@ import {
 import {
   assertProjectUrl,
   captureFailureMessage,
+  dismissSonarqubeModals,
   navigation,
   pageCaptureMetadata,
   screenshotRegion,
@@ -83,6 +84,7 @@ function validatedStepUrl(
 }
 
 export async function captureOverallStep(input: SonarStepInput): Promise<SonarStepResult> {
+  await dismissSonarqubeModals(input.page);
   const control = await firstAvailable(
     overallControlCandidates(input.page, input.expectedKey, input.project.name, input.allowArchivedSnapshot),
     input.deadline,
@@ -90,6 +92,7 @@ export async function captureOverallStep(input: SonarStepInput): Promise<SonarSt
   await visible(control.locator, input.deadline, 'SonarQube Overall Code control was not visible');
   await control.locator.click({ timeout: input.deadline.requireRemaining() });
   const url = validatedStepUrl(input, await waitForOverallUrl(input.page, input.expectedKey, input.deadline, input.allowArchivedSnapshot ?? false), 'overall', input.allowArchivedSnapshot ?? false);
+  await dismissSonarqubeModals(input.page);
   const panel = await overallPanel(input.page, input.deadline);
   await visible(panel, input.deadline, 'SonarQube Overall panel was not visible');
   const capture = await pageCaptureMetadata(input.page, url, control.strategy, input.deadline);
