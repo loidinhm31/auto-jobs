@@ -35,19 +35,18 @@ export async function submitSonarqubeLogin(
       deadline,
     );
 
-    await page.waitForFunction(
-      () => document.querySelector('#login-input, input[name="login"]') === null,
-      undefined,
-      { timeout: Math.min(deadline.requireRemaining(), 10_000) },
-    );
-
-    await page.waitForURL(
-      (url) => !isSonarqubeLoginLocation(url) && hasCredentialFreeAuthority(url),
-      {
-        waitUntil: 'domcontentloaded',
-        timeout: Math.min(deadline.requireRemaining(), 10_000),
-      },
-    );
+    const waitTimeout = Math.min(deadline.requireRemaining(), 10_000);
+    await Promise.race([
+      page.waitForURL(
+        (url) => !isSonarqubeLoginLocation(url) && hasCredentialFreeAuthority(url),
+        { waitUntil: 'domcontentloaded', timeout: waitTimeout },
+      ).catch(() => undefined),
+      page.waitForFunction(
+        () => document.querySelector('#login-input, input[name="login"]') === null,
+        undefined,
+        { timeout: waitTimeout },
+      ).catch(() => undefined),
+    ]);
 
     if (isSonarqubeLoginLocation(new URL(page.url()))) {
       throw new Error('SonarQube login remained on the login endpoint');

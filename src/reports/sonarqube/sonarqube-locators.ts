@@ -27,7 +27,7 @@ async function isActionable(locator: Locator): Promise<boolean> {
   if (!(await locator.isEnabled().catch(() => false))) return false;
   return (await locator.getAttribute('aria-disabled').catch(() => null)) !== 'true';
 }
-async function findAvailable(candidates: SonarLocatorCandidates): Promise<SonarLocator | undefined> {
+export async function findAvailable(candidates: SonarLocatorCandidates): Promise<SonarLocator | undefined> {
   for (const candidate of await resolveCandidates(candidates)) {
     const count = await candidate.locator.count();
     for (let index = 0; index < Math.min(count, MAX_VISIBLE_LOCATOR_MATCHES); index += 1) {
