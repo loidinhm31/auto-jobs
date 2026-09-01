@@ -89,9 +89,10 @@ source-origin and selector settings.
 
 The workflow authenticates through the exact configured `loginUrl`, validates
 the authenticated page, opens the exact configured `jobUrl`, discovers publisher
-destinations once, and captures the configured Snyk and SonarQube evidence. It
-does not trigger builds, inspect queues or build identities, poll terminal
-status, or select another job.
+destinations once, and captures the configured Snyk and SonarQube evidence
+(authenticating through SonarQube login with the same credentials if
+redirected). It does not trigger builds, inspect queues or build identities,
+poll terminal status, or select another job.
 
 ### Windows PowerShell live run
 

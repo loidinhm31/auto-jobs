@@ -22,3 +22,5 @@ reports/
 
 coverage/
 .DS_Store
+.idea/
+

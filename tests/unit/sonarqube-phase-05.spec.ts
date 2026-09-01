@@ -428,3 +428,128 @@ test('fails closed when Issues navigates with duplicate project identities', asy
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
+
+test('authenticates through SonarQube login page when home redirects to /sessions/new', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-login-success-'));
+  const loginHtml = '<!doctype html><title>Log in - SonarQube</title><form action="/sessions/new" method="POST"><input id="login-input" name="login" type="text" /><input id="password-input" name="password" type="password" /><button type="submit">Log in</button></form>';
+  const homeHtml = '<!doctype html><title>Service A Overview</title><nav aria-label="Project"><a href="https://sonar.example/dashboard?id=service-a">Overview</a><a href="https://sonar.example/project/issues?id=service-a">Issues</a></nav><header data-component="project-content-header"><h1>Overview</h1><a role="link" href="https://sonar.example/dashboard?id=service-a">service-a</a></header><main><button role="tab" aria-selected="false">Overall Code</button></main><script>document.querySelector("[role=tab]").onclick=()=>location.href="https://sonar.example/dashboard?id=service-a&codeScope=overall";</script>';
+  const overallHtml = '<!doctype html><title>Service A Overall</title><header data-component="project-content-header"><a href="https://sonar.example/dashboard?id=service-a">service-a</a></header><nav aria-label="Project"><a href="https://sonar.example/project/issues?id=service-a">Issues</a></nav><main><h1>Overview</h1><div id="tabpanel-overall">overall content</div></main>';
+  const issuesHtml = '<!doctype html><title>Service A Issues</title><header data-component="project-content-header"><a href="https://sonar.example/dashboard?id=service-a">service-a</a></header><h1>Issues</h1><nav data-testid="issues-nav-bar" aria-label="Filters"><div data-component="facet-box" data-property="types"><button aria-label="Type" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="BUG" aria-label="Bug 1"><span class="name">Bug</span><span class="stat">1</span></button></div></div><div data-component="facet-box" data-property="severities"><button aria-label="Severity" aria-expanded="true"></button><div role="group"><button role="checkbox" data-facet="CRITICAL" title="Critical"><span class="name">Critical</span><span class="stat">4</span></button></div></div></nav>';
+
+  let authenticated = false;
+  await page.context().route('https://sonar.example/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === 'POST' && url.pathname === '/sessions/new') {
+      authenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><meta http-equiv="refresh" content="0; url=https://sonar.example/dashboard?id=service-a"><a href="https://sonar.example/dashboard?id=service-a">Continue</a>',
+      });
+      return;
+    }
+    if (url.pathname === '/sessions/new') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: loginHtml });
+      return;
+    }
+    if (url.pathname === '/dashboard' && !authenticated) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: loginHtml,
+      });
+      return;
+    }
+    if (url.pathname === '/project/issues') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: issuesHtml });
+      return;
+    }
+    if (url.pathname === '/dashboard') {
+      const body = url.searchParams.get('codeScope') === 'overall' ? overallHtml : homeHtml;
+      await route.fulfill({ status: 200, contentType: 'text/html', body });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'text/html', body: 'Not found' });
+  });
+
+  try {
+    const result = await captureSonarqubeEvidence({
+      page,
+      project: project(),
+      deadline: new WorkflowDeadline(30_000),
+      outputDirectory,
+      homeUrl: 'https://sonar.example/dashboard?id=service-a',
+      secrets: { username: 'test-user', password: 'test-password' },
+    });
+    expect(result.source.state, result.warnings.join(' | ')).toBe('found');
+    expect(result.navigation['sonarqube-home'].state).toBe('found');
+    expect(result.navigation['sonarqube-overall'].state).toBe('found');
+    expect(result.navigation['sonarqube-issues'].state).toBe('found');
+    expect(result.screenshots).toEqual(['sonarqube-overall.png', 'sonarqube-issues.png']);
+    expect(fs.existsSync(path.join(outputDirectory, 'sonarqube-overall.png'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDirectory, 'sonarqube-issues.png'))).toBe(true);
+  } finally {
+    await page.context().unroute('https://sonar.example/**');
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
+
+test('fails closed with redacted diagnostic when SonarQube login fails to leave login endpoint', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-login-fail-'));
+  const loginHtml = '<!doctype html><title>Log in - SonarQube</title><form action="/sessions/new" method="POST"><input id="login-input" name="login" type="text" /><input id="password-input" name="password" type="password" /><button type="submit">Log in</button></form>';
+
+  await page.context().route('https://sonar.example/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === 'POST') {
+      // simulate remaining on login page due to invalid credentials
+      await route.fulfill({ status: 200, contentType: 'text/html', body: loginHtml });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'text/html', body: loginHtml });
+  });
+
+  try {
+    const result = await captureSonarqubeEvidence({
+      page,
+      project: project(),
+      deadline: new WorkflowDeadline(3_000),
+      outputDirectory,
+      homeUrl: 'https://sonar.example/dashboard?id=service-a',
+      secrets: { username: 'test-user', password: 'secret-super-password' },
+    });
+    expect(result.source.state).toBe('incomplete');
+    expect(result.warnings.join(' ')).toContain('SonarQube login');
+    expect(result.warnings.join(' ')).not.toContain('secret-super-password');
+  } finally {
+    await page.context().unroute('https://sonar.example/**');
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
+
+test('fails closed when SonarQube redirects to login but credentials are missing', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonarqube-login-nocreds-'));
+  const loginHtml = '<!doctype html><title>Log in - SonarQube</title><form action="/sessions/new" method="POST"><input id="login-input" name="login" type="text" /><input id="password-input" name="password" type="password" /><button type="submit">Log in</button></form>';
+  await page.context().route('https://sonar.example/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: loginHtml,
+    });
+  });
+
+  try {
+    const result = await captureSonarqubeEvidence({
+      page,
+      project: project(),
+      deadline: new WorkflowDeadline(3_000),
+      outputDirectory,
+      homeUrl: 'https://sonar.example/dashboard?id=service-a',
+    });
+    expect(result.source.state).toBe('incomplete');
+    expect(result.warnings.join(' ')).toContain('credentials were not provided');
+  } finally {
+    await page.context().unroute('https://sonar.example/**');
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
+

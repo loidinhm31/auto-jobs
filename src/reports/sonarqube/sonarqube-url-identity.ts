@@ -16,3 +16,16 @@ export function isArchivedSonarqubeSnapshot(url: URL): boolean {
 export function isArchivedSonarqubeArtifact(url: URL): boolean {
   return /\/artifact\/(?:[^/]+\/)*sonarqube\/(?:index|overall|issues)\.html$/iu.test(url.pathname);
 }
+
+export function isSonarqubeLoginLocation(url: URL): boolean {
+  const path = url.pathname.toLowerCase();
+  return (
+    path === '/sessions/new' ||
+    path === '/sessions/login' ||
+    path.startsWith('/sessions/new/') ||
+    path.startsWith('/sessions/login/') ||
+    /\/login(?:\/|$)/iu.test(path) ||
+    /\/sessions\/(?:new|login|init)(?:\/|$)/iu.test(path)
+  );
+}
+

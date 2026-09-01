@@ -438,6 +438,8 @@ test('routes checked-in templates through the production direct workflow', async
       `GET ${fixture.snykSummaryUrl}`,
       `GET ${fixture.jobUrl}`,
       `GET ${fixture.sonarqubeHomeUrl}`,
+      `POST ${fixture.sonarqubeLoginActionUrl}`,
+      `GET ${fixture.sonarqubeHomeUrl}`,
       `GET ${fixture.sonarqubeHomeUrl}`,
       `GET ${fixture.sonarqubeOverallUrl}`,
       `GET ${fixture.sonarqubeIssuesUrl}`,

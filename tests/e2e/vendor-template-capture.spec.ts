@@ -194,3 +194,78 @@ test('captures SonarQube Home to Overall to Issues and survives generated facet 
     fs.rmSync(outputRoot, { recursive: true, force: true });
   }
 });
+
+test('captures SonarQube through login template redirect to Overall to Issues', async ({ page }) => {
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'sonar-login-e2e-'));
+  const login = readFixture('sonarqube-template/template-login.html');
+  const home = readFixture('sonarqube-template/template-home.html');
+  const overall = readFixture('sonarqube-template/template-overall.html');
+  const issues = readFixture('sonarqube-template/template-issues.html');
+
+  await page.context().addInitScript(({ key }: { key: string }) => {
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target.closest('[role="tab"]') : null;
+      if (!(target instanceof HTMLElement) || target.textContent?.trim() !== 'Overall Code') return;
+      event.preventDefault();
+      window.location.assign(`/dashboard?id=${encodeURIComponent(key)}&codeScope=overall`);
+    }, true);
+  }, { key: SONAR_PROJECT });
+
+  let authenticated = false;
+  const sonarHandler = async (route: Route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname === '/sessions/new') {
+      authenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: `<!doctype html><meta http-equiv="refresh" content="0; url=${SONAR_ORIGIN}/dashboard?id=${encodeURIComponent(SONAR_PROJECT)}"><a href="${SONAR_ORIGIN}/dashboard?id=${encodeURIComponent(SONAR_PROJECT)}">Continue</a>`,
+      });
+      return;
+    }
+    if (url.pathname === '/sessions/new') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: login.replace(/<form\b([^>]*)>/iu, '<form$1 method="POST" action="/sessions/new">').replace(/<button([^>]*\btype=["']submit["'][^>]*?)\bdisabled(?:=""|="disabled")?([^>]*)>/giu, '<button$1$2>'),
+      });
+      return;
+    }
+    if (url.pathname === '/dashboard' && !authenticated) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: login.replace(/<form\b([^>]*)>/iu, '<form$1 method="POST" action="/sessions/new">').replace(/<button([^>]*\btype=["']submit["'][^>]*?)\bdisabled(?:=""|="disabled")?([^>]*)>/giu, '<button$1$2>'),
+      });
+      return;
+    }
+    if (url.pathname === '/project/issues') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: issues });
+      return;
+    }
+    const body = url.searchParams.get('codeScope') === 'overall' ? overall : home;
+    await route.fulfill({ status: 200, contentType: 'text/html', body });
+  };
+
+  await page.context().route(`${SONAR_ORIGIN}/**`, sonarHandler);
+  try {
+    const result = await captureSonarqubeEvidence({
+      page,
+      project: sonarProject(),
+      deadline: new WorkflowDeadline(30_000),
+      outputDirectory,
+      homeUrl: `${SONAR_ORIGIN}/dashboard?id=${encodeURIComponent(SONAR_PROJECT)}`,
+      secrets: { username: 'fixture-user', password: 'fixture-password' },
+    });
+    expect(result.source.state, result.warnings.join(' | ')).toBe('found');
+    expect(result.source.captures).toHaveLength(3);
+    expect(result.screenshots).toEqual(['sonarqube-overall.png', 'sonarqube-issues.png']);
+    expect(fs.existsSync(path.join(outputDirectory, 'sonarqube-overall.png'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDirectory, 'sonarqube-issues.png'))).toBe(true);
+  } finally {
+    await page.context().unroute(`${SONAR_ORIGIN}/**`, sonarHandler);
+    fs.rmSync(outputDirectory, { recursive: true, force: true });
+  }
+});
+

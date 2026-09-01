@@ -60,7 +60,8 @@ flowchart LR
 - `src/jenkins/` authenticates and opens the exact configured job page without
   triggering builds, inspecting queues/build identities, or polling status.
 - `src/reports/snyk/` and `src/reports/sonarqube/` validate allowed links,
-  capture bounded visible evidence, and normalize source-specific results.
+  handle SonarQube login redirect authentication when required, capture bounded
+  visible evidence, and normalize source-specific results.
 - `src/artifacts/` creates immutable run paths, writes validated files, manages
   staging leases and aggregate recovery, and performs bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
@@ -138,9 +139,11 @@ credential-free HTTP(S) and inside its allowed canonical origin.
 
 The Snyk adapter selects one exact report link and one unambiguous summary JSON
 link from the validated Jenkins job page. The SonarQube adapter follows one
-validated dashboard sequence: Home, Overall with `codeScope=overall`, then
-Issues for the same project identity. Tests fulfill these exact browser URLs
-from the checked-in template files; runtime opens them normally.
+validated dashboard sequence: Home (authenticating through the SonarQube login
+page using the project's configured Jenkins credentials if redirected),
+Overall with `codeScope=overall`, then Issues for the same project identity.
+Tests fulfill these exact browser URLs from the checked-in template files;
+runtime opens them normally.
 
 Visible findings are normalized, deduplicated, ordered, and capped. Missing or
 malformed evidence, mismatched counts, disallowed links, and screenshot

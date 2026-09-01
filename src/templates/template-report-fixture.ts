@@ -22,6 +22,8 @@ export interface TemplateReportFixture {
   readonly jobUrl: string;
   readonly snykReportUrl: string;
   readonly snykSummaryUrl: string;
+  readonly sonarqubeLoginUrl: string;
+  readonly sonarqubeLoginActionUrl: string;
   readonly sonarqubeHomeUrl: string;
   readonly sonarqubeOverallUrl: string;
   readonly sonarqubeIssuesUrl: string;
@@ -29,6 +31,7 @@ export interface TemplateReportFixture {
   readonly jenkinsHtml: string;
   readonly snykHtml: string;
   readonly snykSummary: string;
+  readonly sonarqubeLoginHtml: string;
   readonly sonarqubeHomeHtml: string;
   readonly sonarqubeOverallHtml: string;
   readonly sonarqubeIssuesHtml: string;
@@ -186,6 +189,22 @@ function rewriteFormAction(html: string, savedAction: URL, target: string): stri
   if (replacements !== 1) throw new Error('Template login form action could not be rewritten exactly once');
   return rewritten;
 }
+
+function rewriteSonarqubeLoginForm(html: string, targetAction: string): string {
+  let formReplaced = false;
+  let rewritten = html.replace(/<form\b([^>]*)>/iu, (_whole, attrs) => {
+    formReplaced = true;
+    const cleanAttrs = attrs.replace(/\b(?:action|method)\s*=\s*(["'])[\s\S]*?\1/giu, '').trim();
+    return `<form ${cleanAttrs} method="POST" action="${escapeHtml(targetAction)}">`;
+  });
+  if (!formReplaced) throw new Error('Template SonarQube login form could not be rewritten');
+  rewritten = rewritten.replace(
+    /<button([^>]*\btype=["']submit["'][^>]*?)\bdisabled(?:=""|="disabled")?([^>]*)>/giu,
+    '<button$1$2>',
+  );
+  return rewritten;
+}
+
 
 function exactlyOneQueryValue(url: URL, key: string): string | undefined {
   const values = url.searchParams.getAll(key);
@@ -407,6 +426,7 @@ export async function loadTemplateReportFixture(
   const snykHtml = await readTemplate(root, 'snyk-template/template.html', rootIdentity, templateBudget);
   const snykSummary = await readTemplate(root, 'snyk-template/snyk-sca-results-summary.json', rootIdentity, templateBudget);
   const sonarqubeHomeRaw = await readTemplate(root, 'sonarqube-template/template-home.html', rootIdentity, templateBudget);
+  const sonarqubeLoginRaw = await readTemplate(root, 'sonarqube-template/template-login.html', rootIdentity, templateBudget);
   const sonarqubeOverallRaw = await readTemplate(root, 'sonarqube-template/template-overall.html', rootIdentity, templateBudget);
   const sonarqubeIssuesRaw = await readTemplate(root, 'sonarqube-template/template-issues.html', rootIdentity, templateBudget);
 
@@ -434,6 +454,10 @@ export async function loadTemplateReportFixture(
   if (exactlyOneQueryValue(savedSonarqubeHome, 'id') !== sonarqubeProjectId) {
     throw new Error('Template Jenkins and SonarQube project identities do not match');
   }
+  const savedSonarqubeLogin = parseCanonicalUrl(sonarqubeLoginRaw, 'SonarQube login');
+  if (savedSonarqubeLogin.origin !== SAVED_SONAR_ORIGIN || savedSonarqubeLogin.pathname !== '/sessions/new') {
+    throw new Error('SonarQube login template identity is invalid');
+  }
   const savedSonarqubeOverall = parseCanonicalUrl(sonarqubeOverallRaw, 'SonarQube Overall');
   if (savedSonarqubeOverall.origin !== SAVED_SONAR_ORIGIN || !isDashboardPath(savedSonarqubeOverall) ||
     exactlyOneQueryValue(savedSonarqubeOverall, 'id') !== sonarqubeProjectId ||
@@ -450,6 +474,8 @@ export async function loadTemplateReportFixture(
   const jobUrl = remapOrigin(jenkinsCanonical, targetOrigin);
   const snykReportUrl = new URL(`artifact/${report.filename}`, jobUrl).toString();
   const snykSummaryUrl = new URL(`artifact/${summary.filename}`, jobUrl).toString();
+  const sonarqubeLoginUrl = remapOrigin(savedSonarqubeLogin, targetOrigin);
+  const sonarqubeLoginActionUrl = new URL('/sessions/new', targetOrigin).toString();
   const sonarqubeHomeUrl = remapOrigin(savedSonarqubeHome, targetOrigin);
   const sonarqubeOverallUrl = remapOrigin(savedSonarqubeOverall, targetOrigin);
   const sonarqubeIssuesUrl = remapOrigin(savedSonarqubeIssues, targetOrigin);
@@ -473,6 +499,8 @@ export async function loadTemplateReportFixture(
     jobUrl,
     snykReportUrl,
     snykSummaryUrl,
+    sonarqubeLoginUrl,
+    sonarqubeLoginActionUrl,
     sonarqubeHomeUrl,
     sonarqubeOverallUrl,
     sonarqubeIssuesUrl,
@@ -480,6 +508,7 @@ export async function loadTemplateReportFixture(
     jenkinsHtml: rewrittenJenkinsHtml,
     snykHtml,
     snykSummary,
+    sonarqubeLoginHtml: rewriteSonarqubeLoginForm(sonarqubeLoginRaw, sonarqubeLoginActionUrl),
     sonarqubeHomeHtml: rewriteSonarqubeLinks(sonarqubeHomeRaw, sonarRoutes, projectName),
     sonarqubeOverallHtml: rewriteSonarqubeLinks(sonarqubeOverallRaw, sonarRoutes, projectName),
     sonarqubeIssuesHtml: rewriteSonarqubeLinks(sonarqubeIssuesRaw, sonarRoutes, projectName),
@@ -494,6 +523,7 @@ export function templateResponse(url: URL, fixture: TemplateReportFixture): Temp
   if (isExactFixtureUrl(url, fixture.jobUrl)) return { body: fixture.jenkinsHtml, contentType: 'text/html; charset=utf-8' };
   if (isExactFixtureUrl(url, fixture.snykReportUrl)) return { body: fixture.snykHtml, contentType: 'text/html; charset=utf-8' };
   if (isExactFixtureUrl(url, fixture.snykSummaryUrl)) return { body: fixture.snykSummary, contentType: 'application/json; charset=utf-8' };
+  if (isExactFixtureUrl(url, fixture.sonarqubeLoginUrl)) return { body: fixture.sonarqubeLoginHtml, contentType: 'text/html; charset=utf-8' };
   if (isExactFixtureUrl(url, fixture.sonarqubeOverallUrl)) return { body: fixture.sonarqubeOverallHtml, contentType: 'text/html; charset=utf-8' };
   if (isExactFixtureUrl(url, fixture.sonarqubeHomeUrl)) return { body: fixture.sonarqubeHomeHtml, contentType: 'text/html; charset=utf-8' };
   if (isExactFixtureUrl(url, fixture.sonarqubeIssuesUrl)) return { body: fixture.sonarqubeIssuesHtml, contentType: 'text/html; charset=utf-8' };
@@ -506,6 +536,7 @@ export async function installTemplateReportRoutes(
 ): Promise<TemplateRouteRecorder> {
   const recorder: MutableTemplateRouteRecorder = { misses: [], truncated: false };
   const fixtureOrigin = new URL(fixture.jobUrl).origin;
+  let sonarqubeAuthenticated = false;
   await context.route('**/*', async (route: Route) => {
     const request = route.request();
     let url: URL;
@@ -525,8 +556,25 @@ export async function installTemplateReportRoutes(
       });
       return;
     }
+    if (request.method() === 'POST' && (isExactFixtureUrl(url, fixture.sonarqubeLoginActionUrl) || isExactFixtureUrl(url, fixture.sonarqubeLoginUrl) || url.pathname === '/sessions/new')) {
+      sonarqubeAuthenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: `<!doctype html><meta http-equiv="refresh" content="0; url=${escapeHtml(fixture.sonarqubeHomeUrl)}"><a href="${escapeHtml(fixture.sonarqubeHomeUrl)}">Continue</a>`,
+      });
+      return;
+    }
     if (!['GET', 'HEAD'].includes(request.method())) {
       await abortTemplateRoute(route, recorder, 'blockedbyclient');
+      return;
+    }
+    if (isExactFixtureUrl(url, fixture.sonarqubeHomeUrl) && !sonarqubeAuthenticated) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: fixture.sonarqubeLoginHtml,
+      });
       return;
     }
     const response = templateResponse(url, fixture);
@@ -538,6 +586,7 @@ export async function installTemplateReportRoutes(
   });
   return recorder;
 }
+
 
 
 export function templateProjectDocument(

@@ -67,6 +67,7 @@ export type EvidenceCapture = (input: {
   outputDirectory: string;
   snykSummaryReader?: SnykSummaryReader;
   snykOpenSafePage?: (page: Page, deadline: WorkflowDeadline) => Promise<ScriptSafePage>;
+  secrets?: ProjectSecrets;
 }) => Promise<CaptureResult>;
 
 export const defaultCapture: EvidenceCapture = async ({
@@ -78,6 +79,7 @@ export const defaultCapture: EvidenceCapture = async ({
   outputDirectory,
   snykSummaryReader,
   snykOpenSafePage,
+  secrets,
 }) => {
   const linkCollection = await pageLinkCandidatesWithStatus(page, deadline);
   const links = linkCollection.truncated ? [] : linkCollection.candidates;
@@ -114,7 +116,9 @@ export const defaultCapture: EvidenceCapture = async ({
       ...truncationWarnings,
       ...(sonarqubeLinks.home === undefined ? ['SonarQube destination cardinality was not exactly one'] : []),
     ],
+    ...(secrets === undefined ? {} : { secrets }),
   });
+
   state.transition('captured');
   return {
     navigation: {

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import type { NormalizedProjectConfig } from '../../config/config-types.js';
+import type { NormalizedProjectConfig, ProjectSecrets } from '../../config/config-types.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
 import type { CaptureMetadata, SonarSourceEvidence } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
@@ -21,7 +21,8 @@ import {
   captureOverallStep,
   type SonarNavigation,
 } from './sonarqube-capture-steps.js';
-import { isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
+import { isArchivedSonarqubeSnapshot, isSonarqubeLoginLocation } from './sonarqube-url-identity.js';
+import { submitSonarqubeLogin } from './sonarqube-login-step.js';
 
 function emptyResult(state: 'not_found' | 'incomplete', warnings: readonly string[]): SonarCaptureResult {
   const navigation: SonarNavigation = {
@@ -69,6 +70,7 @@ export async function captureSonarqubeEvidence(input: {
   outputDirectory: string;
   homeUrl?: string;
   discoveryWarnings?: readonly string[];
+  secrets?: ProjectSecrets;
 }): Promise<SonarCaptureResult> {
   let capturePage: Page | undefined;
   let routeHandler: ReturnType<typeof createRouteHandler> | undefined;
@@ -104,12 +106,24 @@ export async function captureSonarqubeEvidence(input: {
     );
     if (routeState.blocked) throw new Error('SonarQube request was blocked by the configured origin policy');
     if (response !== null && response.status() >= 400) throw new Error(`SonarQube home returned HTTP ${response.status()}`);
+
+    const isLogin = isSonarqubeLoginLocation(new URL(capturePage.url())) ||
+      (await capturePage.locator('#login-input, input[name="login"]').count()) > 0;
+    if (isLogin) {
+      if (input.secrets === undefined || input.secrets.username.length === 0 || input.secrets.password.length === 0) {
+        throw new Error('SonarQube home redirected to login but project credentials were not provided');
+      }
+      await submitSonarqubeLogin(capturePage, input.secrets, input.deadline);
+      if (routeState.blocked) throw new Error('SonarQube request was blocked by the configured origin policy');
+    }
+
     assertProjectUrl(
       assertAllowedUrl(capturePage.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), input.project.sourceOrigins.sonarqube, 'SonarQube home URL'),
       expectedKey,
       'home',
       allowArchivedSnapshot,
     );
+
     const homeStrategy = await assertHomeIdentity(capturePage, expectedKey, input.deadline, input.project.name, allowArchivedSnapshot);
     const validatedHomeUrl = assertProjectUrl(
       assertAllowedUrl(capturePage.url(), deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl), input.project.sourceOrigins.sonarqube, 'SonarQube Overview URL'),

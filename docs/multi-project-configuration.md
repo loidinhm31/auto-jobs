@@ -49,9 +49,12 @@ before using it for a live collection.
 ### Credentials
 
 Use `credentials` with `usernameVariable` and `passwordVariable` to name the
-environment variables containing a project's Jenkins credentials. If omitted,
-the loader uses `JENKINS_USERNAME` and `JENKINS_PASSWORD`. Neither the JSON
-nor its selectors may contain secret values.
+environment variables containing a project's credentials. If omitted, the
+loader uses `JENKINS_USERNAME` and `JENKINS_PASSWORD`. These credentials are
+used for Jenkins authentication and are reused automatically for SonarQube
+authentication if the SonarQube dashboard redirects to its login page
+(`/sessions/new`). Neither the JSON nor its selectors may contain secret
+values.
 
 ```json
 {
@@ -162,8 +165,8 @@ the direct workflow contract.
 
 ## Offline capture fixtures
 
-Offline fixture tests read seven bounded inputs: the Jenkins job and login
-snapshots, Snyk HTML and summary JSON, and SonarQube home, Overall, and
+Offline fixture tests read eight bounded inputs: the Jenkins job and login
+snapshots, Snyk HTML and summary JSON, and SonarQube login, home, Overall, and
 Issues HTML. They install bounded Playwright context routes at a synthetic
 origin and invoke the same capture, normalization, artifact, and rendering
 workflow. No Jenkins controller, pipeline, vendor service, or Jenkins

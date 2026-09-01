@@ -210,3 +210,30 @@ export async function issuesControlCandidates(page: Page, projectKey: string, al
   }
   return candidates;
 }
+
+export function sonarLoginUsernameCandidates(page: Page): SonarLocator[] {
+  return [
+    { locator: page.locator('#login-input'), strategy: 'id:login-input' },
+    { locator: page.locator('input[name="login"]'), strategy: 'name:login' },
+    { locator: page.getByLabel(/^username$/iu), strategy: 'label:Username' },
+    { locator: page.getByPlaceholder(/username/iu), strategy: 'placeholder:Username' },
+  ];
+}
+
+export function sonarLoginPasswordCandidates(page: Page): SonarLocator[] {
+  return [
+    { locator: page.locator('#password-input'), strategy: 'id:password-input' },
+    { locator: page.locator('input[name="password"]'), strategy: 'name:password' },
+    { locator: page.getByLabel(/^password$/iu), strategy: 'label:Password' },
+    { locator: page.getByPlaceholder(/password/iu), strategy: 'placeholder:Password' },
+  ];
+}
+
+export function sonarLoginSubmitCandidates(page: Page): SonarLocator[] {
+  return [
+    { locator: page.locator('button[type="submit"]'), strategy: 'button:submit' },
+    { locator: page.getByRole('button', { name: /^log in$/iu }), strategy: 'role:button:Log in' },
+    { locator: page.getByRole('button', { name: /^sign in$/iu }), strategy: 'role:button:Sign in' },
+  ];
+}
+

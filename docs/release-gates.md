@@ -39,8 +39,8 @@ npm run test:e2e:templates
 ```
 
 This runs the production direct workflow against the saved Jenkins, Snyk, and
-SonarQube snapshots through the exact default-deny route map. It is not a
-live-vendor or live-Jenkins check.
+SonarQube snapshots (including authentication flow) through the exact
+default-deny route map. It is not a live-vendor or live-Jenkins check.
 
 The native WebKit template gate uses the browser installed on the host:
 

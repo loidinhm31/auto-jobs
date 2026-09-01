@@ -9,7 +9,7 @@ import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
 import type { CaptureMetadata, NavigationTarget } from '../../result-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
-import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeArtifact, isArchivedSonarqubeSnapshot } from './sonarqube-url-identity.js';
+import { exactQueryValue, hasCredentialFreeAuthority, isArchivedSonarqubeArtifact, isArchivedSonarqubeSnapshot, isSonarqubeLoginLocation } from './sonarqube-url-identity.js';
 import { WorkflowDeadlineExceededError, withWorkflowDeadline, type WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 
 export const SONAR_VIEWPORT = { width: 1_440, height: 900 } as const;
@@ -46,7 +46,7 @@ export function assertProjectUrl(
   const url = new URL(value);
   if (!hasCredentialFreeAuthority(url) || exactQueryValue(url, 'id') !== expectedKey) throw new Error(`SonarQube ${label} has the wrong project identity`);
   if (label === 'Overall' && exactQueryValue(url, 'codeScope') !== 'overall') throw new Error('SonarQube Overall has an invalid code scope');
-  if (/\/login(?:\/|$)/iu.test(url.pathname)) throw new Error(`SonarQube ${label} redirected to login`);
+  if (isSonarqubeLoginLocation(url)) throw new Error(`SonarQube ${label} redirected to login`);
   const dashboardPath = label === 'Overall'
     ? (url.pathname === '/dashboard' || url.pathname === '/dashboard/')
     : /\/dashboard\/?$/iu.test(url.pathname);

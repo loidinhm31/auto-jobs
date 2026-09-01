@@ -153,6 +153,7 @@ export async function runProject(
       deadline,
       state: projectState,
       outputDirectory: projectState.identity.runDirectory,
+      secrets: resolved,
     }), deadline);
     captureResult = sanitizeCaptureResult(captured, resolved);
     if (projectState.phase === 'job_opened') projectState.transition('links_discovered');
