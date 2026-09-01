@@ -96,7 +96,8 @@ test('loads the committed two-project example with runtime-only secret values', 
   });
   expect(projects.map((project) => project.id)).toEqual(['service-a', 'service-b']);
   expect(projects.every((project) => Object.isFrozen(project))).toBe(true);
-  expect(projects[0]?.sources.snyk.projectId).toBe('service-a');
+  expect(projects[0]?.sources.snyk.projectId).toBeUndefined();
+  expect(projects[0]?.sources.sonarqube.projectId).toBeUndefined();
   expect(projects[0]?.sources.snyk).not.toHaveProperty('reportPath');
 });
 

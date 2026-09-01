@@ -46,6 +46,7 @@ function sonarHome(candidate: PageLinkCandidate, project: NormalizedProjectConfi
   return {
     href: url.toString(), publisher: 'sonarqube', kind: 'home',
     signal: text.includes('sonar') ? 'accessible-name' : 'path',
+    ...(candidate.inSidePanel ? { inSidePanel: true } : {}),
   };
 }
 
@@ -71,6 +72,13 @@ export function classifySonarLinks(
     }
   }
   const unique = [...new Map(homes.map((home) => [home.href, home])).values()];
-  if (unique.length > 1) pushDiagnostic(warnings, 'ambiguous SonarQube home candidates were rejected');
-  return { ...(unique.length === 1 ? { home: unique[0] } : {}), warnings };
+  if (unique.length > 1) {
+    const sidePanelHomes = unique.filter((home) => home.inSidePanel === true);
+    if (sidePanelHomes.length === 1 && sidePanelHomes[0] !== undefined) {
+      return { home: sidePanelHomes[0], warnings };
+    }
+    pushDiagnostic(warnings, 'ambiguous SonarQube home candidates were rejected');
+  }
+  const single = unique.length === 1 ? unique[0] : undefined;
+  return { ...(single === undefined ? {} : { home: single }), warnings };
 }

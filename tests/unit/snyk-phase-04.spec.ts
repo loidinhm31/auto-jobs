@@ -124,6 +124,16 @@ test('classifies only Snyk-shaped allowed links and rejects ambiguity', () => {
   ], safeProject);
   expect(ambiguous.report).toBeUndefined();
   expect(ambiguous.warnings).toContain('ambiguous Snyk report candidates were rejected');
+
+  const fileListDisambiguation = classifySnykLinks([
+    { href: 'https://jenkins.example/jenkins/artifact/snyk-results.html', text: 'snyk-results.html', inFileList: true },
+    { href: 'https://jenkins.example/jenkins/artifact/snyk-sca-results-summary.json', text: 'snyk-sca-results-summary.json', inFileList: true },
+    { href: 'https://jenkins.example/jenkins/artifact/other-build/snyk-results.html', text: 'Snyk report old' },
+    { href: 'https://jenkins.example/jenkins/artifact/other-build/snyk-sca-results-summary.json', text: 'Snyk summary old' },
+  ], safeProject);
+  expect(fileListDisambiguation.report?.href).toBe('https://jenkins.example/jenkins/artifact/snyk-results.html');
+  expect(fileListDisambiguation.summary?.href).toBe('https://jenkins.example/jenkins/artifact/snyk-sca-results-summary.json');
+  expect(fileListDisambiguation.warnings).toEqual([]);
 });
 
 

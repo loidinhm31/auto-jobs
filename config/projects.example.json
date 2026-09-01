@@ -19,12 +19,6 @@
         "jenkins": ["https://jenkins.example.invalid"],
         "snyk": ["https://snyk.example.invalid"],
         "sonarqube": ["https://sonarqube.example.invalid"]
-      },
-      "snyk": {
-        "projectId": "service-a"
-      },
-      "sonarqube": {
-        "projectId": "service-a"
       }
     },
     {
@@ -40,12 +34,6 @@
         "jenkins": ["https://jenkins.example.invalid"],
         "snyk": ["https://snyk.example.invalid"],
         "sonarqube": ["https://sonarqube.example.invalid"]
-      },
-      "snyk": {
-        "projectId": "service-b"
-      },
-      "sonarqube": {
-        "projectId": "service-b"
       }
     }
   ]

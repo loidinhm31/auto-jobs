@@ -104,11 +104,15 @@ export async function pageLinkCandidatesWithStatus(
           truncated = true;
           continue;
         }
+        const inSidePanel = link.closest('#side-panel') !== null;
+        const inFileList = link.closest('table.fileList, .fileList') !== null;
         const candidate: PageLinkCandidate = {
           href: normalizedHref,
           ...(text === undefined ? {} : { text }),
           ...(ariaLabel === undefined ? {} : { ariaLabel }),
           ...(title === undefined ? {} : { title }),
+          ...(inSidePanel ? { inSidePanel: true } : {}),
+          ...(inFileList ? { inFileList: true } : {}),
         };
         const candidateBytes = encoder.encode(JSON.stringify(candidate)).byteLength;
         if (collectedBytes + candidateBytes > limits.maxBytes) {

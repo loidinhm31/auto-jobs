@@ -82,6 +82,23 @@ test('classifies one allowlisted Sonar dashboard and rejects ambiguity', () => {
     .toBeUndefined();
   expect(classifySonarLinks([{ href: 'https://sonar.example/artifact/reports/sonarqube/index.html?id=service-a&id=service-a' }], configured).home)
     .toBeUndefined();
+
+  const sidePanelDisambiguation = classifySonarLinks([
+    { href: 'https://sonar.example/dashboard?id=service-a', text: 'SonarQube', inSidePanel: true },
+    { href: 'https://sonar.example/dashboard?id=service-a&branch=other', text: 'SonarQube' },
+    { href: 'https://sonar.example/dashboard?id=other-service', text: 'SonarQube' },
+  ], project({ sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: ['https://sonar.example'] } } }));
+  expect(sidePanelDisambiguation.home?.href).toBe('https://sonar.example/dashboard?id=service-a');
+  expect(sidePanelDisambiguation.warnings).toEqual([]);
+
+  const noConfiguredProjectId = project({
+    sourceOrigins: { jenkins: 'https://jenkins.example', snyk: [], sonarqube: ['https://sonar.example'] },
+    sources: { snyk: { allowedOrigins: [] }, sonarqube: { allowedOrigins: ['https://sonar.example'] } },
+  });
+  const resolvedFromUrl = classifySonarLinks([
+    { href: 'https://sonar.example/dashboard?id=com.corp%3Aservice-dynamic&branch=release%2Fsit', inSidePanel: true },
+  ], noConfiguredProjectId);
+  expect(resolvedFromUrl.home?.href).toBe('https://sonar.example/dashboard?id=com.corp%3Aservice-dynamic&branch=release%2Fsit');
 });
 
 

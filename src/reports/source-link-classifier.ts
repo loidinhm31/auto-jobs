@@ -10,6 +10,8 @@ export interface PageLinkCandidate {
   text?: string;
   ariaLabel?: string;
   title?: string;
+  inSidePanel?: boolean;
+  inFileList?: boolean;
 }
 
 export interface ClassifiedSourceLink {
@@ -17,6 +19,8 @@ export interface ClassifiedSourceLink {
   publisher: Exclude<SourcePublisher, 'unknown'>;
   kind: 'report' | 'summary' | 'home' | 'other';
   signal: 'configured' | 'accessible-name' | 'path';
+  inSidePanel?: boolean;
+  inFileList?: boolean;
 }
 
 export interface SnykLinkClassification {
@@ -96,6 +100,8 @@ function classifySnykCandidate(candidate: PageLinkCandidate): ClassifiedSourceLi
     publisher: 'snyk',
     kind: isSummary ? 'summary' : 'report',
     signal,
+    ...(candidate.inSidePanel ? { inSidePanel: true } : {}),
+    ...(candidate.inFileList ? { inFileList: true } : {}),
   };
 }
 
@@ -106,7 +112,13 @@ function chooseSingle(
 ): ClassifiedSourceLink | undefined {
   const unique = [...new Map(candidates.map((candidate) => [candidate.href, candidate])).values()];
   if (unique.length === 1) return unique[0];
-  if (unique.length > 1) pushDiagnostic(warnings, `ambiguous ${label} candidates were rejected`);
+  if (unique.length > 1) {
+    const fileList = unique.filter((c) => c.inFileList === true);
+    if (fileList.length === 1 && fileList[0] !== undefined) return fileList[0];
+    const sidePanel = unique.filter((c) => c.inSidePanel === true);
+    if (sidePanel.length === 1 && sidePanel[0] !== undefined) return sidePanel[0];
+    pushDiagnostic(warnings, `ambiguous ${label} candidates were rejected`);
+  }
   return undefined;
 }
 
@@ -163,8 +175,13 @@ export function classifySnykLinks(
     else if (safeCandidate.kind === 'report') reports.push(safeCandidate);
   }
 
-  const report = chooseSingle(reports, 'Snyk report', warnings);
-  let summary = chooseSingle(summaries, 'Snyk summary', warnings);
+  const fileListReports = reports.filter((r) => r.inFileList === true);
+  const activeReports = fileListReports.length > 0 ? fileListReports : reports;
+  const report = chooseSingle(activeReports, 'Snyk report', warnings);
+
+  const fileListSummaries = summaries.filter((s) => s.inFileList === true);
+  const activeSummaries = fileListSummaries.length > 0 ? fileListSummaries : summaries;
+  let summary = chooseSingle(activeSummaries, 'Snyk summary', warnings);
   if (report !== undefined && summary !== undefined && !matchingArtifactContext(report.href, summary.href)) {
     pushDiagnostic(warnings, 'Snyk report and summary links did not share one artifact context');
     summary = undefined;
