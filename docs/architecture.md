@@ -1,34 +1,41 @@
 # Current architecture
 
-This document describes the implemented schema-v1 configuration and run
-contract. The report command reads one explicit JSON configuration file;
-checked-in templates are test fixtures and are not a runtime source mode.
-`runType` is a project-only discriminator normalized before an executor is
-chosen; it is never inferred from URLs, selectors, CLI names, or environment.
+This document describes the implemented schema-v1 configuration and the two
+explicit execution paths: report capture and the Phase 2 Jenkins
+target-branch auto-build workflow. The report command remains report-only;
+auto-build is an explicit library boundary and is not inferred from URLs,
+selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
 in the project configuration. Tests may fulfill those exact URLs with
 test-only Playwright routes; unmatched network requests are blocked.
 
-See [multi-project configuration](./multi-project-configuration.md) for the
-field-level contract and [release gates](./release-gates.md) for current
-commands and validation boundaries.
+See [system architecture](./system-architecture.md) for the component view,
+[multi-project configuration](./multi-project-configuration.md) for the
+field-level contract, and [release gates](./release-gates.md) for commands and
+validation boundaries.
 
 ## Scope and operating modes
 
 Production and tests use the same schema-v1 configuration shape:
 
-| Mode | Configuration | Page behavior |
+| Source mode | Configuration | Page behavior |
 | --- | --- | --- |
 | runtime | schema-v1 project JSON passed with `--config` | real HTTP(S) navigation |
 | test | schema-v1 test project JSON plus checked-in `templates/` | exact configured/discovered URLs fulfilled by test-only routes |
 
+Project execution mode is independent of source mode:
 
-Project run mode is independent of configuration source mode. The only
-accepted values are `report` and `auto-build`; an omitted project value
-normalizes to `report`. Mode selection is an explicit caller boundary, not a
-build trigger.
+| Execution mode | Selection boundary | Side effect |
+| --- | --- | --- |
+| `report` | all enabled projects normalized as `report` | capture publisher evidence and publish immutable reports |
+| `auto-build` | one exact enabled project normalized as `auto-build` | submit one validated parameterized Jenkins form; do not capture reports |
+
+`runType` is an explicit project-only discriminator. An omitted value
+normalizes to `report`; it is never inferred and does not itself trigger a
+build. The report CLI selects report projects only. A caller that intentionally
+selects an auto-build project must invoke the separate auto-build runner.
 
 The project JSON supplies exact Jenkins `loginUrl` and `jobUrl`, a project
 `runType`, credential environment-variable names, selectors, source-origin
@@ -37,51 +44,69 @@ report-discovery boundary. Snyk report and summary links and the SonarQube home
 link are discovered from that page; SonarQube Overall and Issues links are
 followed from the validated home page.
 
-The CLI runs one browser process for enabled projects. Projects execute in
-configuration order, each in a fresh Playwright context, with one absolute
-capture deadline. A project failure is captured as an outcome so later
-projects can continue. The process exits nonzero when any project fails.
+The report CLI runs one browser process for selected report projects. Projects
+execute in configuration order, each in a fresh Playwright context, with one
+absolute capture deadline. A project failure is captured as an outcome so later
+projects can continue. The auto-build runner owns its own one-project browser
+and context.
 
 ```mermaid
 flowchart LR
-  Config[Schema-v1 project JSON] --> Runner[Sequential runner]
-  Secrets[Environment secret values] --> Runner
-  TestRoutes[Test-only exact URL routes] -. tests only .-> Browser
-  Runner --> Browser[Playwright context]
+  Config[Schema-v1 project JSON] --> Normalize[Validate and normalize]
+  Normalize --> Dispatch{Explicit caller selection}
+  Dispatch -- report --> ReportRunner[Report runner]
+  ReportRunner --> Browser[One Playwright browser]
   Browser --> Login[Exact Jenkins login]
   Login --> Job[Exact Jenkins job page]
   Job --> Discover[Discover Snyk and SonarQube links]
-  Discover --> Capture[Capture Snyk and SonarQube evidence]
-  Capture --> Normalize[Normalize and validate]
-  Normalize --> Reports[Per-run reports and aggregate index]
+  Discover --> Capture[Capture and normalize evidence]
+  Capture --> Reports[Per-run reports and aggregate index]
+  Dispatch -- auto-build + exact projectId --> BuildRunner[Auto-build runner]
+  BuildRunner --> BuildBrowser[Dedicated browser/context]
+  BuildBrowser --> BuildLogin[Exact Jenkins login]
+  BuildLogin --> BuildJob[Exact Jenkins job page]
+  BuildJob --> Trigger[Validate controls and submit once]
+  Trigger --> BuildResult[submitted / rejected / submission-unknown]
+  TestRoutes[Test-only exact URL routes] -. tests only .-> Browser
 ```
 
 ## Components
 
-- `src/cli.ts` requires one schema-v1 project JSON and invokes the runner. It
-  has no template/runtime source switch.
+- `src/cli.ts` requires one schema-v1 project JSON and invokes the report
+  runner. It has no auto-build command or template/runtime source switch.
 - `src/config/` validates schema keys, exact HTTP(S) URLs, project-only
   `runType`, credential references, source origins, selectors, and bounded
   runtime settings. Normalization defaults an omitted `runType` to `report`.
-- `src/config/project-run-selection.ts` provides the explicit
-  `selectReportProjects` and `selectAutoBuildProject` boundaries.
+- `src/config/project-run-selection.ts` owns the explicit
+  `selectReportProjects` and `selectAutoBuildProject` boundaries. Selection is
+  pure and has no browser or Jenkins side effect.
 - `src/config-selectors.ts` owns selector parsing and immutable defaults,
   including the build link and submit-button selectors.
 - `src/config.ts` exposes the loader, normalized contracts, `RunType`, and
   selection helpers from the public configuration surface.
-- `src/runner.ts` enforces one browser, one report root, sequential execution,
-  report-root locking, cleanup, manifest discovery, and aggregate publication.
-- `src/project/` owns the direct login/job-page/capture workflow, deadlines,
-  outcome state, and sanitized failure handling.
-- `src/jenkins/` authenticates and opens the exact configured job page without
-  triggering builds, inspecting queues/build identities, or polling status.
-  `runner-config.ts` carries the authenticated Jenkins selectors, including
-  both build controls, to the Jenkins layer.
+- `src/browser-launcher.ts` centralizes browser choice and environment-driven
+  launch options (`PLAYWRIGHT_EXECUTABLE_PATH`, headless flags, and action
+  delay) shared by report and auto-build callers.
+- `src/runner.ts` enforces one browser for sequential report projects, one
+  report root, report-root locking, cleanup, manifest discovery, and aggregate
+  publication. `runFromConfig` filters out auto-build projects.
+- `src/project/project-workflow.ts` contains the direct report workflow and
+  the separate login/job/trigger auto-build workflow.
+- `src/project/auto-build-runner.ts` owns one-project auto-build execution,
+  fresh context/page creation, absolute deadline handling, redacted outcomes,
+  and bounded resource cleanup. It does not allocate report artifacts.
+- `src/jenkins/auth.ts` authenticates and opens the exact configured job page.
+  `src/jenkins/url-identity.ts` validates exact job and `/build` action
+  identities, including nested and repeatedly encoded `job/` segments.
+- `src/jenkins/locators.ts` maps configured selectors to Playwright locators
+  and reads candidate hrefs without trusting them. `build-trigger-validation.ts`
+  enforces structural containers, control counts, class tokens, form method,
+  and exact action URL. `build-trigger.ts` performs one guarded submission.
 - `src/reports/snyk/` and `src/reports/sonarqube/` validate allowed links,
-  handle SonarQube login redirect authentication when required, capture bounded
-  visible evidence, and normalize source-specific results.
-- `src/artifacts/` creates immutable run paths, writes validated files, manages
-  staging leases and aggregate recovery, and performs bounded cleanup.
+  handle SonarQube login redirects when required, capture bounded visible
+  evidence, and normalize source-specific results.
+- `src/artifacts/` creates immutable report paths, writes validated files,
+  manages staging leases and aggregate recovery, and performs bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
 - `templates/` is the checked-in browser fixture corpus. Test-only routes map
@@ -127,9 +152,10 @@ Selection happens on normalized projects:
 | `selectAutoBuildProject(projects, projectId)` | Requires an exact, non-empty project ID and returns one project only when it is enabled and `runType === 'auto-build'`; missing, disabled, and report projects fail closed. |
 
 The helpers are exported by `src/config.ts`. They do not rewrite modes,
-derive branch identity, or submit a Jenkins request. Phase 01 defines this
-selection boundary and the configuration contract; the report executor still
-has no trigger, queue, polling, or build-number behavior.
+derive branch identity, or submit a Jenkins request. `runFromConfig` passes
+only `selectReportProjects(...)` to the report executor. The explicit
+`runAutoBuildProject(...)` boundary accepts one selected project and is the
+only Phase 2 path that reaches the Jenkins build trigger.
 
 All selector fields are available under `defaults.selectors` and
 `projects[*].selectors`; project values override defaults. The normalized
@@ -188,21 +214,46 @@ and never read from runtime project JSON.
 
 ## Per-project workflow
 
-The workflow submits credentials only to the configured Jenkins login
+### Report workflow
+
+The report path submits credentials only to the configured Jenkins login
 destination, validates the final authenticated page, opens the exact
 configured job page, discovers publisher links once, and captures evidence
-from those destinations. It does not search for another job, trigger builds,
-inspect queues or build identities, poll terminal status, or accept an
-existing-build/build-number override.
+from those destinations. It never searches for another job, opens a build
+page, submits a form, inspects queues or build identities, polls terminal
+status, or accepts a build-number override.
 
-`runType: auto-build` is inert in this report workflow until an explicit
-auto-build dispatcher selects it. The field, selector defaults, and helpers do
-not add a side effect to `npm run report`; a report dispatcher must pass only
-`selectReportProjects(...)` to the report executor.
+### Auto-build workflow
 
-Every configured, discovered, redirected, and final URL must be credential-free
-HTTP(S) and inside its allowed canonical origin. A single absolute deadline
-covers login, job navigation, link discovery, source capture, and publication.
+The auto-build path reuses the same credential resolution, login validation,
+exact job navigation, and one absolute `WorkflowDeadline`, then:
+
+1. requires exactly one visible `#side-panel`;
+2. resolves the configured **Build with Parameters** locator within that
+   container and validates its href as the exact configured job `/build` action;
+3. navigates to that validated detail page;
+4. requires exactly one visible `#bottom-sticker`, one visible configured
+   **Build** button, all three Jenkins class tokens
+   (`jenkins-button`, `jenkins-button--primary`, and
+   `jenkins-!-build-color`), and exactly one ancestor form;
+5. requires form method `POST` and validates the resolved action as the same
+   exact job `/build` action;
+6. arms request/response observers, clicks once, and returns only the
+   configured job URL, validated build-page URL, timestamp, state, and
+   optional response status.
+
+The trigger never reads or returns form bodies, parameters, crumb values,
+headers, cookies, or response bodies. After a matching POST is observed, a
+missing/indeterminate response is `submission-unknown`; it is not retried.
+An HTTP response below 400 is `submitted`, while a response at or above 400 is
+`rejected`. Failures before a matching POST surface as sanitized
+`JenkinsFlowError` values and become `failed-before-submit` at the runner
+boundary. Auto-build does not invoke source capture or report persistence.
+
+Every configured, discovered, redirected, and final URL in either path must be
+credential-free HTTP(S) and inside its allowed canonical origin. A single
+absolute deadline covers the workflow; context/browser cleanup is bounded and
+best-effort.
 
 ## Evidence capture and result contract
 
@@ -281,3 +332,11 @@ build, unit, and generated-report gates. Template tests use exact-URL
 test-only routes and checked-in fixtures; they do not claim live Jenkins or
 vendor execution. Runtime smoke validation requires an authorized project
 JSON and injected credentials and is never part of the deterministic suite.
+
+Phase 2's focused unit coverage is in
+`tests/unit/jenkins-build-trigger.spec.ts`,
+`tests/unit/auto-build-runner.spec.ts`, and the report-selection assertions in
+`tests/unit/sequential-runner.spec.ts`. These tests use an in-process HTTP
+server or injected browser/workflow dependencies; they prove exact scoping,
+URL/form validation, one-POST semantics, redaction, cleanup, and report-mode
+exclusion without contacting a live Jenkins controller.

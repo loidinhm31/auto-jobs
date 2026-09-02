@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
 import type { NormalizedProjectConfig, ProjectSecrets } from '../config/config-types.js';
 import { openJenkinsJob, submitJenkinsLogin } from '../jenkins/auth.js';
+import { triggerParameterizedBuild, type JenkinsBuildTriggerResult } from '../jenkins/build-trigger.js';
 import type { JenkinsRunnerConfig, JenkinsRunnerSelectors } from '../jenkins/runner-config.js';
 import { boundedDiagnostics } from '../workflow/diagnostics.js';
 import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
@@ -68,3 +69,17 @@ export const executeJenkinsWorkflow: ProjectWorkflow = async (
     },
   };
 };
+
+export type AutoBuildWorkflowResult = JenkinsBuildTriggerResult;
+
+export async function executeJenkinsAutoBuildWorkflow(
+  page: Page,
+  project: NormalizedProjectConfig,
+  secrets: ProjectSecrets,
+  deadline: WorkflowDeadline,
+): Promise<AutoBuildWorkflowResult> {
+  const config = runnerConfig(project, secrets);
+  await submitJenkinsLogin(page, config, deadline);
+  await openJenkinsJob(page, config, deadline);
+  return triggerParameterizedBuild(page, config, deadline);
+}

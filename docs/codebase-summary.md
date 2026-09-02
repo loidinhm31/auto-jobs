@@ -7,14 +7,20 @@ the current implementation boundary; it does not claim a live Jenkins run.
 ## Repository profile
 
 - Package: `auto-jobs` (`0.1.0`), private ESM package.
-- Runtime: Node.js 24 or newer; npm 11.13.0; TypeScript 7.
+- Runtime: Node.js 24 or newer; npm 11.13.0; TypeScript 7.0.2.
 - Browser/runtime library: Playwright Test 1.62.1 with Chromium, Firefox, and
-  WebKit adapters (Chromium and WebKit are provisioned by the standard browser
-  install script).
+  WebKit adapters. The standard install script provisions Chromium and WebKit.
 - Primary output: immutable static vulnerability reports aggregating Jenkins,
   Snyk, and SonarQube evidence.
-- Repomix inventory: 148 source, configuration, fixture, and test files were
-  packed; binary and ignored files are outside the summary.
+- Phase 2 addition: an explicit one-project Jenkins parameterized-build
+  workflow that returns a safe in-memory outcome and does not write report
+  artifacts.
+- Repomix inventory: 159 repository files were packed, with binary/ignored
+  files outside the summary. The current XML compaction contains the
+  architecture and Phase 2 documentation as well as source/configuration files.
+  Repomix's security scan excluded two unit-test files containing basic-auth
+  test strings; those tests remain repository inputs and are not treated as
+  runtime behavior.
 
 ## Entry points and scripts
 
@@ -22,17 +28,20 @@ the current implementation boundary; it does not claim a live Jenkins run.
 | --- | --- |
 | `scripts/run-report.mjs` | Builds the report launcher and invokes the report CLI. |
 | `src/cli.ts` | Parses the explicit `--config` path and reports project outcomes. |
-| `src/config.ts` | Public configuration exports, types, validation, normalization, and mode selection helpers. |
+| `src/config.ts` | Public configuration exports, types, validation, normalization, and mode-selection helpers. |
 | `src/runner.ts` | Sequential multi-project report execution and aggregate publication. |
+| `src/project/auto-build-runner.ts` | Explicit one-project auto-build API; not a CLI entry point. |
+| `src/jenkins/build-trigger.ts` | Exact build-page/form validation and one guarded POST. |
 | `scripts/run-template-report.mjs` | Starts the offline template report path. |
 | `src/templates/` | Loads checked-in browser fixtures and runs the template workflow. |
 | `src/reporting/report-server-cli.ts` | Serves an existing report root read-only. |
 
 Useful package scripts include `typecheck`, `build`, `test:unit`,
 `test:e2e:templates`, `test:report`, `test:release:webkit`, `test:release`,
-`report`, `report:template`, and `serve:report`.
+`report`, `report:template`, and `serve:report`. There is no production
+auto-build CLI command in this phase.
 
-## Configuration and Phase 01 run contracts
+## Configuration and run contracts
 
 Configuration is one schema-v1 JSON document passed through `--config`. The
 loader validates the document before browser launch, rejects unknown keys and
@@ -40,7 +49,7 @@ unsafe values, then returns frozen normalized projects.
 
 Each project requires a safe `id`, display `name`, exact credential-free
 Jenkins `loginUrl`, and exact credential-free `jobUrl` on one Jenkins origin
-and base context. `enabled: false` remains an explicit execution gate.
+and base context. `enabled: false` remains an execution gate.
 
 `RunType` is the project-only union `'report' | 'auto-build'`. Missing input
 normalizes to `'report'`; it is not present in `ProjectConfigDefaults` and is
@@ -48,8 +57,7 @@ not read from an environment variable. `selectReportProjects` returns only
 enabled normalized report projects and fails when none exist.
 `selectAutoBuildProject` requires an exact non-empty project ID and returns one
 enabled normalized auto-build project; missing, disabled, or report projects
-fail closed. These helpers define selection and do not themselves trigger
-Jenkins actions.
+fail closed. Both helpers are pure selection boundaries.
 
 Selectors can be supplied at `defaults.selectors` and overridden at
 `projects[*].selectors`. The complete normalized set is `authLandmark`,
@@ -65,26 +73,62 @@ secrets are not persisted in normalized projects, diagnostics, screenshots,
 or reports. `config/projects.example.json` demonstrates an enabled report
 project and a disabled auto-build project using `.invalid` placeholders.
 
-## Runtime pipeline
+## Runtime pipelines
+
+### Report path
 
 1. Parse one explicit configuration path.
 2. Validate schema keys, project identity, exact URLs, origins, selectors,
-   credentials references, paths, and bounded options.
+   credential references, paths, and bounded options.
 3. Normalize defaults, including `runType: 'report'`, selectors, origins, and
    absolute artifact roots.
-4. Select the projects for a caller's executor; report selection excludes
-   auto-build entries.
-5. Launch one configured browser and execute selected projects sequentially,
-   using a fresh Playwright context and absolute deadline per project.
+4. Select enabled report projects with `selectReportProjects`.
+5. Launch one configured browser and execute projects in configuration order,
+   using a fresh context and absolute deadline per project.
 6. Authenticate at the exact Jenkins login URL, open the exact job URL, and
    discover allowed Snyk/SonarQube destinations.
 7. Normalize bounded evidence and publish per-run artifacts plus an aggregate
-   index.
+   index. A project failure is retained so later projects can continue.
 
-The current report workflow does not search jobs, trigger builds, inspect
-queues/build identities, poll terminal status, or accept build-number
-overrides. Auto-build configuration is a contract for an explicit mode-aware
-caller; the build side effect belongs to the separate build workflow.
+The report path never searches jobs, opens a build page, submits a build form,
+inspects queues/build identities, polls terminal status, or accepts a
+build-number override.
+
+### Auto-build path
+
+An integration must normalize the document, call
+`selectAutoBuildProject(projects, projectId)`, and pass only that project to
+`runAutoBuildProject`. The runner rejects disabled or wrong-mode inputs before
+launch, resolves the referenced credentials, creates one browser/context/page,
+and shares one `WorkflowDeadline` across login, navigation, validation,
+submission, and cleanup.
+
+The workflow is:
+
+1. submit Jenkins login and validate the authenticated destination;
+2. open the exact configured `jobUrl`;
+3. require one visible `#side-panel` and one configured
+   **Build with Parameters** link within it;
+4. resolve and validate that link as the exact configured job `/build` action,
+   allowing only the detail-page `?delay=0sec` query;
+5. require one visible `#bottom-sticker`, one configured **Build** button,
+   required Jenkins class tokens, one ancestor form, `POST`, and the exact
+   same `/build` action;
+6. arm request/response observers, click once, and classify the result.
+
+`triggerParameterizedBuild` returns `submitted` for a matching response below
+HTTP 400, `rejected` for a matching response at or above 400, and
+`submission-unknown` when a matching POST was observed but the response is
+indeterminate. A failure before a matching POST throws a sanitized
+`JenkinsFlowError`; `runAutoBuildProject` maps it to `failed-before-submit`.
+No branch retries after a possible side effect.
+
+Auto-build outcomes expose only project identity, configured job URL, validated
+build-page URL, timestamp, optional numeric response status, safe error text,
+and exit code. They do not expose form bodies, parameters, crumbs, headers,
+cookies, response bodies, queue IDs, or build numbers. The runner closes the
+context and browser with bounded best-effort cleanup and clears mutable secret
+copies.
 
 ## Module map
 
@@ -92,28 +136,34 @@ caller; the build side effect belongs to the separate build workflow.
 | --- | --- |
 | `src/config/` | Schema validation, field validation, normalization, secret resolution, and project mode selection. |
 | `src/config-selectors.ts` | Selector kinds, parsing, and immutable selector defaults. |
-| `src/jenkins/` | Login, exact job navigation, URL identity, and Jenkins runner configuration. |
-| `src/project/` | Project workflow orchestration, state transitions, capture, outcomes, and manifests. |
-| `src/reports/snyk/` | Snyk link discovery, HTML/summary parsing, bounded capture, and normalization. |
-| `src/reports/sonarqube/` | SonarQube login redirect, dashboard navigation, facet extraction, and normalization. |
+| `src/browser-launcher.ts` | Shared browser selection and environment-driven launch options. |
+| `src/jenkins/auth.ts` | Credential submission, authenticated-page validation, and exact job navigation. |
+| `src/jenkins/url-identity.ts` | Exact job identity and exact job-action (`/build`) validation. |
+| `src/jenkins/locators.ts` | Configured Playwright locator mapping and href resolution. |
+| `src/jenkins/build-trigger-validation.ts` | Build-page structure, control cardinality, classes, form method, and action checks. |
+| `src/jenkins/build-trigger.ts` | Single parameterized-build submission and outcome classification. |
+| `src/project/project-workflow.ts` | Report workflow plus separate login/job/trigger auto-build workflow. |
+| `src/project/auto-build-runner.ts` | One-project auto-build lifecycle, redaction, and cleanup. |
+| `src/project/project-runner.ts` | Report run state, capture, failure artifacts, and report outcomes. |
 | `src/artifacts/` | Run identities, staging leases, publication, manifest discovery, cleanup, and aggregate recovery. |
 | `src/reporting/` | HTML rendering, report links, view models, static server, and CSP-aware file serving. |
 | `src/security/` | Origin, base-path, relative URL, credential-like URL, traversal, and containment checks. |
-| `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus used by exact-route tests. |
+| `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus. |
 | `tests/unit/` and `tests/e2e/` | Configuration contracts, security hardening, lifecycle behavior, report rendering, and template navigation. |
 
-## Artifact and test boundaries
+## Artifacts and test boundaries
 
-Generated report roots contain `index.html`, `aggregate-data.json`, CSS assets,
-and `<project-id>/<run-id>/` directories with `index.html`, `data.json`,
-`manifest.json`, and requested screenshots. Test-runner traces and reports in
-`test-results/` or `playwright-report/` are test evidence, not vendor evidence.
+Report roots contain `index.html`, `aggregate-data.json`, CSS assets, and
+`<project-id>/<run-id>/` directories with `index.html`, `data.json`,
+`manifest.json`, and requested screenshots. Auto-build runs do not allocate
+these report artifacts. Test-runner traces and reports in `test-results/` or
+`playwright-report/` are test evidence, not vendor evidence.
 
 The deterministic release sequence is documented in
 [release gates](./release-gates.md). Template tests fulfill exact URLs from
 checked-in files with default-deny routes and do not contact Jenkins or vendor
-services. The report server serves an existing aggregate and does not generate
-reports.
+services. Phase 2 unit tests use an in-process HTTP server or injected browser
+and workflow dependencies to prove the trigger without live services.
 
 ## Security and maintenance boundaries
 
@@ -121,10 +171,14 @@ reports.
   values, cookies, tokens, or credential-bearing URLs.
 - Treat `jobUrl` as the sole Jenkins job/branch identity; do not add a second
   branch field or infer identity from selector data.
-- Keep mode selection explicit and project-scoped; never mass-enable
-  auto-build from defaults, environment, URL shape, or CLI naming.
+- Keep mode selection explicit and project-scoped; never mass-enable auto-build
+  from defaults, environment, URL shape, or CLI naming.
+- Validate both build controls structurally before any POST and never inspect
+  hidden form values.
+- Treat an observed POST with no determinate response as an external
+  side-effect uncertainty; do not retry automatically.
 - Preserve canonical report/staging roots, symlink checks, bounded cleanup,
-  immutable run identities, CSP headers, and safe local-link validation.
+  immutable report identities, CSP headers, and safe local-link validation.
 - Update [multi-project configuration](./multi-project-configuration.md) for
-  field-level changes and [architecture](./architecture.md) for data-flow or
-  boundary changes.
+  field-level changes, [architecture](./architecture.md) for data-flow
+  changes, and [code standards](./code-standards.md) for implementation rules.

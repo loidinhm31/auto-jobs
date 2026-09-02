@@ -1,0 +1,148 @@
+# Code standards
+
+This guide describes the conventions enforced by the current TypeScript
+source tree. It complements [architecture](./architecture.md) and the
+[system architecture](./system-architecture.md); it is not a replacement for
+schema or security validation.
+
+## Core principles
+
+- Prefer the smallest implementation that preserves the documented contract.
+- Keep one responsibility per module. Reuse existing validators, URL policy,
+  diagnostics, deadlines, and cleanup helpers instead of creating parallel
+  abstractions.
+- Treat external navigation and Jenkins submission as untrusted operations.
+  Validate before acting, fail closed on ambiguity, and never retry an action
+  after a possible side effect.
+- Keep production TypeScript files below 200 lines when adding or materially
+  changing code. Extract by responsibility rather than compressing statements.
+- Keep Markdown files below the repository documentation limit of 800 lines.
+- Do not add a compatibility alias or deprecated path when a clean cutover is
+  possible.
+
+## Repository layout
+
+| Area | Standard boundary |
+| --- | --- |
+| `src/config/` | Parse, validate, normalize, and select project configuration. No browser side effects. |
+| `src/browser-launcher.ts` | Shared browser selection and environment-derived launch options. |
+| `src/jenkins/` | Jenkins authentication, exact URL identity, scoped locators, and guarded build submission. |
+| `src/project/` | Report and auto-build workflow orchestration, run state, outcomes, and capture. |
+| `src/workflow/` | Shared absolute deadlines, hard cleanup timeouts, and diagnostic helpers. |
+| `src/artifacts/` | Immutable report identity, staging/publication, manifest discovery, and bounded cleanup. |
+| `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
+| `src/reporting/` | Static report rendering, links, and read-only report serving. |
+| `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
+| `src/templates/` | Offline fixture loading and template-report execution only. |
+| `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
+| `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
+
+A module may depend inward on shared contracts and policy helpers, but a
+validator must not launch a browser or submit a request. Report artifact code
+must not become a dependency of the auto-build side-effect path.
+
+## TypeScript and module conventions
+
+Compiler settings in `tsconfig.json` are the source of truth:
+
+- Use strict TypeScript, `noUncheckedIndexedAccess`, exact optional property
+  types, no implicit returns, and no fall-through switches.
+- Use ESM imports with explicit `.js` specifiers for local modules. Use
+  `import type` for type-only dependencies.
+- Prefer exported interfaces and string unions for stable contracts. Keep
+  externally returned objects readonly where mutation is not part of the API.
+- Check possibly absent array/object values explicitly; do not silence strict
+  errors with broad casts. A narrow cast is acceptable at a tested adapter
+  boundary where the runtime shape is known.
+- Keep pure parsing/validation functions deterministic and side-effect free.
+  Put I/O, browser operations, and resource cleanup in orchestration functions.
+- Name files in kebab-case and name functions/types after observable behavior,
+  for example `selectAutoBuildProject` and `JenkinsBuildTriggerResult`.
+
+## Configuration and mode rules
+
+- The only project run types are `'report'` and `'auto-build'`.
+- Normalize omitted `runType` to `'report'`. Never infer mode from URL shape,
+  selector presence, environment variables, or a CLI name.
+- Keep `runType` project-only. It is not a defaults field or a structural
+  environment setting.
+- Treat `enabled: false` as an unconditional execution gate.
+- Select after normalization: `selectReportProjects` returns enabled report
+  projects; `selectAutoBuildProject` returns one exact enabled auto-build
+  project or throws a configuration error.
+- Keep selection helpers pure. `runFromConfig` must pass only report projects
+  to the report runner; an auto-build caller must invoke
+  `runAutoBuildProject` explicitly.
+- Preserve one configured `jobUrl` as the sole Jenkins job/branch identity.
+  Do not add a second branch field or derive a target from UI text.
+
+## Jenkins and browser safety
+
+- Resolve credentials by environment-variable name. Never place secret values
+  in JSON, source, diagnostics, logs, screenshots, traces, or result DTOs.
+- Validate every configured, discovered, redirected, and final URL as
+  credential-free HTTP(S) inside the allowed canonical origin/base context.
+- Use `locatorFor` for configured selector kinds and scope controls to the
+  structural Jenkins containers required by the workflow. Require exact
+  cardinality and visibility before clicking.
+- Before auto-build submission, validate the link as the exact configured job
+  `/build` action, then validate the form method and exact action again. Never
+  inspect hidden parameter, crumb, body, header, cookie, or response values.
+- Install request/response observers before the click and click once. Classify
+  HTTP `< 400` as `submitted`, HTTP `>= 400` as `rejected`, and an observed
+  request without a determinate response as `submission-unknown`. Never retry
+  after a matching POST.
+- Keep browser launch options centralized in `src/browser-launcher.ts`.
+  Environment precedence is explicit in `launchOptions`; do not duplicate
+  parsing in another runner.
+
+## Deadlines, cleanup, and errors
+
+- Create one `WorkflowDeadline` per project execution and pass it through
+  login, navigation, capture/submission, and persistence operations.
+- Bound cleanup separately from the workflow deadline. Close contexts and
+  browsers in `finally` blocks and use the existing settlement helpers.
+- Preserve the primary outcome when cleanup fails; record a bounded warning
+  where the owning result contract supports one.
+- Format diagnostics through `formatDiagnostic` or the Jenkins failure helper,
+  passing the resolved secret values for redaction. Do not return raw errors
+  from a user-facing result.
+- Report runs retain an allocated project/run identity for failure artifacts.
+  Auto-build runs return an in-memory `failed-before-submit` outcome when a
+  failure occurs before a matching POST; they do not allocate report output.
+
+## Testing standards
+
+Tests must defend observable behavior and fail on plausible regressions:
+
+- Put schema, selector, URL-policy, runner, lifecycle, and redaction contracts
+  in `tests/unit/`.
+- Use injected browser/workflow dependencies or an in-process HTTP server for
+  Jenkins action tests. Do not contact a live controller from deterministic
+  gates.
+- For auto-build, assert structural scoping, exact action identity, form
+  method/classes, one POST, response classification, unknown-after-POST, no
+  retry, mode/enabled gates, secret redaction, and resource cleanup.
+- For report execution, assert project order, fresh contexts, failure
+  continuation, artifact identity, aggregate publication, and that auto-build
+  projects are excluded.
+- Keep fixture routes exact and default-deny. Do not treat a checked-in HTML
+  snapshot as evidence of a live vendor or Jenkins run.
+- Avoid tests that only inspect implementation text or incidental defaults;
+  assert state, boundaries, transitions, outputs, and security invariants.
+
+## Change checklist
+
+Before opening a change, verify:
+
+1. The owning module and existing helper were identified; no duplicate policy
+   was introduced.
+2. Public types, normalization, all callers, and tests agree on the contract.
+3. URLs, selectors, form actions, origins, and paths are validated before use.
+4. Secrets are resolved only at execution time and redacted from diagnostics.
+5. One absolute deadline and bounded cleanup cover every browser resource.
+6. A possible external side effect is never retried automatically.
+7. Documentation links point to files under `docs/` or verified repository
+   paths, and each changed Markdown file remains below 800 lines.
+8. Run the narrowest behavioral proof first, then the repository release gates
+   once all concurrent work is integrated.

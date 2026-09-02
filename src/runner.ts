@@ -1,10 +1,14 @@
-import { chromium, firefox, webkit, type Browser, type BrowserContext } from '@playwright/test';
+import type { Browser, BrowserContext } from '@playwright/test';
 
 import { ArtifactPaths } from './artifacts/artifact-paths.js';
 import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
 import { writeAggregateData } from './artifacts/result-writer.js';
 import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
 import { sanitizePersistedWarnings } from './artifacts/result-validation.js';
+import { selectReportProjects } from './config/project-run-selection.js';
+import { defaultLaunch, launchOptions, type BrowserLauncher } from './browser-launcher.js';
+
+export { launchOptions };
 import { loadProjectConfig } from './config/project-config-loader.js';
 import { jenkinsJobPathSegments } from './jenkins/url-identity.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
@@ -14,7 +18,6 @@ import type { ProjectOutcome, RunnerExecutionResult } from './project/project-ty
 import type { BrowserName } from './types.js';
 import { CLEANUP_SETTLE_TIMEOUT_MS, withHardTimeout } from './workflow/workflow-deadline.js';
 
-type BrowserLauncher = (browserName: BrowserName, environment?: NodeJS.ProcessEnv) => Promise<Browser>;
 type ProjectExecutor = (
   project: NormalizedProjectConfig,
   dependencies: ProjectRunnerDependencies,
@@ -44,46 +47,6 @@ function enabledConfiguration(projects: readonly NormalizedProjectConfig[]): {
     throw new Error('All enabled projects must use one global report output root');
   }
   return { projects: enabled, browserName: first.browser, reportRoot: first.artifactDir };
-}
-
-export function launchOptions(environment: NodeJS.ProcessEnv): {
-  executablePath?: string;
-  headless?: boolean;
-  slowMo?: number;
-} {
-  const executablePath = environment['PLAYWRIGHT_EXECUTABLE_PATH']?.trim();
-  const headlessValue = environment['PLAYWRIGHT_HEADLESS']?.trim().toLowerCase();
-  const headedValue = (environment['PLAYWRIGHT_HEADED'] ?? environment['HEADED'])?.trim().toLowerCase();
-  const slowMoValue = (environment['PLAYWRIGHT_SLOW_MO'] ?? environment['PLAYWRIGHT_ACTION_DELAY'])?.trim();
-  let headless: boolean | undefined;
-  if (headlessValue !== undefined && headlessValue !== '') {
-    if (['1', 'true', 'yes'].includes(headlessValue)) headless = true;
-    else if (['0', 'false', 'no'].includes(headlessValue)) headless = false;
-    else throw new Error('PLAYWRIGHT_HEADLESS must be true or false');
-  } else if (headedValue !== undefined && headedValue !== '') {
-    if (['1', 'true', 'yes'].includes(headedValue)) headless = false;
-    else if (['0', 'false', 'no'].includes(headedValue)) headless = true;
-  }
-  let slowMo: number | undefined;
-  if (slowMoValue !== undefined && slowMoValue !== '') {
-    const parsed = Number(slowMoValue);
-    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
-      throw new Error('PLAYWRIGHT_SLOW_MO must be a non-negative integer');
-    }
-    slowMo = parsed;
-  }
-  return {
-    ...(executablePath === undefined || executablePath === '' ? {} : { executablePath }),
-    ...(headless === undefined ? {} : { headless }),
-    ...(slowMo === undefined ? {} : { slowMo }),
-  };
-}
-
-async function defaultLaunch(browserName: BrowserName, environment: NodeJS.ProcessEnv = process.env): Promise<Browser> {
-  const options = launchOptions(environment);
-  if (browserName === 'firefox') return firefox.launch(options);
-  if (browserName === 'webkit') return webkit.launch(options);
-  return chromium.launch(options);
 }
 
 interface HistoricalRun {
@@ -226,6 +189,7 @@ export async function runFromConfig(
   env: NodeJS.ProcessEnv = process.env,
   dependencies: Omit<RunnerDependencies, 'runtimeEnvironment'> = {},
 ): Promise<RunnerExecutionResult> {
-  const projects = loadProjectConfig(filePath, env);
-  return runConfiguredProjects(projects, { ...dependencies, runtimeEnvironment: env });
+  const allProjects = loadProjectConfig(filePath, env);
+  const reportProjects = selectReportProjects(allProjects);
+  return runConfiguredProjects(reportProjects, { ...dependencies, runtimeEnvironment: env });
 }

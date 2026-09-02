@@ -81,11 +81,41 @@ with blocked unmatched network requests. It does not contact Jenkins or
 vendors and does not claim live execution. Generated reports are served
 separately with `npm run serve:report`.
 
-The report runner uses a project-local `.report-runtime-*` directory for
-managed temporary files and attempts bounded cleanup after completion. The
-default staging root is a sibling `artifacts/` directory. `test-results/`,
-`playwright-report/`, and `.runner-build/` are test/build outputs, not report
-release inputs.
+## Phase 2 auto-build gate
+
+The Phase 2 auto-build runner is an explicit library boundary, not a report
+CLI mode. `npm run report` always excludes projects whose normalized
+`runType` is `auto-build`; this prevents a mixed configuration from causing a
+build. No production command currently exposes an auto-build trigger.
+
+Run the focused deterministic tests when reviewing the build workflow:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/jenkins-build-trigger.spec.ts \
+  tests/unit/auto-build-runner.spec.ts \
+  tests/unit/sequential-runner.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The focused tests cover:
+
+- exact `#side-panel` and `#bottom-sticker` scoping and visible-control
+  cardinality;
+- exact configured job `/build` URL identity, form `POST`, and required
+  Jenkins button class tokens;
+- one matching POST, response classification (`submitted` or `rejected`),
+  and `submission-unknown` after a request with no determinate response;
+- no retry after a possible side effect;
+- disabled/wrong-mode rejection, secret redaction, and context/browser
+  cleanup; and
+- report selection excluding auto-build projects.
+
+These tests use an in-process HTTP server or injected browser/workflow
+dependencies. They do not contact a live Jenkins controller and do not prove
+that a build was created. Before any authorized live run, follow the
+[preflight contract](../plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md)
+and treat `submission-unknown` as an indeterminate external side effect.
 
 ## Report server gate
 

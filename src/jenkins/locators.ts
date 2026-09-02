@@ -5,22 +5,22 @@ import type { LocatorSelector } from '../types.js';
 type AriaRole = Parameters<Page['getByRole']>[0];
 
 /** Map the small config selector contract to user-facing Playwright locators. */
-export function locatorFor(page: Page, selector: LocatorSelector): Locator {
+export function locatorFor(root: Page | Locator, selector: LocatorSelector): Locator {
   switch (selector.kind) {
     case 'role': {
       const role = selector.value as AriaRole;
       return selector.name === undefined
-        ? page.getByRole(role)
-        : page.getByRole(role, { name: selector.name });
+        ? root.getByRole(role)
+        : root.getByRole(role, { name: selector.name });
     }
     case 'label':
-      return page.getByLabel(selector.value);
+      return root.getByLabel(selector.value);
     case 'testId':
-      return page.getByTestId(selector.value);
+      return root.getByTestId(selector.value);
     case 'text':
-      return page.getByText(selector.value);
+      return root.getByText(selector.value);
     case 'css':
-      return page.locator(selector.value);
+      return root.locator(selector.value);
   }
 }
 

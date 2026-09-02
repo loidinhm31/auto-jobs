@@ -48,8 +48,13 @@ The content is organized as follows:
 config/ci-env.template
 config/projects.example.json
 docs/architecture.md
+docs/code-standards.md
+docs/codebase-summary.md
 docs/multi-project-configuration.md
+docs/project-overview-pdr.md
+docs/project-roadmap.md
 docs/release-gates.md
+docs/system-architecture.md
 package.json
 plans/260902-0251-jenkins-control-page-and-auto-build/phase-01-configuration-run-contracts.md
 plans/260902-0251-jenkins-control-page-and-auto-build/phase-02-jenkins-auto-build-workflow.md
@@ -84,6 +89,7 @@ src/artifacts/result-validation.ts
 src/artifacts/result-writer.ts
 src/artifacts/snyk-result-sanitizer.ts
 src/artifacts/staging-lease.ts
+src/browser-launcher.ts
 src/cli.ts
 src/config-errors.ts
 src/config-selectors.ts
@@ -98,10 +104,13 @@ src/config/project-config-project-validation.ts
 src/config/project-config-schema.ts
 src/config/project-run-selection.ts
 src/jenkins/auth.ts
+src/jenkins/build-trigger-validation.ts
+src/jenkins/build-trigger.ts
 src/jenkins/errors.ts
 src/jenkins/locators.ts
 src/jenkins/runner-config.ts
 src/jenkins/url-identity.ts
+src/project/auto-build-runner.ts
 src/project/project-capture.ts
 src/project/project-manifest.ts
 src/project/project-run-state.ts
@@ -169,9 +178,11 @@ tests/e2e/template-navigation.spec.ts
 tests/e2e/vendor-template-capture.spec.ts
 tests/unit/artifact-lifecycle.spec.ts
 tests/unit/artifact-paths.spec.ts
+tests/unit/auto-build-runner.spec.ts
 tests/unit/contract-hardening.spec.ts
 tests/unit/diagnostics.spec.ts
 tests/unit/immutable-run-history.spec.ts
+tests/unit/jenkins-build-trigger.spec.ts
 tests/unit/jenkins-phase-02.spec.ts
 tests/unit/launch-arguments.spec.ts
 tests/unit/project-config.spec.ts
@@ -347,33 +358,49 @@ SERVICE_B_JENKINS_PASSWORD=replace-with-service-b-password
 <file path="docs/architecture.md">
 # Current architecture
 
-This document describes the implemented schema-v1 report workflow. The report
-command reads one explicit JSON configuration file; checked-in templates are
-test fixtures and are not a runtime source mode.
+This document describes the implemented schema-v1 configuration and the two
+explicit execution paths: report capture and the Phase 2 Jenkins
+target-branch auto-build workflow. The report command remains report-only;
+auto-build is an explicit library boundary and is not inferred from URLs,
+selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
 in the project configuration. Tests may fulfill those exact URLs with
 test-only Playwright routes; unmatched network requests are blocked.
 
-See [multi-project configuration](./multi-project-configuration.md) for the
-field-level contract and [release gates](./release-gates.md) for current
-commands and validation boundaries.
+See [system architecture](./system-architecture.md) for the component view,
+[multi-project configuration](./multi-project-configuration.md) for the
+field-level contract, and [release gates](./release-gates.md) for commands and
+validation boundaries.
 
 ## Scope and operating modes
 
 Production and tests use the same schema-v1 configuration shape:
 
-| Mode | Configuration | Page behavior |
+| Source mode | Configuration | Page behavior |
 | --- | --- | --- |
 | runtime | schema-v1 project JSON passed with `--config` | real HTTP(S) navigation |
 | test | schema-v1 test project JSON plus checked-in `templates/` | exact configured/discovered URLs fulfilled by test-only routes |
 
-The project JSON supplies exact Jenkins `loginUrl` and `jobUrl`, credential
-environment-variable names, selectors, source-origin policy, browser, timeout,
-and artifact root. The job page is the report-discovery boundary. Snyk report
-and summary links and the SonarQube home link are discovered from that page;
-SonarQube Overall and Issues links are followed from the validated home page.
+Project execution mode is independent of source mode:
+
+| Execution mode | Selection boundary | Side effect |
+| --- | --- | --- |
+| `report` | all enabled projects normalized as `report` | capture publisher evidence and publish immutable reports |
+| `auto-build` | one exact enabled project normalized as `auto-build` | submit one validated parameterized Jenkins form; do not capture reports |
+
+`runType` is an explicit project-only discriminator. An omitted value
+normalizes to `report`; it is never inferred and does not itself trigger a
+build. The report CLI selects report projects only. A caller that intentionally
+selects an auto-build project must invoke the separate auto-build runner.
+
+The project JSON supplies exact Jenkins `loginUrl` and `jobUrl`, a project
+`runType`, credential environment-variable names, selectors, source-origin
+policy, browser, timeout, and artifact root. The job page is the
+report-discovery boundary. Snyk report and summary links and the SonarQube home
+link are discovered from that page; SonarQube Overall and Issues links are
+followed from the validated home page.
 
 The CLI runs one browser process for enabled projects. Projects execute in
 configuration order, each in a fresh Playwright context, with one absolute
@@ -382,35 +409,61 @@ projects can continue. The process exits nonzero when any project fails.
 
 ```mermaid
 flowchart LR
-  Config[Schema-v1 project JSON] --> Runner[Sequential runner]
-  Secrets[Environment secret values] --> Runner
-  TestRoutes[Test-only exact URL routes] -. tests only .-> Browser
-  Runner --> Browser[Playwright context]
+  Config[Schema-v1 project JSON] --> Normalize[Validate and normalize]
+  Normalize --> Dispatch{Explicit caller selection}
+  Dispatch -- report --> ReportRunner[Report runner]
+  ReportRunner --> Browser[One Playwright browser]
   Browser --> Login[Exact Jenkins login]
   Login --> Job[Exact Jenkins job page]
   Job --> Discover[Discover Snyk and SonarQube links]
-  Discover --> Capture[Capture Snyk and SonarQube evidence]
-  Capture --> Normalize[Normalize and validate]
-  Normalize --> Reports[Per-run reports and aggregate index]
+  Discover --> Capture[Capture and normalize evidence]
+  Capture --> Reports[Per-run reports and aggregate index]
+  Dispatch -- auto-build + exact projectId --> BuildRunner[Auto-build runner]
+  BuildRunner --> BuildBrowser[Dedicated browser/context]
+  BuildBrowser --> BuildLogin[Exact Jenkins login]
+  BuildLogin --> BuildJob[Exact Jenkins job page]
+  BuildJob --> Trigger[Validate controls and submit once]
+  Trigger --> BuildResult[submitted / rejected / submission-unknown]
+  TestRoutes[Test-only exact URL routes] -. tests only .-> Browser
 ```
 
 ## Components
 
-- `src/cli.ts` requires one schema-v1 project JSON and invokes the runner. It
-  has no template/runtime source switch.
-- `src/config/` validates the schema, exact HTTP(S) URLs, credential
-  references, source origins, selectors, and bounded runtime settings.
-- `src/runner.ts` enforces one browser, one report root, sequential execution,
-  report-root locking, cleanup, manifest discovery, and aggregate publication.
-- `src/project/` owns the direct login/job-page/capture workflow, deadlines,
-  outcome state, and sanitized failure handling.
-- `src/jenkins/` authenticates and opens the exact configured job page without
-  triggering builds, inspecting queues/build identities, or polling status.
+- `src/cli.ts` requires one schema-v1 project JSON and invokes the report
+  runner. It has no auto-build command or template/runtime source switch.
+- `src/config/` validates schema keys, exact HTTP(S) URLs, project-only
+  `runType`, credential references, source origins, selectors, and bounded
+  runtime settings. Normalization defaults an omitted `runType` to `report`.
+- `src/config/project-run-selection.ts` owns the explicit
+  `selectReportProjects` and `selectAutoBuildProject` boundaries. Selection is
+  pure and has no browser or Jenkins side effect.
+- `src/config-selectors.ts` owns selector parsing and immutable defaults,
+  including the build link and submit-button selectors.
+- `src/config.ts` exposes the loader, normalized contracts, `RunType`, and
+  selection helpers from the public configuration surface.
+- `src/browser-launcher.ts` centralizes browser choice and environment-driven
+  launch options (`PLAYWRIGHT_EXECUTABLE_PATH`, headless flags, and action
+  delay) shared by report and auto-build callers.
+- `src/runner.ts` enforces one browser for sequential report projects, one
+  report root, report-root locking, cleanup, manifest discovery, and aggregate
+  publication. `runFromConfig` filters out auto-build projects.
+- `src/project/project-workflow.ts` contains the direct report workflow and
+  the separate login/job/trigger auto-build workflow.
+- `src/project/auto-build-runner.ts` owns one-project auto-build execution,
+  fresh context/page creation, absolute deadline handling, redacted outcomes,
+  and bounded resource cleanup. It does not allocate report artifacts.
+- `src/jenkins/auth.ts` authenticates and opens the exact configured job page.
+  `src/jenkins/url-identity.ts` validates exact job and `/build` action
+  identities, including nested and repeatedly encoded `job/` segments.
+- `src/jenkins/locators.ts` maps configured selectors to Playwright locators
+  and reads candidate hrefs without trusting them. `build-trigger-validation.ts`
+  enforces structural containers, control counts, class tokens, form method,
+  and exact action URL. `build-trigger.ts` performs one guarded submission.
 - `src/reports/snyk/` and `src/reports/sonarqube/` validate allowed links,
-  handle SonarQube login redirect authentication when required, capture bounded
-  visible evidence, and normalize source-specific results.
-- `src/artifacts/` creates immutable run paths, writes validated files, manages
-  staging leases and aggregate recovery, and performs bounded cleanup.
+  handle SonarQube login redirects when required, capture bounded visible
+  evidence, and normalize source-specific results.
+- `src/artifacts/` creates immutable report paths, writes validated files,
+  manages staging leases and aggregate recovery, and performs bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
 - `templates/` is the checked-in browser fixture corpus. Test-only routes map
@@ -423,8 +476,8 @@ flowchart LR
 The root object has `schemaVersion: 1`, `projects`, and optional `defaults`.
 There must be one to 50 projects and at least one enabled entry. Each project
 requires a unique safe ID, display name, exact Jenkins `loginUrl`, and exact
-Jenkins `jobUrl`. Login and job URLs must share one canonical Jenkins origin
-and base context.
+Jenkins `jobUrl`; it may also set project-only `runType`.
+Login and job URLs must share one canonical Jenkins origin and base context.
 
 The runtime command receives the JSON path explicitly:
 
@@ -438,6 +491,57 @@ unsafe paths, embedded secret values, and out-of-range settings are rejected.
 Legacy structural keys such as `baseUrl`, `jobPath`, `captureFrom`, and
 `buildNumber`, plus structural environment inputs such as `REPORT_SOURCE`,
 `PROJECTS_CONFIG_PATH`, and legacy `JENKINS_*` project settings, are rejected.
+
+### Run mode and selector contract
+
+`runType` accepts exactly `'report'` or `'auto-build'`. Missing input is
+normalized to `'report'`, preserving existing schema-v1 documents as report
+projects. `runType` is deliberately absent from `ProjectConfigDefaults`, so
+`defaults.runType` is rejected as an unknown key. No environment setting is
+read for mode selection; do not use environment configuration to mass-enable
+auto-build.
+
+Selection happens on normalized projects:
+
+| Helper | Contract |
+| --- | --- |
+| `selectReportProjects(projects)` | Returns a frozen list containing only enabled projects with `runType === 'report'`; disabled and auto-build entries never enter the report set. It fails when no enabled report project exists. |
+| `selectAutoBuildProject(projects, projectId)` | Requires an exact, non-empty project ID and returns one project only when it is enabled and `runType === 'auto-build'`; missing, disabled, and report projects fail closed. |
+
+The helpers are exported by `src/config.ts`. They do not rewrite modes,
+derive branch identity, or submit a Jenkins request. `runFromConfig` passes
+only `selectReportProjects(...)` to the report executor. The explicit
+`runAutoBuildProject(...)` boundary accepts one selected project and is the
+only Phase 2 path that reaches the Jenkins build trigger.
+
+All selector fields are available under `defaults.selectors` and
+`projects[*].selectors`; project values override defaults. The normalized
+defaults are:
+
+| Selector | Kind | Value | Name | Required |
+| --- | --- | --- | --- | --- |
+| `authLandmark` | `role` | `link` | `Manage Jenkins` | `true` |
+| `sonarqubeReport` | `testId` | `sonarqube-report` | — | `true` |
+| `snykReport` | `testId` | `snyk-report` | — | `true` |
+| `buildParametersLink` | `role` | `link` | `Build with Parameters` | `true` |
+| `buildSubmitButton` | `role` | `button` | `Build` | `true` |
+
+`buildParametersLink` and `buildSubmitButton` must remain required. Omitting
+`required` defaults it to `true`; an explicit `required: false` override is
+rejected for either field. Their Jenkins search scopes (`#side-panel` and
+`#bottom-sticker`, respectively) remain runtime code rather than configurable
+CSS. Selector values do not change the configured `jobUrl` or branch identity.
+
+### Phase 01 implementation map
+
+| Path | Responsibility |
+| --- | --- |
+| `src/types.ts` | Defines `RunType` and the complete selector shape. |
+| `src/config/*` | Validates, normalizes, and selects project run contracts; environment helpers keep mode out of legacy configuration. |
+| `src/config-selectors.ts` | Defines selector kinds, parsing, and build-control defaults. |
+| `src/config.ts` | Re-exports config types, loader, and selection helpers. |
+| `src/jenkins/runner-config.ts` | Carries required build selectors into Jenkins runner configuration. |
+| `config/projects.example.json` | Shows explicit enabled report and disabled auto-build project entries. |
 
 ### Secret resolution
 
@@ -467,16 +571,46 @@ and never read from runtime project JSON.
 
 ## Per-project workflow
 
-The workflow submits credentials only to the configured Jenkins login
+### Report workflow
+
+The report path submits credentials only to the configured Jenkins login
 destination, validates the final authenticated page, opens the exact
 configured job page, discovers publisher links once, and captures evidence
-from those destinations. It does not search for another job, trigger builds,
-inspect queues or build identities, poll terminal status, or accept an
-existing-build/build-number override.
+from those destinations. It never searches for another job, opens a build
+page, submits a form, inspects queues or build identities, polls terminal
+status, or accepts a build-number override.
 
-Every configured, discovered, redirected, and final URL must be credential-free
-HTTP(S) and inside its allowed canonical origin. A single absolute deadline
-covers login, job navigation, link discovery, source capture, and publication.
+### Auto-build workflow
+
+The auto-build path reuses the same credential resolution, login validation,
+exact job navigation, and one absolute `WorkflowDeadline`, then:
+
+1. requires exactly one visible `#side-panel`;
+2. resolves the configured **Build with Parameters** locator within that
+   container and validates its href as the exact configured job `/build` action;
+3. navigates to that validated detail page;
+4. requires exactly one visible `#bottom-sticker`, one visible configured
+   **Build** button, all three Jenkins class tokens
+   (`jenkins-button`, `jenkins-button--primary`, and
+   `jenkins-!-build-color`), and exactly one ancestor form;
+5. requires form method `POST` and validates the resolved action as the same
+   exact job `/build` action;
+6. arms request/response observers, clicks once, and returns only the
+   configured job URL, validated build-page URL, timestamp, state, and
+   optional response status.
+
+The trigger never reads or returns form bodies, parameters, crumb values,
+headers, cookies, or response bodies. After a matching POST is observed, a
+missing/indeterminate response is `submission-unknown`; it is not retried.
+An HTTP response below 400 is `submitted`, while a response at or above 400 is
+`rejected`. Failures before a matching POST surface as sanitized
+`JenkinsFlowError` values and become `failed-before-submit` at the runner
+boundary. Auto-build does not invoke source capture or report persistence.
+
+Every configured, discovered, redirected, and final URL in either path must be
+credential-free HTTP(S) and inside its allowed canonical origin. A single
+absolute deadline covers the workflow; context/browser cleanup is bounded and
+best-effort.
 
 ## Evidence capture and result contract
 
@@ -555,21 +689,366 @@ build, unit, and generated-report gates. Template tests use exact-URL
 test-only routes and checked-in fixtures; they do not claim live Jenkins or
 vendor execution. Runtime smoke validation requires an authorized project
 JSON and injected credentials and is never part of the deterministic suite.
+
+Phase 2's focused unit coverage is in
+`tests/unit/jenkins-build-trigger.spec.ts`,
+`tests/unit/auto-build-runner.spec.ts`, and the report-selection assertions in
+`tests/unit/sequential-runner.spec.ts`. These tests use an in-process HTTP
+server or injected browser/workflow dependencies; they prove exact scoping,
+URL/form validation, one-POST semantics, redaction, cleanup, and report-mode
+exclusion without contacting a live Jenkins controller.
+</file>
+
+<file path="docs/code-standards.md">
+# Code standards
+
+This guide describes the conventions enforced by the current TypeScript
+source tree. It complements [architecture](./architecture.md) and the
+[system architecture](./system-architecture.md); it is not a replacement for
+schema or security validation.
+
+## Core principles
+
+- Prefer the smallest implementation that preserves the documented contract.
+- Keep one responsibility per module. Reuse existing validators, URL policy,
+  diagnostics, deadlines, and cleanup helpers instead of creating parallel
+  abstractions.
+- Treat external navigation and Jenkins submission as untrusted operations.
+  Validate before acting, fail closed on ambiguity, and never retry an action
+  after a possible side effect.
+- Keep production TypeScript files below 200 lines when adding or materially
+  changing code. Extract by responsibility rather than compressing statements.
+- Keep Markdown files below the repository documentation limit of 800 lines.
+- Do not add a compatibility alias or deprecated path when a clean cutover is
+  possible.
+
+## Repository layout
+
+| Area | Standard boundary |
+| --- | --- |
+| `src/config/` | Parse, validate, normalize, and select project configuration. No browser side effects. |
+| `src/browser-launcher.ts` | Shared browser selection and environment-derived launch options. |
+| `src/jenkins/` | Jenkins authentication, exact URL identity, scoped locators, and guarded build submission. |
+| `src/project/` | Report and auto-build workflow orchestration, run state, outcomes, and capture. |
+| `src/workflow/` | Shared absolute deadlines, hard cleanup timeouts, and diagnostic helpers. |
+| `src/artifacts/` | Immutable report identity, staging/publication, manifest discovery, and bounded cleanup. |
+| `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
+| `src/reporting/` | Static report rendering, links, and read-only report serving. |
+| `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
+| `src/templates/` | Offline fixture loading and template-report execution only. |
+| `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
+| `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
+
+A module may depend inward on shared contracts and policy helpers, but a
+validator must not launch a browser or submit a request. Report artifact code
+must not become a dependency of the auto-build side-effect path.
+
+## TypeScript and module conventions
+
+Compiler settings in `tsconfig.json` are the source of truth:
+
+- Use strict TypeScript, `noUncheckedIndexedAccess`, exact optional property
+  types, no implicit returns, and no fall-through switches.
+- Use ESM imports with explicit `.js` specifiers for local modules. Use
+  `import type` for type-only dependencies.
+- Prefer exported interfaces and string unions for stable contracts. Keep
+  externally returned objects readonly where mutation is not part of the API.
+- Check possibly absent array/object values explicitly; do not silence strict
+  errors with broad casts. A narrow cast is acceptable at a tested adapter
+  boundary where the runtime shape is known.
+- Keep pure parsing/validation functions deterministic and side-effect free.
+  Put I/O, browser operations, and resource cleanup in orchestration functions.
+- Name files in kebab-case and name functions/types after observable behavior,
+  for example `selectAutoBuildProject` and `JenkinsBuildTriggerResult`.
+
+## Configuration and mode rules
+
+- The only project run types are `'report'` and `'auto-build'`.
+- Normalize omitted `runType` to `'report'`. Never infer mode from URL shape,
+  selector presence, environment variables, or a CLI name.
+- Keep `runType` project-only. It is not a defaults field or a structural
+  environment setting.
+- Treat `enabled: false` as an unconditional execution gate.
+- Select after normalization: `selectReportProjects` returns enabled report
+  projects; `selectAutoBuildProject` returns one exact enabled auto-build
+  project or throws a configuration error.
+- Keep selection helpers pure. `runFromConfig` must pass only report projects
+  to the report runner; an auto-build caller must invoke
+  `runAutoBuildProject` explicitly.
+- Preserve one configured `jobUrl` as the sole Jenkins job/branch identity.
+  Do not add a second branch field or derive a target from UI text.
+
+## Jenkins and browser safety
+
+- Resolve credentials by environment-variable name. Never place secret values
+  in JSON, source, diagnostics, logs, screenshots, traces, or result DTOs.
+- Validate every configured, discovered, redirected, and final URL as
+  credential-free HTTP(S) inside the allowed canonical origin/base context.
+- Use `locatorFor` for configured selector kinds and scope controls to the
+  structural Jenkins containers required by the workflow. Require exact
+  cardinality and visibility before clicking.
+- Before auto-build submission, validate the link as the exact configured job
+  `/build` action, then validate the form method and exact action again. Never
+  inspect hidden parameter, crumb, body, header, cookie, or response values.
+- Install request/response observers before the click and click once. Classify
+  HTTP `< 400` as `submitted`, HTTP `>= 400` as `rejected`, and an observed
+  request without a determinate response as `submission-unknown`. Never retry
+  after a matching POST.
+- Keep browser launch options centralized in `src/browser-launcher.ts`.
+  Environment precedence is explicit in `launchOptions`; do not duplicate
+  parsing in another runner.
+
+## Deadlines, cleanup, and errors
+
+- Create one `WorkflowDeadline` per project execution and pass it through
+  login, navigation, capture/submission, and persistence operations.
+- Bound cleanup separately from the workflow deadline. Close contexts and
+  browsers in `finally` blocks and use the existing settlement helpers.
+- Preserve the primary outcome when cleanup fails; record a bounded warning
+  where the owning result contract supports one.
+- Format diagnostics through `formatDiagnostic` or the Jenkins failure helper,
+  passing the resolved secret values for redaction. Do not return raw errors
+  from a user-facing result.
+- Report runs retain an allocated project/run identity for failure artifacts.
+  Auto-build runs return an in-memory `failed-before-submit` outcome when a
+  failure occurs before a matching POST; they do not allocate report output.
+
+## Testing standards
+
+Tests must defend observable behavior and fail on plausible regressions:
+
+- Put schema, selector, URL-policy, runner, lifecycle, and redaction contracts
+  in `tests/unit/`.
+- Use injected browser/workflow dependencies or an in-process HTTP server for
+  Jenkins action tests. Do not contact a live controller from deterministic
+  gates.
+- For auto-build, assert structural scoping, exact action identity, form
+  method/classes, one POST, response classification, unknown-after-POST, no
+  retry, mode/enabled gates, secret redaction, and resource cleanup.
+- For report execution, assert project order, fresh contexts, failure
+  continuation, artifact identity, aggregate publication, and that auto-build
+  projects are excluded.
+- Keep fixture routes exact and default-deny. Do not treat a checked-in HTML
+  snapshot as evidence of a live vendor or Jenkins run.
+- Avoid tests that only inspect implementation text or incidental defaults;
+  assert state, boundaries, transitions, outputs, and security invariants.
+
+## Change checklist
+
+Before opening a change, verify:
+
+1. The owning module and existing helper were identified; no duplicate policy
+   was introduced.
+2. Public types, normalization, all callers, and tests agree on the contract.
+3. URLs, selectors, form actions, origins, and paths are validated before use.
+4. Secrets are resolved only at execution time and redacted from diagnostics.
+5. One absolute deadline and bounded cleanup cover every browser resource.
+6. A possible external side effect is never retried automatically.
+7. Documentation links point to files under `docs/` or verified repository
+   paths, and each changed Markdown file remains below 800 lines.
+8. Run the narrowest behavioral proof first, then the repository release gates
+   once all concurrent work is integrated.
+</file>
+
+<file path="docs/codebase-summary.md">
+# Codebase summary
+
+This summary is derived from the repository compaction generated by Repomix
+(`repomix-output.xml`) and the checked-in source/configuration files. It records
+the current implementation boundary; it does not claim a live Jenkins run.
+
+## Repository profile
+
+- Package: `auto-jobs` (`0.1.0`), private ESM package.
+- Runtime: Node.js 24 or newer; npm 11.13.0; TypeScript 7.0.2.
+- Browser/runtime library: Playwright Test 1.62.1 with Chromium, Firefox, and
+  WebKit adapters. The standard install script provisions Chromium and WebKit.
+- Primary output: immutable static vulnerability reports aggregating Jenkins,
+  Snyk, and SonarQube evidence.
+- Phase 2 addition: an explicit one-project Jenkins parameterized-build
+  workflow that returns a safe in-memory outcome and does not write report
+  artifacts.
+- Repomix inventory: 155 repository files were packed, with binary/ignored
+  files outside the summary. Repomix's security scan excluded two unit-test
+  files containing basic-auth test strings; those tests remain repository
+  inputs and are not treated as runtime behavior.
+
+## Entry points and scripts
+
+| Entry point | Responsibility |
+| --- | --- |
+| `scripts/run-report.mjs` | Builds the report launcher and invokes the report CLI. |
+| `src/cli.ts` | Parses the explicit `--config` path and reports project outcomes. |
+| `src/config.ts` | Public configuration exports, types, validation, normalization, and mode-selection helpers. |
+| `src/runner.ts` | Sequential multi-project report execution and aggregate publication. |
+| `src/project/auto-build-runner.ts` | Explicit one-project auto-build API; not a CLI entry point. |
+| `src/jenkins/build-trigger.ts` | Exact build-page/form validation and one guarded POST. |
+| `scripts/run-template-report.mjs` | Starts the offline template report path. |
+| `src/templates/` | Loads checked-in browser fixtures and runs the template workflow. |
+| `src/reporting/report-server-cli.ts` | Serves an existing report root read-only. |
+
+Useful package scripts include `typecheck`, `build`, `test:unit`,
+`test:e2e:templates`, `test:report`, `test:release:webkit`, `test:release`,
+`report`, `report:template`, and `serve:report`. There is no production
+auto-build CLI command in this phase.
+
+## Configuration and run contracts
+
+Configuration is one schema-v1 JSON document passed through `--config`. The
+loader validates the document before browser launch, rejects unknown keys and
+unsafe values, then returns frozen normalized projects.
+
+Each project requires a safe `id`, display `name`, exact credential-free
+Jenkins `loginUrl`, and exact credential-free `jobUrl` on one Jenkins origin
+and base context. `enabled: false` remains an execution gate.
+
+`RunType` is the project-only union `'report' | 'auto-build'`. Missing input
+normalizes to `'report'`; it is not present in `ProjectConfigDefaults` and is
+not read from an environment variable. `selectReportProjects` returns only
+enabled normalized report projects and fails when none exist.
+`selectAutoBuildProject` requires an exact non-empty project ID and returns one
+enabled normalized auto-build project; missing, disabled, or report projects
+fail closed. Both helpers are pure selection boundaries.
+
+Selectors can be supplied at `defaults.selectors` and overridden at
+`projects[*].selectors`. The complete normalized set is `authLandmark`,
+`sonarqubeReport`, `snykReport`, `buildParametersLink`, and
+`buildSubmitButton`. The build defaults are an accessible role link named
+`Build with Parameters` and an accessible role button named `Build`; both are
+`required: true`. An explicit `required: false` for either build selector is
+rejected. Build-control search scopes remain runtime executor rules.
+
+Credentials are represented only by environment-variable names. Legacy
+structural environment inputs and credential-bearing URLs are rejected; raw
+secrets are not persisted in normalized projects, diagnostics, screenshots,
+or reports. `config/projects.example.json` demonstrates an enabled report
+project and a disabled auto-build project using `.invalid` placeholders.
+
+## Runtime pipelines
+
+### Report path
+
+1. Parse one explicit configuration path.
+2. Validate schema keys, project identity, exact URLs, origins, selectors,
+   credential references, paths, and bounded options.
+3. Normalize defaults, including `runType: 'report'`, selectors, origins, and
+   absolute artifact roots.
+4. Select enabled report projects with `selectReportProjects`.
+5. Launch one configured browser and execute projects in configuration order,
+   using a fresh context and absolute deadline per project.
+6. Authenticate at the exact Jenkins login URL, open the exact job URL, and
+   discover allowed Snyk/SonarQube destinations.
+7. Normalize bounded evidence and publish per-run artifacts plus an aggregate
+   index. A project failure is retained so later projects can continue.
+
+The report path never searches jobs, opens a build page, submits a build form,
+inspects queues/build identities, polls terminal status, or accepts a
+build-number override.
+
+### Auto-build path
+
+An integration must normalize the document, call
+`selectAutoBuildProject(projects, projectId)`, and pass only that project to
+`runAutoBuildProject`. The runner rejects disabled or wrong-mode inputs before
+launch, resolves the referenced credentials, creates one browser/context/page,
+and shares one `WorkflowDeadline` across login, navigation, validation,
+submission, and cleanup.
+
+The workflow is:
+
+1. submit Jenkins login and validate the authenticated destination;
+2. open the exact configured `jobUrl`;
+3. require one visible `#side-panel` and one configured
+   **Build with Parameters** link within it;
+4. resolve and validate that link as the exact configured job `/build` action,
+   allowing only the detail-page `?delay=0sec` query;
+5. require one visible `#bottom-sticker`, one configured **Build** button,
+   required Jenkins class tokens, one ancestor form, `POST`, and the exact
+   same `/build` action;
+6. arm request/response observers, click once, and classify the result.
+
+`triggerParameterizedBuild` returns `submitted` for a matching response below
+HTTP 400, `rejected` for a matching response at or above 400, and
+`submission-unknown` when a matching POST was observed but the response is
+indeterminate. A failure before a matching POST throws a sanitized
+`JenkinsFlowError`; `runAutoBuildProject` maps it to `failed-before-submit`.
+No branch retries after a possible side effect.
+
+Auto-build outcomes expose only project identity, configured job URL, validated
+build-page URL, timestamp, optional numeric response status, safe error text,
+and exit code. They do not expose form bodies, parameters, crumbs, headers,
+cookies, response bodies, queue IDs, or build numbers. The runner closes the
+context and browser with bounded best-effort cleanup and clears mutable secret
+copies.
+
+## Module map
+
+| Directory/module | Boundary |
+| --- | --- |
+| `src/config/` | Schema validation, field validation, normalization, secret resolution, and project mode selection. |
+| `src/config-selectors.ts` | Selector kinds, parsing, and immutable selector defaults. |
+| `src/browser-launcher.ts` | Shared browser selection and environment-driven launch options. |
+| `src/jenkins/auth.ts` | Credential submission, authenticated-page validation, and exact job navigation. |
+| `src/jenkins/url-identity.ts` | Exact job identity and exact job-action (`/build`) validation. |
+| `src/jenkins/locators.ts` | Configured Playwright locator mapping and href resolution. |
+| `src/jenkins/build-trigger-validation.ts` | Build-page structure, control cardinality, classes, form method, and action checks. |
+| `src/jenkins/build-trigger.ts` | Single parameterized-build submission and outcome classification. |
+| `src/project/project-workflow.ts` | Report workflow plus separate login/job/trigger auto-build workflow. |
+| `src/project/auto-build-runner.ts` | One-project auto-build lifecycle, redaction, and cleanup. |
+| `src/project/project-runner.ts` | Report run state, capture, failure artifacts, and report outcomes. |
+| `src/artifacts/` | Run identities, staging leases, publication, manifest discovery, cleanup, and aggregate recovery. |
+| `src/reporting/` | HTML rendering, report links, view models, static server, and CSP-aware file serving. |
+| `src/security/` | Origin, base-path, relative URL, credential-like URL, traversal, and containment checks. |
+| `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus. |
+| `tests/unit/` and `tests/e2e/` | Configuration contracts, security hardening, lifecycle behavior, report rendering, and template navigation. |
+
+## Artifacts and test boundaries
+
+Report roots contain `index.html`, `aggregate-data.json`, CSS assets, and
+`<project-id>/<run-id>/` directories with `index.html`, `data.json`,
+`manifest.json`, and requested screenshots. Auto-build runs do not allocate
+these report artifacts. Test-runner traces and reports in `test-results/` or
+`playwright-report/` are test evidence, not vendor evidence.
+
+The deterministic release sequence is documented in
+[release gates](./release-gates.md). Template tests fulfill exact URLs from
+checked-in files with default-deny routes and do not contact Jenkins or vendor
+services. Phase 2 unit tests use an in-process HTTP server or injected browser
+and workflow dependencies to prove the trigger without live services.
+
+## Security and maintenance boundaries
+
+- Keep secrets in the environment or a trusted CI secret store; never commit
+  values, cookies, tokens, or credential-bearing URLs.
+- Treat `jobUrl` as the sole Jenkins job/branch identity; do not add a second
+  branch field or infer identity from selector data.
+- Keep mode selection explicit and project-scoped; never mass-enable auto-build
+  from defaults, environment, URL shape, or CLI naming.
+- Validate both build controls structurally before any POST and never inspect
+  hidden form values.
+- Treat an observed POST with no determinate response as an external
+  side-effect uncertainty; do not retry automatically.
+- Preserve canonical report/staging roots, symlink checks, bounded cleanup,
+  immutable report identities, CSP headers, and safe local-link validation.
+- Update [multi-project configuration](./multi-project-configuration.md) for
+  field-level changes, [architecture](./architecture.md) for data-flow
+  changes, and [code standards](./code-standards.md) for implementation rules.
 </file>
 
 <file path="docs/multi-project-configuration.md">
 # Multi-project configuration
 
 The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
-projects, and runs them sequentially in configuration order. The current
-implementation is in `src/config/project-config-schema.ts`,
-`src/config/project-config-loader.ts`, and `src/runner.ts`.
+projects, and exposes explicit report and auto-build execution boundaries.
+Mode is never inferred from a URL, selector, CLI name, or environment. The
+configuration contract is implemented in `src/config/` and consumed by
+`src/runner.ts` (report) or `src/project/auto-build-runner.ts` (auto-build).
 
 ## Source selection
 
 The report command always reads one explicit schema-v1 JSON document supplied
-with `--config`. There is no source-mode switch and no environment-selected
-configuration path.
+with `--config`. `runType` classifies a project for the caller's executor; it
+is not a source-mode switch and does not select a configuration path.
 
 Structural environment inputs such as `REPORT_SOURCE`,
 `PROJECTS_CONFIG_PATH`, `JENKINS_BASE_URL`, `JENKINS_JOB_PATH`,
@@ -597,10 +1076,86 @@ are not accepted.
 origin policy, credential references, and source settings for `snyk` and
 `sonarqube`.
 
+## Run type and selection
+
+Each project may set `runType` to exactly `'report'` or `'auto-build'`.
+Omitting it is safe: normalization stores `runType: 'report'`. The field is
+project-only; it is not accepted under `defaults`, and no environment setting
+can configure it. Do not add `runType` to `defaults` or rely on environment
+configuration to choose an executor. Unknown default keys are rejected by
+schema validation, while environment configuration remains reserved for
+credential values.
+
+`enabled: false` always excludes a project from execution, regardless of its
+`runType`. A mode-aware caller selects projects only after loading and
+normalizing the document:
+
+| Helper | Selection contract |
+| --- | --- |
+| `selectReportProjects(projects)` | Returns a frozen list of enabled projects whose normalized `runType` is `report`; disabled and `auto-build` entries are excluded. Throws a configuration error when none remain. |
+| `selectAutoBuildProject(projects, projectId)` | Matches one project by exact, non-empty `id`; returns it only when enabled and normalized as `auto-build`. Missing, disabled, and `report` projects are rejected. |
+
+Both helpers are exported from `src/config.ts` and are side-effect free. They
+do not rewrite a project's mode, infer a target from `jobUrl`, or submit a
+Jenkins request. Callers must choose one helper and one executor; report
+collection and the auto-build side effect remain separate.
+
+## Selector configuration
+
+`selectors` may be supplied in `defaults` and overridden per project. An
+override is an object with a supported `kind` (`role`, `label`, `testId`,
+`text`, or `css`), a non-empty `value`, an optional accessible `name`, and an
+optional `required` boolean. Project values take precedence over defaults.
+When `required` is omitted, it defaults to `true`.
+
+The normalized selector set includes these defaults:
+
+| Selector | Kind | Value | Name | Required |
+| --- | --- | --- | --- | --- |
+| `authLandmark` | `role` | `link` | `Manage Jenkins` | `true` |
+| `sonarqubeReport` | `testId` | `sonarqube-report` | — | `true` |
+| `snykReport` | `testId` | `snyk-report` | — | `true` |
+| `buildParametersLink` | `role` | `link` | `Build with Parameters` | `true` |
+| `buildSubmitButton` | `role` | `button` | `Build` | `true` |
+
+The two build selectors are required configuration controls. An explicit
+`required: false` override is rejected for either
+`buildParametersLink` or `buildSubmitButton`; valid overrides must keep
+`required: true`. Their runtime search scopes (`#side-panel` for the
+parameter link and `#bottom-sticker` for the submit button) are fixed by the
+Jenkins executor and are not configurable CSS.
+
+For example, a defaults override can customize the visible labels while
+retaining the invariant:
+
+```json
+{
+  "selectors": {
+    "buildParametersLink": {
+      "kind": "role",
+      "value": "link",
+      "name": "Build with Parameters",
+      "required": true
+    },
+    "buildSubmitButton": {
+      "kind": "role",
+      "value": "button",
+      "name": "Build",
+      "required": true
+    }
+  }
+}
+```
+
+`selectors` is allowed in both `defaults` and a project entry; `runType` is
+not. Unknown selector fields, malformed values, unsafe selector text, and
+selector overrides that disable required controls are rejected before browser
+launch.
+
 The checked-in [projects.example.json](../config/projects.example.json) shows
-two projects with exact Jenkins URLs, source origins, identities, and
-per-project credential references. A minimal valid document is also shown
-below.
+an enabled `report` project and a disabled `auto-build` project, with exact
+Jenkins URLs, source origins, identities, and per-project credential
+references. A minimal valid document is also shown below.
 
 The checked-in example uses `.invalid` placeholder hosts and is not a runnable
 Jenkins configuration. Replace its Jenkins/vendor URLs with authorized values
@@ -633,7 +1188,8 @@ values.
       "id": "service-a",
       "name": "Service A",
       "loginUrl": "https://jenkins.example.invalid/jenkins/login",
-      "jobUrl": "https://jenkins.example.invalid/jenkins/job/service-a/"
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/service-a/",
+      "runType": "report"
     }
   ]
 }
@@ -709,14 +1265,44 @@ data includes the direct schema-3 state and bounded diagnostics; persistence
 uses a bounded fallback after the workflow deadline and records a warning if
 both persistence attempts fail.
 
-## Sequential and lock boundaries
+## Sequential and mode boundaries
 
-Enabled projects run one at a time through one browser process, with a fresh
-Playwright context per project and one absolute workflow deadline per project.
-Each project authenticates through its exact `loginUrl`, opens its exact
-`jobUrl`, discovers publisher destinations once, and captures the configured
-Snyk and SonarQube evidence. There is no job search, trigger, queue/build
-correlation, terminal polling, or build-number path.
+Enabled report projects run one at a time through one browser process, with a
+fresh Playwright context and one absolute workflow deadline per project. Each
+project authenticates through its exact `loginUrl`, opens its exact `jobUrl`,
+discovers publisher destinations once, and captures the configured Snyk and
+SonarQube evidence. There is no job search, trigger, queue/build correlation,
+terminal polling, or build-number path in this report workflow.
+
+`runFromConfig` calls `selectReportProjects` before `runConfiguredProjects`, so
+`npm run report` never invokes an auto-build project even when both modes are
+present in the same file.
+
+### Explicit auto-build execution
+
+An integration that intentionally performs a build must first normalize the
+document, select one exact project, and then call the separate runner:
+
+```ts
+const project = selectAutoBuildProject(projects, projectId);
+const outcome = await runAutoBuildProject(project);
+```
+
+`selectAutoBuildProject` rejects an empty or missing ID, an unknown project,
+disabled projects, and projects whose normalized `runType` is `report`.
+`runAutoBuildProject` additionally fails closed if the supplied project is
+disabled or not `auto-build`; it resolves credential references, creates one
+browser/context/page, applies one absolute deadline, and always performs
+bounded cleanup.
+
+The auto-build workflow opens the exact configured job, validates one visible
+**Build with Parameters** link in `#side-panel`, validates one visible
+**Build** button and `POST` form in `#bottom-sticker`, and clicks once. Its
+result is one of `submitted`, `rejected`, `submission-unknown`, or
+`failed-before-submit`. It never changes parameters, searches jobs, polls a
+queue/build, retries after an observed POST, or writes report artifacts. The
+current report CLI has no auto-build command; a future control-plane caller
+must preserve these selection and confirmation boundaries.
 
 The schema has no source switch, existing-build mode, job-page override, build
 identity, or polling environment inputs. These are intentionally absent from
@@ -760,6 +1346,244 @@ root can race publication. Use a trusted isolated root for sensitive runs.
 For the complete command and release boundary, see
 [release-gates.md](./release-gates.md). This repository documentation does not
 claim that a live Jenkins or browser execution has been run.
+</file>
+
+<file path="docs/project-overview-pdr.md">
+# Project overview and PDR
+
+**Product:** `auto-jobs`  
+**Document scope:** schema-v1 report capture and Phase 2 Jenkins auto-build  
+**Current milestone:** Phase 2 — **DONE** (2026-09-02T14:30:11+07:00)
+
+## Product summary
+
+`auto-jobs` is a private Node.js/TypeScript Playwright runner for collecting
+bounded Snyk and SonarQube vulnerability evidence from exact Jenkins job pages.
+It writes immutable static reports for the report path. Phase 2 adds a separate,
+explicit one-project workflow for submitting a Jenkins **Build with Parameters**
+form for the configured target job. The build path returns a sanitized
+in-memory outcome; it does not collect evidence or write report artifacts.
+
+The product treats Jenkins navigation and build submission as high-risk external
+operations. Configuration, target identity, selectors, credentials, deadlines,
+and failure semantics are validated before side effects.
+
+## Goals
+
+1. Make report capture deterministic, bounded, and safe for multiple configured
+   projects.
+2. Permit an intentional Jenkins parameterized build only for one exact,
+   enabled, explicitly selected `auto-build` project.
+3. Keep report capture and build submission mutually exclusive.
+4. Preserve target identity: `jobUrl` is the only branch/job identity.
+5. Make ambiguous post-submit outcomes visible without risking duplicate builds.
+6. Keep credentials and request/form data out of persisted results and logs.
+7. Provide deterministic fixture and unit tests without live Jenkins/vendor
+   dependencies.
+
+## Non-goals
+
+- Searching Jenkins jobs or deriving a branch from a selector, URL fragment, or
+  separate `targetBranch` field.
+- Editing Jenkins parameters, using **Build Now**, polling queues/builds,
+  discovering build numbers, cancellation, or automatic retry.
+- Running auto-build from `npm run report` or from an environment-wide switch.
+- Capturing Snyk/SonarQube evidence during an auto-build run.
+- Claiming that checked-in fixtures or deterministic tests prove a live build.
+- Providing a writable control dashboard in Phase 2. A future control-plane
+  caller must preserve the explicit selection and confirmation boundary.
+
+## Users and use cases
+
+| User | Need | Supported boundary |
+| --- | --- | --- |
+| Report operator | Collect evidence for configured jobs | `npm run report -- --config <path>` |
+| Build integration | Submit one selected target-branch build | `selectAutoBuildProject` → `runAutoBuildProject` |
+| Maintainer | Prove behavior without external services | Unit tests and exact offline fixtures |
+| Reviewer | Inspect safe outputs and release gates | Static report root, manifests, and documented commands |
+
+## Functional requirements
+
+### FR-1: Configuration
+
+- Accept one schema-v1 JSON document with one to 50 projects.
+- Require exact credential-free HTTP(S) `loginUrl` and `jobUrl` values on one
+  Jenkins origin/base context.
+- Normalize an omitted project `runType` to `report`.
+- Accept only `runType: 'report' | 'auto-build'`; keep it project-only.
+- Treat `enabled: false` as an unconditional execution gate.
+- Validate selectors, source origins, paths, identities, timeouts, and
+  credential-variable references before browser launch.
+
+### FR-2: Mode selection
+
+- `selectReportProjects(projects)` returns only enabled normalized report
+  projects and fails if none remain.
+- `selectAutoBuildProject(projects, projectId)` requires one exact non-empty ID,
+  an enabled project, and normalized `runType: 'auto-build'`.
+- Selection helpers are pure and cannot submit a request.
+- `runFromConfig` passes only report projects to the sequential report runner.
+
+### FR-3: Report execution
+
+- Use one configured browser and a fresh context per selected project.
+- Execute in configuration order and continue after an individual failure.
+- Authenticate through exact Jenkins login, open exact `jobUrl`, discover
+  allowed publisher links once, and capture bounded Snyk/SonarQube evidence.
+- Stage, validate, and publish immutable per-run artifacts and an aggregate.
+
+### FR-4: Auto-build execution
+
+- Reuse validated login and exact `jobUrl` navigation.
+- Require one visible `#side-panel` and one visible configured **Build with
+  Parameters** link within it.
+- Validate the link as the exact configured job `/build` action before clicking.
+- Require one visible `#bottom-sticker`, one configured **Build** button, all
+  required Jenkins class tokens, one ancestor `POST` form, and the exact same
+  `/build` action.
+- Arm request/response observers before clicking and click exactly once.
+- Reuse existing page defaults; do not inspect or modify hidden parameter values.
+
+### FR-5: Outcomes and side effects
+
+- Return only bounded safe fields: project identity, configured job URL,
+  validated build-page URL, timestamp, optional numeric status, safe diagnostic,
+  state, and exit code.
+- Classify a matching response below HTTP 400 as `submitted`.
+- Classify a matching response at or above HTTP 400 as `rejected`.
+- Classify an observed matching POST without a determinate response as
+  `submission-unknown`.
+- Map pre-POST failures to `failed-before-submit` in the auto-build runner.
+- Never retry after a matching POST or possible external side effect.
+
+### FR-6: Resource and secret handling
+
+- Use one absolute `WorkflowDeadline` for each project build workflow.
+- Create a fresh Playwright context/page and close resources with bounded
+  best-effort cleanup.
+- Resolve credentials from environment-variable references only.
+- Redact secret values from diagnostics and clear mutable secret copies.
+- Do not persist auto-build artifacts, cookies, headers, bodies, crumbs, queue
+  IDs, build numbers, or response bodies.
+
+## Non-functional requirements
+
+| Area | Requirement |
+| --- | --- |
+| Safety | Fail closed on invalid origins, actions, selectors, cardinality, forms, modes, or identities. |
+| Idempotency | No automatic retry after a matching build POST; preserve unknown state. |
+| Security | Credential-free URLs, environment-only secrets, bounded diagnostics, no hidden-form inspection. |
+| Availability | Report projects continue after a project failure; cleanup is bounded. |
+| Determinism | Unit and fixture tests use injected dependencies or exact default-deny routes. |
+| Maintainability | Keep one responsibility per module, strict TypeScript, and production files below 200 lines when changed. |
+| Documentation | Keep each Markdown file below 800 lines and link only verified paths. |
+
+## Phase 2 acceptance criteria
+
+- [x] Exact job-action URL validation rejects sibling jobs, foreign origins,
+  prefixes, encoded path tricks, fragments, and unexpected queries.
+- [x] Build link and submit button are scoped to the required structural
+  containers with exact visible cardinality.
+- [x] Build form method and action are validated before any click.
+- [x] Matching POST is observed once; response state is retained as submitted,
+  rejected, or unknown; no automatic retry occurs.
+- [x] Auto-build runner rejects disabled/wrong-mode projects, redacts errors,
+  and closes context/browser resources.
+- [x] Report execution excludes auto-build projects and retains existing report
+  capture/artifact behavior.
+- [x] Focused unit tests cover the trigger, auto-build runner, and report
+  selection boundary without live Jenkins calls.
+
+## Operational constraints
+
+Before an authorized build, an operator or integration must verify the exact
+controller, project ID, configured `jobUrl`, decoded nested job/branch segments,
+enabled flag, explicit `auto-build` mode, and credential-variable availability.
+Jenkins parameter defaults are accepted as rendered; automation does not alter
+them. A `submission-unknown` outcome requires manual/controller-side
+reconciliation before any future attempt.
+
+The checked-in `config/projects.example.json` remains non-runnable with
+`.invalid` placeholders and a disabled auto-build example. Keep live project
+configuration and secret values outside the repository.
+
+## Traceability
+
+| Requirement area | Primary implementation | Documentation |
+| --- | --- | --- |
+| Schema and mode selection | `src/config/`, `src/config.ts` | [multi-project configuration](./multi-project-configuration.md) |
+| Report runner | `src/runner.ts`, `src/project/project-runner.ts` | [architecture](./architecture.md) |
+| Jenkins identity and trigger | `src/jenkins/url-identity.ts`, `src/jenkins/build-trigger*.ts` | [system architecture](./system-architecture.md) |
+| Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
+| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts` | [release gates](./release-gates.md) |
+| Side-effect preflight | `plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md` | Plan safety contract |
+
+## Open scope
+
+Phase 2 does not expose a user-facing auto-build command or control API. Any
+future control-plane implementation must revalidate configuration on the
+server, select one exact project, require explicit user confirmation, preserve
+single-run/concurrency rules, and map only the safe outcome fields described
+above.
+</file>
+
+<file path="docs/project-roadmap.md">
+# Project roadmap
+
+Last updated: 2026-09-02T14:30:11+07:00  
+Plan: [Jenkins Control Page and Auto-Build](../plans/260902-0251-jenkins-control-page-and-auto-build/plan.md)
+
+## Overall status
+
+- Status: **In progress**
+- Progress: **31%** (16 of 52 weighted planned hours; 2 of 5 phases complete)
+- Current milestone: **Phase 2 — Jenkins auto-build workflow DONE**
+- Phase 2 completed: **2026-09-02T14:30:11+07:00**
+
+## Phase progress
+
+| Phase | Status | Progress | Effort | Evidence/detail |
+|---|---|---:|---:|---|
+| 1. Configuration and run contracts | Completed | 100% | 6h | [Phase 1](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-01-configuration-run-contracts.md) |
+| 2. Jenkins auto-build workflow | **DONE** | **100%** | 10h | [Phase 2](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-02-jenkins-auto-build-workflow.md) |
+| 3. Build-page fixture and routes | Pending | 0% | 8h | [Phase 3](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-03-build-template-fixture.md) |
+| 4. Control Page server, API, and UI | Pending | 0% | 18h | [Phase 4](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-04-control-page-server-and-ui.md) |
+| 5. Verification, quality gates, and docs | Pending | 0% | 10h | [Phase 5](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-05-verification-and-documentation.md) |
+
+## Phase 2 milestone
+
+Delivered the isolated, target-branch auto-build path:
+
+- Reuses validated Jenkins login and exact configured `jobUrl` navigation.
+- Validates the scoped **Build with Parameters** link and **Build** button/form before any side effect.
+- Observes exactly one build POST and classifies `submitted`, `rejected`, or `submission-unknown` without automatic retry.
+- Keeps auto-build execution separate from report capture; `npm run report` excludes auto-build projects.
+- Uses a fresh browser context, bounded cleanup, and secret-redacted outcomes.
+
+Validation evidence:
+
+- [Tester validation](../plans/reports/tester-260902-1302-phase-02-jenkins-auto-build-workflow.md): fresh `npm test` passed with 190 unit and 5 e2e tests; direct full Playwright run passed 201 tests.
+- [Code review](../plans/reports/code-review-260902-1311-phase-02-jenkins-auto-build-workflow.md): 10/10, no critical issues or warnings; all modified production files remain below 200 lines.
+
+The earlier failed test run is superseded by the fresh passing rerun; no Phase 2 blocker remains. Live Jenkins execution remains intentionally outside deterministic validation and requires the [preflight contract](../plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md).
+
+## Next milestones
+
+1. **Phase 3 — Build-page fixture and routes (0%)**: add the bounded build-detail fixture and exact GET/POST route map.
+2. **Phase 4 — Control Page server, API, and UI (0%)**: expose loopback-only config/run controls with CSRF, ETag, and sanitized DTO boundaries.
+3. **Phase 5 — Verification, quality gates, and docs (0%)**: complete cross-browser/UI/security evidence and release documentation.
+
+## Changelog
+
+### 0.1.0 (development) — 2026-09-02
+
+- Completed Phase 2 Jenkins target-branch auto-build workflow at 100%.
+- Recorded exactly-once POST and unknown-after-POST safety semantics.
+- Updated plan status/progress and linked validation/review evidence.
+
+## Unresolved questions
+
+None.
 </file>
 
 <file path="docs/release-gates.md">
@@ -846,11 +1670,41 @@ with blocked unmatched network requests. It does not contact Jenkins or
 vendors and does not claim live execution. Generated reports are served
 separately with `npm run serve:report`.
 
-The report runner uses a project-local `.report-runtime-*` directory for
-managed temporary files and attempts bounded cleanup after completion. The
-default staging root is a sibling `artifacts/` directory. `test-results/`,
-`playwright-report/`, and `.runner-build/` are test/build outputs, not report
-release inputs.
+## Phase 2 auto-build gate
+
+The Phase 2 auto-build runner is an explicit library boundary, not a report
+CLI mode. `npm run report` always excludes projects whose normalized
+`runType` is `auto-build`; this prevents a mixed configuration from causing a
+build. No production command currently exposes an auto-build trigger.
+
+Run the focused deterministic tests when reviewing the build workflow:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/jenkins-build-trigger.spec.ts \
+  tests/unit/auto-build-runner.spec.ts \
+  tests/unit/sequential-runner.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The focused tests cover:
+
+- exact `#side-panel` and `#bottom-sticker` scoping and visible-control
+  cardinality;
+- exact configured job `/build` URL identity, form `POST`, and required
+  Jenkins button class tokens;
+- one matching POST, response classification (`submitted` or `rejected`),
+  and `submission-unknown` after a request with no determinate response;
+- no retry after a possible side effect;
+- disabled/wrong-mode rejection, secret redaction, and context/browser
+  cleanup; and
+- report selection excluding auto-build projects.
+
+These tests use an in-process HTTP server or injected browser/workflow
+dependencies. They do not contact a live Jenkins controller and do not prove
+that a build was created. Before any authorized live run, follow the
+[preflight contract](../plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md)
+and treat `submission-unknown` as an indeterminate external side effect.
 
 ## Report server gate
 
@@ -966,6 +1820,232 @@ running the relevant command; the command output is the release evidence.
 
 Native browser, fixture startup, and live Jenkins results are environment
 evidence only when their commands are freshly run in the target environment.
+</file>
+
+<file path="docs/system-architecture.md">
+# System architecture
+
+This is the component-level view of `auto-jobs` after Phase 2. The repository
+has two intentionally separate execution paths:
+
+- **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
+  and SonarQube evidence, and publish immutable static reports.
+- **Auto-build:** authenticate, inspect one exact Jenkins job, validate the
+  parameterized-build controls, and submit one Jenkins form. It returns a
+  safe in-memory outcome and does not capture or publish reports.
+
+The [architecture](./architecture.md) document contains the field-level runtime
+contract. See [multi-project configuration](./multi-project-configuration.md)
+for JSON details and [release gates](./release-gates.md) for validation commands.
+
+## Context and boundaries
+
+```mermaid
+flowchart TB
+  Operator[Operator or future integration] --> ConfigFile[Schema-v1 project JSON]
+  Secrets[CI secret store / environment] --> Executor
+  ConfigFile --> Loader[Validate and normalize]
+  Loader --> Selector{Explicit mode and project selection}
+  Selector --> Executor[Mode-specific executor]
+  Executor --> Jenkins[Jenkins controller]
+  Jenkins --> ReportSources[Snyk / SonarQube publisher pages]
+  Executor --> ReportRoot[Canonical report root]
+  ReportRoot --> ReadOnlyServer[Read-only report server]
+  Templates[Checked-in offline fixtures] -. test-only exact routes .-> Executor
+```
+
+The loader and selection helpers are pure configuration boundaries. Browser
+launch, credentials, and network I/O begin only after a caller has selected an
+executor. The report server reads an existing canonical report root; it is not
+a build or report-generation API. No writable control-plane server is part of
+the current Phase 2 implementation.
+
+## Mode dispatch
+
+A normalized project carries `runType: 'report' | 'auto-build'`. Missing input
+normalizes to `report`; the field is project-only and cannot be set through
+defaults or environment configuration. `enabled: false` always wins.
+
+| Caller boundary | Input | Executor | Output/side effect |
+| --- | --- | --- | --- |
+| `selectReportProjects(projects)` | normalized config | `runFromConfig` → `runConfiguredProjects` | sequential report outcomes and aggregate artifacts |
+| `selectAutoBuildProject(projects, projectId)` | normalized config plus exact ID | `runAutoBuildProject` | one build outcome; no report artifacts |
+
+`selectReportProjects` returns all enabled report projects and fails when none
+remain. `selectAutoBuildProject` returns exactly one enabled auto-build project
+or fails closed for an empty/unknown ID, disabled project, or report project.
+Neither helper performs I/O. `src/cli.ts` exposes only the report path through
+`npm run report`, so a mixed configuration cannot trigger a build accidentally.
+
+## Report data flow
+
+```mermaid
+flowchart LR
+  File[Explicit --config file] --> Validate[Schema validation]
+  Validate --> Normalize[Frozen normalized projects]
+  Normalize --> ReportSelect[selectReportProjects]
+  ReportSelect --> Browser[One configured browser]
+  Browser --> Context[Fresh context per project]
+  Context --> Login[submitJenkinsLogin]
+  Login --> Job[openJenkinsJob exact jobUrl]
+  Job --> Discover[Publisher link discovery]
+  Discover --> Capture[Snyk / SonarQube capture]
+  Capture --> NormalizeEvidence[Bounded normalization]
+  NormalizeEvidence --> Stage[Staging lease]
+  Stage --> Publish[Validated immutable report]
+  Publish --> Aggregate[Aggregate index and data]
+```
+
+`src/runner.ts` keeps selected projects in configuration order, continues after
+an individual failure, and publishes one aggregate. The report path owns the
+artifact root lock, staging/report paths, manifests, cleanup, and aggregate
+recovery. A fresh Playwright context and one project-local absolute deadline
+is used for each report project while the browser process is shared.
+
+## Auto-build data flow
+
+```mermaid
+sequenceDiagram
+  participant Caller
+  participant Select as Config selection
+  participant Runner as Auto-build runner
+  participant Browser as Playwright browser/context
+  participant Jenkins
+  participant Trigger as Build trigger
+
+  Caller->>Select: selectAutoBuildProject(projects, projectId)
+  Select-->>Caller: one enabled auto-build project
+  Caller->>Runner: runAutoBuildProject(project)
+  Runner->>Browser: launch browser, new context/page
+  Runner->>Jenkins: submit login at exact loginUrl
+  Jenkins-->>Runner: authenticated page
+  Runner->>Jenkins: open exact jobUrl
+  Runner->>Trigger: triggerParameterizedBuild(page, config, deadline)
+  Trigger->>Jenkins: validate scoped link and GET exact job/build
+  Trigger->>Jenkins: validate scoped POST form
+  Trigger->>Jenkins: click Build once
+  Jenkins-->>Trigger: matching POST response or indeterminate result
+  Trigger-->>Runner: submitted / rejected / submission-unknown
+  Runner->>Browser: bounded context/browser cleanup
+  Runner-->>Caller: sanitized in-memory outcome
+```
+
+The auto-build runner does not use `ArtifactPaths`, report capture, queue APIs,
+build-number APIs, polling, cancellation, or retry logic. It clears mutable
+secret copies during cleanup. A failure before a matching POST is represented
+as `failed-before-submit`; once a matching POST is observed, indeterminate
+completion is `submission-unknown` and must not be retried.
+
+## Jenkins component contracts
+
+### Authentication and identity
+
+`src/jenkins/auth.ts` submits credentials only to the configured login action,
+validates the authenticated URL and landmark, and opens the exact configured
+job URL. `src/jenkins/url-identity.ts` provides exact job and job-action
+identity checks. Action identity requires the same origin, credential-free URL,
+normalized path `<jobUrl>/build`, matching decoded `job/` segments, no fragment,
+and no unexpected query. Only the build-detail navigation may carry the exact
+`?delay=0sec` query.
+
+`jobUrl` is the sole branch identity. Nested jobs and repeatedly encoded
+segments are decoded for comparison; sibling jobs, prefixes, alternate origins,
+foreign actions, and path tricks fail closed.
+
+### Scoped controls and submission
+
+`src/jenkins/locators.ts` maps the configured selector contract to Playwright
+locators and resolves hrefs relative to the current page without trusting them.
+`src/jenkins/build-trigger-validation.ts` requires:
+
+1. exactly one visible `#side-panel` and one visible configured **Build with
+   Parameters** link;
+2. a link href that is the exact configured job `/build` action;
+3. exactly one visible `#bottom-sticker` and one visible configured **Build**
+   button;
+4. class tokens `jenkins-button`, `jenkins-button--primary`, and
+   `jenkins-!-build-color`;
+5. exactly one ancestor form with method `POST`; and
+6. a form action that is the same exact configured job `/build` action.
+
+`src/jenkins/build-trigger.ts` installs request and response observers before
+the click. It accepts one matching POST only. A response status below 400 is
+`submitted`; status 400 or higher is `rejected`; a matching request without a
+determinate response is `submission-unknown`. Pre-POST validation/navigation
+errors are sanitized `JenkinsFlowError` failures. The trigger returns no form
+body, parameter, crumb, header, cookie, queue, build-number, or response-body
+data.
+
+## Resource and error boundaries
+
+`src/browser-launcher.ts` is the shared browser-launch boundary. It selects
+Chromium, Firefox, or WebKit and parses the supported environment options:
+`PLAYWRIGHT_EXECUTABLE_PATH`, `PLAYWRIGHT_HEADLESS`, `PLAYWRIGHT_HEADED` or
+`HEADED`, and `PLAYWRIGHT_SLOW_MO` or `PLAYWRIGHT_ACTION_DELAY`.
+
+`WorkflowDeadline` is one immutable absolute time budget per project. Report
+and auto-build workflows pass it through all browser operations. Resource
+creation handles late results, and context/browser closure uses bounded
+settlement cleanup. Cleanup failures must not convert a known auto-build result
+into a retryable operation.
+
+Diagnostics use the existing redaction helpers. URLs are sanitized before
+persistence or display. Report failure artifacts retain a safe project/run
+identity; auto-build results stay in memory and contain only bounded safe
+fields.
+
+## Persistence and serving
+
+Only the report path writes artifacts. Each report run uses a validated project
+ID and immutable run ID below the canonical report root:
+
+```text
+reports/
+├── index.html
+├── aggregate-data.json
+├── assets/report.css
+└── <project-id>/<run-id>/
+    ├── index.html
+    ├── data.json
+    ├── manifest.json
+    └── requested screenshots
+```
+
+`src/artifacts/` stages and validates writes, coordinates same-host report-root
+leases, recovers aggregate publication, and performs bounded orphan cleanup.
+`src/reporting/` escapes rendered values, validates links, sets CSP headers,
+and serves only safe GET/HEAD files below the canonical root. The server is
+read-only, unauthenticated, and loopback by default.
+
+## Test architecture
+
+- Configuration and selection tests exercise normalization, explicit mode
+  gating, disabled projects, selector requirements, and legacy-key rejection.
+- `tests/unit/jenkins-build-trigger.spec.ts` uses an in-process HTTP server to
+  prove exact request order, scoped controls, form/action validation, one POST,
+  HTTP response states, unknown-after-POST, and diagnostic redaction.
+- `tests/unit/auto-build-runner.spec.ts` injects browser/workflow dependencies
+  to prove submitted/rejected/unknown outcomes, mode/enabled fail-closed
+  behavior, cleanup, and secret redaction.
+- `tests/unit/sequential-runner.spec.ts` preserves shared launch options,
+  sequential report behavior, and exclusion of auto-build projects from
+  `runFromConfig`.
+- Template E2E tests use exact default-deny routes and checked-in fixtures;
+  they do not claim live Jenkins or vendor execution.
+
+## Invariants for extensions
+
+1. Keep report capture and auto-build submission as separate executors.
+2. Require explicit project-level auto-build selection and confirmation at the
+   caller boundary; never infer it from config shape or UI text.
+3. Keep `jobUrl` as the only target identity and validate every action URL
+   against it before navigation or submission.
+4. Validate structure and visibility before clicks; never read hidden form
+   parameters or persist request data.
+5. Observe a possible side effect before classifying it and never retry after a
+   matching POST.
+6. Preserve one absolute deadline, bounded cleanup, secret redaction, and the
+   existing canonical report-root/security policy.
 </file>
 
 <file path="package.json">
@@ -1173,8 +2253,11 @@ None.
 - Date: 2026-09-02
 - Priority: P1; irreversible external side effect
 - Effort: 10h
-- Implementation status: Pending
-- Review status: Pending
+- Implementation status: DONE
+- Progress: 100%
+- Review status: Completed
+- Completed at: 2026-09-02T14:30:11+07:00
+- Evidence: [validation report](../../reports/tester-260902-1302-phase-02-jenkins-auto-build-workflow.md) and [code review](../../reports/code-review-260902-1311-phase-02-jenkins-auto-build-workflow.md).
 - Goal: submit one parameterized Jenkins build for one explicitly selected exact branch job, reusing current auth and deadlines.
 
 ## Key insights
@@ -1283,14 +2366,14 @@ All paths rooted at `G:/ws/sharing/auto-jobs`.
 
 ## Todo list
 
-- [ ] Exact job-action URL helper rejects path/origin/query tricks.
-- [ ] Structural containers and accessible controls both enforced.
-- [ ] Form method/action validated before click.
-- [ ] Exactly one POST observed; no automatic retry.
-- [ ] Ambiguous post-submit state retained as unknown.
-- [ ] Auto-build runner closes browser resources and redacts secrets.
-- [ ] Report CLI excludes auto-build entries.
-- [ ] Touched runner/workflow files remain below 200 lines.
+- [x] Exact job-action URL helper rejects path/origin/query tricks.
+- [x] Structural containers and accessible controls both enforced.
+- [x] Form method/action validated before click.
+- [x] Exactly one POST observed; no automatic retry.
+- [x] Ambiguous post-submit state retained as unknown.
+- [x] Auto-build runner closes browser resources and redacts secrets.
+- [x] Report CLI excludes auto-build entries.
+- [x] Touched runner/workflow files remain below 200 lines.
 
 ## Success criteria
 
@@ -1937,6 +3020,13 @@ created: 2026-09-02
 
 One control surface discovers checked-in `config/*.json`, edits validated project settings, and executes exactly one requested mode. `report` preserves current capture/report behavior. `auto-build` authenticates, opens the exact configured branch job, enters **Build with Parameters**, and submits the Jenkins form once.
 
+## Status
+
+- Overall status: In progress — Phase 2 is DONE; Phases 3–5 remain pending.
+- Overall progress: 31% (16h of 52h weighted planned effort; 2 of 5 phases complete).
+- Last updated: 2026-09-02T14:30:11+07:00.
+- Phase 2 evidence: [validation report](../../reports/tester-260902-1302-phase-02-jenkins-auto-build-workflow.md) and [code review](../../reports/code-review-260902-1311-phase-02-jenkins-auto-build-workflow.md).
+
 ## Architecture decisions
 
 - `jobUrl` remains sole branch identity; no second `targetBranch` field.
@@ -1956,7 +3046,7 @@ Read and sign off [preflight contract and side effects](./preflight-contract-and
 | # | Phase | Status | Progress | Effort | Detail |
 |---|---|---|---:|---:|---|
 | 1 | Configuration and run contracts | Completed | 100% | 6h | [phase 01](./phase-01-configuration-run-contracts.md) |
-| 2 | Jenkins auto-build workflow | Pending | 0% | 10h | [phase 02](./phase-02-jenkins-auto-build-workflow.md) |
+| 2 | Jenkins auto-build workflow | DONE | 100% | 10h | [phase 02](./phase-02-jenkins-auto-build-workflow.md) |
 | 3 | Build-page fixture and routes | Pending | 0% | 8h | [phase 03](./phase-03-build-template-fixture.md) |
 | 4 | Control Page server, API, and UI | Pending | 0% | 18h | [phase 04](./phase-04-control-page-server-and-ui.md) |
 | 5 | Verification, quality gates, docs | Pending | 0% | 10h | [phase 05](./phase-05-verification-and-documentation.md) |
@@ -2315,9 +3405,12 @@ reads an explicit schema-v1 JSON configuration file; checked-in templates are
 offline test fixtures.
 
 See [multi-project configuration](./docs/multi-project-configuration.md) for
-the schema-v1 contract, [architecture](./docs/architecture.md) for design and
-security boundaries, and [release gates](./docs/release-gates.md) for the
-validation matrix.
+the schema-v1 contract, [architecture](./docs/architecture.md) and
+[system architecture](./docs/system-architecture.md) for design and security
+boundaries, [code standards](./docs/code-standards.md) for implementation
+conventions, [project overview/PDR](./docs/project-overview-pdr.md) for
+requirements, and [release gates](./docs/release-gates.md) for validation
+commands.
 
 ## Prerequisites
 
@@ -6013,6 +7106,62 @@ export async function releaseStagingLease(
 }
 </file>
 
+<file path="src/browser-launcher.ts">
+import { chromium, firefox, webkit, type Browser } from '@playwright/test';
+
+import type { BrowserName } from './types.js';
+
+export type BrowserLauncher = (
+  browserName: BrowserName,
+  environment?: NodeJS.ProcessEnv,
+) => Promise<Browser>;
+
+export interface BrowserLaunchOptions {
+  executablePath?: string;
+  headless?: boolean;
+  slowMo?: number;
+}
+
+export function launchOptions(environment: NodeJS.ProcessEnv): BrowserLaunchOptions {
+  const executablePath = environment['PLAYWRIGHT_EXECUTABLE_PATH']?.trim();
+  const headlessValue = environment['PLAYWRIGHT_HEADLESS']?.trim().toLowerCase();
+  const headedValue = (environment['PLAYWRIGHT_HEADED'] ?? environment['HEADED'])?.trim().toLowerCase();
+  const slowMoValue = (environment['PLAYWRIGHT_SLOW_MO'] ?? environment['PLAYWRIGHT_ACTION_DELAY'])?.trim();
+  let headless: boolean | undefined;
+  if (headlessValue !== undefined && headlessValue !== '') {
+    if (['1', 'true', 'yes'].includes(headlessValue)) headless = true;
+    else if (['0', 'false', 'no'].includes(headlessValue)) headless = false;
+    else throw new Error('PLAYWRIGHT_HEADLESS must be true or false');
+  } else if (headedValue !== undefined && headedValue !== '') {
+    if (['1', 'true', 'yes'].includes(headedValue)) headless = false;
+    else if (['0', 'false', 'no'].includes(headedValue)) headless = true;
+  }
+  let slowMo: number | undefined;
+  if (slowMoValue !== undefined && slowMoValue !== '') {
+    const parsed = Number(slowMoValue);
+    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+      throw new Error('PLAYWRIGHT_SLOW_MO must be a non-negative integer');
+    }
+    slowMo = parsed;
+  }
+  return {
+    ...(executablePath === undefined || executablePath === '' ? {} : { executablePath }),
+    ...(headless === undefined ? {} : { headless }),
+    ...(slowMo === undefined ? {} : { slowMo }),
+  };
+}
+
+export async function defaultLaunch(
+  browserName: BrowserName,
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<Browser> {
+  const options = launchOptions(environment);
+  if (browserName === 'firefox') return firefox.launch(options);
+  if (browserName === 'webkit') return webkit.launch(options);
+  return chromium.launch(options);
+}
+</file>
+
 <file path="src/cli.ts">
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -7591,6 +8740,242 @@ export async function createJenkinsSession(
 }
 </file>
 
+<file path="src/jenkins/build-trigger-validation.ts">
+import type { Locator, Page } from '@playwright/test';
+
+import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
+import { locatorFor, readFirstHref } from './locators.js';
+import type { JenkinsRunnerConfig } from './runner-config.js';
+import { validateJenkinsJobActionUrl } from './url-identity.js';
+
+export const REQUIRED_BUILD_BUTTON_CLASSES = Object.freeze([
+  'jenkins-button',
+  'jenkins-button--primary',
+  'jenkins-!-build-color',
+]);
+
+export async function locateAndValidateBuildParametersLink(
+  page: Page,
+  config: JenkinsRunnerConfig,
+): Promise<Locator> {
+  const sidePanel = page.locator('#side-panel');
+  if ((await sidePanel.count()) !== 1 || !(await sidePanel.isVisible())) {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure('Locate side-panel', new Error('expected exactly one visible #side-panel'), config, page),
+    );
+  }
+
+  const buildLink = locatorFor(sidePanel, config.selectors.buildParametersLink);
+  if ((await buildLink.count()) !== 1 || !(await buildLink.isVisible())) {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure(
+        'Locate build parameters link',
+        new Error('expected exactly one visible Build with Parameters link in #side-panel'),
+        config,
+        page,
+      ),
+    );
+  }
+
+  const href = await readFirstHref(buildLink, page);
+  if (href === undefined) {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure('Validate build parameters link', new Error('missing href on build link'), config, page),
+    );
+  }
+
+  try {
+    validateJenkinsJobActionUrl(href, config.jobUrl, config.baseUrl, { allowDelay: true, actionName: 'build' });
+  } catch (error) {
+    throw new JenkinsFlowError(formatJenkinsFailure('Validate build parameters link', error, config, page));
+  }
+
+  return buildLink;
+}
+
+export async function locateAndValidateBuildFormAndButton(
+  page: Page,
+  config: JenkinsRunnerConfig,
+): Promise<Locator> {
+  const bottomSticker = page.locator('#bottom-sticker');
+  if ((await bottomSticker.count()) !== 1 || !(await bottomSticker.isVisible())) {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure('Locate bottom-sticker', new Error('expected exactly one visible #bottom-sticker'), config, page),
+    );
+  }
+
+  const buildButton = locatorFor(bottomSticker, config.selectors.buildSubmitButton);
+  if ((await buildButton.count()) !== 1 || !(await buildButton.isVisible())) {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure(
+        'Locate build submit button',
+        new Error('expected exactly one visible Build submit button in #bottom-sticker'),
+        config,
+        page,
+      ),
+    );
+  }
+
+  const classAttr = (await buildButton.getAttribute('class')) ?? '';
+  const tokenSet = new Set(classAttr.split(/\s+/u).filter(Boolean));
+  const missingClasses = REQUIRED_BUILD_BUTTON_CLASSES.filter((cls) => !tokenSet.has(cls));
+  if (missingClasses.length > 0) {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure(
+        'Validate build submit button classes',
+        new Error(`missing required class tokens: ${missingClasses.join(', ')}`),
+        config,
+        page,
+      ),
+    );
+  }
+
+  const ancestorForms = buildButton.locator('xpath=ancestor::form');
+  if ((await ancestorForms.count()) !== 1) {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure('Validate build submit form', new Error('expected exactly one ancestor form'), config, page),
+    );
+  }
+  const form = ancestorForms.first();
+  const method = (await form.getAttribute('method'))?.toUpperCase();
+  if (method !== 'POST') {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure('Validate build submit form', new Error(`expected form method POST, got '${method}'`), config, page),
+    );
+  }
+  const rawAction = await form.getAttribute('action');
+  if (!rawAction) {
+    throw new JenkinsFlowError(
+      formatJenkinsFailure('Validate build submit form', new Error('form action attribute is missing'), config, page),
+    );
+  }
+  const resolvedAction = new URL(rawAction, page.url()).toString();
+  try {
+    validateJenkinsJobActionUrl(resolvedAction, config.jobUrl, config.baseUrl, { allowDelay: false, actionName: 'build' });
+  } catch (error) {
+    throw new JenkinsFlowError(formatJenkinsFailure('Validate build submit form action', error, config, page));
+  }
+
+  return buildButton;
+}
+</file>
+
+<file path="src/jenkins/build-trigger.ts">
+import type { Page, Request, Response } from '@playwright/test';
+
+import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
+import {
+  locateAndValidateBuildFormAndButton,
+  locateAndValidateBuildParametersLink,
+} from './build-trigger-validation.js';
+import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
+import type { JenkinsRunnerConfig } from './runner-config.js';
+import { isExactJenkinsJobActionUrl, validateJenkinsJobActionUrl } from './url-identity.js';
+
+export type JenkinsBuildTriggerState = 'submitted' | 'rejected' | 'submission-unknown';
+
+export interface JenkinsBuildTriggerResult {
+  readonly state: JenkinsBuildTriggerState;
+  readonly jobUrl: string;
+  readonly buildPageUrl: string;
+  readonly submittedAt: string;
+  readonly responseStatus?: number;
+}
+
+export async function triggerParameterizedBuild(
+  page: Page,
+  config: JenkinsRunnerConfig,
+  deadline: WorkflowDeadline,
+): Promise<JenkinsBuildTriggerResult> {
+  deadline.requireRemaining();
+  // Step 1: Locate and validate link inside #side-panel
+  const buildLink = await locateAndValidateBuildParametersLink(page, config);
+
+  // Step 2: Click link and wait for build page navigation
+  try {
+    const navPromise = page.waitForURL(
+      (url) => isExactJenkinsJobActionUrl(url.toString(), config.jobUrl, { allowDelay: true, actionName: 'build' }),
+      { timeout: Math.min(deadline.remainingMs(), config.timeoutMs) },
+    );
+    await buildLink.click({ timeout: Math.min(deadline.remainingMs(), config.timeoutMs) });
+    await navPromise;
+  } catch (error) {
+    throw new JenkinsFlowError(formatJenkinsFailure('Navigate to build parameters page', error, config, page));
+  }
+
+  const buildPageUrl = page.url();
+  try {
+    validateJenkinsJobActionUrl(buildPageUrl, config.jobUrl, config.baseUrl, { allowDelay: true, actionName: 'build' });
+  } catch (error) {
+    throw new JenkinsFlowError(formatJenkinsFailure('Validate build parameters page URL', error, config, page));
+  }
+
+  // Step 3: Locate and validate form and submit button inside #bottom-sticker
+  const buildButton = await locateAndValidateBuildFormAndButton(page, config);
+
+  // Step 4: Arm request and response observers before the click
+  let postObserved = false;
+  let postResponse: { status: number; url: string } | undefined;
+
+  const onRequest = (req: Request) => {
+    if (req.method() === 'POST' && isExactJenkinsJobActionUrl(req.url(), config.jobUrl, { allowDelay: false })) {
+      postObserved = true;
+    }
+  };
+
+  const onResponse = (res: Response) => {
+    if (res.request().method() === 'POST' && isExactJenkinsJobActionUrl(res.url(), config.jobUrl, { allowDelay: false })) {
+      postResponse = { status: res.status(), url: res.url() };
+    }
+  };
+
+  page.on('request', onRequest);
+  page.on('response', onResponse);
+
+  const submittedAt = new Date().toISOString();
+  try {
+    const remainingTimeout = Math.max(1, Math.min(deadline.remainingMs(), config.timeoutMs));
+    const responsePromise = page.waitForResponse(
+      (res) => res.request().method() === 'POST' && isExactJenkinsJobActionUrl(res.url(), config.jobUrl, { allowDelay: false }),
+      { timeout: remainingTimeout },
+    );
+    const clickPromise = buildButton.click({ timeout: remainingTimeout });
+    const [response] = await Promise.all([responsePromise, clickPromise]);
+    const status = response.status();
+    if (status < 400) {
+      return {
+        state: 'submitted',
+        jobUrl: config.jobUrl,
+        buildPageUrl,
+        submittedAt,
+        responseStatus: status,
+      };
+    }
+    return {
+      state: 'rejected',
+      jobUrl: config.jobUrl,
+      buildPageUrl,
+      submittedAt,
+      responseStatus: status,
+    };
+  } catch (error) {
+    if (postObserved) {
+      return {
+        state: 'submission-unknown',
+        jobUrl: config.jobUrl,
+        buildPageUrl,
+        submittedAt,
+        ...(postResponse === undefined ? {} : { responseStatus: postResponse.status }),
+      };
+    }
+    throw new JenkinsFlowError(formatJenkinsFailure('Submit parameterized build', error, config, page));
+  } finally {
+    page.off('request', onRequest);
+    page.off('response', onResponse);
+  }
+}
+</file>
+
 <file path="src/jenkins/errors.ts">
 import type { Page } from '@playwright/test';
 
@@ -7640,22 +9025,22 @@ import type { LocatorSelector } from '../types.js';
 type AriaRole = Parameters<Page['getByRole']>[0];
 
 /** Map the small config selector contract to user-facing Playwright locators. */
-export function locatorFor(page: Page, selector: LocatorSelector): Locator {
+export function locatorFor(root: Page | Locator, selector: LocatorSelector): Locator {
   switch (selector.kind) {
     case 'role': {
       const role = selector.value as AriaRole;
       return selector.name === undefined
-        ? page.getByRole(role)
-        : page.getByRole(role, { name: selector.name });
+        ? root.getByRole(role)
+        : root.getByRole(role, { name: selector.name });
     }
     case 'label':
-      return page.getByLabel(selector.value);
+      return root.getByLabel(selector.value);
     case 'testId':
-      return page.getByTestId(selector.value);
+      return root.getByTestId(selector.value);
     case 'text':
-      return page.getByText(selector.value);
+      return root.getByText(selector.value);
     case 'css':
-      return page.locator(selector.value);
+      return root.locator(selector.value);
   }
 }
 
@@ -7783,8 +9168,187 @@ export function isExactJobUrl(candidateUrl: string, jobUrl: string): boolean {
   }
 }
 
+export interface JenkinsJobActionUrlOptions {
+  readonly allowDelay?: boolean;
+  readonly actionName?: string;
+}
+
+export function isExactJenkinsJobActionUrl(
+  candidateUrl: string,
+  jobUrl: string,
+  options: JenkinsJobActionUrlOptions = {},
+): boolean {
+  try {
+    const candidate = new URL(candidateUrl);
+    const expected = new URL(jobUrl);
+    if (candidate.origin !== expected.origin) return false;
+    if (candidate.username !== '' || candidate.password !== '') return false;
+    if (candidate.hash !== '') return false;
+    if (expected.hash !== '' || expected.search !== '') return false;
+
+    const action = (options.actionName ?? 'build').replace(/^\/+|\/+$/gu, '');
+    const expectedJobPath = normalizedPathname(jobUrl);
+    const expectedActionPath = `${expectedJobPath}/${action}`;
+    const candidatePath = normalizedPathname(candidateUrl);
+    if (candidatePath !== expectedActionPath) return false;
+
+    const expectedSegments = jenkinsJobPathSegments(jobUrl);
+    const candidateSegments = jenkinsJobPathSegments(candidateUrl);
+    if (expectedSegments.length !== candidateSegments.length) return false;
+    for (let i = 0; i < expectedSegments.length; i += 1) {
+      if (expectedSegments[i] !== candidateSegments[i]) return false;
+    }
+
+    if (candidate.search === '') return true;
+    if (options.allowDelay === true && candidate.search === '?delay=0sec') return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function validateJenkinsJobActionUrl(
+  candidateUrl: string,
+  jobUrl: string,
+  baseUrl: string,
+  options: JenkinsJobActionUrlOptions = {},
+): string {
+  const allowed = assertAllowedUrl(candidateUrl, baseUrl, [], 'Jenkins job action URL');
+  if (!isExactJenkinsJobActionUrl(allowed, jobUrl, options)) {
+    throw new Error(`URL '${candidateUrl}' is not the exact Jenkins job action URL for '${jobUrl}'`);
+  }
+  return allowed;
+}
+
 export function validateJenkinsUrl(candidateUrl: string, baseUrl: string): string {
   return assertAllowedUrl(candidateUrl, baseUrl, [], 'Jenkins URL');
+}
+</file>
+
+<file path="src/project/auto-build-runner.ts">
+import type { Browser, BrowserContext, Page } from '@playwright/test';
+
+import { formatDiagnostic } from '../config-errors.js';
+import { resolveProjectSecrets } from '../config/project-config-loader.js';
+import type { NormalizedProjectConfig, ProjectSecrets } from '../config/config-types.js';
+import { defaultLaunch, type BrowserLauncher } from '../browser-launcher.js';
+import { executeJenkinsAutoBuildWorkflow, type AutoBuildWorkflowResult } from './project-workflow.js';
+import { settleCleanup, WorkflowDeadline } from '../workflow/workflow-deadline.js';
+
+export type AutoBuildOutcomeState =
+  | 'submitted'
+  | 'rejected'
+  | 'submission-unknown'
+  | 'failed-before-submit';
+
+export interface AutoBuildRunOutcome {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly state: AutoBuildOutcomeState;
+  readonly jobUrl: string;
+  readonly buildPageUrl?: string;
+  readonly submittedAt?: string;
+  readonly responseStatus?: number;
+  readonly error?: string;
+  readonly exitCode: 0 | 1;
+}
+
+export interface AutoBuildRunnerDependencies {
+  readonly runtimeEnvironment?: NodeJS.ProcessEnv;
+  readonly launchBrowser?: BrowserLauncher;
+  readonly executeWorkflow?: (
+    page: Page,
+    project: NormalizedProjectConfig,
+    secrets: ProjectSecrets,
+    deadline: WorkflowDeadline,
+  ) => Promise<AutoBuildWorkflowResult>;
+  readonly configureContext?: (context: BrowserContext) => Promise<void>;
+}
+
+export async function runAutoBuildProject(
+  project: NormalizedProjectConfig,
+  dependencies: AutoBuildRunnerDependencies = {},
+): Promise<AutoBuildRunOutcome> {
+  const env = dependencies.runtimeEnvironment ?? process.env;
+  let secrets: ProjectSecrets | undefined;
+  let secretValues: string[] = [];
+  let browser: Browser | undefined;
+  let context: BrowserContext | undefined;
+
+  try {
+    if (!project.enabled) {
+      throw new Error(`Project '${project.id}' is disabled`);
+    }
+    if (project.runType !== 'auto-build') {
+      throw new Error(`Project '${project.id}' is not configured for auto-build`);
+    }
+
+    secrets = resolveProjectSecrets(project, env);
+    secretValues = [secrets.username, secrets.password].filter(Boolean);
+
+    const deadline = new WorkflowDeadline(project.timeoutMs);
+    deadline.requireRemaining();
+    const launcher = dependencies.launchBrowser ?? defaultLaunch;
+    browser = await launcher(project.browser, env);
+
+    context = await browser.newContext();
+    if (dependencies.configureContext !== undefined) {
+      await dependencies.configureContext(context);
+    }
+
+    const page = await context.newPage();
+    const workflow = dependencies.executeWorkflow ?? executeJenkinsAutoBuildWorkflow;
+    const result = await workflow(page, project, secrets, deadline);
+
+    if (result.state === 'submitted') {
+      return {
+        projectId: project.id,
+        projectName: project.name,
+        state: 'submitted',
+        jobUrl: project.jobUrl,
+        buildPageUrl: result.buildPageUrl,
+        submittedAt: result.submittedAt,
+        ...(result.responseStatus === undefined ? {} : { responseStatus: result.responseStatus }),
+        exitCode: 0,
+      };
+    }
+
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      state: result.state,
+      jobUrl: project.jobUrl,
+      buildPageUrl: result.buildPageUrl,
+      submittedAt: result.submittedAt,
+      ...(result.responseStatus === undefined ? {} : { responseStatus: result.responseStatus }),
+      exitCode: 1,
+    };
+  } catch (error) {
+    const safeError = formatDiagnostic(error, secretValues);
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      state: 'failed-before-submit',
+      jobUrl: project.jobUrl,
+      error: safeError,
+      exitCode: 1,
+    };
+  } finally {
+    if (secrets !== undefined) {
+      try {
+        (secrets as unknown as Record<string, unknown>)['username'] = '';
+        (secrets as unknown as Record<string, unknown>)['password'] = '';
+      } catch {
+        // Ignore if immutable
+      }
+    }
+    if (context !== undefined) {
+      await settleCleanup(() => context!.close());
+    }
+    if (browser !== undefined) {
+      await settleCleanup(() => browser!.close());
+    }
+  }
 }
 </file>
 
@@ -8465,6 +10029,7 @@ import type { Page } from '@playwright/test';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
 import type { NormalizedProjectConfig, ProjectSecrets } from '../config/config-types.js';
 import { openJenkinsJob, submitJenkinsLogin } from '../jenkins/auth.js';
+import { triggerParameterizedBuild, type JenkinsBuildTriggerResult } from '../jenkins/build-trigger.js';
 import type { JenkinsRunnerConfig, JenkinsRunnerSelectors } from '../jenkins/runner-config.js';
 import { boundedDiagnostics } from '../workflow/diagnostics.js';
 import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
@@ -8530,6 +10095,20 @@ export const executeJenkinsWorkflow: ProjectWorkflow = async (
     },
   };
 };
+
+export type AutoBuildWorkflowResult = JenkinsBuildTriggerResult;
+
+export async function executeJenkinsAutoBuildWorkflow(
+  page: Page,
+  project: NormalizedProjectConfig,
+  secrets: ProjectSecrets,
+  deadline: WorkflowDeadline,
+): Promise<AutoBuildWorkflowResult> {
+  const config = runnerConfig(project, secrets);
+  await submitJenkinsLogin(page, config, deadline);
+  await openJenkinsJob(page, config, deadline);
+  return triggerParameterizedBuild(page, config, deadline);
+}
 </file>
 
 <file path="src/reporting/aggregate-report-renderer.ts">
@@ -12887,13 +14466,17 @@ export interface AggregateReportResult {
 </file>
 
 <file path="src/runner.ts">
-import { chromium, firefox, webkit, type Browser, type BrowserContext } from '@playwright/test';
+import type { Browser, BrowserContext } from '@playwright/test';
 
 import { ArtifactPaths } from './artifacts/artifact-paths.js';
 import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
 import { writeAggregateData } from './artifacts/result-writer.js';
 import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
 import { sanitizePersistedWarnings } from './artifacts/result-validation.js';
+import { selectReportProjects } from './config/project-run-selection.js';
+import { defaultLaunch, launchOptions, type BrowserLauncher } from './browser-launcher.js';
+
+export { launchOptions };
 import { loadProjectConfig } from './config/project-config-loader.js';
 import { jenkinsJobPathSegments } from './jenkins/url-identity.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
@@ -12903,7 +14486,6 @@ import type { ProjectOutcome, RunnerExecutionResult } from './project/project-ty
 import type { BrowserName } from './types.js';
 import { CLEANUP_SETTLE_TIMEOUT_MS, withHardTimeout } from './workflow/workflow-deadline.js';
 
-type BrowserLauncher = (browserName: BrowserName, environment?: NodeJS.ProcessEnv) => Promise<Browser>;
 type ProjectExecutor = (
   project: NormalizedProjectConfig,
   dependencies: ProjectRunnerDependencies,
@@ -12933,46 +14515,6 @@ function enabledConfiguration(projects: readonly NormalizedProjectConfig[]): {
     throw new Error('All enabled projects must use one global report output root');
   }
   return { projects: enabled, browserName: first.browser, reportRoot: first.artifactDir };
-}
-
-export function launchOptions(environment: NodeJS.ProcessEnv): {
-  executablePath?: string;
-  headless?: boolean;
-  slowMo?: number;
-} {
-  const executablePath = environment['PLAYWRIGHT_EXECUTABLE_PATH']?.trim();
-  const headlessValue = environment['PLAYWRIGHT_HEADLESS']?.trim().toLowerCase();
-  const headedValue = (environment['PLAYWRIGHT_HEADED'] ?? environment['HEADED'])?.trim().toLowerCase();
-  const slowMoValue = (environment['PLAYWRIGHT_SLOW_MO'] ?? environment['PLAYWRIGHT_ACTION_DELAY'])?.trim();
-  let headless: boolean | undefined;
-  if (headlessValue !== undefined && headlessValue !== '') {
-    if (['1', 'true', 'yes'].includes(headlessValue)) headless = true;
-    else if (['0', 'false', 'no'].includes(headlessValue)) headless = false;
-    else throw new Error('PLAYWRIGHT_HEADLESS must be true or false');
-  } else if (headedValue !== undefined && headedValue !== '') {
-    if (['1', 'true', 'yes'].includes(headedValue)) headless = false;
-    else if (['0', 'false', 'no'].includes(headedValue)) headless = true;
-  }
-  let slowMo: number | undefined;
-  if (slowMoValue !== undefined && slowMoValue !== '') {
-    const parsed = Number(slowMoValue);
-    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
-      throw new Error('PLAYWRIGHT_SLOW_MO must be a non-negative integer');
-    }
-    slowMo = parsed;
-  }
-  return {
-    ...(executablePath === undefined || executablePath === '' ? {} : { executablePath }),
-    ...(headless === undefined ? {} : { headless }),
-    ...(slowMo === undefined ? {} : { slowMo }),
-  };
-}
-
-async function defaultLaunch(browserName: BrowserName, environment: NodeJS.ProcessEnv = process.env): Promise<Browser> {
-  const options = launchOptions(environment);
-  if (browserName === 'firefox') return firefox.launch(options);
-  if (browserName === 'webkit') return webkit.launch(options);
-  return chromium.launch(options);
 }
 
 interface HistoricalRun {
@@ -13115,8 +14657,9 @@ export async function runFromConfig(
   env: NodeJS.ProcessEnv = process.env,
   dependencies: Omit<RunnerDependencies, 'runtimeEnvironment'> = {},
 ): Promise<RunnerExecutionResult> {
-  const projects = loadProjectConfig(filePath, env);
-  return runConfiguredProjects(projects, { ...dependencies, runtimeEnvironment: env });
+  const allProjects = loadProjectConfig(filePath, env);
+  const reportProjects = selectReportProjects(allProjects);
+  return runConfiguredProjects(reportProjects, { ...dependencies, runtimeEnvironment: env });
 }
 </file>
 
@@ -104663,6 +106206,179 @@ test('rejects unsafe manifest discovery limits', async () => {
 });
 </file>
 
+<file path="tests/unit/auto-build-runner.spec.ts">
+import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+
+import { normalizeProjectConfigDocument } from '../../src/config.js';
+import type { NormalizedProjectConfig, ProjectConfigInput } from '../../src/config/config-types.js';
+import { runAutoBuildProject } from '../../src/project/auto-build-runner.js';
+
+function autoBuildProject(overrides: Partial<ProjectConfigInput> = {}): NormalizedProjectConfig {
+  const targetId = overrides.id ?? 'service-a';
+  const doc = normalizeProjectConfigDocument({
+    schemaVersion: 1,
+    projects: [
+      {
+        id: 'service-a',
+        name: 'Service A',
+        enabled: true,
+        runType: 'auto-build',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/service-a/',
+        timeoutMs: 5_000,
+        browser: 'chromium',
+        artifactDir: 'reports',
+        credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' },
+        sourceOrigins: {
+          jenkins: ['https://jenkins.example'],
+          snyk: ['https://snyk.example'],
+          sonarqube: ['https://sonarqube.example'],
+        },
+        ...overrides,
+      },
+      {
+        id: 'dummy-enabled',
+        name: 'Dummy Enabled',
+        enabled: true,
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/dummy/',
+        credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' },
+        sourceOrigins: {
+          jenkins: ['https://jenkins.example'],
+          snyk: ['https://snyk.example'],
+          sonarqube: ['https://sonarqube.example'],
+        },
+      },
+    ],
+  });
+  return doc.find((p) => p.id === targetId)!;
+}
+function mockBrowser(trackers: { contextClosed?: () => void; browserClosed?: () => void } = {}) {
+  const context = {
+    newPage: async () => ({} as Page),
+    close: async () => {
+      trackers.contextClosed?.();
+    },
+  } as unknown as BrowserContext;
+
+  const browser = {
+    newContext: async () => context,
+    close: async () => {
+      trackers.browserClosed?.();
+    },
+  } as unknown as Browser;
+
+  return { browser, context };
+}
+
+const mockEnv = { A_USER: 'test-user', A_PASSWORD: 'super-secret-password' };
+
+test('runs auto-build workflow successfully and returns submitted state with exit code 0', async () => {
+  const { browser } = mockBrowser();
+  const project = autoBuildProject();
+  const outcome = await runAutoBuildProject(project, {
+    runtimeEnvironment: mockEnv,
+    launchBrowser: async () => browser,
+    executeWorkflow: async () => ({
+      state: 'submitted',
+      jobUrl: project.jobUrl,
+      buildPageUrl: `${project.jobUrl}build`,
+      submittedAt: new Date().toISOString(),
+      responseStatus: 302,
+    }),
+  });
+
+  expect(outcome.state).toBe('submitted');
+  expect(outcome.exitCode).toBe(0);
+  expect(outcome.projectId).toBe('service-a');
+  expect(outcome.projectName).toBe('Service A');
+  expect(outcome.responseStatus).toBe(302);
+});
+
+test('handles rejected build state with exit code 1', async () => {
+  const { browser } = mockBrowser();
+  const project = autoBuildProject();
+  const outcome = await runAutoBuildProject(project, {
+    runtimeEnvironment: mockEnv,
+    launchBrowser: async () => browser,
+    executeWorkflow: async () => ({
+      state: 'rejected',
+      jobUrl: project.jobUrl,
+      buildPageUrl: `${project.jobUrl}build`,
+      submittedAt: new Date().toISOString(),
+      responseStatus: 403,
+    }),
+  });
+
+  expect(outcome.state).toBe('rejected');
+  expect(outcome.exitCode).toBe(1);
+  expect(outcome.responseStatus).toBe(403);
+});
+
+test('handles submission-unknown state with exit code 1', async () => {
+  const { browser } = mockBrowser();
+  const project = autoBuildProject();
+  const outcome = await runAutoBuildProject(project, {
+    runtimeEnvironment: mockEnv,
+    launchBrowser: async () => browser,
+    executeWorkflow: async () => ({
+      state: 'submission-unknown',
+      jobUrl: project.jobUrl,
+      buildPageUrl: `${project.jobUrl}build`,
+      submittedAt: new Date().toISOString(),
+    }),
+  });
+
+  expect(outcome.state).toBe('submission-unknown');
+  expect(outcome.exitCode).toBe(1);
+});
+
+test('fails closed when project is disabled or configured for report', async () => {
+  const { browser } = mockBrowser();
+  const disabled = autoBuildProject({ enabled: false });
+  const outcomeDisabled = await runAutoBuildProject(disabled, {
+    runtimeEnvironment: mockEnv,
+    launchBrowser: async () => browser,
+  });
+  expect(outcomeDisabled.state).toBe('failed-before-submit');
+  expect(outcomeDisabled.exitCode).toBe(1);
+  expect(outcomeDisabled.error).toContain('disabled');
+
+  const reportProject = autoBuildProject({ runType: 'report' });
+  const outcomeReport = await runAutoBuildProject(reportProject, {
+    runtimeEnvironment: mockEnv,
+    launchBrowser: async () => browser,
+  });
+  expect(outcomeReport.state).toBe('failed-before-submit');
+  expect(outcomeReport.exitCode).toBe(1);
+  expect(outcomeReport.error).toContain('not configured for auto-build');
+});
+
+test('cleans up context and browser resources even when workflow throws', async () => {
+  let contextClosed = false;
+  let browserClosed = false;
+  const { browser } = mockBrowser({
+    contextClosed: () => { contextClosed = true; },
+    browserClosed: () => { browserClosed = true; },
+  });
+
+  const project = autoBuildProject();
+  const outcome = await runAutoBuildProject(project, {
+    runtimeEnvironment: mockEnv,
+    launchBrowser: async () => browser,
+    executeWorkflow: async () => {
+      throw new Error('Failure while opening job with super-secret-password');
+    },
+  });
+
+  expect(outcome.state).toBe('failed-before-submit');
+  expect(outcome.exitCode).toBe(1);
+  expect(outcome.error).not.toContain('super-secret-password');
+  expect(contextClosed).toBe(true);
+  expect(browserClosed).toBe(true);
+});
+</file>
+
 <file path="tests/unit/contract-hardening.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -104978,6 +106694,210 @@ test('keeps direct same-job reruns in immutable report folders and aggregate lin
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+</file>
+
+<file path="tests/unit/jenkins-build-trigger.spec.ts">
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { test, expect } from '@playwright/test';
+
+import { triggerParameterizedBuild } from '../../src/jenkins/build-trigger.js';
+import { JenkinsFlowError } from '../../src/jenkins/errors.js';
+import { DEFAULT_JENKINS_RUNNER_SELECTORS, type JenkinsRunnerConfig } from '../../src/jenkins/runner-config.js';
+import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
+
+function runnerConfig(baseUrl: string): JenkinsRunnerConfig {
+  return {
+    baseUrl,
+    loginUrl: `${baseUrl}/login`,
+    jobUrl: `${baseUrl}/job/service-a/`,
+    username: 'test-user',
+    password: 'super-secret-password',
+    timeoutMs: 2_000,
+    browser: 'chromium',
+    selectors: DEFAULT_JENKINS_RUNNER_SELECTORS,
+  };
+}
+
+async function listen(
+  handler: (request: IncomingMessage, response: ServerResponse) => void,
+): Promise<{ server: Server; baseUrl: string }> {
+  const server = createServer(handler);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return { server, baseUrl: `http://127.0.0.1:${address.port}/jenkins` };
+}
+async function close(server: Server): Promise<void> {
+  if ('closeAllConnections' in server && typeof server.closeAllConnections === 'function') {
+    server.closeAllConnections();
+  }
+  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+}
+
+const VALID_FORM = '<div id="bottom-sticker"><form method="POST" action="/jenkins/job/service-a/build"><button class="jenkins-button jenkins-button--primary jenkins-!-build-color">Build</button></form></div>';
+
+test('submits parameterized build when side-panel link and bottom-sticker form are valid', async ({ page }) => {
+  let postCount = 0;
+  const { server, baseUrl } = await listen((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<div id="side-panel"><a href="/jenkins/job/service-a/build">Build with Parameters</a></div>');
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/build') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(VALID_FORM);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/jenkins/job/service-a/build') {
+      postCount += 1;
+      response.writeHead(302, { location: '/jenkins/job/service-a/' });
+      response.end();
+      return;
+    }
+    response.writeHead(404);
+    response.end('not found');
+  });
+  try {
+    const config = runnerConfig(baseUrl);
+    await page.goto(`${baseUrl}/job/service-a/`);
+    const result = await triggerParameterizedBuild(page, config, new WorkflowDeadline(2_000));
+    expect(result.state).toBe('submitted');
+    expect(result.jobUrl).toBe(config.jobUrl);
+    expect(result.responseStatus).toBe(302);
+    expect(postCount).toBe(1);
+  } finally {
+    await close(server);
+  }
+});
+
+test('handles rejected build response >= 400', async ({ page }) => {
+  let postCount = 0;
+  const { server, baseUrl } = await listen((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<div id="side-panel"><a href="/jenkins/job/service-a/build">Build with Parameters</a></div>');
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/build') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(VALID_FORM);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/jenkins/job/service-a/build') {
+      postCount += 1;
+      response.writeHead(403, { 'content-type': 'text/plain' });
+      response.end('Forbidden');
+      return;
+    }
+    response.writeHead(404);
+    response.end('not found');
+  });
+  try {
+    const config = runnerConfig(baseUrl);
+    await page.goto(`${baseUrl}/job/service-a/`);
+    const result = await triggerParameterizedBuild(page, config, new WorkflowDeadline(2_000));
+    expect(result.state).toBe('rejected');
+    expect(result.responseStatus).toBe(403);
+    expect(postCount).toBe(1);
+  } finally {
+    await close(server);
+  }
+});
+
+test('handles post-observed timeout as submission-unknown without retry', async ({ page }) => {
+  let postCount = 0;
+  const { server, baseUrl } = await listen((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<div id="side-panel"><a href="/jenkins/job/service-a/build">Build with Parameters</a></div>');
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/build') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(VALID_FORM);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/jenkins/job/service-a/build') {
+      postCount += 1;
+      return;
+    }
+    response.writeHead(404);
+    response.end('not found');
+  });
+  try {
+    const config = { ...runnerConfig(baseUrl), timeoutMs: 800 };
+    await page.goto(`${baseUrl}/job/service-a/`);
+    const result = await triggerParameterizedBuild(page, config, new WorkflowDeadline(800));
+    expect(result.state).toBe('submission-unknown');
+    expect(postCount).toBe(1);
+  } finally {
+    await close(server);
+  }
+});
+
+test('rejects link outside #side-panel and button outside #bottom-sticker', async ({ page }) => {
+  const { server, baseUrl } = await listen((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<div id="main-panel"><a href="/jenkins/job/service-a/build">Build with Parameters</a></div>');
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  try {
+    const config = runnerConfig(baseUrl);
+    await page.goto(`${baseUrl}/job/service-a/`);
+    await expect(triggerParameterizedBuild(page, config, new WorkflowDeadline(1_000))).rejects.toThrow(JenkinsFlowError);
+  } finally {
+    await close(server);
+  }
+});
+
+test('rejects button missing required classes or form pointing to foreign action', async ({ page }) => {
+  const { server, baseUrl } = await listen((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<div id="side-panel"><a href="/jenkins/job/service-a/build">Build with Parameters</a></div>');
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/build') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<div id="bottom-sticker"><form method="POST" action="/jenkins/job/other-job/build"><button class="jenkins-button">Build</button></form></div>');
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  try {
+    const config = runnerConfig(baseUrl);
+    await page.goto(`${baseUrl}/job/service-a/`);
+    await expect(triggerParameterizedBuild(page, config, new WorkflowDeadline(1_000))).rejects.toThrow(JenkinsFlowError);
+  } finally {
+    await close(server);
+  }
+});
+
+test('redacts credentials from error diagnostics', async ({ page }) => {
+  const config = runnerConfig('http://127.0.0.1:9999/jenkins');
+  let thrownError: Error | undefined;
+  try {
+    await triggerParameterizedBuild(page, config, new WorkflowDeadline(200));
+  } catch (error) {
+    thrownError = error as Error;
+  }
+  expect(thrownError).toBeDefined();
+  expect(thrownError?.message).not.toContain('super-secret-password');
 });
 </file>
 
@@ -107031,7 +108951,7 @@ import type { CaptureResult } from '../../src/project/project-runner.js';
 import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
 import { WorkflowDeadline, withWorkflowDeadlineAndLateResource } from '../../src/workflow/workflow-deadline.js';
-import { launchOptions, runConfiguredProjects } from '../../src/runner.js';
+import { launchOptions, runConfiguredProjects, runFromConfig } from '../../src/runner.js';
 
 function projectFile(root: string): string {
   const filePath = path.join(root, 'projects.json');
@@ -107308,6 +109228,47 @@ test('configures launchOptions with executablePath, headless, and slowMo action 
   expect(() => launchOptions({ PLAYWRIGHT_SLOW_MO: 'abc' })).toThrow(/non-negative/iu);
   expect(() => launchOptions({ PLAYWRIGHT_SLOW_MO: '12.5' })).toThrow(/non-negative/iu);
   expect(() => launchOptions({ PLAYWRIGHT_HEADLESS: 'invalid' })).toThrow(/true or false/iu);
+});
+
+test('runFromConfig executes report projects only and excludes auto-build projects', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-jobs-report-select-'));
+  const environment = {
+    A_USER: 'user-a',
+    A_PASSWORD: 'secret-password-a',
+    B_USER: 'user-b',
+    B_PASSWORD: 'secret-password-b',
+  };
+  const executedProjectIds: string[] = [];
+  try {
+    const filePath = path.join(root, 'projects.json');
+    fs.writeFileSync(filePath, JSON.stringify({
+      schemaVersion: 1,
+      defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
+      projects: [
+        { id: 'report-proj', name: 'Report Proj', runType: 'report', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/report-proj/', credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
+        { id: 'build-proj', name: 'Build Proj', runType: 'auto-build', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/build-proj/', credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
+      ],
+    }), { mode: 0o600 });
+
+    const result = await runFromConfig(filePath, environment, {
+      launchBrowser: async () => fakeBrowser(),
+      executeProject: async (project) => {
+        executedProjectIds.push(project.id);
+        return {
+          projectId: project.id,
+          name: project.name,
+          state: 'success',
+          runId: 'run-1',
+          warnings: [],
+        };
+      },
+    });
+
+    expect(executedProjectIds).toEqual(['report-proj']);
+    expect(result.outcomes.map((o) => o.projectId)).toEqual(['report-proj']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 </file>
 

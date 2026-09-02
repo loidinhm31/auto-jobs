@@ -11,7 +11,7 @@ import type { CaptureResult } from '../../src/project/project-runner.js';
 import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
 import { WorkflowDeadline, withWorkflowDeadlineAndLateResource } from '../../src/workflow/workflow-deadline.js';
-import { launchOptions, runConfiguredProjects } from '../../src/runner.js';
+import { launchOptions, runConfiguredProjects, runFromConfig } from '../../src/runner.js';
 
 function projectFile(root: string): string {
   const filePath = path.join(root, 'projects.json');
@@ -288,4 +288,45 @@ test('configures launchOptions with executablePath, headless, and slowMo action 
   expect(() => launchOptions({ PLAYWRIGHT_SLOW_MO: 'abc' })).toThrow(/non-negative/iu);
   expect(() => launchOptions({ PLAYWRIGHT_SLOW_MO: '12.5' })).toThrow(/non-negative/iu);
   expect(() => launchOptions({ PLAYWRIGHT_HEADLESS: 'invalid' })).toThrow(/true or false/iu);
+});
+
+test('runFromConfig executes report projects only and excludes auto-build projects', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-jobs-report-select-'));
+  const environment = {
+    A_USER: 'user-a',
+    A_PASSWORD: 'secret-password-a',
+    B_USER: 'user-b',
+    B_PASSWORD: 'secret-password-b',
+  };
+  const executedProjectIds: string[] = [];
+  try {
+    const filePath = path.join(root, 'projects.json');
+    fs.writeFileSync(filePath, JSON.stringify({
+      schemaVersion: 1,
+      defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
+      projects: [
+        { id: 'report-proj', name: 'Report Proj', runType: 'report', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/report-proj/', credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
+        { id: 'build-proj', name: 'Build Proj', runType: 'auto-build', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/build-proj/', credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
+      ],
+    }), { mode: 0o600 });
+
+    const result = await runFromConfig(filePath, environment, {
+      launchBrowser: async () => fakeBrowser(),
+      executeProject: async (project) => {
+        executedProjectIds.push(project.id);
+        return {
+          projectId: project.id,
+          name: project.name,
+          state: 'success',
+          runId: 'run-1',
+          warnings: [],
+        };
+      },
+    });
+
+    expect(executedProjectIds).toEqual(['report-proj']);
+    expect(result.outcomes.map((o) => o.projectId)).toEqual(['report-proj']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

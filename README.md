@@ -6,9 +6,12 @@ reads an explicit schema-v1 JSON configuration file; checked-in templates are
 offline test fixtures.
 
 See [multi-project configuration](./docs/multi-project-configuration.md) for
-the schema-v1 contract, [architecture](./docs/architecture.md) for design and
-security boundaries, and [release gates](./docs/release-gates.md) for the
-validation matrix.
+the schema-v1 contract, [architecture](./docs/architecture.md) and
+[system architecture](./docs/system-architecture.md) for design and security
+boundaries, [code standards](./docs/code-standards.md) for implementation
+conventions, [project overview/PDR](./docs/project-overview-pdr.md) for
+requirements, and [release gates](./docs/release-gates.md) for validation
+commands.
 
 ## Prerequisites
 

@@ -1,10 +1,10 @@
 # Multi-project configuration
 
 The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
-projects, and exposes an explicit run-mode contract. Mode is never inferred
-from a URL, selector, CLI name, or environment. The current implementation is
-in `src/config/project-config-schema.ts`, `src/config/project-config-loader.ts`,
-`src/config/project-run-selection.ts`, and `src/runner.ts`.
+projects, and exposes explicit report and auto-build execution boundaries.
+Mode is never inferred from a URL, selector, CLI name, or environment. The
+configuration contract is implemented in `src/config/` and consumed by
+`src/runner.ts` (report) or `src/project/auto-build-runner.ts` (auto-build).
 
 ## Source selection
 
@@ -57,10 +57,10 @@ normalizing the document:
 | `selectReportProjects(projects)` | Returns a frozen list of enabled projects whose normalized `runType` is `report`; disabled and `auto-build` entries are excluded. Throws a configuration error when none remain. |
 | `selectAutoBuildProject(projects, projectId)` | Matches one project by exact, non-empty `id`; returns it only when enabled and normalized as `auto-build`. Missing, disabled, and `report` projects are rejected. |
 
-Both helpers are exported from `src/config.ts`. They do not rewrite a
-project's mode, infer a target from `jobUrl`, or trigger Jenkins actions.
-Callers must choose one helper and one executor; the Phase 01 contract keeps
-report collection separate from the auto-build side effect.
+Both helpers are exported from `src/config.ts` and are side-effect free. They
+do not rewrite a project's mode, infer a target from `jobUrl`, or submit a
+Jenkins request. Callers must choose one helper and one executor; report
+collection and the auto-build side effect remain separate.
 
 ## Selector configuration
 
@@ -227,20 +227,44 @@ data includes the direct schema-3 state and bounded diagnostics; persistence
 uses a bounded fallback after the workflow deadline and records a warning if
 both persistence attempts fail.
 
-## Sequential and lock boundaries
+## Sequential and mode boundaries
 
-Enabled projects run one at a time through one browser process, with a fresh
-Playwright context per project and one absolute workflow deadline per project.
-Each project authenticates through its exact `loginUrl`, opens its exact
-`jobUrl`, discovers publisher destinations once, and captures the configured
-Snyk and SonarQube evidence. There is no job search, trigger, queue/build
-correlation, terminal polling, or build-number path.
+Enabled report projects run one at a time through one browser process, with a
+fresh Playwright context and one absolute workflow deadline per project. Each
+project authenticates through its exact `loginUrl`, opens its exact `jobUrl`,
+discovers publisher destinations once, and captures the configured Snyk and
+SonarQube evidence. There is no job search, trigger, queue/build correlation,
+terminal polling, or build-number path in this report workflow.
 
-`runType: auto-build` does not cause a build in this report workflow. The mode
-is acted on only when a caller selects the project with
-`selectAutoBuildProject`; Phase 01 adds no trigger, queue, polling, or build
-submission behavior. A report dispatcher should pass only
-`selectReportProjects(...)` to the report executor.
+`runFromConfig` calls `selectReportProjects` before `runConfiguredProjects`, so
+`npm run report` never invokes an auto-build project even when both modes are
+present in the same file.
+
+### Explicit auto-build execution
+
+An integration that intentionally performs a build must first normalize the
+document, select one exact project, and then call the separate runner:
+
+```ts
+const project = selectAutoBuildProject(projects, projectId);
+const outcome = await runAutoBuildProject(project);
+```
+
+`selectAutoBuildProject` rejects an empty or missing ID, an unknown project,
+disabled projects, and projects whose normalized `runType` is `report`.
+`runAutoBuildProject` additionally fails closed if the supplied project is
+disabled or not `auto-build`; it resolves credential references, creates one
+browser/context/page, applies one absolute deadline, and always performs
+bounded cleanup.
+
+The auto-build workflow opens the exact configured job, validates one visible
+**Build with Parameters** link in `#side-panel`, validates one visible
+**Build** button and `POST` form in `#bottom-sticker`, and clicks once. Its
+result is one of `submitted`, `rejected`, `submission-unknown`, or
+`failed-before-submit`. It never changes parameters, searches jobs, polls a
+queue/build, retries after an observed POST, or writes report artifacts. The
+current report CLI has no auto-build command; a future control-plane caller
+must preserve these selection and confirmation boundaries.
 
 The schema has no source switch, existing-build mode, job-page override, build
 identity, or polling environment inputs. These are intentionally absent from
