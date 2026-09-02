@@ -33,7 +33,7 @@ test.describe('template build fixture', () => {
     expect(response?.body).toBe(fixture.buildHtml);
   });
 
-  test('routes POST to buildActionUrl with 303 redirect to jobUrl', async ({ page }) => {
+  test('routes POST to buildActionUrl and navigates to jobUrl', async ({ page }) => {
     const fixture = await loadTemplateReportFixture({});
     const recorder = await installTemplateReportRoutes(page.context(), fixture);
 
@@ -46,8 +46,9 @@ test.describe('template build fixture', () => {
     await page.locator('#bottom-sticker button[type="submit"]').click();
     const postResponse = await responsePromise;
 
-    expect(postResponse.status()).toBe(303);
-    expect(postResponse.headers()['location']).toBe(fixture.jobUrl);
+    expect(postResponse.status()).toBe(200);
+    await page.waitForURL(fixture.jobUrl);
+    expect(page.url()).toBe(fixture.jobUrl);
     expect(recorder.misses).toHaveLength(0);
   });
 

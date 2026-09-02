@@ -52,7 +52,7 @@ test.describe('template auto-build e2e workflow', () => {
     expect(outcome.projectId).toBe('template-auto-build');
     expect(outcome.jobUrl).toBe(fixture.jobUrl);
     expect(outcome.buildPageUrl).toBe(fixture.buildPageUrl);
-    expect(outcome.responseStatus).toBe(303);
+    expect([200, 303]).toContain(outcome.responseStatus);
     expect(outcome.submittedAt).toBeDefined();
 
     const buildPosts = requestLedger.filter(

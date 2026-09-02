@@ -1,0 +1,273 @@
+:root {
+  --bg-color: #f8fafc;
+  --card-bg: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --border-color: #cbd5e1;
+  --primary: #0369a1;
+  --primary-hover: #075985;
+  --primary-text: #ffffff;
+  --secondary: #e2e8f0;
+  --secondary-hover: #cbd5e1;
+  --secondary-text: #0f172a;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-text: #ffffff;
+  --status-success: #16a34a;
+  --status-warning: #d97706;
+  --status-error: #dc2626;
+  --focus-ring: #0284c7;
+  --mono-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--primary);
+  color: #fff;
+  padding: 8px 16px;
+  z-index: 100;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.app-header {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  padding: 1rem 1.5rem;
+}
+.header-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.header-container h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+.config-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.main-container {
+  max-width: 1200px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+}
+
+.dashboard-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.dashboard-section h2 {
+  margin-top: 0;
+  font-size: 1.25rem;
+  border-bottom: 1px solid var(--secondary);
+  padding-bottom: 0.5rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary { background: var(--primary); color: var(--primary-text); }
+.btn-primary:not(:disabled):hover { background: var(--primary-hover); }
+.btn-secondary { background: var(--secondary); color: var(--secondary-text); border-color: var(--border-color); }
+.btn-secondary:not(:disabled):hover { background: var(--secondary-hover); }
+.btn-danger { background: var(--danger); color: var(--danger-text); }
+.btn-danger:not(:disabled):hover { background: var(--danger-hover); }
+
+.status-banner {
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+.status-banner.hidden { display: none; }
+.status-banner.info { background: #e0f2fe; color: #0369a1; }
+.status-banner.success { background: #dcfce7; color: #15803d; }
+.status-banner.error { background: #fee2e2; color: #b91c1c; }
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.project-card {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1rem;
+  background: var(--bg-color);
+}
+.project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.5rem;
+}
+.project-card h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.project-card-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mono {
+  font-family: var(--mono-font);
+  word-break: break-all;
+}
+
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+#raw-json-textarea {
+  width: 100%;
+  font-family: var(--mono-font);
+  font-size: 0.875rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+.validation-msg {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+.validation-msg.valid { color: var(--status-success); }
+.validation-msg.invalid { color: var(--status-error); }
+
+.actions-bar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.run-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.run-card-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-idle { background: var(--secondary); color: var(--secondary-text); }
+.badge-queued { background: #fef08a; color: #854d0e; }
+.badge-running { background: #bae6fd; color: #075985; }
+.badge-succeeded { background: #bbf7d0; color: #166534; }
+.badge-failed { background: #fecaca; color: #991b1b; }
+.badge-unknown { background: #fed7aa; color: #9a3412; }
+
+.log-pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 1rem;
+  border-radius: 4px;
+  font-family: var(--mono-font);
+  font-size: 0.8125rem;
+  max-height: 250px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.confirm-dialog {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.5rem;
+  max-width: 500px;
+  background: var(--card-bg);
+}
+.confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.dialog-details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+.dialog-details dt { font-weight: 600; }
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

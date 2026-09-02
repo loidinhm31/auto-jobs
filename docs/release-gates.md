@@ -16,12 +16,13 @@ npm run typecheck
 npm run build
 npm run test:unit
 npm run test:e2e:templates
+npm run test:control
 npm run test:report
 npm run test:release:webkit
 ```
 
 `npm ci` does not download browsers. `npm run install:browsers` provisions
-both Chromium and WebKit before the native gates. The `test:release` script is the deterministic shorthand for typecheck, build, unit, Chromium template, generated-report, and WebKit template gates; it does not install dependencies or browsers:
+both Chromium and WebKit before the native gates. The `test:release` script is the deterministic shorthand for typecheck, build, unit, Chromium template, control UI, generated-report, and WebKit template gates; it does not install dependencies or browsers:
 
 ```sh
 npm run test:release
@@ -185,6 +186,23 @@ IPv4 interfaces. The server is read-only, unauthenticated, and serves only
 GET/HEAD requests below a canonical root containing the generated aggregate
 `index.html`. Use a firewall and a trusted network; this is not public
 hosting.
+
+## Control server gate
+
+`npm run serve:control` first builds the server and starts the interactive Control Dashboard on loopback.
+
+Flags and defaults:
+- Mode: control (`--control`)
+- Host: `127.0.0.1` (refuses LAN / non-loopback bindings)
+- Port: `4173`
+- Config root: `config/` (or `--config-root <dir>`)
+- Report root: `reports/` (or `--root <dir>`)
+
+Deterministic testing of the Control API and UI is executed via:
+```sh
+npm run test:control
+```
+which exercises config reading/atomic saving, validation errors, report execution, auto-build confirmation dialogs, and WCAG A/AA accessibility scanning in Chromium and WebKit.
 
 ## Browser-fixture boundary
 

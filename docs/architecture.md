@@ -366,7 +366,7 @@ folder or status. Persistence is best-effort; the aggregate still records the
 outcome when possible. Playwright test traces under `test-results/` are test
 evidence, not vendor report evidence.
 
-## Locking, cleanup, and report server
+## Locking, cleanup, and server modes
 
 The private report-root lease coordinates same-host work using token, PID,
 hostname, acquisition timestamp, and expiry. It is not a distributed lock or
@@ -378,26 +378,38 @@ Cleanup inspects only configured canonical report/staging roots, enforces
 bounded age/entry/byte/removal budgets, refuses symlink traversal, and
 preserves active, malformed, oversized, or ambiguous entries with warnings.
 
+### Report Server (`npm run serve:report`)
+
 `npm run serve:report` builds the launcher and serves an existing aggregate
 under `reports/` by default (`127.0.0.1:4173`). It does not generate reports.
 `REPORT_ROOT`, `REPORT_HOST`, `REPORT_PORT`, and explicit LAN opt-in control
 serving only; the server is read-only, unauthenticated, and limited to
 GET/HEAD below the canonical root.
 
+### Control Server (`npm run serve:control`)
+
+`npm run serve:control` builds and launches the interactive loopback control dashboard
+(`127.0.0.1:4173`). It exposes:
+- Safe config discovery (`GET /api/configs`) and atomic updates (`PUT /api/config`) with ETag and schema validation;
+- Single-mode execution (`POST /api/run`) for `report` or `auto-build` runs;
+- Run status and live logs (`GET /api/run`);
+- Local immutable report links (`GET /reports/...`).
+
+Control mode is restricted strictly to loopback (`127.0.0.1` / `localhost`) and refuses LAN binding. All mutations require strict Host and Origin validation and CSRF protection.
+
 ## Test and release boundary
 
-The deterministic order is `npm ci`, `npm run typecheck`, `npm run build`,
-`npm run test:unit`, `npm run test:e2e:templates`, and
-`npm run test:report`. `npm run test:release` is the shorthand for typecheck,
-build, unit, and generated-report gates. Template tests use exact-URL
+The deterministic order is `npm ci`, `npm run install:browsers`, `npm run typecheck`, `npm run build`,
+`npm run test:unit`, `npm run test:e2e:templates`, `npm run test:control`, `npm run test:report`, and `npm run test:release:webkit`. `npm run test:release` is the shorthand for typecheck,
+build, unit, template, control, generated-report, and WebKit gates. Template tests use exact-URL
 test-only routes and checked-in fixtures; they do not claim live Jenkins or
 vendor execution. Runtime smoke validation requires an authorized project
 JSON and injected credentials and is never part of the deterministic suite.
 
-Phase 2's focused unit coverage is in
+Phase 2 and Phase 3 focused unit coverage is in
 `tests/unit/jenkins-build-trigger.spec.ts`,
-`tests/unit/auto-build-runner.spec.ts`, and the report-selection assertions in
-`tests/unit/sequential-runner.spec.ts`. These tests use an in-process HTTP
-server or injected browser/workflow dependencies; they prove exact scoping,
+`tests/unit/auto-build-runner.spec.ts`, `tests/unit/template-build-fixture.spec.ts`, and the report-selection assertions in
+`tests/unit/sequential-runner.spec.ts`. Control API and UI coverage is in `tests/unit/control-config-api.spec.ts`, `tests/unit/control-run-api.spec.ts`, and `tests/e2e/control-page.spec.ts`. These tests prove exact scoping,
 URL/form validation, one-POST semantics, redaction, cleanup, and report-mode
 exclusion without contacting a live Jenkins controller.
+

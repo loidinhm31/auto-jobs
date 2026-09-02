@@ -1,0 +1,91 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="__CSRF_TOKEN_PLACEHOLDER__">
+  <title>Jenkins Control Dashboard</title>
+  <link rel="stylesheet" href="/assets/control-page.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="app-header">
+    <div class="header-container">
+      <h1>Jenkins Control Dashboard</h1>
+      <div class="config-selector-group">
+        <label for="config-select">Active Configuration:</label>
+        <select id="config-select" aria-label="Select Configuration"></select>
+        <button id="btn-reload" type="button" class="btn btn-secondary">Reload</button>
+        <button id="btn-save" type="button" class="btn btn-primary" disabled>Save Config</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content" class="main-container">
+    <div id="status-banner" class="status-banner hidden" role="status" aria-live="polite"></div>
+
+    <section aria-labelledby="section-projects-title" class="dashboard-section">
+      <h2 id="section-projects-title">Projects</h2>
+      <div id="projects-list" class="projects-grid"></div>
+    </section>
+
+    <section aria-labelledby="section-editor-title" class="dashboard-section">
+      <details id="json-editor-details">
+        <summary id="section-editor-title">Advanced: Raw JSON Configuration</summary>
+        <div class="editor-container">
+          <label for="raw-json-textarea" class="visually-hidden">Raw JSON configuration editor</label>
+          <textarea id="raw-json-textarea" rows="12" spellcheck="false" aria-label="Raw JSON configuration editor"></textarea>
+          <div class="editor-actions">
+            <button id="btn-apply-json" type="button" class="btn btn-secondary">Apply & Validate</button>
+            <span id="json-validation-msg" class="validation-msg" aria-live="polite"></span>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <section aria-labelledby="section-actions-title" class="dashboard-section">
+      <h2 id="section-actions-title">Execute Actions</h2>
+      <div class="actions-bar">
+        <button id="btn-run-reports" type="button" class="btn btn-primary">Generate Reports (All Enabled)</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="section-run-title" class="dashboard-section">
+      <h2 id="section-run-title">Current / Recent Run</h2>
+      <div id="run-status-card" class="run-card">
+        <div class="run-card-header">
+          <span id="run-status-badge" class="badge badge-idle">Idle</span>
+          <span id="run-id-display" class="run-id"></span>
+        </div>
+        <div id="run-result-box" class="run-result-box hidden"></div>
+        <div class="log-viewer">
+          <h3>Execution Logs</h3>
+          <pre id="run-logs" role="log" aria-live="polite" class="log-pre">No active run.</pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="build-confirm-dialog" class="confirm-dialog" aria-labelledby="dialog-title">
+    <form method="dialog" class="dialog-content">
+      <h2 id="dialog-title">Confirm Jenkins Auto-Build</h2>
+      <p>Are you sure you want to trigger a Jenkins build for the following project?</p>
+      <dl class="dialog-details">
+        <dt>Project ID:</dt>
+        <dd id="confirm-project-id"></dd>
+        <dt>Project Name:</dt>
+        <dd id="confirm-project-name"></dd>
+        <dt>Target Job URL:</dt>
+        <dd id="confirm-job-url" class="mono"></dd>
+      </dl>
+      <div class="dialog-actions">
+        <button type="button" id="btn-cancel-build" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-confirm-build" class="btn btn-danger">Confirm & Submit Build</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/assets/control-page.js"></script>
+</body>
+</html>

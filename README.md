@@ -150,10 +150,28 @@ dedicated authentication integration; do not put cookies or tokens in the
 project JSON.
 
 
-## Report server
+## Control page dashboard
 
-The default server URL is `http://127.0.0.1:4173/`. It requires an existing
-generated aggregate at the selected root and has no authentication.
+The Control Page dashboard provides an interactive web UI on loopback to discover, view, and edit project configurations (`config/*.json`), run report generation or auto-build jobs, inspect live run logs and outcomes, and open generated reports.
+
+Start the control dashboard:
+
+```sh
+npm run serve:control
+```
+
+Open `http://127.0.0.1:4173/` in your browser.
+
+> **Warning:** Triggering `auto-build` from the dashboard submits a parameterized build to the target Jenkins job. Always confirm the target job and project configuration before submitting.
+
+- **Config management**: Edit `enabled`, `runType` (`report` vs `auto-build`), and raw JSON configuration safely with ETag concurrency control.
+- **Mutual exclusion**: Report generation and auto-build runs are mutually exclusive and executed one at a time.
+- **Security**: The control dashboard is strictly restricted to loopback (`127.0.0.1`) and rejects non-loopback bindings and cross-origin state-modifying requests.
+
+## Report server (read-only aggregate preview)
+
+`npm run serve:report` serves an existing static report aggregate under `reports/`. Defaults:
+`http://127.0.0.1:4173/`. It requires an existing generated aggregate at the selected root and is read-only.
 
 CLI flags and environment equivalents:
 
@@ -243,13 +261,16 @@ then uses a bounded fallback and records a warning if both attempts fail.
 | `npm ci` | install locked dependencies without downloading browsers |
 | `npm run install:browsers` | explicitly provision Chromium and WebKit |
 | `npm run report -- --config <config.json>` | generate a Jenkins report from an explicit schema-v1 file |
-| `npm run test:e2e:templates` | run offline template fixture checks |
-| `npm run serve:report` | build and serve `reports/` on loopback |
+| `npm run serve:control` | build and start interactive Control Dashboard on loopback |
+| `npm run serve:report` | build and serve `reports/` on loopback (read-only aggregate) |
+| `npm run test:e2e:templates` | run offline template fixture checks in Chromium |
+| `npm run test:control` | run Control Page API & UI E2E tests in Chromium & WebKit |
+| `npm run test:release:webkit` | run the native WebKit template gate |
+| `npm run test:report` | run generated-report browser checks |
+| `npm run test:unit` | run unit tests |
+| `npm run test:release` | run full deterministic release gate suite |
 | `npm run typecheck` | TypeScript check without emitting files |
 | `npm run build` | compile the CLI/report server to `.runner-build/` |
-| `npm run test:unit` | run unit tests |
-| `npm run test:report` | run generated-report browser checks |
-| `npm run test:release:webkit` | run the native WebKit template gate |
 
 ## Security notes
 

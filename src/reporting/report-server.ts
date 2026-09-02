@@ -1,8 +1,12 @@
 import { createServer, type Server } from 'node:http';
 import { isIP, type Socket } from 'node:net';
+import { randomBytes } from 'node:crypto';
 
 import { assertReportRoot } from './report-server-file-io.js';
 import { handleReportRequest } from './report-server-files.js';
+import { handleControlRequest } from './report-server-control.js';
+import { createConfigStore } from './report-server-config-store.js';
+import { createRunManager, type RunManagerOptions } from './report-server-run-manager.js';
 
 const SHUTDOWN_GRACE_MS = 2_000;
 
@@ -10,6 +14,9 @@ export interface ReportServerOptions {
   readonly host?: string;
   readonly port?: number;
   readonly allowLan?: boolean;
+  readonly mode?: 'report' | 'control';
+  readonly configRoot?: string;
+  readonly runManagerOptions?: Partial<RunManagerOptions>;
 }
 
 export interface ReportServerHandle {
@@ -18,6 +25,8 @@ export interface ReportServerHandle {
   readonly host: string;
   readonly port: number;
   readonly url: string;
+  readonly mode: 'report' | 'control';
+  readonly csrfToken?: string | undefined;
   readonly close: () => Promise<void>;
 }
 
@@ -33,7 +42,7 @@ function validatePort(port: number): number {
   return port;
 }
 
-function isLoopbackHost(host: string): boolean {
+export function isLoopbackHost(host: string): boolean {
   return host.toLowerCase() === 'localhost' || host === '::1' || (isIP(host) === 4 && host.startsWith('127.'));
 }
 
@@ -41,22 +50,66 @@ export async function createReportServer(
   reportRoot: string,
   options: ReportServerOptions = {},
 ): Promise<ReportServerHandle> {
-  const rootReference = await assertReportRoot(reportRoot);
-  const root = rootReference.path;
+  const mode = options.mode ?? 'report';
   const host = validateHost(options.host ?? '127.0.0.1');
   const port = validatePort(options.port ?? 4_173);
-  if (!isLoopbackHost(host) && options.allowLan !== true) throw new Error('Non-loopback report server binding requires explicit --allow-lan');
+
+  if (mode === 'control') {
+    if (!isLoopbackHost(host)) {
+      throw new Error('Control mode cannot be bound to non-loopback host');
+    }
+    if (options.allowLan === true) {
+      throw new Error('Control mode cannot be combined with --allow-lan');
+    }
+  } else if (!isLoopbackHost(host) && options.allowLan !== true) {
+    throw new Error('Non-loopback report server binding requires explicit --allow-lan');
+  }
+
+  const root = mode === 'report' ? (await assertReportRoot(reportRoot)).path : reportRoot;
+  const rootIdentity = mode === 'report' ? (await assertReportRoot(reportRoot)).identity : undefined;
+
+  let csrfToken: string | undefined;
+  let controlContext: Parameters<typeof handleControlRequest>[0] | undefined;
+
+  if (mode === 'control') {
+    csrfToken = randomBytes(32).toString('hex');
+    const configRoot = options.configRoot ?? 'config';
+    const configStore = await createConfigStore(configRoot);
+    const runManager = createRunManager({
+      configStore,
+      reportRoot: root,
+      ...options.runManagerOptions,
+    });
+    controlContext = {
+      configStore,
+      runManager,
+      reportRoot: root,
+      host,
+      port,
+      csrfToken,
+    };
+  }
+
   const sockets = new Set<Socket>();
   const server = createServer((request, response) => {
-    void handleReportRequest(root, request, response, rootReference.identity).catch(() => {
-      if (!response.headersSent) response.writeHead(500).end('unable to read report file\n');
-      else response.destroy();
-    });
+    if (mode === 'control' && controlContext !== undefined) {
+      void handleControlRequest(controlContext, request, response).catch(() => {
+        if (!response.headersSent) response.writeHead(500).end('internal control server error\n');
+        else response.destroy();
+      });
+    } else {
+      void handleReportRequest(root, request, response, rootIdentity).catch(() => {
+        if (!response.headersSent) response.writeHead(500).end('unable to read report file\n');
+        else response.destroy();
+      });
+    }
   });
+
   server.on('connection', (socket) => {
     sockets.add(socket);
     socket.once('close', () => sockets.delete(socket));
   });
+
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => { server.off('listening', onListening); reject(error); };
     const onListening = () => { server.off('error', onError); resolve(); };
@@ -64,11 +117,17 @@ export async function createReportServer(
     server.once('listening', onListening);
     server.listen(port, host);
   });
+
   const address = server.address();
   if (address === null || typeof address === 'string') {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     throw new Error('Report server did not expose a TCP address');
   }
+
+  if (controlContext !== undefined) {
+    (controlContext as unknown as { port: number }).port = address.port;
+  }
+
   let closePromise: Promise<void> | undefined;
   const close = (): Promise<void> => {
     closePromise ??= new Promise<void>((resolve, reject) => {
@@ -89,6 +148,16 @@ export async function createReportServer(
     });
     return closePromise;
   };
+
   const formattedHost = host.includes(':') ? `[${host}]` : host;
-  return { server, root, host, port: address.port, url: `http://${formattedHost}:${address.port}/`, close };
+  return {
+    server,
+    root,
+    host,
+    port: address.port,
+    url: `http://${formattedHost}:${address.port}/`,
+    mode,
+    csrfToken,
+    close,
+  };
 }

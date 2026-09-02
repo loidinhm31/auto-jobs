@@ -77,9 +77,11 @@ test('supports explicit LAN binding and project-local defaults', async () => {
   );
   expect(options).toEqual({
     root: path.resolve('reports'),
+    configRoot: path.resolve('config'),
     host: '0.0.0.0',
     port: 4180,
     allowLan: true,
+    mode: 'report',
     help: false,
   });
 });

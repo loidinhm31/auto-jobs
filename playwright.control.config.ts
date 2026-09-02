@@ -14,18 +14,18 @@ const slowMo = slowMoRaw !== undefined && slowMoRaw !== '' && Number.isFinite(Nu
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['**/e2e/template-navigation.spec.ts', '**/e2e/template-auto-build.spec.ts'],
+  testMatch: '**/e2e/control-page.spec.ts',
   fullyParallel: true,
   forbidOnly: Boolean(environment['CI']),
   retries: environment['CI'] ? 1 : 0,
   timeout: 30_000,
   expect: { timeout: 5_000 },
   reporter: environment['CI'] ? 'blob' : 'html',
-  outputDir: 'test-results/templates-webkit',
+  outputDir: 'test-results/control-page',
   use: {
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     screenshot: 'off',
     video: 'off',
     headless,
@@ -36,5 +36,8 @@ export default defineConfig({
       ...(slowMo === undefined ? {} : { slowMo }),
     },
   },
-  projects: [{ name: 'webkit-template', use: { browserName: 'webkit' } }],
+  projects: [
+    { name: 'chromium-control', use: { browserName: 'chromium' } },
+    { name: 'webkit-control', use: { browserName: 'webkit' } },
+  ],
 });

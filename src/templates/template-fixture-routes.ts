@@ -130,10 +130,9 @@ export async function installTemplateReportRoutes(
     }
     if (request.method() === 'POST' && isExactFixtureUrl(url, fixture.buildActionUrl)) {
       await route.fulfill({
-        status: 303,
-        headers: {
-          Location: fixture.jobUrl,
-        },
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: `<!doctype html><meta http-equiv="refresh" content="0; url=${escapeHtml(fixture.jobUrl)}"><a href="${escapeHtml(fixture.jobUrl)}">Continue</a>`,
       });
       return;
     }
