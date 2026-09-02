@@ -151,13 +151,13 @@ copies.
 | `src/artifacts/` | Run identities, staging leases, publication, manifest discovery, cleanup, and aggregate recovery. |
 | `src/reporting/` | HTML rendering, report links, view models, static server, and CSP-aware file serving. |
 | `src/security/` | Origin, base-path, relative URL, credential-like URL, traversal, and containment checks. |
-| `src/templates/template-fixture-types.ts` | Readonly fixture, response, recorder, file-identity, budget, artifact-link, and Sonar route contracts. |
+| `src/templates/template-fixture-types.ts` | Fixture, response, route recorder, file-identity, read-budget, artifact-link, and Sonar route contracts. |
 | `src/templates/template-fixture-file-io.ts` | Canonical root resolution, no-follow reads, identity/symlink checks, and 4 MiB/16 MiB budgets. |
 | `src/templates/template-fixture-html.ts` | HTML parsing, URL policy, canonical/form/link rewrites, artifact selection, and exact URL matching. |
 | `src/templates/template-fixture-sonarqube.ts` | Saved SonarQube identity checks and dashboard/issues rewrites. |
 | `src/templates/template-fixture-build-validation.ts` | Saved `#side-panel` build-link discovery and build-page DOM/action validation. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
-| `src/templates/template-fixture-routes.ts` | Exact response lookup, login/build POST exceptions, and sanitized miss recording. |
+| `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
 | `src/templates/template-report-fixture.ts` | Public facade exports plus explicit `templateProjectDocument` run type. |
 | `templates/jenkins-template/template-build.html` | Minimal saved-origin build page with canonical URL, `POST` form, `#bottom-sticker`, and classed `Build` button. |
 | `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus, including the build detail page. |

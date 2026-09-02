@@ -204,7 +204,7 @@ types -> file-io/html -> sonarqube/build-validation -> loader/routes -> facade
 
 | Module or asset | Contract |
 | --- | --- |
-| `template-fixture-types.ts` | Readonly fixture, response, route-miss/recorder, file-identity, budget, artifact-link, and Sonar route types. |
+| `template-fixture-types.ts` | Fixture, response, route recorder, file-identity, budget, artifact-link, and Sonar route types. |
 | `template-fixture-file-io.ts` | Canonical root resolution and descriptor/no-follow reads with identity, symlink, 4 MiB per-file, and 16 MiB total checks. |
 | `template-fixture-html.ts` | HTML tag/attribute parsing, URL policy, canonical/form/link rewrites, artifact selection, and exact URL comparison. |
 | `template-fixture-sonarqube.ts` | Saved SonarQube origin/project identity checks and dashboard/issues link rewrites. |

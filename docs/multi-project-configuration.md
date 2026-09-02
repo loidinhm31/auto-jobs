@@ -281,10 +281,13 @@ synthetic origin, and invokes the same capture or auto-build workflow.
 
 Fixture responsibilities are split across
 `src/templates/template-fixture-types.ts`,
-`template-fixture-file-io.ts`, `template-fixture-html.ts`,
-`template-fixture-sonarqube.ts`, `template-fixture-build-validation.ts`,
-`template-fixture-loader.ts`, and `template-fixture-routes.ts`.
-`template-report-fixture.ts` is the public facade.
+`src/templates/template-fixture-file-io.ts`,
+`src/templates/template-fixture-html.ts`,
+`src/templates/template-fixture-sonarqube.ts`,
+`src/templates/template-fixture-build-validation.ts`,
+`src/templates/template-fixture-loader.ts`, and
+`src/templates/template-fixture-routes.ts`.
+`src/templates/template-report-fixture.ts` is the public facade.
 
 Routes fulfill only exact fixture `GET`/`HEAD` URLs, the Jenkins/SonarQube login
 POST exceptions, and the exact build action `POST`. A build POST returns
