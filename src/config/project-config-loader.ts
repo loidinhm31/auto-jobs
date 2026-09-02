@@ -12,7 +12,12 @@ import type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
   ProjectSecrets,
+  RunType,
 } from './config-types.js';
+import {
+  assertNoLegacyEnvironmentInputs,
+  resolveProjectSecrets,
+} from './project-config-environment.js';
 import {
   credentials,
   normalizedSource,
@@ -23,43 +28,10 @@ import {
 } from './project-config-normalization.js';
 import { assertProjectConfigDocument } from './project-config-schema.js';
 
+export { resolveProjectSecrets } from './project-config-environment.js';
+
 const DEFAULT_TIMEOUT_MS = 300_000;
 const DEFAULT_ARTIFACT_DIR = 'reports';
-
-const LEGACY_STRUCTURE_ENVIRONMENT_KEYS: Record<string, true> = {
-  REPORT_SOURCE: true,
-  PROJECTS_CONFIG_PATH: true,
-  JENKINS_BASE_URL: true,
-  JENKINS_JOB_PATH: true,
-  JENKINS_BUILD_NUMBER: true,
-  JENKINS_LOGIN_PATH: true,
-  JENKINS_TRIGGER_MODE: true,
-  JENKINS_TIMEOUT_MS: true,
-  JENKINS_POLL_INTERVAL_MS: true,
-  PLAYWRIGHT_BROWSER: true,
-  ARTIFACT_DIR: true,
-  PROJECT_ID: true,
-  PROJECT_NAME: true,
-  JENKINS_USERNAME_VARIABLE: true,
-  JENKINS_PASSWORD_VARIABLE: true,
-  JENKINS_TRIGGER_SELECTOR: true,
-  JENKINS_AUTH_LANDMARK: true,
-  JENKINS_QUEUE_URL_SELECTOR: true,
-  JENKINS_BUILD_STATUS_SELECTOR: true,
-  JENKINS_BUILD_URL_SELECTOR: true,
-  SONAR_REPORT_SELECTOR: true,
-  SNYK_REPORT_SELECTOR: true,
-  SNYK_ALLOWED_ORIGINS: true,
-  SNYK_PROJECT_ID: true,
-  SONARQUBE_ALLOWED_ORIGINS: true,
-  SONARQUBE_PROJECT_ID: true,
-};
-
-function assertNoLegacyEnvironmentInputs(env: NodeJS.ProcessEnv): void {
-  if (Object.keys(LEGACY_STRUCTURE_ENVIRONMENT_KEYS).some((key) => env[key]?.trim())) {
-    throw new ConfigError(['legacy environment configuration is not supported; use --config <path>']);
-  }
-}
 
 function normalizedJenkinsOrigin(
   loginUrl: string,
@@ -67,24 +39,21 @@ function normalizedJenkinsOrigin(
   fieldName: string,
   issues: string[],
 ): string {
-  const origin = safe(
-    `${fieldName}.loginUrl`,
-    '',
-    () => canonicalizeOrigin(new URL(loginUrl).origin, `${fieldName}.jenkins origin`),
-    issues,
-  );
-  if (configured !== undefined) {
-    const allowed = configured
-      .map((value, index) => safe(
-        `${fieldName}.sourceOrigins.jenkins[${index}]`,
-        '',
-        () => canonicalizeOrigin(value, `${fieldName}.sourceOrigins.jenkins`),
-        issues,
-      ))
-      .filter(Boolean);
-    if (!allowed.includes(origin)) {
-      issues.push(`${fieldName}.sourceOrigins.jenkins must include the configured Jenkins origin`);
-    }
+  let fallback = 'https://invalid.local';
+  try {
+    fallback = canonicalizeOrigin(loginUrl, `${fieldName}.loginUrl`);
+  } catch {
+    // URL normalization catches malformed login URL errors.
+  }
+  const candidate = configured === undefined || configured.length === 0
+    ? fallback
+    : configured[0] ?? fallback;
+  let origin = fallback;
+  try {
+    origin = canonicalizeOrigin(candidate, `${fieldName}.sourceOrigins.jenkins`);
+  } catch (error) {
+    if (error instanceof ConfigError && error.issues.length > 0) issues.push(...error.issues);
+    else issues.push(`${fieldName}.sourceOrigins.jenkins must be a valid origin`);
   }
   return origin;
 }
@@ -112,7 +81,7 @@ function normalizeDocument(
       () => normalizeConfiguredUrl(project.jobUrl, `${field}.jobUrl`),
       issues,
     );
-    const baseUrl = safe(
+    safe(
       `${field}.jobUrl`,
       'http://invalid.local',
       () => deriveJenkinsBaseUrl(loginUrl, jobUrl),
@@ -141,10 +110,12 @@ function normalizeDocument(
     const snykOrigins = sourceOrigins(project, defaults, 'snyk', fallbackSnyk, issues);
     const sonarOrigins = sourceOrigins(project, defaults, 'sonarqube', fallbackSonar, issues);
     const artifactDir = path.resolve(project.artifactDir ?? defaults.artifactDir ?? DEFAULT_ARTIFACT_DIR);
-    const normalized: NormalizedProjectConfig = {
+    const runType: RunType = project.runType ?? 'report';
+    const normalizedProject: NormalizedProjectConfig = {
       schemaVersion: 1,
       id: project.id.trim(),
       name: project.name.trim(),
+      runType,
       enabled: project.enabled !== false,
       loginUrl,
       jobUrl,
@@ -163,7 +134,7 @@ function normalizeDocument(
       selectors: selectors(project, defaults),
       credentialVariables: Object.freeze(credentials(project, defaults)),
     };
-    return Object.freeze(normalized);
+    return Object.freeze(normalizedProject);
   });
   if (validateSecrets) {
     for (const project of normalized) {
@@ -195,21 +166,4 @@ export function loadProjectConfig(
 ): readonly NormalizedProjectConfig[] {
   assertNoLegacyEnvironmentInputs(env);
   return normalizeDocument(readDocument(filePath), env, validateSecrets);
-}
-
-export function resolveProjectSecrets(
-  project: Pick<NormalizedProjectConfig, 'credentialVariables'>,
-  env: NodeJS.ProcessEnv = process.env,
-): ProjectSecrets {
-  const issues: string[] = [];
-  const username = env[project.credentialVariables.usernameVariable];
-  const password = env[project.credentialVariables.passwordVariable];
-  if (username === undefined || username.length === 0) {
-    issues.push(`${project.credentialVariables.usernameVariable} is required`);
-  }
-  if (password === undefined || password.length === 0) {
-    issues.push(`${project.credentialVariables.passwordVariable} is required`);
-  }
-  if (issues.length > 0) throw new ConfigError(issues);
-  return Object.freeze({ username: username as string, password: password as string });
 }

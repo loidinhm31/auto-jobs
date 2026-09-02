@@ -25,7 +25,7 @@ import { WorkflowDeadline } from '../../src/workflow/workflow-deadline.js';
 
 function project(overrides: Record<string, unknown> = {}): NormalizedProjectConfig {
   return {
-    id: 'service-a', name: 'Service A', enabled: true, schemaVersion: 1,
+    id: 'service-a', name: 'Service A', enabled: true, runType: 'report', schemaVersion: 1,
     loginUrl: 'https://jenkins.example/login',
     jobUrl: 'https://jenkins.example/job/service-a/',
     timeoutMs: 30_000,

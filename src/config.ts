@@ -17,6 +17,10 @@ export {
   normalizeProjectConfigDocument,
   resolveProjectSecrets,
 } from './config/project-config-loader.js';
+export {
+  selectAutoBuildProject,
+  selectReportProjects,
+} from './config/project-run-selection.js';
 
 export type {
   NormalizedProjectConfig,
@@ -28,8 +32,8 @@ export type {
   ProjectOriginPolicies,
   ProjectSecrets,
   ProjectSourceInput,
+  RunType,
 } from './config/config-types.js';
-
 export {
   assertProjectConfigDocument,
   PROJECT_CONFIG_LIMITS,

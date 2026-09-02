@@ -38,6 +38,18 @@ export const DEFAULT_SELECTORS: SelectorConfig = {
     value: 'snyk-report',
     required: true,
   },
+  buildParametersLink: {
+    kind: 'role',
+    value: 'link',
+    name: 'Build with Parameters',
+    required: true,
+  },
+  buildSubmitButton: {
+    kind: 'role',
+    value: 'button',
+    name: 'Build',
+    required: true,
+  },
 };
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

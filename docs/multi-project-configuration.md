@@ -1,15 +1,16 @@
 # Multi-project configuration
 
 The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
-projects, and runs them sequentially in configuration order. The current
-implementation is in `src/config/project-config-schema.ts`,
-`src/config/project-config-loader.ts`, and `src/runner.ts`.
+projects, and exposes an explicit run-mode contract. Mode is never inferred
+from a URL, selector, CLI name, or environment. The current implementation is
+in `src/config/project-config-schema.ts`, `src/config/project-config-loader.ts`,
+`src/config/project-run-selection.ts`, and `src/runner.ts`.
 
 ## Source selection
 
 The report command always reads one explicit schema-v1 JSON document supplied
-with `--config`. There is no source-mode switch and no environment-selected
-configuration path.
+with `--config`. `runType` classifies a project for the caller's executor; it
+is not a source-mode switch and does not select a configuration path.
 
 Structural environment inputs such as `REPORT_SOURCE`,
 `PROJECTS_CONFIG_PATH`, `JENKINS_BASE_URL`, `JENKINS_JOB_PATH`,
@@ -37,10 +38,86 @@ are not accepted.
 origin policy, credential references, and source settings for `snyk` and
 `sonarqube`.
 
+## Run type and selection
+
+Each project may set `runType` to exactly `'report'` or `'auto-build'`.
+Omitting it is safe: normalization stores `runType: 'report'`. The field is
+project-only; it is not accepted under `defaults`, and no environment setting
+can configure it. Do not add `runType` to `defaults` or rely on environment
+configuration to choose an executor. Unknown default keys are rejected by
+schema validation, while environment configuration remains reserved for
+credential values.
+
+`enabled: false` always excludes a project from execution, regardless of its
+`runType`. A mode-aware caller selects projects only after loading and
+normalizing the document:
+
+| Helper | Selection contract |
+| --- | --- |
+| `selectReportProjects(projects)` | Returns a frozen list of enabled projects whose normalized `runType` is `report`; disabled and `auto-build` entries are excluded. Throws a configuration error when none remain. |
+| `selectAutoBuildProject(projects, projectId)` | Matches one project by exact, non-empty `id`; returns it only when enabled and normalized as `auto-build`. Missing, disabled, and `report` projects are rejected. |
+
+Both helpers are exported from `src/config.ts`. They do not rewrite a
+project's mode, infer a target from `jobUrl`, or trigger Jenkins actions.
+Callers must choose one helper and one executor; the Phase 01 contract keeps
+report collection separate from the auto-build side effect.
+
+## Selector configuration
+
+`selectors` may be supplied in `defaults` and overridden per project. An
+override is an object with a supported `kind` (`role`, `label`, `testId`,
+`text`, or `css`), a non-empty `value`, an optional accessible `name`, and an
+optional `required` boolean. Project values take precedence over defaults.
+When `required` is omitted, it defaults to `true`.
+
+The normalized selector set includes these defaults:
+
+| Selector | Kind | Value | Name | Required |
+| --- | --- | --- | --- | --- |
+| `authLandmark` | `role` | `link` | `Manage Jenkins` | `true` |
+| `sonarqubeReport` | `testId` | `sonarqube-report` | — | `true` |
+| `snykReport` | `testId` | `snyk-report` | — | `true` |
+| `buildParametersLink` | `role` | `link` | `Build with Parameters` | `true` |
+| `buildSubmitButton` | `role` | `button` | `Build` | `true` |
+
+The two build selectors are required configuration controls. An explicit
+`required: false` override is rejected for either
+`buildParametersLink` or `buildSubmitButton`; valid overrides must keep
+`required: true`. Their runtime search scopes (`#side-panel` for the
+parameter link and `#bottom-sticker` for the submit button) are fixed by the
+Jenkins executor and are not configurable CSS.
+
+For example, a defaults override can customize the visible labels while
+retaining the invariant:
+
+```json
+{
+  "selectors": {
+    "buildParametersLink": {
+      "kind": "role",
+      "value": "link",
+      "name": "Build with Parameters",
+      "required": true
+    },
+    "buildSubmitButton": {
+      "kind": "role",
+      "value": "button",
+      "name": "Build",
+      "required": true
+    }
+  }
+}
+```
+
+`selectors` is allowed in both `defaults` and a project entry; `runType` is
+not. Unknown selector fields, malformed values, unsafe selector text, and
+selector overrides that disable required controls are rejected before browser
+launch.
+
 The checked-in [projects.example.json](../config/projects.example.json) shows
-two projects with exact Jenkins URLs, source origins, identities, and
-per-project credential references. A minimal valid document is also shown
-below.
+an enabled `report` project and a disabled `auto-build` project, with exact
+Jenkins URLs, source origins, identities, and per-project credential
+references. A minimal valid document is also shown below.
 
 The checked-in example uses `.invalid` placeholder hosts and is not a runnable
 Jenkins configuration. Replace its Jenkins/vendor URLs with authorized values
@@ -73,7 +150,8 @@ values.
       "id": "service-a",
       "name": "Service A",
       "loginUrl": "https://jenkins.example.invalid/jenkins/login",
-      "jobUrl": "https://jenkins.example.invalid/jenkins/job/service-a/"
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/service-a/",
+      "runType": "report"
     }
   ]
 }
@@ -157,6 +235,12 @@ Each project authenticates through its exact `loginUrl`, opens its exact
 `jobUrl`, discovers publisher destinations once, and captures the configured
 Snyk and SonarQube evidence. There is no job search, trigger, queue/build
 correlation, terminal polling, or build-number path.
+
+`runType: auto-build` does not cause a build in this report workflow. The mode
+is acted on only when a caller selects the project with
+`selectAutoBuildProject`; Phase 01 adds no trigger, queue, polling, or build
+submission behavior. A report dispatcher should pass only
+`selectReportProjects(...)` to the report executor.
 
 The schema has no source switch, existing-build mode, job-page override, build
 identity, or polling environment inputs. These are intentionally absent from

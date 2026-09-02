@@ -1,4 +1,5 @@
 export type ReportState = 'found' | 'not_found' | 'incomplete';
+export type RunType = 'report' | 'auto-build';
 export type SourceName = 'snyk' | 'sonarqube';
 export type SelectorKind = 'role' | 'label' | 'testId' | 'text' | 'css';
 export type BrowserName = 'chromium' | 'firefox' | 'webkit';
@@ -14,6 +15,8 @@ export interface SelectorConfig {
   authLandmark: LocatorSelector;
   sonarqubeReport: LocatorSelector;
   snykReport: LocatorSelector;
+  buildParametersLink: LocatorSelector;
+  buildSubmitButton: LocatorSelector;
 }
 
 export type LocatorSelectorInput = Omit<LocatorSelector, 'required'> & {

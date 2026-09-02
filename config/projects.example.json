@@ -13,6 +13,8 @@
     {
       "id": "service-a",
       "name": "Service A",
+      "enabled": true,
+      "runType": "report",
       "loginUrl": "https://jenkins.example.invalid/jenkins/login",
       "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
       "sourceOrigins": {
@@ -24,6 +26,8 @@
     {
       "id": "service-b",
       "name": "Service B",
+      "enabled": false,
+      "runType": "auto-build",
       "loginUrl": "https://jenkins.example.invalid/jenkins/login",
       "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-b/job/main/",
       "credentials": {

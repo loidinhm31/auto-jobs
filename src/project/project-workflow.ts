@@ -32,6 +32,8 @@ function runnerConfig(
   const baseUrl = deriveJenkinsBaseUrl(project.loginUrl, project.jobUrl);
   const selectors: JenkinsRunnerSelectors = {
     authLandmark: project.selectors.authLandmark,
+    buildParametersLink: project.selectors.buildParametersLink,
+    buildSubmitButton: project.selectors.buildSubmitButton,
   };
   return {
     baseUrl,

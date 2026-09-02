@@ -1,9 +1,12 @@
 import type {
   BrowserName,
+  RunType,
   SelectorConfig,
   SelectorOverrides,
   SourceName,
 } from '../types.js';
+
+export type { RunType } from '../types.js';
 
 export interface ProjectCredentialReferences {
   usernameVariable: string;
@@ -26,6 +29,7 @@ export interface ProjectConfigInput {
   name: string;
   loginUrl: string;
   jobUrl: string;
+  runType?: RunType;
   enabled?: boolean;
   timeoutMs?: number;
   browser?: BrowserName;
@@ -63,6 +67,7 @@ export interface NormalizedProjectConfig {
   readonly schemaVersion: 1;
   readonly id: string;
   readonly name: string;
+  readonly runType: RunType;
   readonly enabled: boolean;
   readonly loginUrl: string;
   readonly jobUrl: string;
