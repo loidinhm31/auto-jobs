@@ -273,13 +273,24 @@ the direct workflow contract.
 
 ## Offline capture fixtures
 
-Offline fixture tests read eight bounded inputs: the Jenkins job and login
-snapshots, Snyk HTML and summary JSON, and SonarQube login, home, Overall, and
-Issues HTML. They install bounded Playwright context routes at a synthetic
-origin and invoke the same capture, normalization, artifact, and rendering
-workflow. No Jenkins controller, pipeline, vendor service, or Jenkins
-credential is needed. These fixtures are test inputs, not report CLI source
-modes.
+Offline fixture tests read nine bounded inputs: Jenkins job, login, and build
+snapshots; Snyk HTML and summary JSON; and SonarQube login, home, Overall, and
+Issues HTML. `loadTemplateReportFixture` validates saved identities, derives
+the build page from the unique job-page link, rewrites approved URLs to a
+synthetic origin, and invokes the same capture or auto-build workflow.
+
+Fixture responsibilities are split across
+`src/templates/template-fixture-types.ts`,
+`template-fixture-file-io.ts`, `template-fixture-html.ts`,
+`template-fixture-sonarqube.ts`, `template-fixture-build-validation.ts`,
+`template-fixture-loader.ts`, and `template-fixture-routes.ts`.
+`template-report-fixture.ts` is the public facade.
+
+Routes fulfill only exact fixture `GET`/`HEAD` URLs, the Jenkins/SonarQube login
+POST exceptions, and the exact build action `POST`. A build POST returns
+`303 Location: <jobUrl>`; unknown methods/URLs abort and record sanitized
+misses. No Jenkins controller, pipeline, vendor service, or credential is
+needed. These fixtures are test inputs, not report CLI source modes.
 
 The checked-in template Snyk page and summary describe six findings (critical
 2, high 4). These are fixture data, not live service observations.

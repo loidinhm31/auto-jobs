@@ -1,47 +1,50 @@
 This file is a merged representation of the entire codebase, combined into a single document by Repomix.
 
-<file_summary>
-This section contains a summary of this file.
+================================================================
+File Summary
+================================================================
 
-<purpose>
+Purpose:
+--------
 This file contains a packed representation of the entire repository's contents.
 It is designed to be easily consumable by AI systems for analysis, code review,
 or other automated processes.
-</purpose>
 
-<file_format>
+File Format:
+------------
 The content is organized as follows:
 1. This summary section
 2. Repository information
 3. Directory structure
-4. Repository files, each consisting of:
-  - File path as an attribute
-  - Full contents of the file
-</file_format>
+4. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
 
-<usage_guidelines>
+Usage Guidelines:
+-----------------
 - This file should be treated as read-only. Any changes should be made to the
   original repository files, not this packed version.
 - When processing this file, use the file path to distinguish
   between different files in the repository.
 - Be aware that this file may contain sensitive information. Handle it with
   the same level of security as you would the original repository.
-</usage_guidelines>
 
-<notes>
+Notes:
+------
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
-</notes>
 
-<additional_info>
+Additional Info:
+----------------
 
-</additional_info>
-
-</file_summary>
-
-<directory_structure>
+================================================================
+Directory Structure
+================================================================
 .codegraph/.gitignore
 .gitignore
 .repomixignore
@@ -155,6 +158,13 @@ src/result-types.ts
 src/runner.ts
 src/security/relative-url-policy.ts
 src/security/url-policy.ts
+src/templates/template-fixture-build-validation.ts
+src/templates/template-fixture-file-io.ts
+src/templates/template-fixture-html.ts
+src/templates/template-fixture-loader.ts
+src/templates/template-fixture-routes.ts
+src/templates/template-fixture-sonarqube.ts
+src/templates/template-fixture-types.ts
 src/templates/template-report-cli.ts
 src/templates/template-report-fixture.ts
 src/templates/template-report-runner.ts
@@ -163,6 +173,7 @@ src/workflow/diagnostics.ts
 src/workflow/workflow-deadline.ts
 templates/jenkins-template/login.html
 templates/jenkins-template/README.md
+templates/jenkins-template/template-build.html
 templates/jenkins-template/template.html
 templates/snyk-template/snyk-sca-results-summary.json
 templates/snyk-template/template.html
@@ -174,6 +185,7 @@ tests/e2e/generated-report-fixtures.ts
 tests/e2e/generated-report-image.ts
 tests/e2e/generated-report.spec.ts
 tests/e2e/multi-project-report-flow.spec.ts
+tests/e2e/template-auto-build.spec.ts
 tests/e2e/template-navigation.spec.ts
 tests/e2e/vendor-template-capture.spec.ts
 tests/unit/artifact-lifecycle.spec.ts
@@ -198,23 +210,27 @@ tests/unit/snyk-phase-04.spec.ts
 tests/unit/snyk-review-regressions.spec.ts
 tests/unit/snyk-screenshot-retry.spec.ts
 tests/unit/sonarqube-phase-05.spec.ts
+tests/unit/template-build-fixture.spec.ts
 tests/unit/template-report.spec.ts
 tsconfig.build.json
 tsconfig.json
-</directory_structure>
 
-<files>
-This section contains the contents of the repository's files.
+================================================================
+Files
+================================================================
 
-<file path=".codegraph/.gitignore">
+================
+File: .codegraph/.gitignore
+================
 # CodeGraph data files — local to each machine, not for committing.
 # Ignore everything in .codegraph/ except this file itself, so transient
 # files (the database, daemon.pid, sockets, logs) never show up in git.
 *
 !.gitignore
-</file>
 
-<file path=".gitignore">
+================
+File: .gitignore
+================
 [n]ode_modules/
 
 .*env*
@@ -240,9 +256,10 @@ reports/
 coverage/
 .DS_Store
 .idea/
-</file>
 
-<file path=".repomixignore">
+================
+File: .repomixignore
+================
 # Dot-folders (not covered by .gitignore defaults)
 .omp/
 .git/
@@ -297,18 +314,20 @@ Cargo.lock
 
 # Repomix output
 repomix-output.*
-</file>
 
-<file path="config/ci-env.template">
+================
+File: config/ci-env.template
+================
 # Inject the credential values referenced by config/projects.example.json.
 # Keep actual values in the CI secret store; these placeholders are examples.
 JENKINS_USERNAME=replace-with-jenkins-username
 JENKINS_PASSWORD=replace-with-jenkins-password
 SERVICE_B_JENKINS_USERNAME=replace-with-service-b-username
 SERVICE_B_JENKINS_PASSWORD=replace-with-service-b-password
-</file>
 
-<file path="config/projects.example.json">
+================
+File: config/projects.example.json
+================
 {
   "schemaVersion": 1,
   "defaults": {
@@ -353,16 +372,18 @@ SERVICE_B_JENKINS_PASSWORD=replace-with-service-b-password
     }
   ]
 }
-</file>
 
-<file path="docs/architecture.md">
+================
+File: docs/architecture.md
+================
 # Current architecture
 
 This document describes the implemented schema-v1 configuration and the two
-explicit execution paths: report capture and the Phase 2 Jenkins
-target-branch auto-build workflow. The report command remains report-only;
-auto-build is an explicit library boundary and is not inferred from URLs,
-selectors, CLI names, or environment.
+explicit execution paths: report capture and the target-branch Jenkins
+auto-build workflow. Phase 3 adds an offline build-page fixture and an exact
+route map so the auto-build path can be exercised without live side effects.
+The report command remains report-only; auto-build is an explicit library
+boundary and is not inferred from URLs, selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -402,10 +423,11 @@ report-discovery boundary. Snyk report and summary links and the SonarQube home
 link are discovered from that page; SonarQube Overall and Issues links are
 followed from the validated home page.
 
-The CLI runs one browser process for enabled projects. Projects execute in
-configuration order, each in a fresh Playwright context, with one absolute
-capture deadline. A project failure is captured as an outcome so later
-projects can continue. The process exits nonzero when any project fails.
+The report CLI runs one browser process for selected report projects. Projects
+execute in configuration order, each in a fresh Playwright context, with one
+absolute capture deadline. A project failure is captured as an outcome so later
+projects can continue. The auto-build runner owns its own one-project browser
+and context.
 
 ```mermaid
 flowchart LR
@@ -466,6 +488,24 @@ flowchart LR
   manages staging leases and aggregate recovery, and performs bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
+- `src/templates/template-report-fixture.ts` is the public template facade; it
+  re-exports the supported loader, response, route, types, and size-boundary API.
+- `src/templates/template-fixture-types.ts` defines the fixture, response, route
+  miss/recorder, file-identity, read-budget, artifact-link, and Sonar route contracts.
+- `src/templates/template-fixture-file-io.ts` resolves a canonical template root
+  and performs descriptor/no-follow, identity, symlink, and byte-budgeted reads.
+- `src/templates/template-fixture-html.ts` owns bounded HTML parsing, URL checks,
+  canonical/form/link rewrites, artifact selection, and exact fixture matching.
+- `src/templates/template-fixture-sonarqube.ts` validates SonarQube identities
+  and rewrites dashboard/issues links for the synthetic fixture origin.
+- `src/templates/template-fixture-build-validation.ts` derives the build link
+  from `#side-panel` and validates build canonical, form, sticker, and button controls.
+- `src/templates/template-fixture-loader.ts` reads and validates the nine saved
+  inputs, derives build/report/Sonar destinations, and assembles the fixture.
+- `src/templates/template-fixture-routes.ts` fulfills exact fixture URLs and
+  records sanitized default-deny route misses.
+- `templates/jenkins-template/template-build.html` is the minimal saved-origin
+  build-detail page used for canonical/action and DOM-contract validation.
 - `templates/` is the checked-in browser fixture corpus. Test-only routes map
   exact URLs from saved pages to those files and abort unmatched network.
 
@@ -564,10 +604,52 @@ must never contain passwords, tokens, cookies, or credential-bearing URLs.
 ### Test configuration
 
 Tests load the same schema-v1 shape with non-routable fixture URLs. The
-test-only router reads checked-in files below `templates/`, derives exact Snyk
-and SonarQube destinations embedded in saved pages, and fulfills only those
-URLs. Fixture paths are canonical, traversal- and symlink-safe, size-bounded,
-and never read from runtime project JSON.
+test-only router reads nine checked-in files below `templates/`, derives the
+build detail URL from the unique saved Jenkins link, derives Snyk and SonarQube
+destinations from saved canonical pages, and fulfills only exact synthetic URLs.
+Fixture paths are canonical, traversal- and symlink-safe, size-bounded, and
+never read from runtime project JSON.
+
+## Phase 3 template fixture and route contract
+
+`loadTemplateReportFixture(env, origin?)` resolves the checked-in template root
+(or the optional `TEMPLATES_DIR` override), reads nine bounded files, and fails
+before browser startup when a saved identity or DOM contract drifts. The
+per-file limit is 4 MiB and the cumulative fixture limit remains 16 MiB.
+
+Build identity is derived, never hand-constructed:
+
+1. `extractSidePanelBuildLink` requires exactly one `Build with Parameters`
+   anchor in the saved Jenkins `#side-panel`, then validates its approved
+   origin, same-job `/build` path, and optional `delay=0sec` query.
+2. `validateBuildTemplate` requires one canonical URL matching that discovered
+   build page, one `POST` form with the same exact `/build` action, one
+   `#bottom-sticker`, and one `Build` submit button with all required Jenkins
+   class tokens.
+3. The loader rewrites only the selected job anchor and validated build form
+   action to the synthetic fixture origin; unrelated saved links remain untouched.
+
+The route sequence is:
+
+```text
+GET loginUrl -> POST loginActionUrl -> GET jobUrl -> GET buildPageUrl
+-> POST buildActionUrl -> 303 Location: jobUrl -> GET jobUrl
+```
+
+`templateResponse` matches all nine fixture URLs exactly, including query and
+fragment identity. `installTemplateReportRoutes` permits only `GET`/`HEAD` for
+those responses plus the exact Jenkins login actions, the same-origin
+SonarQube `/sessions/new` authentication path, and exact build-action `POST`.
+The build `POST` returns `303` with only the exact job URL; form data is neither
+read nor reflected. Every other method or URL aborts, and the recorder retains
+at most 32 sanitized method/origin/path misses. Report mode never follows the
+build anchor, so its request sequence remains report-only.
+
+The focused unit and E2E contracts are
+`tests/unit/template-build-fixture.spec.ts` and
+`tests/e2e/template-auto-build.spec.ts`; they prove fixture drift rejection,
+exact build redirect, one build `POST`, and no Snyk/SonarQube capture in
+auto-build mode.
 
 ## Per-project workflow
 
@@ -697,9 +779,10 @@ Phase 2's focused unit coverage is in
 server or injected browser/workflow dependencies; they prove exact scoping,
 URL/form validation, one-POST semantics, redaction, cleanup, and report-mode
 exclusion without contacting a live Jenkins controller.
-</file>
 
-<file path="docs/code-standards.md">
+================
+File: docs/code-standards.md
+================
 # Code standards
 
 This guide describes the conventions enforced by the current TypeScript
@@ -735,13 +818,42 @@ schema or security validation.
 | `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
 | `src/reporting/` | Static report rendering, links, and read-only report serving. |
 | `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
-| `src/templates/` | Offline fixture loading and template-report execution only. |
+| `src/templates/` | Offline fixture types, safe file loading, HTML/Sonar/build validation, exact route installation, and the public facade only. |
 | `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
 | `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
 
 A module may depend inward on shared contracts and policy helpers, but a
 validator must not launch a browser or submit a request. Report artifact code
 must not become a dependency of the auto-build side-effect path.
+
+## Template fixture boundaries
+
+Keep the fixture implementation as a one-way DAG:
+
+```text
+types -> file-io/html -> sonarqube/build-validation -> loader/routes -> facade
+```
+
+| Module | Standard responsibility |
+| --- | --- |
+| `template-fixture-types.ts` | Define fixture, response, recorder, identity, budget, artifact-link, and Sonar route contracts; do not perform I/O. |
+| `template-fixture-file-io.ts` | Resolve canonical roots and read regular files with no-follow, identity, symlink, and 4 MiB per-file/16 MiB total limits. |
+| `template-fixture-html.ts` | Parse and rewrite saved HTML only through credential-free URL checks and exact cardinality helpers. |
+| `template-fixture-sonarqube.ts` | Validate the saved SonarQube project identity and rewrite only approved dashboard/issues links. |
+| `template-fixture-build-validation.ts` | Derive the build URL from the unique saved `#side-panel` link and validate canonical, form/action, sticker, and button structure. |
+| `template-fixture-loader.ts` | Read nine fixture files, validate identities before route installation, and assemble synthetic URLs/HTML. |
+| `template-fixture-routes.ts` | Fulfill exact `GET`/`HEAD` fixture URLs, exact Jenkins login actions, the same-origin SonarQube `/sessions/new` authentication path, and the exact build `POST`; default-deny everything else. |
+| `template-report-fixture.ts` | Be the only supported import surface for fixture loading/routes/types and build `templateProjectDocument` with explicit run type. |
+
+The checked-in `templates/jenkins-template/template-build.html` must remain
+minimal and inert: one saved-origin canonical URL, one `POST` form with the
+same-job `/build` action, one `#bottom-sticker`, and one classed `Build`
+submit button. Never inspect, reflect, or log its hidden/default parameter
+values. Route misses may retain only bounded method/origin/path metadata.
+
+Keep the report fixture's default `runType` as `report`; tests requesting
+auto-build must pass that mode explicitly. Preserve the facade import path
+when extracting helpers, and keep each production module below 200 lines.
 
 ## TypeScript and module conventions
 
@@ -848,14 +960,16 @@ Before opening a change, verify:
    paths, and each changed Markdown file remains below 800 lines.
 8. Run the narrowest behavioral proof first, then the repository release gates
    once all concurrent work is integrated.
-</file>
 
-<file path="docs/codebase-summary.md">
+================
+File: docs/codebase-summary.md
+================
 # Codebase summary
 
 This summary is derived from the repository compaction generated by Repomix
 (`repomix-output.xml`) and the checked-in source/configuration files. It records
-the current implementation boundary; it does not claim a live Jenkins run.
+the current implementation boundary through Phase 3; it does not claim a live
+Jenkins run.
 
 ## Repository profile
 
@@ -868,10 +982,14 @@ the current implementation boundary; it does not claim a live Jenkins run.
 - Phase 2 addition: an explicit one-project Jenkins parameterized-build
   workflow that returns a safe in-memory outcome and does not write report
   artifacts.
-- Repomix inventory: 155 repository files were packed, with binary/ignored
-  files outside the summary. Repomix's security scan excluded two unit-test
-  files containing basic-auth test strings; those tests remain repository
-  inputs and are not treated as runtime behavior.
+- Phase 3 addition: a nine-file offline template corpus with a validated build
+  detail page and exact default-deny GET/POST routes for deterministic proof.
+- Repomix inventory: 169 repository files were packed, with binary/ignored
+  files outside the summary. The refreshed XML compaction includes the Phase 3
+  source, fixtures, and documentation.
+- Repomix's security scan excluded two unit-test files containing basic-auth
+  test strings; those tests remain repository inputs and are not treated as
+  runtime behavior.
 
 ## Entry points and scripts
 
@@ -883,9 +1001,9 @@ the current implementation boundary; it does not claim a live Jenkins run.
 | `src/runner.ts` | Sequential multi-project report execution and aggregate publication. |
 | `src/project/auto-build-runner.ts` | Explicit one-project auto-build API; not a CLI entry point. |
 | `src/jenkins/build-trigger.ts` | Exact build-page/form validation and one guarded POST. |
-| `scripts/run-template-report.mjs` | Starts the offline template report path. |
-| `src/templates/` | Loads checked-in browser fixtures and runs the template workflow. |
-| `src/reporting/report-server-cli.ts` | Serves an existing report root read-only. |
+| `src/templates/template-report-fixture.ts` | Public fixture facade and template project document builder. |
+| `src/templates/template-fixture-loader.ts` | Loads and validates the complete offline fixture. |
+| `src/templates/template-fixture-routes.ts` | Installs exact default-deny browser routes. |
 
 Useful package scripts include `typecheck`, `build`, `test:unit`,
 `test:e2e:templates`, `test:report`, `test:release:webkit`, `test:release`,
@@ -999,8 +1117,17 @@ copies.
 | `src/artifacts/` | Run identities, staging leases, publication, manifest discovery, cleanup, and aggregate recovery. |
 | `src/reporting/` | HTML rendering, report links, view models, static server, and CSP-aware file serving. |
 | `src/security/` | Origin, base-path, relative URL, credential-like URL, traversal, and containment checks. |
-| `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus. |
-| `tests/unit/` and `tests/e2e/` | Configuration contracts, security hardening, lifecycle behavior, report rendering, and template navigation. |
+| `src/templates/template-fixture-types.ts` | Readonly fixture, response, recorder, file-identity, budget, artifact-link, and Sonar route contracts. |
+| `src/templates/template-fixture-file-io.ts` | Canonical root resolution, no-follow reads, identity/symlink checks, and 4 MiB/16 MiB budgets. |
+| `src/templates/template-fixture-html.ts` | HTML parsing, URL policy, canonical/form/link rewrites, artifact selection, and exact URL matching. |
+| `src/templates/template-fixture-sonarqube.ts` | Saved SonarQube identity checks and dashboard/issues rewrites. |
+| `src/templates/template-fixture-build-validation.ts` | Saved `#side-panel` build-link discovery and build-page DOM/action validation. |
+| `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
+| `src/templates/template-fixture-routes.ts` | Exact response lookup, login/build POST exceptions, and sanitized miss recording. |
+| `src/templates/template-report-fixture.ts` | Public facade exports plus explicit `templateProjectDocument` run type. |
+| `templates/jenkins-template/template-build.html` | Minimal saved-origin build page with canonical URL, `POST` form, `#bottom-sticker`, and classed `Build` button. |
+| `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus, including the build detail page. |
+| `tests/unit/template-build-fixture.spec.ts` and `tests/e2e/template-auto-build.spec.ts` | Build fixture drift, exact redirect, route, budget, and production auto-build coverage. |
 
 ## Artifacts and test boundaries
 
@@ -1013,8 +1140,31 @@ these report artifacts. Test-runner traces and reports in `test-results/` or
 The deterministic release sequence is documented in
 [release gates](./release-gates.md). Template tests fulfill exact URLs from
 checked-in files with default-deny routes and do not contact Jenkins or vendor
-services. Phase 2 unit tests use an in-process HTTP server or injected browser
-and workflow dependencies to prove the trigger without live services.
+services. `template-build-fixture.spec.ts` validates the ninth file and
+`template-auto-build.spec.ts` proves one build POST without Snyk/Sonar capture.
+
+## Offline template fixture flow
+
+`loadTemplateReportFixture(env, origin?)` resolves the canonical `templates/`
+root (or `TEMPLATES_DIR`), reads the Jenkins login/job/build pages, Snyk HTML
+and summary, and SonarQube login/home/Overall/Issues pages. It enforces a
+4 MiB per-file and 16 MiB cumulative budget, validates saved origins and
+identities, then remaps only approved links/actions to a synthetic origin.
+
+The build page identity comes from the unique saved `Build with Parameters`
+anchor in `#side-panel`; the loader does not construct a branch path. The
+build template must have one matching canonical URL, one `POST` action, one
+`#bottom-sticker`, and one `Build` button with all three Jenkins class tokens.
+
+`templateResponse` serves only exact fixture URLs. `installTemplateReportRoutes`
+allows exact `GET`/`HEAD` responses, exact Jenkins login actions, the
+same-origin SonarQube `/sessions/new` authentication path, and the exact build
+`POST`. Unknown requests abort and record only bounded method/origin/path
+fields. The route state for SonarQube login is context-local.
+
+`templateProjectDocument(env, fixture, runType)` emits one normalized schema-v1
+project; `runType` defaults to `report`, while the auto-build E2E passes
+`auto-build` explicitly. Report mode never follows the build route.
 
 ## Security and maintenance boundaries
 
@@ -1033,9 +1183,10 @@ and workflow dependencies to prove the trigger without live services.
 - Update [multi-project configuration](./multi-project-configuration.md) for
   field-level changes, [architecture](./architecture.md) for data-flow
   changes, and [code standards](./code-standards.md) for implementation rules.
-</file>
 
-<file path="docs/multi-project-configuration.md">
+================
+File: docs/multi-project-configuration.md
+================
 # Multi-project configuration
 
 The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
@@ -1311,13 +1462,24 @@ the direct workflow contract.
 
 ## Offline capture fixtures
 
-Offline fixture tests read eight bounded inputs: the Jenkins job and login
-snapshots, Snyk HTML and summary JSON, and SonarQube login, home, Overall, and
-Issues HTML. They install bounded Playwright context routes at a synthetic
-origin and invoke the same capture, normalization, artifact, and rendering
-workflow. No Jenkins controller, pipeline, vendor service, or Jenkins
-credential is needed. These fixtures are test inputs, not report CLI source
-modes.
+Offline fixture tests read nine bounded inputs: Jenkins job, login, and build
+snapshots; Snyk HTML and summary JSON; and SonarQube login, home, Overall, and
+Issues HTML. `loadTemplateReportFixture` validates saved identities, derives
+the build page from the unique job-page link, rewrites approved URLs to a
+synthetic origin, and invokes the same capture or auto-build workflow.
+
+Fixture responsibilities are split across
+`src/templates/template-fixture-types.ts`,
+`template-fixture-file-io.ts`, `template-fixture-html.ts`,
+`template-fixture-sonarqube.ts`, `template-fixture-build-validation.ts`,
+`template-fixture-loader.ts`, and `template-fixture-routes.ts`.
+`template-report-fixture.ts` is the public facade.
+
+Routes fulfill only exact fixture `GET`/`HEAD` URLs, the Jenkins/SonarQube login
+POST exceptions, and the exact build action `POST`. A build POST returns
+`303 Location: <jobUrl>`; unknown methods/URLs abort and record sanitized
+misses. No Jenkins controller, pipeline, vendor service, or credential is
+needed. These fixtures are test inputs, not report CLI source modes.
 
 The checked-in template Snyk page and summary describe six findings (critical
 2, high 4). These are fixture data, not live service observations.
@@ -1346,23 +1508,27 @@ root can race publication. Use a trusted isolated root for sensitive runs.
 For the complete command and release boundary, see
 [release-gates.md](./release-gates.md). This repository documentation does not
 claim that a live Jenkins or browser execution has been run.
-</file>
 
-<file path="docs/project-overview-pdr.md">
+================
+File: docs/project-overview-pdr.md
+================
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
-**Document scope:** schema-v1 report capture and Phase 2 Jenkins auto-build  
-**Current milestone:** Phase 2 — **DONE** (2026-09-02T14:30:11+07:00)
+**Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build, and
+Phase 3 offline build-page fixtures  
+**Current milestone:** Phase 3 — **DONE** (2026-09-02T16:57:40+07:00)
 
 ## Product summary
 
 `auto-jobs` is a private Node.js/TypeScript Playwright runner for collecting
 bounded Snyk and SonarQube vulnerability evidence from exact Jenkins job pages.
-It writes immutable static reports for the report path. Phase 2 adds a separate,
-explicit one-project workflow for submitting a Jenkins **Build with Parameters**
-form for the configured target job. The build path returns a sanitized
-in-memory outcome; it does not collect evidence or write report artifacts.
+It writes immutable static reports for the report path. The explicit auto-build
+path submits one Jenkins **Build with Parameters** form for the configured
+target job and returns a sanitized in-memory outcome; it does not collect
+evidence or write report artifacts. Phase 3 adds a minimal checked-in build
+detail page and exact offline routes so both paths can be proven without live
+Jenkins or vendor services.
 
 The product treats Jenkins navigation and build submission as high-risk external
 operations. Configuration, target identity, selectors, credentials, deadlines,
@@ -1390,8 +1556,8 @@ and failure semantics are validated before side effects.
 - Running auto-build from `npm run report` or from an environment-wide switch.
 - Capturing Snyk/SonarQube evidence during an auto-build run.
 - Claiming that checked-in fixtures or deterministic tests prove a live build.
-- Providing a writable control dashboard in Phase 2. A future control-plane
-  caller must preserve the explicit selection and confirmation boundary.
+- Providing a writable control dashboard in the current phases. A future
+  control-plane caller must preserve the explicit selection and confirmation boundary.
 
 ## Users and use cases
 
@@ -1466,6 +1632,23 @@ and failure semantics are validated before side effects.
 - Do not persist auto-build artifacts, cookies, headers, bodies, crumbs, queue
   IDs, build numbers, or response bodies.
 
+### FR-7: Offline build-page fixture
+
+- Keep `templates/jenkins-template/template-build.html` minimal, inert, and
+  free of credentials, scripts, external assets, production hosts, and report links.
+- Load nine fixture files through canonical, no-follow, identity-checked reads
+  under the existing 4 MiB per-file and 16 MiB cumulative limits.
+- Derive the build detail URL from the unique saved `#side-panel`
+  **Build with Parameters** anchor; validate its origin, exact same-job
+  `/build` path, and allowed `delay=0sec` query.
+- Validate one matching build canonical URL, one `POST` form/action, one
+  `#bottom-sticker`, and one classed `Build` submit button before route setup.
+- Fulfill only exact synthetic fixture URLs. The exact build `POST` returns a
+  `303` redirect to the exact fixture job URL; all other methods/URLs abort and
+  record bounded sanitized misses.
+- Keep fixture helpers modular and preserve `template-report-fixture.ts` as the
+  public facade. Report mode does not follow the build route.
+
 ## Non-functional requirements
 
 | Area | Requirement |
@@ -1494,6 +1677,20 @@ and failure semantics are validated before side effects.
 - [x] Focused unit tests cover the trigger, auto-build runner, and report
   selection boundary without live Jenkins calls.
 
+## Phase 3 acceptance criteria
+
+- [x] The loader fails before browser startup when the saved build link,
+  canonical URL, form/action, sticker, or button contract drifts.
+- [x] Build identity is derived from saved links/canonicals rather than a
+  hard-coded branch or project field.
+- [x] The exact build `GET`/`POST` route and `303` redirect are fulfilled
+  offline; unknown requests remain default-deny and misses are sanitized.
+- [x] Auto-build E2E proves one build `POST`, exact request order, and no
+  Snyk/SonarQube capture requests; report flow remains unchanged.
+- [x] Fixture implementation is split into focused sub-200-line modules behind
+  the supported public facade.
+
+
 ## Operational constraints
 
 Before an authorized build, an operator or integration must verify the exact
@@ -1515,29 +1712,33 @@ configuration and secret values outside the repository.
 | Report runner | `src/runner.ts`, `src/project/project-runner.ts` | [architecture](./architecture.md) |
 | Jenkins identity and trigger | `src/jenkins/url-identity.ts`, `src/jenkins/build-trigger*.ts` | [system architecture](./system-architecture.md) |
 | Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
-| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts` | [release gates](./release-gates.md) |
+| Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
+| Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
+| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect preflight | `plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md` | Plan safety contract |
 
 ## Open scope
 
-Phase 2 does not expose a user-facing auto-build command or control API. Any
-future control-plane implementation must revalidate configuration on the
-server, select one exact project, require explicit user confirmation, preserve
-single-run/concurrency rules, and map only the safe outcome fields described
-above.
-</file>
+Phase 3 provides deterministic fixture proof but does not expose a production
+auto-build command or control API. Any future control-plane implementation must
+revalidate configuration on the server, select one exact project, require
+explicit user confirmation, preserve single-run/concurrency rules, and map only
+the safe outcome fields described above.
 
-<file path="docs/project-roadmap.md">
+================
+File: docs/project-roadmap.md
+================
 # Project roadmap
 
-Last updated: 2026-09-02T14:30:11+07:00  
+Last updated: 2026-09-02T16:57:40+07:00  
 Plan: [Jenkins Control Page and Auto-Build](../plans/260902-0251-jenkins-control-page-and-auto-build/plan.md)
 
 ## Overall status
 
 - Status: **In progress**
-- Progress: **31%** (16 of 52 weighted planned hours; 2 of 5 phases complete)
-- Current milestone: **Phase 2 — Jenkins auto-build workflow DONE**
+- Progress: **46%** (24 of 52 weighted planned hours; 3 of 5 phases complete)
+- Current milestone: **Phase 3 — Build-page fixture and exact routes DONE**
+- Phase 3 completed: **2026-09-02T16:57:40+07:00**
 - Phase 2 completed: **2026-09-02T14:30:11+07:00**
 
 ## Phase progress
@@ -1546,7 +1747,7 @@ Plan: [Jenkins Control Page and Auto-Build](../plans/260902-0251-jenkins-control
 |---|---|---:|---:|---|
 | 1. Configuration and run contracts | Completed | 100% | 6h | [Phase 1](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-01-configuration-run-contracts.md) |
 | 2. Jenkins auto-build workflow | **DONE** | **100%** | 10h | [Phase 2](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-02-jenkins-auto-build-workflow.md) |
-| 3. Build-page fixture and routes | Pending | 0% | 8h | [Phase 3](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-03-build-template-fixture.md) |
+| 3. Build-page fixture and routes | **DONE** | **100%** | 8h | [Phase 3](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-03-build-template-fixture.md) |
 | 4. Control Page server, API, and UI | Pending | 0% | 18h | [Phase 4](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-04-control-page-server-and-ui.md) |
 | 5. Verification, quality gates, and docs | Pending | 0% | 10h | [Phase 5](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-05-verification-and-documentation.md) |
 
@@ -1567,11 +1768,24 @@ Validation evidence:
 
 The earlier failed test run is superseded by the fresh passing rerun; no Phase 2 blocker remains. Live Jenkins execution remains intentionally outside deterministic validation and requires the [preflight contract](../plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md).
 
+## Phase 3 milestone
+
+Delivered the bounded build-page fixture and exact offline routes:
+
+- Added the ninth fixture file under existing per-file and cumulative read budgets.
+- Validated canonical build-page/form identities derived from saved Jenkins links.
+- Fulfilled only the exact build-page GET and one build-action POST; redirect returns the exact job URL.
+- Preserved report-only navigation and blocked unmatched methods/URLs with sanitized misses.
+
+Validation evidence:
+
+- [Tester validation](../plans/reports/tester-260902-1443-phase-03-build-template-fixture.md): final requested runs passed 203/203; typecheck and production build passed.
+- [Code review](../plans/reports/code-review-260902-1443-phase-03-build-template-fixture.md): 10/10, no critical issues or warnings; all changed files remain under 200 LOC.
+
 ## Next milestones
 
-1. **Phase 3 — Build-page fixture and routes (0%)**: add the bounded build-detail fixture and exact GET/POST route map.
-2. **Phase 4 — Control Page server, API, and UI (0%)**: expose loopback-only config/run controls with CSRF, ETag, and sanitized DTO boundaries.
-3. **Phase 5 — Verification, quality gates, and docs (0%)**: complete cross-browser/UI/security evidence and release documentation.
+1. **Phase 4 — Control Page server, API, and UI (0%)**: expose loopback-only config/run controls with CSRF, ETag, and sanitized DTO boundaries.
+2. **Phase 5 — Verification, quality gates, and docs (0%)**: complete cross-browser/UI/security evidence and release documentation.
 
 ## Changelog
 
@@ -1580,19 +1794,22 @@ The earlier failed test run is superseded by the fresh passing rerun; no Phase 2
 - Completed Phase 2 Jenkins target-branch auto-build workflow at 100%.
 - Recorded exactly-once POST and unknown-after-POST safety semantics.
 - Updated plan status/progress and linked validation/review evidence.
+- Completed Phase 3 build-page fixture and exact offline routes at 100%.
+- Linked final validation evidence (203 passing executions, typecheck, production build) and 10/10 code review.
 
 ## Unresolved questions
 
 None.
-</file>
 
-<file path="docs/release-gates.md">
+================
+File: docs/release-gates.md
+================
 # Release gates
 
-This project has deterministic local gates for native browsers and an
-offline-template gate. The commands below are the current release contract;
-test counts are intentionally not hard-coded because they change with the
-test suite.
+This project has deterministic local gates for native browsers, offline report
+fixtures, and the Phase 3 build-page fixture. The commands below are the
+current release contract; test counts are intentionally not hard-coded because
+they change with the test suite.
 
 ## Gate order
 
@@ -1639,6 +1856,28 @@ npm run test:release:webkit
 
 It runs the same production workflow and exact route map without a controller,
 vendor service, or published port.
+
+## Phase 3 build-page fixture gate
+
+Run the focused fixture checks directly:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/template-build-fixture.spec.ts \
+  --config=playwright.unit.config.ts
+node scripts/run-playwright.mjs playwright test \
+  tests/e2e/template-auto-build.spec.ts \
+  --config=playwright.config.ts
+```
+
+The unit suite loads the ninth checked-in template file and rejects drift in
+the saved build link, canonical URL, `POST` form/action, `#bottom-sticker`,
+button classes/text, or file-size budget. The E2E test runs the production
+auto-build workflow against the offline route map and proves
+`GET login -> POST login -> GET job -> GET build -> POST build -> GET job`,
+exactly one build `POST`, no Snyk/SonarQube requests, and no unmatched route.
+These commands do not contact Jenkins or vendor services and do not prove that
+a live build was created.
 
 ## Report gate
 
@@ -1755,9 +1994,11 @@ hosting.
 
 ## Browser-fixture boundary
 
-The report workflow does not depend on a Jenkins controller fixture. Current
-acceptance uses native Playwright tests and the checked-in offline template
-corpus; controller/container experiments are outside the report contract.
+The report workflow does not depend on a Jenkins controller. Current
+acceptance uses native Playwright tests and the checked-in nine-file offline
+corpus, including `templates/jenkins-template/template-build.html`. The
+build-detail route is synthetic, exact, default-deny, and test-only;
+controller/container experiments are outside the report and fixture contracts.
 
 ## Artifact verification
 
@@ -1820,12 +2061,13 @@ running the relevant command; the command output is the release evidence.
 
 Native browser, fixture startup, and live Jenkins results are environment
 evidence only when their commands are freshly run in the target environment.
-</file>
 
-<file path="docs/system-architecture.md">
+================
+File: docs/system-architecture.md
+================
 # System architecture
 
-This is the component-level view of `auto-jobs` after Phase 2. The repository
+This is the component-level view of `auto-jobs` after Phase 3. The repository
 has two intentionally separate execution paths:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
@@ -1833,6 +2075,8 @@ has two intentionally separate execution paths:
 - **Auto-build:** authenticate, inspect one exact Jenkins job, validate the
   parameterized-build controls, and submit one Jenkins form. It returns a
   safe in-memory outcome and does not capture or publish reports.
+- **Offline fixture:** load the checked-in nine-file corpus and fulfill only
+  exact synthetic URLs for deterministic report and auto-build tests.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
@@ -1851,14 +2095,14 @@ flowchart TB
   Jenkins --> ReportSources[Snyk / SonarQube publisher pages]
   Executor --> ReportRoot[Canonical report root]
   ReportRoot --> ReadOnlyServer[Read-only report server]
-  Templates[Checked-in offline fixtures] -. test-only exact routes .-> Executor
+  Templates[Checked-in offline fixtures] -. exact synthetic URL routes, tests only .-> Executor
 ```
 
 The loader and selection helpers are pure configuration boundaries. Browser
 launch, credentials, and network I/O begin only after a caller has selected an
 executor. The report server reads an existing canonical report root; it is not
 a build or report-generation API. No writable control-plane server is part of
-the current Phase 2 implementation.
+the current implementation.
 
 ## Mode dispatch
 
@@ -2017,6 +2261,42 @@ leases, recovers aggregate publication, and performs bounded orphan cleanup.
 and serves only safe GET/HEAD files below the canonical root. The server is
 read-only, unauthenticated, and loopback by default.
 
+## Offline template fixture subsystem
+
+The fixture subsystem has a one-way dependency graph:
+
+```text
+types -> file-io/html -> sonarqube/build-validation -> loader/routes -> facade
+```
+
+| Module or asset | Contract |
+| --- | --- |
+| `template-fixture-types.ts` | Readonly fixture, response, route-miss/recorder, file-identity, budget, artifact-link, and Sonar route types. |
+| `template-fixture-file-io.ts` | Canonical root resolution and descriptor/no-follow reads with identity, symlink, 4 MiB per-file, and 16 MiB total checks. |
+| `template-fixture-html.ts` | HTML tag/attribute parsing, URL policy, canonical/form/link rewrites, artifact selection, and exact URL comparison. |
+| `template-fixture-sonarqube.ts` | Saved SonarQube origin/project identity checks and dashboard/issues link rewrites. |
+| `template-fixture-build-validation.ts` | Unique `#side-panel` build-link discovery plus canonical, form/action, sticker, and button validation. |
+| `template-fixture-loader.ts` | Reads nine files, derives build/report/Sonar destinations, rewrites selected links/actions, and assembles `TemplateReportFixture`. |
+| `template-fixture-routes.ts` | Installs the catch-all Playwright route handler, fulfills exact responses, handles exact POST exceptions, and records sanitized misses. |
+| `template-report-fixture.ts` | Public facade exporting the supported loader, route installer, response helper, types, origin, and total-size boundary. |
+| `templates/jenkins-template/template-build.html` | Minimal saved-origin build detail page: one canonical URL, one `POST` form, one `#bottom-sticker`, and one classed `Build` button. |
+
+The loader derives the build identity from the unique saved job-page
+`Build with Parameters` anchor. It permits only the approved saved origin, the
+same-job `/build` path, and the detail-page `delay=0sec` query. The build
+template canonical must match that URL; its form action must be the same
+`/build` path without query or fragment. Only the selected job href and
+validated build form action are remapped to the synthetic origin.
+
+The route map fulfills nine exact `GET`/`HEAD` fixture URLs. It also permits
+the exact Jenkins login actions, the same-origin SonarQube `/sessions/new`
+authentication path, and the exact build-action `POST`. The build action
+returns `303 Location: <fixture.jobUrl>` without reading or reflecting form
+data; the browser then requests the exact job page. Any other method or URL is
+aborted and recorded with bounded method, origin, and pathname fields only.
+SonarQube home serves the login page until the context-local login `POST` marks
+that route authenticated.
+
 ## Test architecture
 
 - Configuration and selection tests exercise normalization, explicit mode
@@ -2030,8 +2310,11 @@ read-only, unauthenticated, and loopback by default.
 - `tests/unit/sequential-runner.spec.ts` preserves shared launch options,
   sequential report behavior, and exclusion of auto-build projects from
   `runFromConfig`.
-- Template E2E tests use exact default-deny routes and checked-in fixtures;
-  they do not claim live Jenkins or vendor execution.
+- Template unit and E2E tests use exact default-deny routes and checked-in
+  fixtures; `template-build-fixture.spec.ts` proves build-page drift and
+  redirect contracts, while `template-auto-build.spec.ts` exercises the
+  production auto-build workflow with one build `POST`. They do not claim live
+  Jenkins or vendor execution.
 
 ## Invariants for extensions
 
@@ -2046,9 +2329,10 @@ read-only, unauthenticated, and loopback by default.
    matching POST.
 6. Preserve one absolute deadline, bounded cleanup, secret redaction, and the
    existing canonical report-root/security policy.
-</file>
 
-<file path="package.json">
+================
+File: package.json
+================
 {
   "name": "auto-jobs",
   "version": "0.1.0",
@@ -2081,9 +2365,10 @@ read-only, unauthenticated, and loopback by default.
     "typescript": "7.0.2"
   }
 }
-</file>
 
-<file path="plans/260902-0251-jenkins-control-page-and-auto-build/phase-01-configuration-run-contracts.md">
+================
+File: plans/260902-0251-jenkins-control-page-and-auto-build/phase-01-configuration-run-contracts.md
+================
 # Phase 01 — Configuration and Run Contracts
 
 ## Context links
@@ -2234,9 +2519,10 @@ Phase 2 consumes `RunType`, exact selector defaults, and `selectAutoBuildProject
 ## Unresolved questions
 
 None.
-</file>
 
-<file path="plans/260902-0251-jenkins-control-page-and-auto-build/phase-02-jenkins-auto-build-workflow.md">
+================
+File: plans/260902-0251-jenkins-control-page-and-auto-build/phase-02-jenkins-auto-build-workflow.md
+================
 # Phase 02 — Jenkins Target-Branch Auto-Build Workflow
 
 ## Context links
@@ -2410,9 +2696,10 @@ Phase 3 supplies deterministic build-detail HTML and an exact GET/POST route seq
 ## Unresolved questions
 
 None. Jenkins parameters use existing page defaults by explicit scope decision.
-</file>
 
-<file path="plans/260902-0251-jenkins-control-page-and-auto-build/phase-03-build-template-fixture.md">
+================
+File: plans/260902-0251-jenkins-control-page-and-auto-build/phase-03-build-template-fixture.md
+================
 # Phase 03 — Build-Page Template Fixture and Exact Routes
 
 ## Context links
@@ -2428,8 +2715,11 @@ None. Jenkins parameters use existing page defaults by explicit scope decision.
 - Date: 2026-09-02
 - Priority: P1; deterministic proof without live side effects
 - Effort: 8h
-- Implementation status: Pending
-- Review status: Pending
+- Implementation status: DONE
+- Progress: 100%
+- Review status: Approved (Score: 10/10)
+- Completed at: 2026-09-02T16:57:40+07:00
+- Evidence: [validation report](../../reports/tester-260902-1443-phase-03-build-template-fixture.md) and [code review](../../reports/code-review-260902-1443-phase-03-build-template-fixture.md).
 - Goal: add a minimal faithful Jenkins parameter-detail fixture and route only its exact GET/POST flow.
 
 ## Key insights
@@ -2530,14 +2820,14 @@ All paths rooted at `G:/ws/sharing/auto-jobs`.
 
 ## Todo list
 
-- [ ] Custom build template matches exact required DOM contract.
-- [ ] Loader derives identity from saved links/canonicals, not hard-coded branch fields.
-- [ ] Ninth file obeys existing safe-read budgets.
-- [ ] Only exact GET build page and POST build action are fulfilled.
-- [ ] POST redirects to exact job without reflecting data.
-- [ ] Report fixture flow remains unchanged.
-- [ ] Oversized fixture module split into focused sub-200-line files.
-- [ ] Chromium E2E records exactly one build POST.
+- [x] Custom build template matches exact required DOM contract.
+- [x] Loader derives identity from saved links/canonicals, not hard-coded branch fields.
+- [x] Ninth file obeys existing safe-read budgets.
+- [x] Only exact GET build page and POST build action are fulfilled.
+- [x] POST redirects to exact job without reflecting data.
+- [x] Report fixture flow remains unchanged.
+- [x] Oversized fixture module split into focused sub-200-line files.
+- [x] Chromium E2E records exactly one build POST.
 
 ## Success criteria
 
@@ -2572,9 +2862,10 @@ Phase 4 injects this executor into the Control Page run manager for tests while 
 ## Unresolved questions
 
 None.
-</file>
 
-<file path="plans/260902-0251-jenkins-control-page-and-auto-build/phase-04-control-page-server-and-ui.md">
+================
+File: plans/260902-0251-jenkins-control-page-and-auto-build/phase-04-control-page-server-and-ui.md
+================
 # Phase 04 — Control Page Web UI and API Server
 
 ## Context links
@@ -2766,9 +3057,10 @@ Phase 5 adds cross-browser fixture/UI gates, exact security regressions, documen
 ## Unresolved questions
 
 None.
-</file>
 
-<file path="plans/260902-0251-jenkins-control-page-and-auto-build/phase-05-verification-and-documentation.md">
+================
+File: plans/260902-0251-jenkins-control-page-and-auto-build/phase-05-verification-and-documentation.md
+================
 # Phase 05 — Verification, Quality Gates, and Documentation
 
 ## Context links
@@ -3000,9 +3292,10 @@ After all gates pass, implementation can be reviewed for release. Operators must
 ## Unresolved questions
 
 None.
-</file>
 
-<file path="plans/260902-0251-jenkins-control-page-and-auto-build/plan.md">
+================
+File: plans/260902-0251-jenkins-control-page-and-auto-build/plan.md
+================
 ---
 title: "Jenkins Control Page and Auto-Build"
 description: "Add safe target-branch Jenkins build submission and a loopback control dashboard for configuration, mode selection, runs, logs, and report links."
@@ -3022,10 +3315,11 @@ One control surface discovers checked-in `config/*.json`, edits validated projec
 
 ## Status
 
-- Overall status: In progress — Phase 2 is DONE; Phases 3–5 remain pending.
-- Overall progress: 31% (16h of 52h weighted planned effort; 2 of 5 phases complete).
-- Last updated: 2026-09-02T14:30:11+07:00.
+- Overall status: In progress — Phases 1–3 are DONE; Phases 4–5 remain pending.
+- Overall progress: 46% (24h of 52h weighted planned effort; 3 of 5 phases complete).
+- Last updated: 2026-09-02T16:57:40+07:00.
 - Phase 2 evidence: [validation report](../../reports/tester-260902-1302-phase-02-jenkins-auto-build-workflow.md) and [code review](../../reports/code-review-260902-1311-phase-02-jenkins-auto-build-workflow.md).
+- Phase 3 evidence: [validation report](../../reports/tester-260902-1443-phase-03-build-template-fixture.md) and [code review](../../reports/code-review-260902-1443-phase-03-build-template-fixture.md).
 
 ## Architecture decisions
 
@@ -3047,7 +3341,7 @@ Read and sign off [preflight contract and side effects](./preflight-contract-and
 |---|---|---|---:|---:|---|
 | 1 | Configuration and run contracts | Completed | 100% | 6h | [phase 01](./phase-01-configuration-run-contracts.md) |
 | 2 | Jenkins auto-build workflow | DONE | 100% | 10h | [phase 02](./phase-02-jenkins-auto-build-workflow.md) |
-| 3 | Build-page fixture and routes | Pending | 0% | 8h | [phase 03](./phase-03-build-template-fixture.md) |
+| 3 | Build-page fixture and routes | DONE | 100% | 8h | [phase 03](./phase-03-build-template-fixture.md) |
 | 4 | Control Page server, API, and UI | Pending | 0% | 18h | [phase 04](./phase-04-control-page-server-and-ui.md) |
 | 5 | Verification, quality gates, docs | Pending | 0% | 10h | [phase 05](./phase-05-verification-and-documentation.md) |
 
@@ -3074,9 +3368,10 @@ Queue/build polling, build cancellation, parameter mutation, scheduling, multi-u
 ## Unresolved questions
 
 None. Assumption: Jenkins parameter defaults are intentionally configured; automation only presses **Build**.
-</file>
 
-<file path="plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md">
+================
+File: plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md
+================
 # Preflight Contract and Side-Effect Review
 
 ## Context
@@ -3205,9 +3500,10 @@ Build parameters, queue correlation, terminal polling, retries, cancellation, sc
 ## Unresolved questions
 
 None.
-</file>
 
-<file path="playwright.config.ts">
+================
+File: playwright.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -3255,9 +3551,10 @@ export default defineConfig({
     },
   ],
 });
-</file>
 
-<file path="playwright.template.config.ts">
+================
+File: playwright.template.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -3298,9 +3595,10 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium-template', use: { browserName: 'chromium' } }],
 });
-</file>
 
-<file path="playwright.unit.config.ts">
+================
+File: playwright.unit.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 import { parseBrowserName } from './src/config.js';
@@ -3351,9 +3649,10 @@ export default defineConfig({
     },
   ],
 });
-</file>
 
-<file path="playwright.webkit.config.ts">
+================
+File: playwright.webkit.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -3394,9 +3693,10 @@ export default defineConfig({
   },
   projects: [{ name: 'webkit-template', use: { browserName: 'webkit' } }],
 });
-</file>
 
-<file path="README.md">
+================
+File: README.md
+================
 # Jenkins Playwright vulnerability reports
 
 This project collects bounded Snyk and SonarQube evidence from configured
@@ -3664,9 +3964,10 @@ then uses a bounded fallback and records a warning if both attempts fail.
   The lock owner record contains a token, PID, and hostname—not a UID—so the
   lock is not a same-UID authorization boundary or a distributed lock.
 - This documentation does not claim live Jenkins or browser execution.
-</file>
 
-<file path="scripts/copy-report-css.mjs">
+================
+File: scripts/copy-report-css.mjs
+================
 import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -3679,9 +3980,10 @@ await copyFile(
   resolve(projectRoot, 'src', 'reporting', 'report.css'),
   resolve(outputDirectory, 'report.css'),
 );
-</file>
 
-<file path="scripts/report-runtime.mjs">
+================
+File: scripts/report-runtime.mjs
+================
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -3880,9 +4182,10 @@ export async function createRuntimeDirectory() {
     throw error;
   }
 }
-</file>
 
-<file path="scripts/run-playwright.mjs">
+================
+File: scripts/run-playwright.mjs
+================
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 
@@ -4015,9 +4318,10 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
-</file>
 
-<file path="scripts/run-report.mjs">
+================
+File: scripts/run-report.mjs
+================
 import { spawn } from 'node:child_process';
 
 import { createRuntimeDirectory, removeRuntimeDirectory } from './report-runtime.mjs';
@@ -4146,9 +4450,10 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
-</file>
 
-<file path="scripts/run-template-report.mjs">
+================
+File: scripts/run-template-report.mjs
+================
 import { spawn } from 'node:child_process';
 
 import { createRuntimeDirectory, removeRuntimeDirectory } from './report-runtime.mjs';
@@ -4277,9 +4582,10 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
-</file>
 
-<file path="src/artifacts/aggregate-manifest-reader.ts">
+================
+File: src/artifacts/aggregate-manifest-reader.ts
+================
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -4589,9 +4895,10 @@ export async function discoverRunManifests(
   });
   return { manifests, warnings, ignoredIncompatibleCount };
 }
-</file>
 
-<file path="src/artifacts/aggregate-publication-recovery.ts">
+================
+File: src/artifacts/aggregate-publication-recovery.ts
+================
 import { constants } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -4718,9 +5025,10 @@ export async function recoverAggregatePublication(reportRoot: string): Promise<v
     await fs.unlink(journalPath);
   }
 }
-</file>
 
-<file path="src/artifacts/aggregate-report-publisher.ts">
+================
+File: src/artifacts/aggregate-report-publisher.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -4864,13 +5172,15 @@ export async function writeAggregateDataPair(
     }
   }
 }
-</file>
 
-<file path="src/artifacts/artifact-identity.ts">
+================
+File: src/artifacts/artifact-identity.ts
+================
 export const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
-</file>
 
-<file path="src/artifacts/artifact-manifest.ts">
+================
+File: src/artifacts/artifact-manifest.ts
+================
 import type { ProjectOutcomeState } from '../project/project-types.js';
 
 export interface ProjectRunManifest {
@@ -4921,9 +5231,10 @@ export interface ManifestDiscoveryResult {
   readonly warnings: readonly string[];
   readonly ignoredIncompatibleCount: number;
 }
-</file>
 
-<file path="src/artifacts/artifact-paths.ts">
+================
+File: src/artifacts/artifact-paths.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -5132,9 +5443,10 @@ export class ArtifactPaths {
     return acquireReportRootLock(this.reportRoot, options);
   }
 }
-</file>
 
-<file path="src/artifacts/failure-artifact-inventory.ts">
+================
+File: src/artifacts/failure-artifact-inventory.ts
+================
 import * as crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import type { Dirent } from 'node:fs';
@@ -5477,9 +5789,10 @@ export async function failureManifestWithAvailableArtifacts(
     warnings,
   });
 }
-</file>
 
-<file path="src/artifacts/orphan-cleanup.ts">
+================
+File: src/artifacts/orphan-cleanup.ts
+================
 import type { Dirent, Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -5731,9 +6044,10 @@ export async function cleanupOrphans(
   await cleanupReportRoot(report, state);
   return { inspected: state.inspected, removed: state.removed, warnings: state.warnings };
 }
-</file>
 
-<file path="src/artifacts/process-instance-inspector.ts">
+================
+File: src/artifacts/process-instance-inspector.ts
+================
 import { execFile } from 'node:child_process';
 
 const MAX_INSPECTOR_OUTPUT_BYTES = 1_024;
@@ -5820,9 +6134,10 @@ export const inspectProcessInstance: ProcessInstanceInspector = async (pid) => {
   if (!Number.isSafeInteger(pid) || pid < 1) return { state: 'unknown' };
   return process.platform === 'win32' ? inspectWithPowerShell(pid) : inspectWithNode(pid);
 };
-</file>
 
-<file path="src/artifacts/report-root-lock-owner.ts">
+================
+File: src/artifacts/report-root-lock-owner.ts
+================
 import { constants, type Dirent, type Stats } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -6080,9 +6395,10 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
     }
   }
 }
-</file>
 
-<file path="src/artifacts/report-root-lock.ts">
+================
+File: src/artifacts/report-root-lock.ts
+================
 export {
   acquireReportRootLock,
   REPORT_LOCK_HEARTBEAT_MS,
@@ -6090,9 +6406,10 @@ export {
   REPORT_LOCK_WAIT_MS,
 } from './report-root-lock-owner.js';
 export type { ReportRootLock, ReportRootLockOptions } from './report-root-lock-owner.js';
-</file>
 
-<file path="src/artifacts/result-sanitizer.ts">
+================
+File: src/artifacts/result-sanitizer.ts
+================
 import { redactText, sanitizeUrl } from '../config-errors.js';
 import type {
   CaptureMetadata,
@@ -6270,9 +6587,10 @@ export function safeFailure(value: ProjectFailureResultV3): ProjectFailureResult
 }
 
 export { assertValidFailureResult, assertValidProjectResult };
-</file>
 
-<file path="src/artifacts/result-validation.ts">
+================
+File: src/artifacts/result-validation.ts
+================
 import type {
   AggregateProjectSummary,
   AggregateReportResult,
@@ -6680,9 +6998,10 @@ export function isValidAggregateResult(value: unknown): value is AggregateReport
 export function assertValidAggregateResult(value: unknown): asserts value is AggregateReportResult {
   if (!isValidAggregateResult(value)) throw new Error('aggregate result schema is invalid');
 }
-</file>
 
-<file path="src/artifacts/result-writer.ts">
+================
+File: src/artifacts/result-writer.ts
+================
 import * as crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
@@ -6887,9 +7206,10 @@ export async function writeAggregateData(
 ): Promise<string> {
   return writeAggregateDataPair(reportRoot, aggregate);
 }
-</file>
 
-<file path="src/artifacts/snyk-result-sanitizer.ts">
+================
+File: src/artifacts/snyk-result-sanitizer.ts
+================
 import { redactText } from '../config-errors.js';
 import type {
   SnykFinding,
@@ -6968,9 +7288,10 @@ export function safeSnykSource(
     ...(value.findings === undefined ? {} : { findings: value.findings.slice(0, MAX_SNYK_FINDINGS).map((finding) => safeFinding(finding, sanitize)) }),
   };
 }
-</file>
 
-<file path="src/artifacts/staging-lease.ts">
+================
+File: src/artifacts/staging-lease.ts
+================
 import { constants } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -7104,9 +7425,10 @@ export async function releaseStagingLease(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 }
-</file>
 
-<file path="src/browser-launcher.ts">
+================
+File: src/browser-launcher.ts
+================
 import { chromium, firefox, webkit, type Browser } from '@playwright/test';
 
 import type { BrowserName } from './types.js';
@@ -7160,9 +7482,10 @@ export async function defaultLaunch(
   if (browserName === 'webkit') return webkit.launch(options);
   return chromium.launch(options);
 }
-</file>
 
-<file path="src/cli.ts">
+================
+File: src/cli.ts
+================
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7288,9 +7611,10 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     process.exitCode = 1;
   }
 }
-</file>
 
-<file path="src/config-errors.ts">
+================
+File: src/config-errors.ts
+================
 export class ConfigError extends Error {
   readonly issues: readonly string[];
 
@@ -7363,9 +7687,10 @@ export function sanitizeUrl(value: string): string {
     return redactText(value);
   }
 }
-</file>
 
-<file path="src/config-selectors.ts">
+================
+File: src/config-selectors.ts
+================
 import type {
   LocatorSelector,
   SelectorConfig,
@@ -7485,9 +7810,10 @@ export function parseSelectorValue(
   }
   return selector;
 }
-</file>
 
-<file path="src/config-values.ts">
+================
+File: src/config-values.ts
+================
 import type { BrowserName } from './types.js';
 
 import { ConfigError } from './config-errors.js';
@@ -7571,9 +7897,10 @@ export function parseBrowserName(value: string | undefined): BrowserName {
   }
   return input as BrowserName;
 }
-</file>
 
-<file path="src/config.ts">
+================
+File: src/config.ts
+================
 export {
   ConfigError,
   formatDiagnostic,
@@ -7624,9 +7951,10 @@ export {
   isWithinBasePath,
 } from './security/url-policy.js';
 export { resolveSafeRelativeUrl } from './security/relative-url-policy.js';
-</file>
 
-<file path="src/config/config-types.ts">
+================
+File: src/config/config-types.ts
+================
 import type {
   BrowserName,
   RunType,
@@ -7720,9 +8048,10 @@ export interface ProjectSecrets {
   readonly username: string;
   readonly password: string;
 }
-</file>
 
-<file path="src/config/project-config-environment.ts">
+================
+File: src/config/project-config-environment.ts
+================
 import { ConfigError } from '../config-errors.js';
 import type {
   NormalizedProjectConfig,
@@ -7780,9 +8109,10 @@ export function resolveProjectSecrets(
   if (issues.length > 0) throw new ConfigError(issues);
   return Object.freeze({ username: username as string, password: password as string });
 }
-</file>
 
-<file path="src/config/project-config-field-validation.ts">
+================
+File: src/config/project-config-field-validation.ts
+================
 import * as path from 'node:path';
 
 import { ConfigError } from '../config-errors.js';
@@ -7901,9 +8231,10 @@ export function safeArtifactPath(value: unknown, fieldName: string, issues: stri
     issues.push(`${fieldName} must not be the filesystem root`);
   }
 }
-</file>
 
-<file path="src/config/project-config-loader.ts">
+================
+File: src/config/project-config-loader.ts
+================
 import * as path from 'node:path';
 
 import { ConfigError } from '../config-errors.js';
@@ -8073,9 +8404,10 @@ export function loadProjectConfig(
   assertNoLegacyEnvironmentInputs(env);
   return normalizeDocument(readDocument(filePath), env, validateSecrets);
 }
-</file>
 
-<file path="src/config/project-config-normalization.ts">
+================
+File: src/config/project-config-normalization.ts
+================
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -8237,9 +8569,10 @@ export function normalizedSource(
     ...(input?.projectId === undefined ? {} : { projectId: input.projectId.trim() }),
   });
 }
-</file>
 
-<file path="src/config/project-config-project-validation.ts">
+================
+File: src/config/project-config-project-validation.ts
+================
 import { ConfigError } from '../config-errors.js';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
 import { DEFAULT_SELECTORS, isRecord, parseSelectorValue } from '../config-selectors.js';
@@ -8421,9 +8754,10 @@ export function validateDefaults(value: unknown, issues: string[]): void {
     issues.push('config.defaults must be an object');
   }
 }
-</file>
 
-<file path="src/config/project-config-schema.ts">
+================
+File: src/config/project-config-schema.ts
+================
 import { ConfigError } from '../config-errors.js';
 import { isRecord } from '../config-selectors.js';
 import type { ProjectConfigDocumentV1 } from './config-types.js';
@@ -8475,9 +8809,10 @@ export function assertProjectConfigDocument(value: unknown): ProjectConfigDocume
   if (issues.length > 0) throw new ConfigError(issues);
   return value as unknown as ProjectConfigDocumentV1;
 }
-</file>
 
-<file path="src/config/project-run-selection.ts">
+================
+File: src/config/project-run-selection.ts
+================
 import { ConfigError } from '../config-errors.js';
 import type { NormalizedProjectConfig } from './config-types.js';
 
@@ -8512,9 +8847,10 @@ export function selectAutoBuildProject(
   }
   return project;
 }
-</file>
 
-<file path="src/jenkins/auth.ts">
+================
+File: src/jenkins/auth.ts
+================
 import {
   expect,
   type Browser,
@@ -8738,9 +9074,10 @@ export async function createJenkinsSession(
     throw error;
   }
 }
-</file>
 
-<file path="src/jenkins/build-trigger-validation.ts">
+================
+File: src/jenkins/build-trigger-validation.ts
+================
 import type { Locator, Page } from '@playwright/test';
 
 import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
@@ -8858,9 +9195,10 @@ export async function locateAndValidateBuildFormAndButton(
 
   return buildButton;
 }
-</file>
 
-<file path="src/jenkins/build-trigger.ts">
+================
+File: src/jenkins/build-trigger.ts
+================
 import type { Page, Request, Response } from '@playwright/test';
 
 import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
@@ -8974,9 +9312,10 @@ export async function triggerParameterizedBuild(
     page.off('response', onResponse);
   }
 }
-</file>
 
-<file path="src/jenkins/errors.ts">
+================
+File: src/jenkins/errors.ts
+================
 import type { Page } from '@playwright/test';
 
 import {
@@ -9015,9 +9354,10 @@ export function formatJenkinsFailure(
   const safeUrl = formatDiagnostic(sanitizeUrl(currentUrl), [config.username, config.password]);
   return `${action} at ${safeUrl}: ${formatJenkinsObservation(error, config)}${suffix}`;
 }
-</file>
 
-<file path="src/jenkins/locators.ts">
+================
+File: src/jenkins/locators.ts
+================
 import type { Locator, Page } from '@playwright/test';
 
 import type { LocatorSelector } from '../types.js';
@@ -9076,9 +9416,10 @@ export function selectorDescription(selector: LocatorSelector): string {
   const name = selector.name === undefined ? '' : ` name=${selector.name}`;
   return `${selector.kind}:${selector.value}${name}`;
 }
-</file>
 
-<file path="src/jenkins/runner-config.ts">
+================
+File: src/jenkins/runner-config.ts
+================
 import type { BrowserName, LocatorSelector } from '../types.js';
 
 export interface JenkinsRunnerSelectors {
@@ -9118,9 +9459,10 @@ export const DEFAULT_JENKINS_RUNNER_SELECTORS: JenkinsRunnerSelectors = {
     required: true,
   },
 };
-</file>
 
-<file path="src/jenkins/url-identity.ts">
+================
+File: src/jenkins/url-identity.ts
+================
 import { assertAllowedUrl } from '../security/url-policy.js';
 
 export function normalizedPathname(url: string): string {
@@ -9223,9 +9565,10 @@ export function validateJenkinsJobActionUrl(
 export function validateJenkinsUrl(candidateUrl: string, baseUrl: string): string {
   return assertAllowedUrl(candidateUrl, baseUrl, [], 'Jenkins URL');
 }
-</file>
 
-<file path="src/project/auto-build-runner.ts">
+================
+File: src/project/auto-build-runner.ts
+================
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 import { formatDiagnostic } from '../config-errors.js';
@@ -9350,9 +9693,10 @@ export async function runAutoBuildProject(
     }
   }
 }
-</file>
 
-<file path="src/project/project-capture.ts">
+================
+File: src/project/project-capture.ts
+================
 import type { Page } from '@playwright/test';
 
 import { redactText, sanitizeUrl } from '../config-errors.js';
@@ -9580,9 +9924,10 @@ export function sanitizeProjectDiagnostics(
     observationErrors: boundedDiagnostics(diagnostics.observationErrors.map((value) => redactText(value, secretValues))),
   };
 }
-</file>
 
-<file path="src/project/project-manifest.ts">
+================
+File: src/project/project-manifest.ts
+================
 import type { NormalizedProjectConfig } from '../config/config-types.js';
 import type { ProjectRunManifest } from '../artifacts/artifact-manifest.js';
 import { boundedDiagnostics } from '../workflow/diagnostics.js';
@@ -9631,9 +9976,10 @@ export function createProjectManifest(
     }),
   };
 }
-</file>
 
-<file path="src/project/project-run-state.ts">
+================
+File: src/project/project-run-state.ts
+================
 import type { ProjectRunIdentity } from './project-types.js';
 
 export type ProjectRunPhase =
@@ -9682,9 +10028,10 @@ export class ProjectRunState {
     this.currentPhase = 'failed';
   }
 }
-</file>
 
-<file path="src/project/project-runner.ts">
+================
+File: src/project/project-runner.ts
+================
 import type { BrowserContext, Browser, Page } from '@playwright/test';
 
 import { formatDiagnostic, sanitizeUrl } from '../config-errors.js';
@@ -9986,9 +10333,10 @@ export async function runProject(
     };
   }
 }
-</file>
 
-<file path="src/project/project-types.ts">
+================
+File: src/project/project-types.ts
+================
 import type { AggregateReportResult } from '../result-types.js';
 import type { DiscoveredRunManifest } from '../artifacts/artifact-manifest.js';
 
@@ -10021,9 +10369,10 @@ export interface RunnerExecutionResult {
   readonly warnings: readonly string[];
   readonly exitCode: 0 | 1;
 }
-</file>
 
-<file path="src/project/project-workflow.ts">
+================
+File: src/project/project-workflow.ts
+================
 import type { Page } from '@playwright/test';
 
 import { deriveJenkinsBaseUrl } from '../config-values.js';
@@ -10109,9 +10458,10 @@ export async function executeJenkinsAutoBuildWorkflow(
   await openJenkinsJob(page, config, deadline);
   return triggerParameterizedBuild(page, config, deadline);
 }
-</file>
 
-<file path="src/reporting/aggregate-report-renderer.ts">
+================
+File: src/reporting/aggregate-report-renderer.ts
+================
 import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from '../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from './html-escape.js';
 import { localManifestHref, localReportHref } from './report-links.js';
@@ -10165,9 +10515,10 @@ export function renderAggregateReport(aggregate: AggregateReportResult): string 
 </html>
 `;
 }
-</file>
 
-<file path="src/reporting/html-escape.ts">
+================
+File: src/reporting/html-escape.ts
+================
 const HTML_ENTITIES: Readonly<Record<string, string>> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -10190,9 +10541,10 @@ export function escapeHtmlText(value: string): string {
 export function escapeHtmlAttribute(value: string): string {
   return escape(value);
 }
-</file>
 
-<file path="src/reporting/project-report-renderer.ts">
+================
+File: src/reporting/project-report-renderer.ts
+================
 import { escapeHtmlAttribute, escapeHtmlText } from './html-escape.js';
 import { REPORT_ANCHORS, stateClass, stateLabel, type ProjectReportViewModel } from './report-view-model.js';
 import { renderArtifactSection } from './sections/artifact-section.js';
@@ -10239,9 +10591,10 @@ export function renderProjectReport(model: ProjectReportViewModel): string {
 </html>
 `;
 }
-</file>
 
-<file path="src/reporting/report-links.ts">
+================
+File: src/reporting/report-links.ts
+================
 import { assertSafeReferenceUrl } from '../security/url-policy.js';
 
 const SAFE_LOCAL_SEGMENT = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
@@ -10283,9 +10636,10 @@ export function localReportHref(value: string | undefined): string | undefined {
 export function localManifestHref(value: string | undefined): string | undefined {
   return value === undefined || !value.endsWith('/manifest.json') ? undefined : safeLocalPath(value);
 }
-</file>
 
-<file path="src/reporting/report-output.ts">
+================
+File: src/reporting/report-output.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -10426,9 +10780,10 @@ export function reportFileExists(filename: string): boolean {
     return false;
   }
 }
-</file>
 
-<file path="src/reporting/report-server-cli.ts">
+================
+File: src/reporting/report-server-cli.ts
+================
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10517,15 +10872,17 @@ if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLTo
     process.exitCode = 1;
   });
 }
-</file>
 
-<file path="src/reporting/report-server-constants.ts">
+================
+File: src/reporting/report-server-constants.ts
+================
 export const MAX_STATIC_FILE_BYTES = 16 * 1_048_576;
 export const AGGREGATE_REPORT_MARKER = '<title>Vulnerability report index</title>';
 export const REPORT_CSP = "default-src 'none'; img-src 'self' data:; style-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'";
-</file>
 
-<file path="src/reporting/report-server-file-io.ts">
+================
+File: src/reporting/report-server-file-io.ts
+================
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -10786,9 +11143,10 @@ export async function readBounded(file: OpenedReportFile): Promise<Buffer> {
   }
   return Buffer.concat(chunks, total);
 }
-</file>
 
-<file path="src/reporting/report-server-files.ts">
+================
+File: src/reporting/report-server-files.ts
+================
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as path from 'node:path';
 
@@ -10880,9 +11238,10 @@ export async function handleReportRequest(root: string, request: IncomingMessage
     await file.handle.close().catch(() => undefined);
   }
 }
-</file>
 
-<file path="src/reporting/report-server.ts">
+================
+File: src/reporting/report-server.ts
+================
 import { createServer, type Server } from 'node:http';
 import { isIP, type Socket } from 'node:net';
 
@@ -10977,9 +11336,10 @@ export async function createReportServer(
   const formattedHost = host.includes(':') ? `[${host}]` : host;
   return { server, root, host, port: address.port, url: `http://${formattedHost}:${address.port}/`, close };
 }
-</file>
 
-<file path="src/reporting/report-view-model.ts">
+================
+File: src/reporting/report-view-model.ts
+================
 import type { ProjectFailureResultV3, ProjectRunManifest } from '../artifacts/artifact-manifest.js';
 import type {
   CaptureMetadata,
@@ -11098,9 +11458,10 @@ export function createProjectReportViewModel(
     ...(manifest.artifacts.trace === undefined ? {} : { trace: manifest.artifacts.trace }),
   };
 }
-</file>
 
-<file path="src/reporting/report.css">
+================
+File: src/reporting/report.css
+================
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -11171,9 +11532,10 @@ footer { padding: 0 0 3rem; color: var(--ink-muted); font-size: 0.86rem; }
   th, td { padding: 0.45rem; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
-</file>
 
-<file path="src/reporting/sections/artifact-section.ts">
+================
+File: src/reporting/sections/artifact-section.ts
+================
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref } from '../report-links.js';
 import { REPORT_ANCHORS, type ProjectReportViewModel } from '../report-view-model.js';
@@ -11202,9 +11564,10 @@ export function renderArtifactSection(model: ProjectReportViewModel): string {
     <p class="security-note">When served over HTTP, add a response-header CSP with <code>frame-ancestors 'none'</code>; a meta policy cannot enforce that directive.</p>
   </section>`;
 }
-</file>
 
-<file path="src/reporting/sections/jenkins-section.ts">
+================
+File: src/reporting/sections/jenkins-section.ts
+================
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localAnchorHref, safeExternalHref } from '../report-links.js';
 import { REPORT_ANCHORS, stateClass, stateLabel, type ProjectReportViewModel } from '../report-view-model.js';
@@ -11251,9 +11614,10 @@ export function renderJenkinsSection(model: ProjectReportViewModel): string {
     <nav aria-label="Report sections"><h3>Evidence navigation</h3>${navigationLinks(model)}</nav>
   </section>`;
 }
-</file>
 
-<file path="src/reporting/sections/snyk-section.ts">
+================
+File: src/reporting/sections/snyk-section.ts
+================
 import type { CaptureMetadata, SnykFinding, SnykSourceEvidence } from '../../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref, safeExternalHref } from '../report-links.js';
@@ -11312,9 +11676,10 @@ export function renderSnykSection(model: ProjectReportViewModel): string {
   if (source === undefined) return `<section id="snyk-test-report" aria-labelledby="snyk-heading"><h2 id="snyk-heading">Snyk test report</h2><p class="state-message">Snyk evidence was not available for this failed run.</p></section>`;
   return `<section id="snyk-test-report" aria-labelledby="snyk-heading"><div class="section-heading"><div><p class="eyebrow">Snyk</p><h2 id="snyk-heading">Snyk test report</h2></div>${badge(source.state)}</div><p class="state-message">${source.state === 'found' ? 'Normalized evidence captured.' : source.state === 'not_found' ? 'No Snyk report link was found on the Jenkins job page.' : 'Snyk evidence is incomplete; warnings explain what was retained.'}</p>${screenshot(source, model.artifacts)}${summary(source)}<h3>Detailed findings</h3>${findings(source)}${source.captures.length === 0 ? '' : `<h3>Capture provenance</h3><ul class="provenance-list">${source.captures.map(sourceLine).join('')}</ul>`}${source.warnings.length === 0 ? '' : `<ul class="warning-list">${source.warnings.map((warning) => `<li>${escapeHtmlText(warning)}</li>`).join('')}</ul>`}</section>`;
 }
-</file>
 
-<file path="src/reporting/sections/sonarqube-section.ts">
+================
+File: src/reporting/sections/sonarqube-section.ts
+================
 import type { CaptureMetadata, SonarFacetValue, SonarSourceEvidence } from '../../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref, safeExternalHref } from '../report-links.js';
@@ -11364,9 +11729,10 @@ export function renderSonarqubeSection(model: ProjectReportViewModel): string {
   const issuesTarget = source.navigation.find((item) => item.key === 'sonarqube-issues');
   return `<section id="sonarqube-overall" aria-labelledby="sonarqube-heading"><div class="section-heading"><div><p class="eyebrow">SonarQube</p><h2 id="sonarqube-heading">Overall and Issues evidence</h2></div>${badge(source.state)}</div>${homeSection(source)}<div class="subsection"><div class="section-heading"><h3>Overall</h3>${badge(overallTarget?.state ?? 'incomplete')}</div>${evidenceImage(source, 'sonarqube-overall.png', model.artifacts, 'SonarQube Overall evidence screenshot')} ${sourceAction(overall)}</div><section id="sonarqube-issues" class="subsection" aria-labelledby="sonarqube-issues-heading"><div class="section-heading"><h3 id="sonarqube-issues-heading">Issues</h3>${badge(issuesTarget?.state ?? 'incomplete')}</div>${evidenceImage(source, 'sonarqube-issues.png', model.artifacts, 'SonarQube Issues Type and Severity evidence screenshot')} ${sourceAction(issues)}<div class="facet-grid">${facetTable('Type', source.facets?.types)}${facetTable('Severity', source.facets?.severities)}</div></section>${source.warnings.length === 0 ? '' : `<ul class="warning-list">${source.warnings.map((warning) => `<li>${escapeHtmlText(warning)}</li>`).join('')}</ul>`}</section>`;
 }
-</file>
 
-<file path="src/reports/snyk/snyk-capture-support.ts">
+================
+File: src/reports/snyk/snyk-capture-support.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -11746,9 +12112,10 @@ export async function screenshotReport(
 export function captureFailureMessage(error: unknown): string {
   return formatDiagnostic(error);
 }
-</file>
 
-<file path="src/reports/snyk/snyk-capture.ts">
+================
+File: src/reports/snyk/snyk-capture.ts
+================
 import type { Page } from '@playwright/test';
 
 import { sanitizeUrl } from '../../config-errors.js';
@@ -12008,9 +12375,10 @@ export async function captureSnykEvidence(input: {
     );
   }
 }
-</file>
 
-<file path="src/reports/snyk/snyk-html-extractor.ts">
+================
+File: src/reports/snyk/snyk-html-extractor.ts
+================
 import type { Page } from '@playwright/test';
 
 import type {
@@ -12245,9 +12613,10 @@ export async function extractSnykHtml(page: Page): Promise<SnykHtmlEvidence> {
     };
   }, { severityNames: [...SEVERITIES], maxDetailCards: MAX_DETAIL_CARDS });
 }
-</file>
 
-<file path="src/reports/snyk/snyk-normalize.ts">
+================
+File: src/reports/snyk/snyk-normalize.ts
+================
 import type {
   SnykFinding,
   SnykScanMetadata,
@@ -12439,9 +12808,10 @@ export function normalizeSnykEvidence(input: SnykNormalizationInput): Normalized
     warnings,
   };
 }
-</file>
 
-<file path="src/reports/snyk/snyk-summary-parser.ts">
+================
+File: src/reports/snyk/snyk-summary-parser.ts
+================
 import type { SnykSeverity, SnykSeverityCounts } from '../../result-types.js';
 import { isRecord } from '../../config-selectors.js';
 
@@ -12485,9 +12855,10 @@ export function parseSnykSummaryJson(text: string): ParsedSnykSummary {
     return { warnings: ['Snyk summary JSON could not be parsed'] };
   }
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-capture-step-types.ts">
+================
+File: src/reports/sonarqube/sonarqube-capture-step-types.ts
+================
 import type { Page } from '@playwright/test';
 
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
@@ -12513,9 +12884,10 @@ export interface SonarStepResult {
 export interface SonarIssuesStepResult extends SonarStepResult {
   facets: SonarIssueFacets;
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-capture-steps.ts">
+================
+File: src/reports/sonarqube/sonarqube-capture-steps.ts
+================
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import type { NavigationTargets } from '../../result-types.js';
@@ -12646,9 +13018,10 @@ export async function assertHomeIdentity(
   }
   return `${identityStrategy};${overview.strategy}`;
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-capture-support.ts">
+================
+File: src/reports/sonarqube/sonarqube-capture-support.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -12858,9 +13231,10 @@ export function createRouteHandler(
 export function captureFailureMessage(error: unknown): string {
   return formatDiagnostic(error);
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-capture.ts">
+================
+File: src/reports/sonarqube/sonarqube-capture.ts
+================
 import { expect, type Page, type Route } from '@playwright/test';
 
 import type { NormalizedProjectConfig, ProjectSecrets } from '../../config/config-types.js';
@@ -13086,9 +13460,10 @@ export async function captureSonarqubeEvidence(input: SonarCaptureInput): Promis
     }
   }
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-facet-locators.ts">
+================
+File: src/reports/sonarqube/sonarqube-facet-locators.ts
+================
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import { MAX_SONAR_FACETS, type SonarFacetCandidate } from './sonarqube-issue-facets.js';
@@ -13249,9 +13624,10 @@ export async function facetCandidates(
 ): Promise<SonarFacetCandidate[]> {
   return (await facetCandidatesWithStatus(facet, kind, deadline)).values;
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-issue-facets.ts">
+================
+File: src/reports/sonarqube/sonarqube-issue-facets.ts
+================
 import type { SonarFacetValue, SonarIssueFacets } from '../../result-types.js';
 
 export const MAX_SONAR_FACETS = 64;
@@ -13334,9 +13710,10 @@ export function sanitizeSonarIssueFacets(
     })),
   };
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-issues-capture-step.ts">
+================
+File: src/reports/sonarqube/sonarqube-issues-capture-step.ts
+================
 import { expect, type Locator } from '@playwright/test';
 
 import type { SonarIssueFacets } from '../../result-types.js';
@@ -13526,9 +13903,10 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
     warnings: [...new Set(warnings)],
   };
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-locators.ts">
+================
+File: src/reports/sonarqube/sonarqube-locators.ts
+================
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
@@ -13798,9 +14176,10 @@ export function sonarLoginSubmitCandidates(page: Page): SonarLocator[] {
     { locator: page.getByRole('button', { name: /^sign in$/iu }), strategy: 'role:button:Sign in' },
   ];
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-login-step.ts">
+================
+File: src/reports/sonarqube/sonarqube-login-step.ts
+================
 import type { Page } from '@playwright/test';
 
 import type { ProjectSecrets } from '../../config/config-types.js';
@@ -13860,9 +14239,10 @@ export async function submitSonarqubeLogin(
     );
   }
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-project-identity-locators.ts">
+================
+File: src/reports/sonarqube/sonarqube-project-identity-locators.ts
+================
 import type { Locator, Page } from '@playwright/test';
 
 import type { SonarLocator } from './sonarqube-locators.js';
@@ -13930,9 +14310,10 @@ export async function projectIdentityHrefCandidates(page: Page, projectKey: stri
   }
   return candidates;
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-source-link-classifier.ts">
+================
+File: src/reports/sonarqube/sonarqube-source-link-classifier.ts
+================
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
@@ -14017,9 +14398,10 @@ export function classifySonarLinks(
   const single = unique.length === 1 ? unique[0] : undefined;
   return { ...(single === undefined ? {} : { home: single }), warnings };
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-url-identity.ts">
+================
+File: src/reports/sonarqube/sonarqube-url-identity.ts
+================
 export function exactQueryValue(url: URL, key: string): string | undefined {
   const values = url.searchParams.getAll(key);
   if (values.length !== 1) return undefined;
@@ -14050,9 +14432,10 @@ export function isSonarqubeLoginLocation(url: URL): boolean {
     /\/sessions\/(?:new|login|init)(?:\/|$)/iu.test(path)
   );
 }
-</file>
 
-<file path="src/reports/source-link-classifier.ts">
+================
+File: src/reports/source-link-classifier.ts
+================
 import type { NormalizedProjectConfig } from '../config/config-types.js';
 import { assertAllowedUrl } from '../security/url-policy.js';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
@@ -14283,9 +14666,10 @@ export function classifySnykLinks(
 
 export type { SonarLinkClassification } from './sonarqube/sonarqube-source-link-classifier.js';
 export { classifySonarLinks } from './sonarqube/sonarqube-source-link-classifier.js';
-</file>
 
-<file path="src/result-types.ts">
+================
+File: src/result-types.ts
+================
 import type { ReportState } from './types.js';
 
 export interface CaptureMetadata {
@@ -14463,9 +14847,10 @@ export interface AggregateReportResult {
   projects: AggregateProjectSummary[];
   warnings: string[];
 }
-</file>
 
-<file path="src/runner.ts">
+================
+File: src/runner.ts
+================
 import type { Browser, BrowserContext } from '@playwright/test';
 
 import { ArtifactPaths } from './artifacts/artifact-paths.js';
@@ -14661,9 +15046,10 @@ export async function runFromConfig(
   const reportProjects = selectReportProjects(allProjects);
   return runConfiguredProjects(reportProjects, { ...dependencies, runtimeEnvironment: env });
 }
-</file>
 
-<file path="src/security/relative-url-policy.ts">
+================
+File: src/security/relative-url-policy.ts
+================
 import { ConfigError } from '../config-errors.js';
 import {
   canonicalizeBaseUrl,
@@ -14697,9 +15083,10 @@ export function resolveSafeRelativeUrl(
   }
   return result;
 }
-</file>
 
-<file path="src/security/url-policy.ts">
+================
+File: src/security/url-policy.ts
+================
 import { ConfigError } from '../config-errors.js';
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
@@ -14895,9 +15282,893 @@ export function isSafeReferenceUrl(value: unknown): value is string {
     return false;
   }
 }
-</file>
 
-<file path="src/templates/template-report-cli.ts">
+================
+File: src/templates/template-fixture-build-validation.ts
+================
+import {
+  attribute,
+  decodeHtmlEntities,
+  elementTags,
+  parseAbsoluteUrl,
+  parseCanonicalUrl,
+} from './template-fixture-html.js';
+
+export function extractSidePanelBuildLink(jenkinsHtml: string, jenkinsCanonical: URL): URL {
+  const sidePanelMatch =
+    /<div\b[^>]*\bid=["']side-panel["'][^>]*>([\s\S]*?)<div\b[^>]*\bid=["']main-panel["']/iu.exec(
+      jenkinsHtml,
+    );
+  if (!sidePanelMatch) throw new Error('Jenkins job template side-panel landmark is missing');
+  const anchors = sidePanelMatch[1]!.match(/<a\b[\s\S]*?<\/a>/giu) ?? [];
+  const buildAnchors = anchors.filter((anchor) => {
+    const text = decodeHtmlEntities(anchor.replace(/<[^>]+>/gu, '')).trim();
+    return text.includes('Build with Parameters');
+  });
+  if (buildAnchors.length !== 1) {
+    throw new Error('Jenkins job template must contain exactly one Build with Parameters link in the side panel');
+  }
+  const rawHref = attribute(buildAnchors[0]!, 'href');
+  if (rawHref === undefined) throw new Error('Jenkins job template build parameters link is missing an href');
+  const buildUrl = parseAbsoluteUrl(rawHref, jenkinsCanonical, 'Jenkins build parameters');
+  if (buildUrl.origin !== jenkinsCanonical.origin) {
+    throw new Error('Jenkins build parameters link origin is not the approved saved origin');
+  }
+  const expectedPrefix = jenkinsCanonical.pathname.replace(/\/+$/u, '');
+  if (buildUrl.pathname !== `${expectedPrefix}/build` && buildUrl.pathname !== `${expectedPrefix}/build/`) {
+    throw new Error('Jenkins build parameters link action path does not match the job path');
+  }
+  const delayValues = buildUrl.searchParams.getAll('delay');
+  if (
+    buildUrl.searchParams.size > 1 ||
+    (buildUrl.searchParams.size === 1 && (delayValues.length !== 1 || delayValues[0] !== '0sec'))
+  ) {
+    throw new Error('Jenkins build parameters link contains unexpected query parameters');
+  }
+  return buildUrl;
+}
+
+export function validateBuildTemplate(
+  buildHtmlRaw: string,
+  savedBuildUrl: URL,
+): { buildCanonical: URL; buildAction: URL } {
+  const buildCanonical = parseCanonicalUrl(buildHtmlRaw, 'Jenkins build');
+  if (buildCanonical.toString() !== savedBuildUrl.toString()) {
+    throw new Error('Jenkins build template canonical URL does not match the saved job build URL');
+  }
+  const postForms = elementTags(buildHtmlRaw, 'form').filter(
+    (tag) => (attribute(tag, 'method') ?? 'get').trim().toLowerCase() === 'post',
+  );
+  if (postForms.length !== 1) throw new Error('Jenkins build template must contain exactly one POST form');
+  const rawAction = attribute(postForms[0]!, 'action');
+  if (rawAction === undefined) throw new Error('Jenkins build template POST form action is missing');
+  const buildAction = parseAbsoluteUrl(rawAction, buildCanonical, 'Jenkins build action');
+  if (buildAction.origin !== buildCanonical.origin) throw new Error('Jenkins build form action origin changed');
+  const expectedPrefix = savedBuildUrl.pathname.replace(/\/(?:build\/?|\?.*)?$/iu, '');
+  if (buildAction.pathname.replace(/\/+$/u, '') !== `${expectedPrefix}/build` || buildAction.search || buildAction.hash) {
+    throw new Error('Jenkins build form action does not match the exact job build path');
+  }
+  const stickerMatch = /<div\b[^>]*\bid=["']bottom-sticker["'][^>]*>([\s\S]*?)<\/div>/iu.exec(buildHtmlRaw);
+  if (!stickerMatch) throw new Error('Jenkins build template must contain a #bottom-sticker container');
+  const stickerButtons = stickerMatch[1]!.match(/<button\b[\s\S]*?<\/button>/giu) ?? [];
+  if (stickerButtons.length !== 1) {
+    throw new Error('Jenkins build template #bottom-sticker must contain exactly one submit button');
+  }
+  const buttonTag = stickerButtons[0]!;
+  if (attribute(buttonTag, 'type')?.toLowerCase() !== 'submit') {
+    throw new Error('Jenkins build button must have type="submit"');
+  }
+  const tokenSet = new Set((attribute(buttonTag, 'class') ?? '').split(/\s+/u).filter(Boolean));
+  for (const cls of ['jenkins-button', 'jenkins-button--primary', 'jenkins-!-build-color']) {
+    if (!tokenSet.has(cls)) throw new Error(`Jenkins build button is missing required class: ${cls}`);
+  }
+  if (decodeHtmlEntities(buttonTag.replace(/<[^>]+>/gu, '')).trim() !== 'Build') {
+    throw new Error('Jenkins build button text must be "Build"');
+  }
+  return { buildCanonical, buildAction };
+}
+
+================
+File: src/templates/template-fixture-file-io.ts
+================
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import type { FileIdentity, TemplateReadBudget } from './template-fixture-types.js';
+
+export const MAX_TEMPLATE_BYTES = 4 * 1_048_576;
+export const MAX_TEMPLATE_TOTAL_BYTES = 16 * 1_048_576;
+export const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+export async function descriptorPath(fileDescriptor: number): Promise<string> {
+  return fs.realpath(path.join('/proc/self/fd', String(fileDescriptor)));
+}
+
+export function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
+  return left.ino === right.ino && (left.dev === right.dev || left.dev === 0 || right.dev === 0);
+}
+
+export async function windowsPathIsSafe(
+  root: string,
+  filename: string,
+  handle?: fs.FileHandle,
+): Promise<boolean> {
+  try {
+    let current = path.parse(filename).root;
+    for (const segment of path.relative(current, filename).split(path.sep).filter(Boolean)) {
+      current = path.join(current, segment);
+      if ((await fs.lstat(current)).isSymbolicLink()) return false;
+    }
+    const canonicalRoot = await fs.realpath(root);
+    const canonicalFilename = await fs.realpath(filename);
+    const relative = path.relative(canonicalRoot, canonicalFilename);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return false;
+    if (handle !== undefined) {
+      const [pathStat, handleStat] = await Promise.all([fs.stat(filename), handle.stat()]);
+      if (
+        pathStat.ino !== handleStat.ino ||
+        (pathStat.dev !== 0 && handleStat.dev !== 0 && pathStat.dev !== handleStat.dev)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function readTemplate(
+  root: string,
+  relativePath: string,
+  expectedRootIdentity: FileIdentity,
+  budget: TemplateReadBudget,
+): Promise<string> {
+  const target = path.resolve(root, relativePath);
+  const relative = path.relative(root, target);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error('Template path escapes the configured template root');
+  }
+  const rootHandle = await fs.open(
+    root,
+    fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
+  );
+  try {
+    const openedRoot = process.platform === 'win32' ? root : await descriptorPath(rootHandle.fd);
+    if (openedRoot !== root) throw new Error('Template root changed while it was being opened');
+    if (
+      process.platform === 'win32' &&
+      (!(await windowsPathIsSafe(root, root)) ||
+        !(await windowsPathIsSafe(root, root, rootHandle)) ||
+        !sameIdentity(await rootHandle.stat(), expectedRootIdentity))
+    ) {
+      throw new Error('Template root changed while it was being opened');
+    }
+    if (process.platform === 'win32' && !(await windowsPathIsSafe(root, target))) {
+      throw new Error(`Template source contains an unsafe path: ${relativePath}`);
+    }
+    const templateHandle = await fs.open(
+      process.platform === 'win32' ? target : path.join('/proc/self/fd', String(rootHandle.fd), relativePath),
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+    );
+    try {
+      const stat = await templateHandle.stat();
+      const expectedPath = path.resolve(openedRoot, relativePath);
+      if (process.platform === 'win32') {
+        if (
+          !(await windowsPathIsSafe(root, root, rootHandle)) ||
+          !sameIdentity(await rootHandle.stat(), expectedRootIdentity) ||
+          !(await windowsPathIsSafe(root, target, templateHandle))
+        ) {
+          throw new Error(`Template source contains an unsafe path: ${relativePath}`);
+        }
+      } else if ((await descriptorPath(templateHandle.fd)) !== expectedPath) {
+        throw new Error(`Template source contains an unsafe path: ${relativePath}`);
+      }
+      const nextBytes = budget.bytes + stat.size;
+      if (!stat.isFile() || stat.size > MAX_TEMPLATE_BYTES || nextBytes > MAX_TEMPLATE_TOTAL_BYTES) {
+        throw new Error(`Template source is not a regular file under the per-file and total fixture budgets: ${relativePath}`);
+      }
+      budget.bytes = nextBytes;
+      const bytes = Buffer.alloc(stat.size);
+      let offset = 0;
+      while (offset < bytes.byteLength) {
+        const read = await templateHandle.read(bytes, offset, bytes.byteLength - offset, offset);
+        if (read.bytesRead === 0) throw new Error(`Template source changed while it was being read: ${relativePath}`);
+        offset += read.bytesRead;
+      }
+      return bytes.toString('utf8');
+    } finally {
+      await templateHandle.close();
+    }
+  } finally {
+    await rootHandle.close();
+  }
+}
+
+export async function resolveTemplateRoot(
+  env: NodeJS.ProcessEnv,
+): Promise<{ root: string; rootIdentity: FileIdentity }> {
+  const configuredRoot = env['TEMPLATES_DIR']?.trim() || path.join(REPOSITORY_ROOT, 'templates');
+  const configuredRootPath = path.resolve(configuredRoot);
+  const configuredRootStat = await fs.lstat(configuredRootPath);
+  const canonicalRoot = await fs.realpath(configuredRootPath);
+  const rootStat = await fs.stat(canonicalRoot);
+  const rootIsSafe = process.platform === 'win32'
+    ? await windowsPathIsSafe(canonicalRoot, configuredRootPath)
+    : canonicalRoot === configuredRootPath;
+  if (!configuredRootStat.isDirectory() || configuredRootStat.isSymbolicLink() || !rootIsSafe) {
+    throw new Error('Template root must be a real directory without symbolic-link components');
+  }
+  return {
+    root: canonicalRoot,
+    rootIdentity: { dev: rootStat.dev, ino: rootStat.ino },
+  };
+}
+
+================
+File: src/templates/template-fixture-html.ts
+================
+import type { ArtifactLink } from './template-fixture-types.js';
+
+export function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+export function escapedPattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+export function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/giu, '&')
+    .replace(/&quot;/giu, '"')
+    .replace(/&#39;|&apos;/giu, "'")
+    .replace(/&lt;/giu, '<')
+    .replace(/&gt;/giu, '>');
+}
+
+export function elementTags(html: string, name: string): string[] {
+  return html.match(new RegExp(`<${name}\\b[\\s\\S]*?>`, 'giu')) ?? [];
+}
+
+export function attribute(tag: string, name: string): string | undefined {
+  const match = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'iu').exec(tag);
+  return match?.[2];
+}
+
+export function parseAbsoluteUrl(raw: string, base: URL | undefined, label: string): URL {
+  let url: URL;
+  try {
+    url = new URL(decodeHtmlEntities(raw), base);
+  } catch {
+    throw new Error(`Template ${label} URL is malformed`);
+  }
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username.length > 0 ||
+    url.password.length > 0 ||
+    url.hash.length > 0
+  ) {
+    throw new Error(`Template ${label} URL is unsafe`);
+  }
+  return url;
+}
+
+export function parseCanonicalUrl(html: string, label: string): URL {
+  const tags = elementTags(html, 'link').filter((tag) =>
+    (attribute(tag, 'rel') ?? '').split(/\s+/u).some((value) => value.toLowerCase() === 'canonical'),
+  );
+  if (tags.length !== 1) throw new Error(`Template ${label} must contain exactly one canonical URL`);
+  const rawHref = attribute(tags[0]!, 'href');
+  if (rawHref === undefined) throw new Error(`Template ${label} canonical URL is missing`);
+  return parseAbsoluteUrl(rawHref, undefined, `${label} canonical`);
+}
+
+export function anchorUrls(html: string, base: URL, label: string): URL[] {
+  const urls: URL[] = [];
+  for (const tag of elementTags(html, 'a')) {
+    const rawHref = attribute(tag, 'href');
+    if (rawHref === undefined) continue;
+    try {
+      urls.push(parseAbsoluteUrl(rawHref, base, label));
+    } catch {
+      // Ignore malformed unrelated links; required route selection fails closed below.
+    }
+  }
+  return urls;
+}
+
+export function rewriteHrefAttributes(
+  html: string,
+  base: URL,
+  rewrite: (url: URL) => string | undefined,
+): string {
+  return html.replace(
+    /(\bhref\s*=\s*)(["'])([\s\S]*?)\2/giu,
+    (whole: string, prefix: string, quote: string, rawHref: string) => {
+      let url: URL;
+      try {
+        url = parseAbsoluteUrl(rawHref, base, 'link');
+      } catch {
+        return whole;
+      }
+      const replacement = rewrite(url);
+      return replacement === undefined ? whole : `${prefix}${quote}${escapeHtml(replacement)}${quote}`;
+    },
+  );
+}
+
+export function rewriteFormAction(
+  html: string,
+  savedAction: URL,
+  target: string,
+  formLabel = 'login form',
+): string {
+  let replacements = 0;
+  const rewritten = html.replace(
+    /(<form\b[\s\S]*?\baction\s*=\s*)(["'])([\s\S]*?)\2/iu,
+    (whole: string, prefix: string, quote: string, rawAction: string) => {
+      let action: URL;
+      try {
+        action = parseAbsoluteUrl(rawAction, savedAction, `${formLabel} action`);
+      } catch {
+        return whole;
+      }
+      if (action.toString() !== savedAction.toString()) return whole;
+      replacements += 1;
+      return `${prefix}${quote}${escapeHtml(target)}${quote}`;
+    },
+  );
+  if (replacements !== 1) throw new Error(`Template ${formLabel} action could not be rewritten exactly once`);
+  return rewritten;
+}
+
+export function rewriteSonarqubeLoginForm(html: string, targetAction: string): string {
+  let formReplaced = false;
+  let rewritten = html.replace(/<form\b([^>]*)>/iu, (_whole, attrs) => {
+    formReplaced = true;
+    const cleanAttrs = attrs.replace(/\b(?:action|method)\s*=\s*(["'])[\s\S]*?\1/giu, '').trim();
+    return `<form ${cleanAttrs} method="POST" action="${escapeHtml(targetAction)}">`;
+  });
+  if (!formReplaced) throw new Error('Template SonarQube login form could not be rewritten');
+  rewritten = rewritten.replace(
+    /<button([^>]*\btype=["']submit["'][^>]*?)\bdisabled(?:=""|="disabled")?([^>]*)>/giu,
+    '<button$1$2>',
+  );
+  return rewritten;
+}
+
+export function exactlyOneQueryValue(url: URL, key: string): string | undefined {
+  const values = url.searchParams.getAll(key);
+  if (values.length !== 1) return undefined;
+  const value = values[0]?.trim();
+  return value === undefined || value.length === 0 ? undefined : value;
+}
+
+export function remapOrigin(url: URL, origin: string): string {
+  const target = new URL(origin);
+  target.pathname = url.pathname;
+  target.search = url.search;
+  target.hash = url.hash;
+  return target.toString();
+}
+
+export function selectSingleUrl(values: readonly URL[], label: string): URL {
+  const unique = new Map<string, URL>();
+  for (const value of values) unique.set(value.toString(), value);
+  if (unique.size !== 1) throw new Error(`Template ${label} must resolve to exactly one URL after deduplication`);
+  return unique.values().next().value!;
+}
+
+export function artifactLink(url: URL, origin: string, filename: string): ArtifactLink | undefined {
+  if (url.origin !== origin || url.search.length > 0 || url.hash.length > 0) return undefined;
+  const canonicalPathname = url.pathname.replace(/\/(?:\*fingerprint\*|\*view\*)\/?$/iu, '');
+  const marker = '/artifact/';
+  const markerIndex = canonicalPathname.lastIndexOf(marker);
+  if (markerIndex < 0 || canonicalPathname.slice(markerIndex + marker.length) !== filename) return undefined;
+  const canonicalUrl = new URL(url);
+  canonicalUrl.pathname = canonicalPathname;
+  return { url: canonicalUrl, context: canonicalPathname.slice(0, markerIndex), filename };
+}
+
+export function selectArtifactLink(
+  urls: readonly URL[],
+  origin: string,
+  filename: string,
+  label: string,
+): ArtifactLink {
+  const candidates = urls
+    .map((url) => artifactLink(url, origin, filename))
+    .filter((candidate): candidate is ArtifactLink => candidate !== undefined);
+  const selected = selectSingleUrl(
+    candidates.map((candidate) => candidate.url),
+    label,
+  );
+  return candidates.find((candidate) => candidate.url.toString() === selected.toString())!;
+}
+
+export function isExactFixtureUrl(candidate: URL, expected: string): boolean {
+  const target = new URL(expected);
+  return (
+    candidate.origin === target.origin &&
+    candidate.pathname === target.pathname &&
+    candidate.search === target.search &&
+    candidate.hash === target.hash
+  );
+}
+
+================
+File: src/templates/template-fixture-loader.ts
+================
+import {
+  extractSidePanelBuildLink,
+  validateBuildTemplate,
+} from './template-fixture-build-validation.js';
+import {
+  readTemplate,
+  resolveTemplateRoot,
+} from './template-fixture-file-io.js';
+import {
+  anchorUrls,
+  artifactLink,
+  attribute,
+  decodeHtmlEntities,
+  elementTags,
+  exactlyOneQueryValue,
+  parseAbsoluteUrl,
+  parseCanonicalUrl,
+  remapOrigin,
+  rewriteFormAction,
+  rewriteHrefAttributes,
+  rewriteSonarqubeLoginForm,
+  selectArtifactLink,
+  selectSingleUrl,
+} from './template-fixture-html.js';
+import {
+  isDashboardPath,
+  isProjectIssuesPath,
+  projectIdFromSonarqubeUrl,
+  rewriteSonarqubeLinks,
+  SAVED_SONAR_ORIGIN,
+} from './template-fixture-sonarqube.js';
+import type {
+  SonarqubeRouteMap,
+  TemplateReadBudget,
+  TemplateReportFixture,
+} from './template-fixture-types.js';
+
+export const TEMPLATE_REPORT_ORIGIN = 'https://templates.invalid';
+const TEMPLATE_JENKINS_JOB_ORIGIN = 'https://jenkins-example.example-domain.com';
+const TEMPLATE_JENKINS_LOGIN_ORIGIN = 'https://jenkins-jenkins-example.example-domain.com';
+
+export async function loadTemplateReportFixture(
+  env: NodeJS.ProcessEnv,
+  origin = TEMPLATE_REPORT_ORIGIN,
+): Promise<TemplateReportFixture> {
+  const targetOrigin = new URL(origin).origin;
+  const { root, rootIdentity } = await resolveTemplateRoot(env);
+  const budget: TemplateReadBudget = { bytes: 0 };
+  const jenkinsHtmlRaw = await readTemplate(root, 'jenkins-template/template.html', rootIdentity, budget);
+  const loginHtmlRaw = await readTemplate(root, 'jenkins-template/login.html', rootIdentity, budget);
+  const templateBuildRaw = await readTemplate(root, 'jenkins-template/template-build.html', rootIdentity, budget);
+  const snykHtml = await readTemplate(root, 'snyk-template/template.html', rootIdentity, budget);
+  const snykSummary = await readTemplate(root, 'snyk-template/snyk-sca-results-summary.json', rootIdentity, budget);
+  const sonarqubeHomeRaw = await readTemplate(root, 'sonarqube-template/template-home.html', rootIdentity, budget);
+  const sonarqubeLoginRaw = await readTemplate(root, 'sonarqube-template/template-login.html', rootIdentity, budget);
+  const sonarqubeOverallRaw = await readTemplate(root, 'sonarqube-template/template-overall.html', rootIdentity, budget);
+  const sonarqubeIssuesRaw = await readTemplate(root, 'sonarqube-template/template-issues.html', rootIdentity, budget);
+
+  const jenkinsCanonical = parseCanonicalUrl(jenkinsHtmlRaw, 'Jenkins job');
+  if (jenkinsCanonical.origin !== TEMPLATE_JENKINS_JOB_ORIGIN) {
+    throw new Error('Jenkins job template origin is not the approved saved origin');
+  }
+  const loginCanonical = parseCanonicalUrl(loginHtmlRaw, 'Jenkins login');
+  if (loginCanonical.origin !== TEMPLATE_JENKINS_LOGIN_ORIGIN) {
+    throw new Error('Jenkins login template origin is not the approved saved origin');
+  }
+  const postForms = elementTags(loginHtmlRaw, 'form').filter((t) => (attribute(t, 'method') ?? 'get').trim().toLowerCase() === 'post');
+  if (postForms.length !== 1) throw new Error('Template login must contain exactly one POST form');
+  const rawAction = attribute(postForms[0]!, 'action');
+  if (rawAction === undefined) throw new Error('Template login POST form action is missing');
+  const loginAction = parseAbsoluteUrl(rawAction, loginCanonical, 'login action');
+  if (loginAction.origin !== loginCanonical.origin) throw new Error('Template login action changed origin');
+
+  const savedBuildUrl = extractSidePanelBuildLink(jenkinsHtmlRaw, jenkinsCanonical);
+  const { buildAction } = validateBuildTemplate(templateBuildRaw, savedBuildUrl);
+
+  const jobLinks = anchorUrls(jenkinsHtmlRaw, jenkinsCanonical, 'Jenkins job');
+  const report = selectArtifactLink(jobLinks, jenkinsCanonical.origin, 'snyk-results.html', 'Snyk report');
+  const summary = selectArtifactLink(jobLinks, jenkinsCanonical.origin, 'snyk-sca-results-summary.json', 'Snyk summary');
+  if (report.context !== summary.context) throw new Error('Template Snyk report and summary do not share one artifact context');
+
+  const sonarHomeCandidates = jobLinks.filter((url) =>
+    url.origin === SAVED_SONAR_ORIGIN && isDashboardPath(url) &&
+    exactlyOneQueryValue(url, 'id') !== undefined && url.searchParams.getAll('codeScope').length === 0);
+  const savedSonarqubeHome = selectSingleUrl(sonarHomeCandidates, 'SonarQube home');
+  const sonarqubeProjectId = projectIdFromSonarqubeUrl(parseCanonicalUrl(sonarqubeHomeRaw, 'SonarQube home'));
+  if (exactlyOneQueryValue(savedSonarqubeHome, 'id') !== sonarqubeProjectId) {
+    throw new Error('Template Jenkins and SonarQube project identities do not match');
+  }
+  const savedSonarqubeLogin = parseCanonicalUrl(sonarqubeLoginRaw, 'SonarQube login');
+  if (savedSonarqubeLogin.origin !== SAVED_SONAR_ORIGIN || savedSonarqubeLogin.pathname !== '/sessions/new') {
+    throw new Error('SonarQube login template identity is invalid');
+  }
+  const savedSonarqubeOverall = parseCanonicalUrl(sonarqubeOverallRaw, 'SonarQube Overall');
+  if (savedSonarqubeOverall.origin !== SAVED_SONAR_ORIGIN || !isDashboardPath(savedSonarqubeOverall) ||
+    exactlyOneQueryValue(savedSonarqubeOverall, 'id') !== sonarqubeProjectId ||
+    exactlyOneQueryValue(savedSonarqubeOverall, 'codeScope') !== 'overall') {
+    throw new Error('SonarQube Overall template identity is invalid');
+  }
+  const savedSonarqubeIssues = parseCanonicalUrl(sonarqubeIssuesRaw, 'SonarQube Issues');
+  if (savedSonarqubeIssues.origin !== SAVED_SONAR_ORIGIN || !isProjectIssuesPath(savedSonarqubeIssues) ||
+    exactlyOneQueryValue(savedSonarqubeIssues, 'id') !== sonarqubeProjectId) {
+    throw new Error('SonarQube Issues template identity is invalid');
+  }
+
+  const projectName = env['PROJECT_NAME']?.trim() || 'Template reports';
+  const jobUrl = remapOrigin(jenkinsCanonical, targetOrigin);
+  const buildPageUrl = remapOrigin(savedBuildUrl, targetOrigin);
+  const buildActionUrl = remapOrigin(buildAction, targetOrigin);
+  const snykReportUrl = new URL(`artifact/${report.filename}`, jobUrl).toString();
+  const snykSummaryUrl = new URL(`artifact/${summary.filename}`, jobUrl).toString();
+  const sonarqubeLoginUrl = remapOrigin(savedSonarqubeLogin, targetOrigin);
+  const sonarqubeLoginActionUrl = new URL('/sessions/new', targetOrigin).toString();
+  const sonarqubeHomeUrl = remapOrigin(savedSonarqubeHome, targetOrigin);
+  const sonarqubeOverallUrl = remapOrigin(savedSonarqubeOverall, targetOrigin);
+  const sonarqubeIssuesUrl = remapOrigin(savedSonarqubeIssues, targetOrigin);
+  const sonarRoutes: SonarqubeRouteMap = {
+    projectId: sonarqubeProjectId,
+    homeUrl: sonarqubeHomeUrl,
+    overallUrl: sonarqubeOverallUrl,
+    issuesUrl: sonarqubeIssuesUrl,
+  };
+  const rewrittenJenkinsHtml = rewriteHrefAttributes(jenkinsHtmlRaw, jenkinsCanonical, (url) => {
+    const reportLink = artifactLink(url, jenkinsCanonical.origin, report.filename);
+    if (reportLink?.url.toString() === report.url.toString()) return snykReportUrl;
+    const summaryLink = artifactLink(url, jenkinsCanonical.origin, summary.filename);
+    if (summaryLink?.url.toString() === summary.url.toString()) return snykSummaryUrl;
+    if (url.toString() === savedSonarqubeHome.toString()) return sonarqubeHomeUrl;
+    if (url.toString() === savedBuildUrl.toString()) return buildPageUrl;
+    return undefined;
+  });
+
+  return {
+    loginUrl: remapOrigin(loginCanonical, targetOrigin),
+    loginActionUrl: remapOrigin(loginAction, targetOrigin),
+    jobUrl,
+    buildPageUrl,
+    buildActionUrl,
+    snykReportUrl,
+    snykSummaryUrl,
+    sonarqubeLoginUrl,
+    sonarqubeLoginActionUrl,
+    sonarqubeHomeUrl,
+    sonarqubeOverallUrl,
+    sonarqubeIssuesUrl,
+    loginHtml: rewriteFormAction(loginHtmlRaw, loginAction, remapOrigin(loginAction, targetOrigin)),
+    jenkinsHtml: rewrittenJenkinsHtml,
+    buildHtml: rewriteFormAction(templateBuildRaw, buildAction, buildActionUrl, 'Jenkins build form'),
+    snykHtml,
+    snykSummary,
+    sonarqubeLoginHtml: rewriteSonarqubeLoginForm(sonarqubeLoginRaw, sonarqubeLoginActionUrl),
+    sonarqubeHomeHtml: rewriteSonarqubeLinks(sonarqubeHomeRaw, sonarRoutes, projectName),
+    sonarqubeOverallHtml: rewriteSonarqubeLinks(sonarqubeOverallRaw, sonarRoutes, projectName),
+    sonarqubeIssuesHtml: rewriteSonarqubeLinks(sonarqubeIssuesRaw, sonarRoutes, projectName),
+    jenkinsTitle: decodeHtmlEntities(/<title[^>]*>([\s\S]*?)<\/title>/iu.exec(jenkinsHtmlRaw)?.[1]?.trim() ?? 'Jenkins template'),
+    sonarqubeProjectId,
+  };
+}
+
+================
+File: src/templates/template-fixture-routes.ts
+================
+import type { BrowserContext, Route } from '@playwright/test';
+
+import { sanitizeUrl } from '../config-errors.js';
+import { escapeHtml, isExactFixtureUrl } from './template-fixture-html.js';
+import type {
+  MutableTemplateRouteRecorder,
+  TemplateReportFixture,
+  TemplateResponse,
+  TemplateRouteMiss,
+  TemplateRouteRecorder,
+} from './template-fixture-types.js';
+
+const MAX_TEMPLATE_ROUTE_MISSES = 32;
+const MAX_TEMPLATE_ROUTE_METHOD_LENGTH = 32;
+const MAX_TEMPLATE_ROUTE_ORIGIN_LENGTH = 256;
+const MAX_TEMPLATE_ROUTE_PATH_LENGTH = 2_048;
+
+function recordTemplateRouteMiss(
+  recorder: MutableTemplateRouteRecorder,
+  method: string,
+  rawUrl: string,
+): void {
+  if (recorder.misses.length >= MAX_TEMPLATE_ROUTE_MISSES) {
+    recorder.truncated = true;
+    return;
+  }
+  let origin = '[invalid]';
+  let pathname = '[invalid]';
+  try {
+    const url = new URL(sanitizeUrl(rawUrl));
+    origin = url.origin.slice(0, MAX_TEMPLATE_ROUTE_ORIGIN_LENGTH);
+    pathname = url.pathname.slice(0, MAX_TEMPLATE_ROUTE_PATH_LENGTH);
+  } catch {
+    // Preserve only the invalid marker; raw request URLs may contain secrets.
+  }
+  recorder.misses.push({
+    method: method.slice(0, MAX_TEMPLATE_ROUTE_METHOD_LENGTH),
+    origin,
+    pathname,
+  });
+}
+
+async function abortTemplateRoute(
+  route: Route,
+  recorder: MutableTemplateRouteRecorder,
+  errorCode?: 'blockedbyclient',
+): Promise<void> {
+  const request = route.request();
+  recordTemplateRouteMiss(recorder, request.method(), request.url());
+  if (errorCode === undefined) await route.abort();
+  else await route.abort(errorCode);
+}
+
+export function templateResponse(
+  url: URL,
+  fixture: TemplateReportFixture,
+): TemplateResponse | undefined {
+  if (isExactFixtureUrl(url, fixture.loginUrl)) {
+    return { body: fixture.loginHtml, contentType: 'text/html; charset=utf-8' };
+  }
+  if (isExactFixtureUrl(url, fixture.jobUrl)) {
+    return { body: fixture.jenkinsHtml, contentType: 'text/html; charset=utf-8' };
+  }
+  if (isExactFixtureUrl(url, fixture.buildPageUrl)) {
+    return { body: fixture.buildHtml, contentType: 'text/html; charset=utf-8' };
+  }
+  if (isExactFixtureUrl(url, fixture.snykReportUrl)) {
+    return { body: fixture.snykHtml, contentType: 'text/html; charset=utf-8' };
+  }
+  if (isExactFixtureUrl(url, fixture.snykSummaryUrl)) {
+    return { body: fixture.snykSummary, contentType: 'application/json; charset=utf-8' };
+  }
+  if (isExactFixtureUrl(url, fixture.sonarqubeLoginUrl)) {
+    return { body: fixture.sonarqubeLoginHtml, contentType: 'text/html; charset=utf-8' };
+  }
+  if (isExactFixtureUrl(url, fixture.sonarqubeOverallUrl)) {
+    return { body: fixture.sonarqubeOverallHtml, contentType: 'text/html; charset=utf-8' };
+  }
+  if (isExactFixtureUrl(url, fixture.sonarqubeHomeUrl)) {
+    return { body: fixture.sonarqubeHomeHtml, contentType: 'text/html; charset=utf-8' };
+  }
+  if (isExactFixtureUrl(url, fixture.sonarqubeIssuesUrl)) {
+    return { body: fixture.sonarqubeIssuesHtml, contentType: 'text/html; charset=utf-8' };
+  }
+  return undefined;
+}
+
+export async function installTemplateReportRoutes(
+  context: BrowserContext,
+  fixture: TemplateReportFixture,
+): Promise<TemplateRouteRecorder> {
+  const recorder: MutableTemplateRouteRecorder = { misses: [], truncated: false };
+  const fixtureOrigin = new URL(fixture.jobUrl).origin;
+  let sonarqubeAuthenticated = false;
+
+  await context.route('**/*', async (route: Route) => {
+    const request = route.request();
+    let url: URL;
+    try {
+      url = new URL(request.url());
+    } catch {
+      await abortTemplateRoute(route, recorder);
+      return;
+    }
+    if (url.origin !== fixtureOrigin) {
+      await abortTemplateRoute(route, recorder);
+      return;
+    }
+    if (request.method() === 'POST' && isExactFixtureUrl(url, fixture.loginActionUrl)) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: `<!doctype html><meta http-equiv="refresh" content="0; url=${escapeHtml(fixture.jobUrl)}"><a href="${escapeHtml(fixture.jobUrl)}">Continue</a>`,
+      });
+      return;
+    }
+    if (
+      request.method() === 'POST' &&
+      (isExactFixtureUrl(url, fixture.sonarqubeLoginActionUrl) ||
+        isExactFixtureUrl(url, fixture.sonarqubeLoginUrl) ||
+        url.pathname === '/sessions/new')
+    ) {
+      sonarqubeAuthenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: `<!doctype html><meta http-equiv="refresh" content="0; url=${escapeHtml(fixture.sonarqubeHomeUrl)}"><a href="${escapeHtml(fixture.sonarqubeHomeUrl)}">Continue</a>`,
+      });
+      return;
+    }
+    if (request.method() === 'POST' && isExactFixtureUrl(url, fixture.buildActionUrl)) {
+      await route.fulfill({
+        status: 303,
+        headers: {
+          Location: fixture.jobUrl,
+        },
+      });
+      return;
+    }
+    if (!['GET', 'HEAD'].includes(request.method())) {
+      await abortTemplateRoute(route, recorder, 'blockedbyclient');
+      return;
+    }
+    if (isExactFixtureUrl(url, fixture.sonarqubeHomeUrl) && !sonarqubeAuthenticated) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: fixture.sonarqubeLoginHtml,
+      });
+      return;
+    }
+    const response = templateResponse(url, fixture);
+    if (response === undefined) {
+      await abortTemplateRoute(route, recorder, 'blockedbyclient');
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: response.contentType, body: response.body });
+  });
+
+  return recorder;
+}
+
+================
+File: src/templates/template-fixture-sonarqube.ts
+================
+import {
+  escapeHtml,
+  escapedPattern,
+  exactlyOneQueryValue,
+  rewriteHrefAttributes,
+} from './template-fixture-html.js';
+import type { SonarqubeRouteMap } from './template-fixture-types.js';
+
+export const SAVED_SONAR_ORIGIN = 'https://sonarqube.example-domain.com';
+
+export function isDashboardPath(url: URL): boolean {
+  return url.pathname === '/dashboard' || url.pathname === '/dashboard/';
+}
+
+export function isProjectIssuesPath(url: URL): boolean {
+  return url.pathname === '/project/issues' || url.pathname === '/project/issues/';
+}
+
+export function projectIdFromSonarqubeUrl(url: URL): string {
+  if (url.origin !== SAVED_SONAR_ORIGIN || !isDashboardPath(url)) {
+    throw new Error('SonarQube template does not contain a project dashboard identity');
+  }
+  const projectId = exactlyOneQueryValue(url, 'id');
+  if (projectId === undefined || projectId.length > 512) {
+    throw new Error('SonarQube template project identity is unsafe');
+  }
+  return projectId;
+}
+
+export function rewriteSonarqubeLinks(
+  html: string,
+  routes: SonarqubeRouteMap,
+  projectName: string,
+): string {
+  const rewritten = rewriteHrefAttributes(html, new URL(SAVED_SONAR_ORIGIN), (url) => {
+    if (url.origin !== SAVED_SONAR_ORIGIN || exactlyOneQueryValue(url, 'id') !== routes.projectId) {
+      return undefined;
+    }
+    if (isDashboardPath(url)) {
+      const scopes = url.searchParams.getAll('codeScope');
+      if (scopes.length === 0) return routes.homeUrl;
+      if (scopes.length === 1 && scopes[0] === 'overall') return routes.overallUrl;
+    }
+    if (isProjectIssuesPath(url)) return routes.issuesUrl;
+    return undefined;
+  });
+  const withOverallLink = rewritten.replace(
+    /<button([^>]*\brole="tab"[^>]*)>\s*Overall Code\s*<\/button>/giu,
+    `<a$1 href="${escapeHtml(routes.overallUrl)}">Overall Code</a>`,
+  );
+  const sourceDisplayName = routes.projectId.slice(routes.projectId.lastIndexOf(':') + 1);
+  if (sourceDisplayName === projectName) return withOverallLink;
+  return withOverallLink.replace(
+    new RegExp(
+      `(<a[^>]*\\bjs-project-link\\b[^>]*>\\s*)${escapedPattern(sourceDisplayName)}(\\s*<\\/a>)`,
+      'u',
+    ),
+    (_whole: string, prefix: string, suffix: string) => `${prefix}${escapeHtml(projectName)}${suffix}`,
+  );
+}
+
+================
+File: src/templates/template-fixture-types.ts
+================
+export interface TemplateReportFixture {
+  readonly loginUrl: string;
+  readonly loginActionUrl: string;
+  readonly jobUrl: string;
+  readonly buildPageUrl: string;
+  readonly buildActionUrl: string;
+  readonly snykReportUrl: string;
+  readonly snykSummaryUrl: string;
+  readonly sonarqubeLoginUrl: string;
+  readonly sonarqubeLoginActionUrl: string;
+  readonly sonarqubeHomeUrl: string;
+  readonly sonarqubeOverallUrl: string;
+  readonly sonarqubeIssuesUrl: string;
+  readonly loginHtml: string;
+  readonly jenkinsHtml: string;
+  readonly buildHtml: string;
+  readonly snykHtml: string;
+  readonly snykSummary: string;
+  readonly sonarqubeLoginHtml: string;
+  readonly sonarqubeHomeHtml: string;
+  readonly sonarqubeOverallHtml: string;
+  readonly sonarqubeIssuesHtml: string;
+  readonly jenkinsTitle: string;
+  readonly sonarqubeProjectId: string;
+}
+
+export interface TemplateResponse {
+  readonly body: string;
+  readonly contentType: string;
+}
+
+export interface TemplateRouteMiss {
+  readonly method: string;
+  readonly origin: string;
+  readonly pathname: string;
+}
+
+export interface TemplateRouteRecorder {
+  readonly misses: readonly TemplateRouteMiss[];
+  readonly truncated: boolean;
+}
+
+export interface MutableTemplateRouteRecorder {
+  readonly misses: TemplateRouteMiss[];
+  truncated: boolean;
+}
+
+export interface FileIdentity {
+  readonly dev: number;
+  readonly ino: number;
+}
+
+export interface TemplateReadBudget {
+  bytes: number;
+}
+
+export interface ArtifactLink {
+  readonly url: URL;
+  readonly context: string;
+  readonly filename: string;
+}
+
+export interface SonarqubeRouteMap {
+  readonly projectId: string;
+  readonly homeUrl: string;
+  readonly overallUrl: string;
+  readonly issuesUrl: string;
+}
+
+================
+File: src/templates/template-report-cli.ts
+================
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -14941,635 +16212,88 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     process.exitCode = 1;
   }
 }
-</file>
 
-<file path="src/templates/template-report-fixture.ts">
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import type { BrowserContext, Route } from '@playwright/test';
-
-import { sanitizeUrl } from '../config-errors.js';
-import type { ProjectConfigDocumentV1 } from '../config/config-types.js';
+================
+File: src/templates/template-report-fixture.ts
+================
+import type { ProjectConfigDocumentV1, RunType } from '../config/config-types.js';
 import { parseBrowserName, parsePositiveInteger } from '../config-values.js';
+import { MAX_TEMPLATE_TOTAL_BYTES } from './template-fixture-file-io.js';
+import {
+  loadTemplateReportFixture,
+  TEMPLATE_REPORT_ORIGIN,
+} from './template-fixture-loader.js';
+import {
+  installTemplateReportRoutes,
+  templateResponse,
+} from './template-fixture-routes.js';
+import type {
+  TemplateReportFixture,
+  TemplateResponse,
+  TemplateRouteMiss,
+  TemplateRouteRecorder,
+} from './template-fixture-types.js';
 
-export const TEMPLATE_REPORT_ORIGIN = 'https://templates.invalid';
-const TEMPLATE_JENKINS_JOB_ORIGIN = 'https://jenkins-example.example-domain.com';
-const TEMPLATE_JENKINS_LOGIN_ORIGIN = 'https://jenkins-jenkins-example.example-domain.com';
-const SAVED_SONAR_ORIGIN = 'https://sonarqube.example-domain.com';
-const MAX_TEMPLATE_BYTES = 4 * 1_048_576;
-export const MAX_TEMPLATE_TOTAL_BYTES = 16 * 1_048_576;
-const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-
-export interface TemplateReportFixture {
-  readonly loginUrl: string;
-  readonly loginActionUrl: string;
-  readonly jobUrl: string;
-  readonly snykReportUrl: string;
-  readonly snykSummaryUrl: string;
-  readonly sonarqubeLoginUrl: string;
-  readonly sonarqubeLoginActionUrl: string;
-  readonly sonarqubeHomeUrl: string;
-  readonly sonarqubeOverallUrl: string;
-  readonly sonarqubeIssuesUrl: string;
-  readonly loginHtml: string;
-  readonly jenkinsHtml: string;
-  readonly snykHtml: string;
-  readonly snykSummary: string;
-  readonly sonarqubeLoginHtml: string;
-  readonly sonarqubeHomeHtml: string;
-  readonly sonarqubeOverallHtml: string;
-  readonly sonarqubeIssuesHtml: string;
-  readonly jenkinsTitle: string;
-  readonly sonarqubeProjectId: string;
-}
-
-export interface TemplateResponse {
-  readonly body: string;
-  readonly contentType: string;
-}
-
-export interface TemplateRouteMiss {
-  readonly method: string;
-  readonly origin: string;
-  readonly pathname: string;
-}
-
-export interface TemplateRouteRecorder {
-  readonly misses: readonly TemplateRouteMiss[];
-  readonly truncated: boolean;
-}
-
-interface MutableTemplateRouteRecorder {
-  readonly misses: TemplateRouteMiss[];
-  truncated: boolean;
-}
-
-const MAX_TEMPLATE_ROUTE_MISSES = 32;
-const MAX_TEMPLATE_ROUTE_METHOD_LENGTH = 32;
-const MAX_TEMPLATE_ROUTE_ORIGIN_LENGTH = 256;
-const MAX_TEMPLATE_ROUTE_PATH_LENGTH = 2_048;
-
-function recordTemplateRouteMiss(
-  recorder: MutableTemplateRouteRecorder,
-  method: string,
-  rawUrl: string,
-): void {
-  if (recorder.misses.length >= MAX_TEMPLATE_ROUTE_MISSES) {
-    recorder.truncated = true;
-    return;
-  }
-  let origin = '[invalid]';
-  let pathname = '[invalid]';
-  try {
-    const url = new URL(sanitizeUrl(rawUrl));
-    origin = url.origin.slice(0, MAX_TEMPLATE_ROUTE_ORIGIN_LENGTH);
-    pathname = url.pathname.slice(0, MAX_TEMPLATE_ROUTE_PATH_LENGTH);
-  } catch {
-    // Preserve only the invalid marker; raw request URLs may contain secrets.
-  }
-  recorder.misses.push({
-    method: method.slice(0, MAX_TEMPLATE_ROUTE_METHOD_LENGTH),
-    origin,
-    pathname,
-  });
-}
-
-async function abortTemplateRoute(
-  route: Route,
-  recorder: MutableTemplateRouteRecorder,
-  errorCode?: 'blockedbyclient',
-): Promise<void> {
-  const request = route.request();
-  recordTemplateRouteMiss(recorder, request.method(), request.url());
-  if (errorCode === undefined) await route.abort();
-  else await route.abort(errorCode);
-}
-
-function escapeHtml(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-}
-function escapedPattern(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-}
-
-function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&amp;/giu, '&')
-    .replace(/&quot;/giu, '"')
-    .replace(/&#39;|&apos;/giu, "'")
-    .replace(/&lt;/giu, '<')
-    .replace(/&gt;/giu, '>');
-}
-
-function elementTags(html: string, name: string): string[] {
-  return html.match(new RegExp(`<${name}\\b[\\s\\S]*?>`, 'giu')) ?? [];
-}
-
-function attribute(tag: string, name: string): string | undefined {
-  const match = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'iu').exec(tag);
-  return match?.[2];
-}
-
-function parseAbsoluteUrl(raw: string, base: URL | undefined, label: string): URL {
-  let url: URL;
-  try {
-    url = new URL(decodeHtmlEntities(raw), base);
-  } catch {
-    throw new Error(`Template ${label} URL is malformed`);
-  }
-  if (!['http:', 'https:'].includes(url.protocol) || url.username.length > 0 || url.password.length > 0 || url.hash.length > 0) {
-    throw new Error(`Template ${label} URL is unsafe`);
-  }
-  return url;
-}
-
-function parseCanonicalUrl(html: string, label: string): URL {
-  const tags = elementTags(html, 'link').filter((tag) =>
-    (attribute(tag, 'rel') ?? '').split(/\s+/u).some((value) => value.toLowerCase() === 'canonical'));
-  if (tags.length !== 1) throw new Error(`Template ${label} must contain exactly one canonical URL`);
-  const rawHref = attribute(tags[0]!, 'href');
-  if (rawHref === undefined) throw new Error(`Template ${label} canonical URL is missing`);
-  return parseAbsoluteUrl(rawHref, undefined, `${label} canonical`);
-}
-
-function anchorUrls(html: string, base: URL, label: string): URL[] {
-  const urls: URL[] = [];
-  for (const tag of elementTags(html, 'a')) {
-    const rawHref = attribute(tag, 'href');
-    if (rawHref === undefined) continue;
-    try {
-      urls.push(parseAbsoluteUrl(rawHref, base, label));
-    } catch {
-      // Ignore malformed unrelated links; required route selection fails closed below.
-    }
-  }
-  return urls;
-}
-
-function rewriteHrefAttributes(
-  html: string,
-  base: URL,
-  rewrite: (url: URL) => string | undefined,
-): string {
-  return html.replace(/(\bhref\s*=\s*)(["'])([\s\S]*?)\2/giu,
-    (whole: string, prefix: string, quote: string, rawHref: string) => {
-      let url: URL;
-      try { url = parseAbsoluteUrl(rawHref, base, 'link'); } catch { return whole; }
-      const replacement = rewrite(url);
-      return replacement === undefined ? whole : `${prefix}${quote}${escapeHtml(replacement)}${quote}`;
-    });
-}
-
-function rewriteFormAction(html: string, savedAction: URL, target: string): string {
-  let replacements = 0;
-  const rewritten = html.replace(/(<form\b[\s\S]*?\baction\s*=\s*)(["'])([\s\S]*?)\2/iu,
-    (whole: string, prefix: string, quote: string, rawAction: string) => {
-      let action: URL;
-      try { action = parseAbsoluteUrl(rawAction, savedAction, 'login action'); } catch { return whole; }
-      if (action.toString() !== savedAction.toString()) return whole;
-      replacements += 1;
-      return `${prefix}${quote}${escapeHtml(target)}${quote}`;
-    });
-  if (replacements !== 1) throw new Error('Template login form action could not be rewritten exactly once');
-  return rewritten;
-}
-
-function rewriteSonarqubeLoginForm(html: string, targetAction: string): string {
-  let formReplaced = false;
-  let rewritten = html.replace(/<form\b([^>]*)>/iu, (_whole, attrs) => {
-    formReplaced = true;
-    const cleanAttrs = attrs.replace(/\b(?:action|method)\s*=\s*(["'])[\s\S]*?\1/giu, '').trim();
-    return `<form ${cleanAttrs} method="POST" action="${escapeHtml(targetAction)}">`;
-  });
-  if (!formReplaced) throw new Error('Template SonarQube login form could not be rewritten');
-  rewritten = rewritten.replace(
-    /<button([^>]*\btype=["']submit["'][^>]*?)\bdisabled(?:=""|="disabled")?([^>]*)>/giu,
-    '<button$1$2>',
-  );
-  return rewritten;
-}
-
-
-function exactlyOneQueryValue(url: URL, key: string): string | undefined {
-  const values = url.searchParams.getAll(key);
-  if (values.length !== 1) return undefined;
-  const value = values[0]?.trim();
-  return value === undefined || value.length === 0 ? undefined : value;
-}
-
-function remapOrigin(url: URL, origin: string): string {
-  const target = new URL(origin);
-  target.pathname = url.pathname;
-  target.search = url.search;
-  target.hash = url.hash;
-  return target.toString();
-}
-
-function selectSingleUrl(values: readonly URL[], label: string): URL {
-  const unique = new Map<string, URL>();
-  for (const value of values) unique.set(value.toString(), value);
-  if (unique.size !== 1) throw new Error(`Template ${label} must resolve to exactly one URL after deduplication`);
-  return unique.values().next().value!;
-}
-
-interface ArtifactLink {
-  readonly url: URL;
-  readonly context: string;
-  readonly filename: string;
-}
-
-function artifactLink(url: URL, origin: string, filename: string): ArtifactLink | undefined {
-  if (url.origin !== origin || url.search.length > 0 || url.hash.length > 0) return undefined;
-  const canonicalPathname = url.pathname.replace(/\/(?:\*fingerprint\*|\*view\*)\/?$/iu, '');
-  const marker = '/artifact/';
-  const markerIndex = canonicalPathname.lastIndexOf(marker);
-  if (markerIndex < 0 || canonicalPathname.slice(markerIndex + marker.length) !== filename) return undefined;
-  const canonicalUrl = new URL(url);
-  canonicalUrl.pathname = canonicalPathname;
-  return { url: canonicalUrl, context: canonicalPathname.slice(0, markerIndex), filename };
-}
-
-function isDashboardPath(url: URL): boolean {
-  return url.pathname === '/dashboard' || url.pathname === '/dashboard/';
-}
-
-function isProjectIssuesPath(url: URL): boolean {
-  return url.pathname === '/project/issues' || url.pathname === '/project/issues/';
-}
-
-function isExactFixtureUrl(candidate: URL, expected: string): boolean {
-  const target = new URL(expected);
-  return candidate.origin === target.origin &&
-    candidate.pathname === target.pathname &&
-    candidate.search === target.search &&
-    candidate.hash === target.hash;
-}
-
-
-async function descriptorPath(fileDescriptor: number): Promise<string> {
-  return fs.realpath(path.join('/proc/self/fd', String(fileDescriptor)));
-}
-
-interface FileIdentity {
-  readonly dev: number;
-  readonly ino: number;
-}
-interface TemplateReadBudget {
-  bytes: number;
-}
-
-function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
-  return left.ino === right.ino && (left.dev === right.dev || left.dev === 0 || right.dev === 0);
-}
-
-async function windowsPathIsSafe(root: string, filename: string, handle?: fs.FileHandle): Promise<boolean> {
-  try {
-    let current = path.parse(filename).root;
-    for (const segment of path.relative(current, filename).split(path.sep).filter(Boolean)) {
-      current = path.join(current, segment);
-      if ((await fs.lstat(current)).isSymbolicLink()) return false;
-    }
-    const canonicalRoot = await fs.realpath(root);
-    const canonicalFilename = await fs.realpath(filename);
-    const relative = path.relative(canonicalRoot, canonicalFilename);
-    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return false;
-    if (handle !== undefined) {
-      const [pathStat, handleStat] = await Promise.all([fs.stat(filename), handle.stat()]);
-      if (pathStat.ino !== handleStat.ino ||
-        (pathStat.dev !== 0 && handleStat.dev !== 0 && pathStat.dev !== handleStat.dev)) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function readTemplate(
-  root: string,
-  relativePath: string,
-  expectedRootIdentity: FileIdentity,
-  budget: TemplateReadBudget,
-): Promise<string> {
-  const target = path.resolve(root, relativePath);
-  const relative = path.relative(root, target);
-  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('Template path escapes the configured template root');
-  const rootHandle = await fs.open(
-    root,
-    fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
-  );
-  try {
-    const openedRoot = process.platform === 'win32' ? root : await descriptorPath(rootHandle.fd);
-    if (openedRoot !== root) throw new Error('Template root changed while it was being opened');
-    if (process.platform === 'win32' && (!(await windowsPathIsSafe(root, root)) || !(await windowsPathIsSafe(root, root, rootHandle)) || !sameIdentity(await rootHandle.stat(), expectedRootIdentity))) {
-      throw new Error('Template root changed while it was being opened');
-    }
-    if (process.platform === 'win32' && !(await windowsPathIsSafe(root, target))) {
-      throw new Error(`Template source contains an unsafe path: ${relativePath}`);
-    }
-    const templateHandle = await fs.open(
-      process.platform === 'win32' ? target : path.join('/proc/self/fd', String(rootHandle.fd), relativePath),
-      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
-    );
-    try {
-      const stat = await templateHandle.stat();
-      const expectedPath = path.resolve(openedRoot, relativePath);
-      if (process.platform === 'win32') {
-        if (!(await windowsPathIsSafe(root, root, rootHandle)) || !sameIdentity(await rootHandle.stat(), expectedRootIdentity) || !(await windowsPathIsSafe(root, target, templateHandle))) {
-          throw new Error(`Template source contains an unsafe path: ${relativePath}`);
-        }
-      } else if (await descriptorPath(templateHandle.fd) !== expectedPath) {
-        throw new Error(`Template source contains an unsafe path: ${relativePath}`);
-      }
-      const nextBytes = budget.bytes + stat.size;
-      if (!stat.isFile() || stat.size > MAX_TEMPLATE_BYTES || nextBytes > MAX_TEMPLATE_TOTAL_BYTES) {
-        throw new Error(`Template source is not a regular file under the per-file and total fixture budgets: ${relativePath}`);
-      }
-      budget.bytes = nextBytes;
-      const bytes = Buffer.alloc(stat.size);
-      let offset = 0;
-      while (offset < bytes.byteLength) {
-        const read = await templateHandle.read(bytes, offset, bytes.byteLength - offset, offset);
-        if (read.bytesRead === 0) throw new Error(`Template source changed while it was being read: ${relativePath}`);
-        offset += read.bytesRead;
-      }
-      return bytes.toString('utf8');
-    } finally {
-      await templateHandle.close();
-    }
-  } finally {
-    await rootHandle.close();
-  }
-}
-
-function projectIdFromSonarqubeUrl(url: URL): string {
-  if (url.origin !== SAVED_SONAR_ORIGIN || !isDashboardPath(url)) {
-    throw new Error('SonarQube template does not contain a project dashboard identity');
-  }
-  const projectId = exactlyOneQueryValue(url, 'id');
-  if (projectId === undefined || projectId.length > 512) {
-    throw new Error('SonarQube template project identity is unsafe');
-  }
-  return projectId;
-}
-
-interface SonarqubeRouteMap {
-  readonly projectId: string;
-  readonly homeUrl: string;
-  readonly overallUrl: string;
-  readonly issuesUrl: string;
-}
-
-function rewriteSonarqubeLinks(html: string, routes: SonarqubeRouteMap, projectName: string): string {
-  const rewritten = rewriteHrefAttributes(html, new URL(SAVED_SONAR_ORIGIN), (url) => {
-    if (url.origin !== SAVED_SONAR_ORIGIN || exactlyOneQueryValue(url, 'id') !== routes.projectId) return undefined;
-    if (isDashboardPath(url)) {
-      const scopes = url.searchParams.getAll('codeScope');
-      if (scopes.length === 0) return routes.homeUrl;
-      if (scopes.length === 1 && scopes[0] === 'overall') return routes.overallUrl;
-    }
-    if (isProjectIssuesPath(url)) return routes.issuesUrl;
-    return undefined;
-  });
-  const withOverallLink = rewritten.replace(
-    /<button([^>]*\brole="tab"[^>]*)>\s*Overall Code\s*<\/button>/giu,
-    `<a$1 href="${escapeHtml(routes.overallUrl)}">Overall Code</a>`,
-  );
-  const sourceDisplayName = routes.projectId.slice(routes.projectId.lastIndexOf(':') + 1);
-  if (sourceDisplayName === projectName) return withOverallLink;
-  return withOverallLink.replace(
-    new RegExp(`(<a[^>]*\\bjs-project-link\\b[^>]*>\\s*)${escapedPattern(sourceDisplayName)}(\\s*<\\/a>)`, 'u'),
-    (_whole: string, prefix: string, suffix: string) => `${prefix}${escapeHtml(projectName)}${suffix}`,
-  );
-}
-function selectArtifactLink(urls: readonly URL[], origin: string, filename: string, label: string): ArtifactLink {
-  const candidates = urls.map((url) => artifactLink(url, origin, filename)).filter((candidate): candidate is ArtifactLink => candidate !== undefined);
-  const selected = selectSingleUrl(candidates.map((candidate) => candidate.url), label);
-  return candidates.find((candidate) => candidate.url.toString() === selected.toString())!;
-}
-export async function loadTemplateReportFixture(
-  env: NodeJS.ProcessEnv,
-  origin = TEMPLATE_REPORT_ORIGIN,
-): Promise<TemplateReportFixture> {
-  const targetOrigin = new URL(origin).origin;
-  const configuredRoot = env['TEMPLATES_DIR']?.trim() || path.join(REPOSITORY_ROOT, 'templates');
-  const configuredRootPath = path.resolve(configuredRoot);
-  const configuredRootStat = await fs.lstat(configuredRootPath);
-  const canonicalRoot = await fs.realpath(configuredRootPath);
-  const rootStat = await fs.stat(canonicalRoot);
-  const rootIsSafe = process.platform === 'win32'
-    ? await windowsPathIsSafe(canonicalRoot, configuredRootPath)
-    : canonicalRoot === configuredRootPath;
-  if (!configuredRootStat.isDirectory() || configuredRootStat.isSymbolicLink() || !rootIsSafe) {
-    throw new Error('Template root must be a real directory without symbolic-link components');
-  }
-  const root = canonicalRoot;
-  const rootIdentity: FileIdentity = { dev: rootStat.dev, ino: rootStat.ino };
-  const templateBudget: TemplateReadBudget = { bytes: 0 };
-  const jenkinsHtmlRaw = await readTemplate(root, 'jenkins-template/template.html', rootIdentity, templateBudget);
-  const loginHtmlRaw = await readTemplate(root, 'jenkins-template/login.html', rootIdentity, templateBudget);
-  const snykHtml = await readTemplate(root, 'snyk-template/template.html', rootIdentity, templateBudget);
-  const snykSummary = await readTemplate(root, 'snyk-template/snyk-sca-results-summary.json', rootIdentity, templateBudget);
-  const sonarqubeHomeRaw = await readTemplate(root, 'sonarqube-template/template-home.html', rootIdentity, templateBudget);
-  const sonarqubeLoginRaw = await readTemplate(root, 'sonarqube-template/template-login.html', rootIdentity, templateBudget);
-  const sonarqubeOverallRaw = await readTemplate(root, 'sonarqube-template/template-overall.html', rootIdentity, templateBudget);
-  const sonarqubeIssuesRaw = await readTemplate(root, 'sonarqube-template/template-issues.html', rootIdentity, templateBudget);
-
-  const jenkinsCanonical = parseCanonicalUrl(jenkinsHtmlRaw, 'Jenkins job');
-  if (jenkinsCanonical.origin !== TEMPLATE_JENKINS_JOB_ORIGIN) throw new Error('Jenkins job template origin is not the approved saved origin');
-  const loginCanonical = parseCanonicalUrl(loginHtmlRaw, 'Jenkins login');
-  if (loginCanonical.origin !== TEMPLATE_JENKINS_LOGIN_ORIGIN) throw new Error('Jenkins login template origin is not the approved saved origin');
-  const postForms = elementTags(loginHtmlRaw, 'form').filter((tag) => (attribute(tag, 'method') ?? 'get').trim().toLowerCase() === 'post');
-  if (postForms.length !== 1) throw new Error('Template login must contain exactly one POST form');
-  const rawAction = attribute(postForms[0]!, 'action');
-  if (rawAction === undefined) throw new Error('Template login POST form action is missing');
-  const loginAction = parseAbsoluteUrl(rawAction, loginCanonical, 'login action');
-  if (loginAction.origin !== loginCanonical.origin) throw new Error('Template login action changed origin');
-
-  const jobLinks = anchorUrls(jenkinsHtmlRaw, jenkinsCanonical, 'Jenkins job');
-  const report = selectArtifactLink(jobLinks, jenkinsCanonical.origin, 'snyk-results.html', 'Snyk report');
-  const summary = selectArtifactLink(jobLinks, jenkinsCanonical.origin, 'snyk-sca-results-summary.json', 'Snyk summary');
-  if (report.context !== summary.context) throw new Error('Template Snyk report and summary do not share one artifact context');
-
-  const sonarHomeCandidates = jobLinks.filter((url) =>
-    url.origin === SAVED_SONAR_ORIGIN && isDashboardPath(url) &&
-    exactlyOneQueryValue(url, 'id') !== undefined && url.searchParams.getAll('codeScope').length === 0);
-  const savedSonarqubeHome = selectSingleUrl(sonarHomeCandidates, 'SonarQube home');
-  const sonarqubeProjectId = projectIdFromSonarqubeUrl(parseCanonicalUrl(sonarqubeHomeRaw, 'SonarQube home'));
-  if (exactlyOneQueryValue(savedSonarqubeHome, 'id') !== sonarqubeProjectId) {
-    throw new Error('Template Jenkins and SonarQube project identities do not match');
-  }
-  const savedSonarqubeLogin = parseCanonicalUrl(sonarqubeLoginRaw, 'SonarQube login');
-  if (savedSonarqubeLogin.origin !== SAVED_SONAR_ORIGIN || savedSonarqubeLogin.pathname !== '/sessions/new') {
-    throw new Error('SonarQube login template identity is invalid');
-  }
-  const savedSonarqubeOverall = parseCanonicalUrl(sonarqubeOverallRaw, 'SonarQube Overall');
-  if (savedSonarqubeOverall.origin !== SAVED_SONAR_ORIGIN || !isDashboardPath(savedSonarqubeOverall) ||
-    exactlyOneQueryValue(savedSonarqubeOverall, 'id') !== sonarqubeProjectId ||
-    exactlyOneQueryValue(savedSonarqubeOverall, 'codeScope') !== 'overall') {
-    throw new Error('SonarQube Overall template identity is invalid');
-  }
-  const savedSonarqubeIssues = parseCanonicalUrl(sonarqubeIssuesRaw, 'SonarQube Issues');
-  if (savedSonarqubeIssues.origin !== SAVED_SONAR_ORIGIN || !isProjectIssuesPath(savedSonarqubeIssues) ||
-    exactlyOneQueryValue(savedSonarqubeIssues, 'id') !== sonarqubeProjectId) {
-    throw new Error('SonarQube Issues template identity is invalid');
-  }
-
-  const projectName = env['PROJECT_NAME']?.trim() || 'Template reports';
-  const jobUrl = remapOrigin(jenkinsCanonical, targetOrigin);
-  const snykReportUrl = new URL(`artifact/${report.filename}`, jobUrl).toString();
-  const snykSummaryUrl = new URL(`artifact/${summary.filename}`, jobUrl).toString();
-  const sonarqubeLoginUrl = remapOrigin(savedSonarqubeLogin, targetOrigin);
-  const sonarqubeLoginActionUrl = new URL('/sessions/new', targetOrigin).toString();
-  const sonarqubeHomeUrl = remapOrigin(savedSonarqubeHome, targetOrigin);
-  const sonarqubeOverallUrl = remapOrigin(savedSonarqubeOverall, targetOrigin);
-  const sonarqubeIssuesUrl = remapOrigin(savedSonarqubeIssues, targetOrigin);
-  const sonarRoutes: SonarqubeRouteMap = {
-    projectId: sonarqubeProjectId,
-    homeUrl: sonarqubeHomeUrl,
-    overallUrl: sonarqubeOverallUrl,
-    issuesUrl: sonarqubeIssuesUrl,
-  };
-  const rewrittenJenkinsHtml = rewriteHrefAttributes(jenkinsHtmlRaw, jenkinsCanonical, (url) => {
-    const reportLink = artifactLink(url, jenkinsCanonical.origin, report.filename);
-    if (reportLink?.url.toString() === report.url.toString()) return snykReportUrl;
-    const summaryLink = artifactLink(url, jenkinsCanonical.origin, summary.filename);
-    if (summaryLink?.url.toString() === summary.url.toString()) return snykSummaryUrl;
-    if (url.toString() === savedSonarqubeHome.toString()) return sonarqubeHomeUrl;
-    return undefined;
-  });
-  return {
-    loginUrl: remapOrigin(loginCanonical, targetOrigin),
-    loginActionUrl: remapOrigin(loginAction, targetOrigin),
-    jobUrl,
-    snykReportUrl,
-    snykSummaryUrl,
-    sonarqubeLoginUrl,
-    sonarqubeLoginActionUrl,
-    sonarqubeHomeUrl,
-    sonarqubeOverallUrl,
-    sonarqubeIssuesUrl,
-    loginHtml: rewriteFormAction(loginHtmlRaw, loginAction, remapOrigin(loginAction, targetOrigin)),
-    jenkinsHtml: rewrittenJenkinsHtml,
-    snykHtml,
-    snykSummary,
-    sonarqubeLoginHtml: rewriteSonarqubeLoginForm(sonarqubeLoginRaw, sonarqubeLoginActionUrl),
-    sonarqubeHomeHtml: rewriteSonarqubeLinks(sonarqubeHomeRaw, sonarRoutes, projectName),
-    sonarqubeOverallHtml: rewriteSonarqubeLinks(sonarqubeOverallRaw, sonarRoutes, projectName),
-    sonarqubeIssuesHtml: rewriteSonarqubeLinks(sonarqubeIssuesRaw, sonarRoutes, projectName),
-    jenkinsTitle: decodeHtmlEntities(/<title[^>]*>([\s\S]*?)<\/title>/iu.exec(jenkinsHtmlRaw)?.[1]?.trim() ?? 'Jenkins template'),
-    sonarqubeProjectId,
-  };
-}
-
-
-export function templateResponse(url: URL, fixture: TemplateReportFixture): TemplateResponse | undefined {
-  if (isExactFixtureUrl(url, fixture.loginUrl)) return { body: fixture.loginHtml, contentType: 'text/html; charset=utf-8' };
-  if (isExactFixtureUrl(url, fixture.jobUrl)) return { body: fixture.jenkinsHtml, contentType: 'text/html; charset=utf-8' };
-  if (isExactFixtureUrl(url, fixture.snykReportUrl)) return { body: fixture.snykHtml, contentType: 'text/html; charset=utf-8' };
-  if (isExactFixtureUrl(url, fixture.snykSummaryUrl)) return { body: fixture.snykSummary, contentType: 'application/json; charset=utf-8' };
-  if (isExactFixtureUrl(url, fixture.sonarqubeLoginUrl)) return { body: fixture.sonarqubeLoginHtml, contentType: 'text/html; charset=utf-8' };
-  if (isExactFixtureUrl(url, fixture.sonarqubeOverallUrl)) return { body: fixture.sonarqubeOverallHtml, contentType: 'text/html; charset=utf-8' };
-  if (isExactFixtureUrl(url, fixture.sonarqubeHomeUrl)) return { body: fixture.sonarqubeHomeHtml, contentType: 'text/html; charset=utf-8' };
-  if (isExactFixtureUrl(url, fixture.sonarqubeIssuesUrl)) return { body: fixture.sonarqubeIssuesHtml, contentType: 'text/html; charset=utf-8' };
-  return undefined;
-}
-
-export async function installTemplateReportRoutes(
-  context: BrowserContext,
-  fixture: TemplateReportFixture,
-): Promise<TemplateRouteRecorder> {
-  const recorder: MutableTemplateRouteRecorder = { misses: [], truncated: false };
-  const fixtureOrigin = new URL(fixture.jobUrl).origin;
-  let sonarqubeAuthenticated = false;
-  await context.route('**/*', async (route: Route) => {
-    const request = route.request();
-    let url: URL;
-    try { url = new URL(request.url()); } catch {
-      await abortTemplateRoute(route, recorder);
-      return;
-    }
-    if (url.origin !== fixtureOrigin) {
-      await abortTemplateRoute(route, recorder);
-      return;
-    }
-    if (request.method() === 'POST' && isExactFixtureUrl(url, fixture.loginActionUrl)) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/html; charset=utf-8',
-        body: `<!doctype html><meta http-equiv="refresh" content="0; url=${escapeHtml(fixture.jobUrl)}"><a href="${escapeHtml(fixture.jobUrl)}">Continue</a>`,
-      });
-      return;
-    }
-    if (request.method() === 'POST' && (isExactFixtureUrl(url, fixture.sonarqubeLoginActionUrl) || isExactFixtureUrl(url, fixture.sonarqubeLoginUrl) || url.pathname === '/sessions/new')) {
-      sonarqubeAuthenticated = true;
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/html; charset=utf-8',
-        body: `<!doctype html><meta http-equiv="refresh" content="0; url=${escapeHtml(fixture.sonarqubeHomeUrl)}"><a href="${escapeHtml(fixture.sonarqubeHomeUrl)}">Continue</a>`,
-      });
-      return;
-    }
-    if (!['GET', 'HEAD'].includes(request.method())) {
-      await abortTemplateRoute(route, recorder, 'blockedbyclient');
-      return;
-    }
-    if (isExactFixtureUrl(url, fixture.sonarqubeHomeUrl) && !sonarqubeAuthenticated) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/html; charset=utf-8',
-        body: fixture.sonarqubeLoginHtml,
-      });
-      return;
-    }
-    const response = templateResponse(url, fixture);
-    if (response === undefined) {
-      await abortTemplateRoute(route, recorder, 'blockedbyclient');
-      return;
-    }
-    await route.fulfill({ status: 200, contentType: response.contentType, body: response.body });
-  });
-  return recorder;
-}
-
-
+export {
+  MAX_TEMPLATE_TOTAL_BYTES,
+  TEMPLATE_REPORT_ORIGIN,
+  installTemplateReportRoutes,
+  loadTemplateReportFixture,
+  templateResponse,
+};
+export type {
+  TemplateReportFixture,
+  TemplateResponse,
+  TemplateRouteMiss,
+  TemplateRouteRecorder,
+};
 
 export function templateProjectDocument(
   env: NodeJS.ProcessEnv,
   fixture: TemplateReportFixture,
+  runType: RunType = 'report',
 ): ProjectConfigDocumentV1 {
   const projectId = env['PROJECT_ID']?.trim() || 'template-reports';
   const projectName = env['PROJECT_NAME']?.trim() || 'Template reports';
   const artifactDir = env['ARTIFACT_DIR']?.trim() || 'reports';
   const origin = new URL(fixture.jobUrl).origin;
-  const timeoutMs = parsePositiveInteger(env['TEMPLATE_TIMEOUT_MS']?.trim() || '300000', 'TEMPLATE_TIMEOUT_MS');
+  const timeoutMs = parsePositiveInteger(
+    env['TEMPLATE_TIMEOUT_MS']?.trim() || '300000',
+    'TEMPLATE_TIMEOUT_MS',
+  );
   return {
     schemaVersion: 1,
-    projects: [{
-      id: projectId,
-      name: projectName,
-      enabled: true,
-      loginUrl: fixture.loginUrl,
-      jobUrl: fixture.jobUrl,
-      timeoutMs,
-      browser: parseBrowserName(env['PLAYWRIGHT_BROWSER']?.trim()),
-      artifactDir,
-      credentials: { usernameVariable: 'TEMPLATE_FIXTURE_USERNAME', passwordVariable: 'TEMPLATE_FIXTURE_PASSWORD' },
-      sourceOrigins: { jenkins: [origin], snyk: [origin], sonarqube: [origin] },
-      snyk: {
-        allowedOrigins: [origin],
+    projects: [
+      {
+        id: projectId,
+        name: projectName,
+        enabled: true,
+        runType,
+        loginUrl: fixture.loginUrl,
+        jobUrl: fixture.jobUrl,
+        timeoutMs,
+        browser: parseBrowserName(env['PLAYWRIGHT_BROWSER']?.trim()),
+        artifactDir,
+        credentials: {
+          usernameVariable: 'TEMPLATE_FIXTURE_USERNAME',
+          passwordVariable: 'TEMPLATE_FIXTURE_PASSWORD',
+        },
+        sourceOrigins: { jenkins: [origin], snyk: [origin], sonarqube: [origin] },
+        snyk: {
+          allowedOrigins: [origin],
+        },
+        sonarqube: {
+          allowedOrigins: [origin],
+          projectId: fixture.sonarqubeProjectId,
+        },
       },
-      sonarqube: {
-        allowedOrigins: [origin],
-        projectId: fixture.sonarqubeProjectId,
-      },
-    }],
+    ],
   };
 }
-</file>
 
-<file path="src/templates/template-report-runner.ts">
+================
+File: src/templates/template-report-runner.ts
+================
 import type { Page } from '@playwright/test';
 import { normalizeProjectConfigDocument } from '../config/project-config-loader.js';
 import { runProject } from '../project/project-runner.js';
@@ -15659,9 +16383,10 @@ export async function runFromTemplates(
     }),
   });
 }
-</file>
 
-<file path="src/types.ts">
+================
+File: src/types.ts
+================
 export type ReportState = 'found' | 'not_found' | 'incomplete';
 export type RunType = 'report' | 'auto-build';
 export type SourceName = 'snyk' | 'sonarqube';
@@ -15734,9 +16459,10 @@ export type {
   ProjectRunIdentity,
   RunnerExecutionResult,
 } from './project/project-types.js';
-</file>
 
-<file path="src/workflow/diagnostics.ts">
+================
+File: src/workflow/diagnostics.ts
+================
 export const MAX_DIAGNOSTIC_ITEMS = 32;
 export const MAX_DIAGNOSTIC_LENGTH = 500;
 
@@ -15748,9 +16474,10 @@ export function pushDiagnostic(target: string[], value: string): void {
 export function boundedDiagnostics(values: readonly string[]): string[] {
   return values.slice(-MAX_DIAGNOSTIC_ITEMS).map((value) => value.slice(0, MAX_DIAGNOSTIC_LENGTH));
 }
-</file>
 
-<file path="src/workflow/workflow-deadline.ts">
+================
+File: src/workflow/workflow-deadline.ts
+================
 export class WorkflowDeadlineExceededError extends Error {
   public constructor() {
     super('Jenkins workflow deadline expired');
@@ -15849,9 +16576,10 @@ export async function withWorkflowDeadlineAndLateResource<T>(
     if (timer !== undefined) clearTimeout(timer);
   }
 }
-</file>
 
-<file path="templates/jenkins-template/login.html">
+================
+File: templates/jenkins-template/login.html
+================
 <!DOCTYPE html>
 <html lang="en-US" data-theme="none">
 
@@ -17418,9 +18146,10 @@ export async function withWorkflowDeadlineAndLateResource<T>(
 </body>
 
 </html>
-</file>
 
-<file path="templates/jenkins-template/README.md">
+================
+File: templates/jenkins-template/README.md
+================
 url:
 https://jenkins-example.example-domain.com/job/Container%20Platform/job/XX/job/job-id/job/Service%20Name/job/Build/job/Build%20Servie%20Name/job/release%252Fsit/
 
@@ -17494,9 +18223,45 @@ public network. For narrower exposure, use `--host <this-machine-LAN-IP>`
 with `--allow-lan`. The server is read-only and has no authentication. Use
 `--root <directory>` or `REPORT_ROOT=<directory>` only for an intentionally
 different, canonical report root.
-</file>
 
-<file path="templates/jenkins-template/template.html">
+================
+File: templates/jenkins-template/template-build.html
+================
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Build with Parameters [Container Platform » ID » job-id » Service Name » Build » Build Service Name » release/sit] - Jenkins</title>
+  <link rel="canonical" href="https://jenkins-example.example-domain.com/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build?delay=0sec">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body id="jenkins" class="yui-skin-sam jenkins-2.462.1">
+  <header class="page-header">
+    <div class="page-headline">
+      <h1 class="page-headline">Parameterized Build</h1>
+    </div>
+  </header>
+  <main id="main-panel" class="jenkins-main-panel">
+    <form method="POST" action="https://jenkins-example.example-domain.com/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build">
+      <div class="parameters">
+        <div class="jenkins-form-item">
+          <label class="jenkins-form-label" for="param-branch">TARGET_BRANCH</label>
+          <input class="jenkins-input" id="param-branch" name="TARGET_BRANCH" type="text" value="release/sit" readonly>
+        </div>
+      </div>
+      <div id="bottom-sticker" class="bottom-sticker">
+        <div class="bottom-sticker-inner">
+          <button type="submit" class="jenkins-button jenkins-button--primary jenkins-!-build-color">Build</button>
+        </div>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
+
+================
+File: templates/jenkins-template/template.html
+================
 <!DOCTYPE html>
 <html data-theme="none">
 
@@ -49721,9 +50486,10 @@ start of main content ⇒
 </body>
 
 </html>
-</file>
 
-<file path="templates/snyk-template/snyk-sca-results-summary.json">
+================
+File: templates/snyk-template/snyk-sca-results-summary.json
+================
 {
   "source": {
     "com.example-domain.example-package:com.example-domain.example-package.service": {
@@ -49738,9 +50504,10 @@ start of main content ⇒
     "low": 0
   }
 }
-</file>
 
-<file path="templates/snyk-template/template.html">
+================
+File: templates/snyk-template/template.html
+================
 <!DOCTYPE html>
 <!-- saved from url=(0227)https://jenkins-example.example-domain.com/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/10/artifact/snyk-results.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -50665,9 +51432,10 @@ start of main content ⇒
 
 
 </body></html>
-</file>
 
-<file path="templates/sonarqube-template/template-home.html">
+================
+File: templates/sonarqube-template/template-home.html
+================
 <!DOCTYPE html>
 <html lang="en">
 
@@ -70060,9 +70828,10 @@ start of main content ⇒
 </body>
 
 </html>
-</file>
 
-<file path="templates/sonarqube-template/template-issues.html">
+================
+File: templates/sonarqube-template/template-issues.html
+================
 <!DOCTYPE html>
 <html lang="en">
 
@@ -89375,9 +90144,10 @@ start of main content ⇒
 </body>
 
 </html>
-</file>
 
-<file path="templates/sonarqube-template/template-login.html">
+================
+File: templates/sonarqube-template/template-login.html
+================
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><script type="application/ld+json">{
   "@context": "https://schema.org",
@@ -89423,9 +90193,10 @@ start of main content ⇒
 
 
 </body></html>
-</file>
 
-<file path="templates/sonarqube-template/template-overall.html">
+================
+File: templates/sonarqube-template/template-overall.html
+================
 <!DOCTYPE html>
 <html lang="en">
 
@@ -105009,9 +105780,10 @@ start of main content ⇒
 </body>
 
 </html>
-</file>
 
-<file path="tests/e2e/generated-report-fixtures.ts">
+================
+File: tests/e2e/generated-report-fixtures.ts
+================
 import * as http from 'node:http';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -105125,9 +105897,10 @@ export async function createGeneratedReportFixture(): Promise<{ baseUrl: string;
   const server = await listen(root);
   return { ...server, reportPath: `/reports/${reportPath}` };
 }
-</file>
 
-<file path="tests/e2e/generated-report-image.ts">
+================
+File: tests/e2e/generated-report-image.ts
+================
 import { deflateSync } from 'node:zlib';
 
 const WIDTH = 320;
@@ -105183,9 +105956,10 @@ export function generatedReportImage(): Buffer {
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
-</file>
 
-<file path="tests/e2e/generated-report.spec.ts">
+================
+File: tests/e2e/generated-report.spec.ts
+================
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
@@ -105284,9 +106058,10 @@ test.describe('generated offline reports', () => {
     await expect(page.getByRole('heading', { name: 'Overall and Issues evidence' })).toBeVisible();
   });
 });
-</file>
 
-<file path="tests/e2e/multi-project-report-flow.spec.ts">
+================
+File: tests/e2e/multi-project-report-flow.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -105383,9 +106158,94 @@ test('runs two projects in order with fresh browser state and later-project cont
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/e2e/template-navigation.spec.ts">
+================
+File: tests/e2e/template-auto-build.spec.ts
+================
+import { expect, test } from '@playwright/test';
+
+import { normalizeProjectConfigDocument } from '../../src/config/project-config-loader.js';
+import { runAutoBuildProject } from '../../src/project/auto-build-runner.js';
+import {
+  installTemplateReportRoutes,
+  loadTemplateReportFixture,
+  templateProjectDocument,
+} from '../../src/templates/template-report-fixture.js';
+
+test.describe('template auto-build e2e workflow', () => {
+  test('executes production auto-build workflow against offline template routes', async ({}, testInfo) => {
+    test.setTimeout(45_000);
+    const browserName = testInfo.project.name === 'webkit-template' ? 'webkit' : 'chromium';
+
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PROJECT_ID: 'template-auto-build',
+      PROJECT_NAME: 'Template Auto Build',
+      PLAYWRIGHT_BROWSER: browserName,
+      PLAYWRIGHT_HEADLESS: 'true',
+      TEMPLATE_TIMEOUT_MS: '25000',
+    };
+
+    const fixture = await loadTemplateReportFixture(env);
+    const runtimeEnvironment: NodeJS.ProcessEnv = {
+      ...env,
+      TEMPLATE_FIXTURE_USERNAME: 'template-fixture-user',
+      TEMPLATE_FIXTURE_PASSWORD: 'template-fixture-password',
+    };
+
+    const configDoc = templateProjectDocument(env, fixture, 'auto-build');
+    const projects = normalizeProjectConfigDocument(configDoc, runtimeEnvironment);
+    expect(projects).toHaveLength(1);
+    const project = projects[0]!;
+    expect(project.runType).toBe('auto-build');
+
+    const requestLedger: Array<{ method: string; url: string }> = [];
+
+    const outcome = await runAutoBuildProject(project, {
+      runtimeEnvironment,
+      configureContext: async (context) => {
+        await installTemplateReportRoutes(context, fixture);
+        context.on('request', (req) => {
+          requestLedger.push({ method: req.method(), url: req.url() });
+        });
+      },
+    });
+
+    expect(outcome.state).toBe('submitted');
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.projectId).toBe('template-auto-build');
+    expect(outcome.jobUrl).toBe(fixture.jobUrl);
+    expect(outcome.buildPageUrl).toBe(fixture.buildPageUrl);
+    expect(outcome.responseStatus).toBe(303);
+    expect(outcome.submittedAt).toBeDefined();
+
+    const buildPosts = requestLedger.filter(
+      (r) => r.method === 'POST' && r.url === fixture.buildActionUrl,
+    );
+    expect(buildPosts).toHaveLength(1);
+
+    const snykRequests = requestLedger.filter(
+      (r) => r.url.includes('snyk') || r.url.includes('artifact/'),
+    );
+    expect(snykRequests).toHaveLength(0);
+
+    const sonarRequests = requestLedger.filter(
+      (r) => r.url.includes('sonar') || r.url.includes('dashboard') || r.url.includes('sessions'),
+    );
+    expect(sonarRequests).toHaveLength(0);
+
+    const requestSequence = requestLedger.map((r) => `${r.method} ${r.url}`);
+    expect(requestSequence).toContain(`GET ${fixture.loginUrl}`);
+    expect(requestSequence).toContain(`POST ${fixture.loginActionUrl}`);
+    expect(requestSequence).toContain(`GET ${fixture.jobUrl}`);
+    expect(requestSequence).toContain(`GET ${fixture.buildPageUrl}`);
+    expect(requestSequence).toContain(`POST ${fixture.buildActionUrl}`);
+  });
+});
+
+================
+File: tests/e2e/template-navigation.spec.ts
+================
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -105436,9 +106296,10 @@ test('runs the production direct workflow against exact checked-in template rout
     await fs.rm(reportRoot, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/e2e/vendor-template-capture.spec.ts">
+================
+File: tests/e2e/vendor-template-capture.spec.ts
+================
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -105709,9 +106570,10 @@ test('captures SonarQube through login template redirect to Overall to Issues', 
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/artifact-lifecycle.spec.ts">
+================
+File: tests/unit/artifact-lifecycle.spec.ts
+================
 import * as fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import * as os from 'node:os';
@@ -106021,9 +106883,10 @@ test('rejects overlapping report and staging roots before creating output', asyn
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/artifact-paths.spec.ts">
+================
+File: tests/unit/artifact-paths.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -106204,9 +107067,10 @@ test('rejects unsafe manifest discovery limits', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/auto-build-runner.spec.ts">
+================
+File: tests/unit/auto-build-runner.spec.ts
+================
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 import { normalizeProjectConfigDocument } from '../../src/config.js';
@@ -106377,9 +107241,10 @@ test('cleans up context and browser resources even when workflow throws', async 
   expect(contextClosed).toBe(true);
   expect(browserClosed).toBe(true);
 });
-</file>
 
-<file path="tests/unit/contract-hardening.spec.ts">
+================
+File: tests/unit/contract-hardening.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -106568,9 +107433,10 @@ test('requires all five keyed navigation targets', () => {
   expect(hasCompleteNavigationTargets(complete)).toBe(false);
   expect(hasCompleteNavigationTargets(Object.values(complete))).toBe(false);
 });
-</file>
 
-<file path="tests/unit/diagnostics.spec.ts">
+================
+File: tests/unit/diagnostics.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 import { boundedDiagnostics, pushDiagnostic } from '../../src/workflow/diagnostics.js';
@@ -106583,9 +107449,10 @@ test('caps diagnostic history and each persisted observation', () => {
   expect(values.every((value) => value.length <= 500)).toBe(true);
   expect(boundedDiagnostics(values)).toHaveLength(32);
 });
-</file>
 
-<file path="tests/unit/immutable-run-history.spec.ts">
+================
+File: tests/unit/immutable-run-history.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -106695,9 +107562,10 @@ test('keeps direct same-job reruns in immutable report folders and aggregate lin
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/jenkins-build-trigger.spec.ts">
+================
+File: tests/unit/jenkins-build-trigger.spec.ts
+================
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test, expect } from '@playwright/test';
@@ -106899,9 +107767,10 @@ test('redacts credentials from error diagnostics', async ({ page }) => {
   expect(thrownError).toBeDefined();
   expect(thrownError?.message).not.toContain('super-secret-password');
 });
-</file>
 
-<file path="tests/unit/jenkins-phase-02.spec.ts">
+================
+File: tests/unit/jenkins-phase-02.spec.ts
+================
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -107465,9 +108334,10 @@ test('redacts credentials from Jenkins diagnostics', async ({ page }) => {
   expect(message).not.toContain('password');
   expect(message).toContain('[REDACTED]');
 });
-</file>
 
-<file path="tests/unit/launch-arguments.spec.ts">
+================
+File: tests/unit/launch-arguments.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 // @ts-expect-error JavaScript script module has no declarations
@@ -107530,9 +108400,10 @@ test('parses --env arguments for template report runner', () => {
     },
   });
 });
-</file>
 
-<file path="tests/unit/project-config.spec.ts">
+================
+File: tests/unit/project-config.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -107754,9 +108625,10 @@ test('canonicalizes origins and contains relative navigation', () => {
     ['https://sonar.example'],
   )).toThrow(/configured origins/u);
 });
-</file>
 
-<file path="tests/unit/project-run-state.spec.ts">
+================
+File: tests/unit/project-run-state.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 import { ProjectRunState } from '../../src/project/project-run-state.js';
@@ -107799,9 +108671,10 @@ test('allows a failure from an active phase only once', () => {
   expect(run.failure).toBe('safe diagnostic');
   expect(() => run.fail('again')).toThrow(/Cannot fail/u);
 });
-</file>
 
-<file path="tests/unit/report-root-lock-owner.spec.ts">
+================
+File: tests/unit/report-root-lock-owner.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -107941,9 +108814,10 @@ test('reports the current and an impossible process safely', async () => {
     expect(current).toEqual({ state: 'live' });
   }
 });
-</file>
 
-<file path="tests/unit/report-server.spec.ts">
+================
+File: tests/unit/report-server.spec.ts
+================
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as os from 'node:os';
@@ -108079,9 +108953,10 @@ async function pageRequest(url: string): Promise<{ status(): number }> {
     request.once('error', reject);
   });
 }
-</file>
 
-<file path="tests/unit/reporting-output.spec.ts">
+================
+File: tests/unit/reporting-output.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -108379,9 +109254,10 @@ test('bounds cumulative historical artifact discovery reads', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/result-writer.spec.ts">
+================
+File: tests/unit/result-writer.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -108780,9 +109656,10 @@ test('bounds run-directory entries and bytes during allowlist validation', async
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/run-type-config.spec.ts">
+================
+File: tests/unit/run-type-config.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 import {
@@ -108935,9 +109812,10 @@ test('selectAutoBuildProject rejects missing, disabled, and non-auto-build proje
   expect(() => selectAutoBuildProject(normalized, 'build-disabled')).toThrow(/project 'build-disabled' is disabled/u);
   expect(() => selectAutoBuildProject(normalized, 'report-project')).toThrow(/project 'report-project' is not configured for auto-build/u);
 });
-</file>
 
-<file path="tests/unit/sequential-runner.spec.ts">
+================
+File: tests/unit/sequential-runner.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -109270,9 +110148,10 @@ test('runFromConfig executes report projects only and excludes auto-build projec
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/snyk-io-regressions.spec.ts">
+================
+File: tests/unit/snyk-io-regressions.spec.ts
+================
 import { createServer } from 'node:http';
 
 import { expect, test } from '@playwright/test';
@@ -109386,9 +110265,10 @@ test('fails closed when page link metadata exceeds field or total budgets', asyn
   expect(oversizedTotal.truncated).toBe(true);
   expect(oversizedTotal.candidates.length).toBeLessThan(256);
 });
-</file>
 
-<file path="tests/unit/snyk-phase-04.spec.ts">
+================
+File: tests/unit/snyk-phase-04.spec.ts
+================
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -109641,9 +110521,10 @@ test('captures and retains double-encoded branch in Snyk report and summary capt
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/snyk-review-regressions.spec.ts">
+================
+File: tests/unit/snyk-review-regressions.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -109842,9 +110723,10 @@ test('blocks an unallowlisted report redirect before the fixture receives it', a
   expect(result.source.state).toBe('incomplete');
   expect(result.warnings.join(' ')).not.toMatch(/sessionid|evil\.example/iu);
 });
-</file>
 
-<file path="tests/unit/snyk-screenshot-retry.spec.ts">
+================
+File: tests/unit/snyk-screenshot-retry.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -109924,9 +110806,10 @@ test('does not retry non-protocol Snyk screenshot failures', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/sonarqube-phase-05.spec.ts">
+================
+File: tests/unit/sonarqube-phase-05.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -110754,9 +111637,179 @@ test('automatically dismisses onboarding popup with Got it button on first dashb
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/template-report.spec.ts">
+================
+File: tests/unit/template-build-fixture.spec.ts
+================
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { expect, test } from '@playwright/test';
+
+import {
+  installTemplateReportRoutes,
+  loadTemplateReportFixture,
+  templateResponse,
+} from '../../src/templates/template-report-fixture.js';
+
+test.describe('template build fixture', () => {
+  test('loads checked-in template fixture with build routes and DOM artifacts', async () => {
+    const fixture = await loadTemplateReportFixture({});
+
+    expect(fixture.buildPageUrl).toBe(
+      'https://templates.invalid/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build?delay=0sec',
+    );
+    expect(fixture.buildActionUrl).toBe(
+      'https://templates.invalid/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build',
+    );
+
+    expect(fixture.jenkinsHtml).toContain(fixture.buildPageUrl);
+    expect(fixture.buildHtml).toContain(`action="${fixture.buildActionUrl}"`);
+    expect(fixture.buildHtml).toContain('id="bottom-sticker"');
+    expect(fixture.buildHtml).toContain('jenkins-button--primary');
+    expect(fixture.buildHtml).toContain('Build</button>');
+
+    const response = templateResponse(new URL(fixture.buildPageUrl), fixture);
+    expect(response).toBeDefined();
+    expect(response?.contentType).toBe('text/html; charset=utf-8');
+    expect(response?.body).toBe(fixture.buildHtml);
+  });
+
+  test('routes POST to buildActionUrl with 303 redirect to jobUrl', async ({ page }) => {
+    const fixture = await loadTemplateReportFixture({});
+    const recorder = await installTemplateReportRoutes(page.context(), fixture);
+
+    await page.goto(fixture.loginUrl);
+    await page.locator('form').evaluate((form: HTMLFormElement) => form.submit());
+    await page.waitForURL(fixture.jobUrl);
+
+    await page.goto(fixture.buildPageUrl);
+    const responsePromise = page.waitForResponse((res) => res.url() === fixture.buildActionUrl);
+    await page.locator('#bottom-sticker button[type="submit"]').click();
+    const postResponse = await responsePromise;
+
+    expect(postResponse.status()).toBe(303);
+    expect(postResponse.headers()['location']).toBe(fixture.jobUrl);
+    expect(recorder.misses).toHaveLength(0);
+  });
+
+  test('rejects drifted build parameters link in job template', async () => {
+    const roots: string[] = [];
+    const copyTemplates = (suffix: string): string => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), `build-fixture-drift-${suffix}-`));
+      fs.cpSync(path.resolve('templates'), path.join(root, 'templates'), { recursive: true });
+      roots.push(root);
+      return path.join(root, 'templates');
+    };
+
+    try {
+      const missingLinkRoot = copyTemplates('missing-link');
+      const jobFile = path.join(missingLinkRoot, 'jenkins-template', 'template.html');
+      const jobHtml = fs.readFileSync(jobFile, 'utf8');
+      fs.writeFileSync(jobFile, jobHtml.replace('Build with Parameters', 'Custom Build Text'));
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: missingLinkRoot })).rejects.toThrow(
+        /Build with Parameters/iu,
+      );
+
+      const foreignOriginRoot = copyTemplates('foreign-origin');
+      const foreignJobFile = path.join(foreignOriginRoot, 'jenkins-template', 'template.html');
+      fs.writeFileSync(
+        foreignJobFile,
+        jobHtml.replace(
+          'href="https://jenkins-example.example-domain.com/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build?delay=0sec"',
+          'href="https://evil-jenkins.example.com/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build?delay=0sec"',
+        ),
+      );
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: foreignOriginRoot })).rejects.toThrow(
+        /origin/iu,
+      );
+      const wrongPathRoot = copyTemplates('wrong-path');
+      const wrongPathFile = path.join(wrongPathRoot, 'jenkins-template', 'template.html');
+      fs.writeFileSync(
+        wrongPathFile,
+        jobHtml.replace('/release%252Fsit/build?delay=0sec', '/release%252Fsit/wrong-action?delay=0sec'),
+      );
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: wrongPathRoot })).rejects.toThrow(
+        /action path/iu,
+      );
+    } finally {
+      for (const root of roots) fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects drifted build template canonical, form, sticker, and button', async () => {
+    const roots: string[] = [];
+    const copyTemplates = (suffix: string): string => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), `build-template-drift-${suffix}-`));
+      fs.cpSync(path.resolve('templates'), path.join(root, 'templates'), { recursive: true });
+      roots.push(root);
+      return path.join(root, 'templates');
+    };
+
+    try {
+      const canonicalRoot = copyTemplates('canonical');
+      const buildFile = path.join(canonicalRoot, 'jenkins-template', 'template-build.html');
+      const buildHtml = fs.readFileSync(buildFile, 'utf8');
+      fs.writeFileSync(buildFile, buildHtml.replace('delay=0sec', 'delay=999sec'));
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: canonicalRoot })).rejects.toThrow(
+        /canonical URL/iu,
+      );
+
+      const getFormRoot = copyTemplates('get-form');
+      const getFormFile = path.join(getFormRoot, 'jenkins-template', 'template-build.html');
+      fs.writeFileSync(getFormFile, buildHtml.replace('method="POST"', 'method="GET"'));
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: getFormRoot })).rejects.toThrow(
+        /POST form/iu,
+      );
+
+      const stickerRoot = copyTemplates('sticker');
+      const stickerFile = path.join(stickerRoot, 'jenkins-template', 'template-build.html');
+      fs.writeFileSync(stickerFile, buildHtml.replace('id="bottom-sticker"', 'id="other-sticker"'));
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: stickerRoot })).rejects.toThrow(
+        /bottom-sticker/iu,
+      );
+
+      const buttonClassRoot = copyTemplates('button-class');
+      const buttonClassFile = path.join(buttonClassRoot, 'jenkins-template', 'template-build.html');
+      fs.writeFileSync(
+        buttonClassFile,
+        buildHtml.replace('jenkins-!-build-color', 'jenkins-!-wrong-color'),
+      );
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: buttonClassRoot })).rejects.toThrow(
+        /missing required class/iu,
+      );
+
+      const buttonTextRoot = copyTemplates('button-text');
+      const buttonTextFile = path.join(buttonTextRoot, 'jenkins-template', 'template-build.html');
+      fs.writeFileSync(buttonTextFile, buildHtml.replace('>Build</button>', '>Submit</button>'));
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: buttonTextRoot })).rejects.toThrow(
+        /button text must be "Build"/iu,
+      );
+    } finally {
+      for (const root of roots) fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects an oversized 9th template file', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'build-fixture-oversized-'));
+    try {
+      const templatesDir = path.join(root, 'templates');
+      fs.cpSync(path.resolve('templates'), templatesDir, { recursive: true });
+      const buildFile = path.join(templatesDir, 'jenkins-template', 'template-build.html');
+      fs.appendFileSync(buildFile, `<!-- ${'x'.repeat(4 * 1024 * 1024 + 10)} -->`);
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: templatesDir })).rejects.toThrow(
+        /per-file and total fixture budgets/iu,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+================
+File: tests/unit/template-report.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -110876,9 +111929,10 @@ test('rejects symlinked and oversized template sources before capture', async ()
     fs.rmSync(oversizedRoot, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tsconfig.build.json">
+================
+File: tsconfig.build.json
+================
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -110891,9 +111945,10 @@ test('rejects symlinked and oversized template sources before capture', async ()
   "include": ["src/**/*.ts"],
   "exclude": ["tests", "test-results", "playwright-report", ".runner-build"]
 }
-</file>
 
-<file path="tsconfig.json">
+================
+File: tsconfig.json
+================
 {
   "compilerOptions": {
     "target": "ES2023",
@@ -110922,6 +111977,9 @@ test('rejects symlinked and oversized template sources before capture', async ()
   ],
   "exclude": ["test-results", "playwright-report"]
 }
-</file>
 
-</files>
+
+
+================================================================
+End of Codebase
+================================================================

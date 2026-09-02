@@ -1,17 +1,20 @@
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
-**Document scope:** schema-v1 report capture and Phase 2 Jenkins auto-build  
-**Current milestone:** Phase 2 — **DONE** (2026-09-02T14:30:11+07:00)
+**Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build, and
+Phase 3 offline build-page fixtures  
+**Current milestone:** Phase 3 — **DONE** (2026-09-02T16:57:40+07:00)
 
 ## Product summary
 
 `auto-jobs` is a private Node.js/TypeScript Playwright runner for collecting
 bounded Snyk and SonarQube vulnerability evidence from exact Jenkins job pages.
-It writes immutable static reports for the report path. Phase 2 adds a separate,
-explicit one-project workflow for submitting a Jenkins **Build with Parameters**
-form for the configured target job. The build path returns a sanitized
-in-memory outcome; it does not collect evidence or write report artifacts.
+It writes immutable static reports for the report path. The explicit auto-build
+path submits one Jenkins **Build with Parameters** form for the configured
+target job and returns a sanitized in-memory outcome; it does not collect
+evidence or write report artifacts. Phase 3 adds a minimal checked-in build
+detail page and exact offline routes so both paths can be proven without live
+Jenkins or vendor services.
 
 The product treats Jenkins navigation and build submission as high-risk external
 operations. Configuration, target identity, selectors, credentials, deadlines,
@@ -39,8 +42,8 @@ and failure semantics are validated before side effects.
 - Running auto-build from `npm run report` or from an environment-wide switch.
 - Capturing Snyk/SonarQube evidence during an auto-build run.
 - Claiming that checked-in fixtures or deterministic tests prove a live build.
-- Providing a writable control dashboard in Phase 2. A future control-plane
-  caller must preserve the explicit selection and confirmation boundary.
+- Providing a writable control dashboard in the current phases. A future
+  control-plane caller must preserve the explicit selection and confirmation boundary.
 
 ## Users and use cases
 
@@ -115,6 +118,23 @@ and failure semantics are validated before side effects.
 - Do not persist auto-build artifacts, cookies, headers, bodies, crumbs, queue
   IDs, build numbers, or response bodies.
 
+### FR-7: Offline build-page fixture
+
+- Keep `templates/jenkins-template/template-build.html` minimal, inert, and
+  free of credentials, scripts, external assets, production hosts, and report links.
+- Load nine fixture files through canonical, no-follow, identity-checked reads
+  under the existing 4 MiB per-file and 16 MiB cumulative limits.
+- Derive the build detail URL from the unique saved `#side-panel`
+  **Build with Parameters** anchor; validate its origin, exact same-job
+  `/build` path, and allowed `delay=0sec` query.
+- Validate one matching build canonical URL, one `POST` form/action, one
+  `#bottom-sticker`, and one classed `Build` submit button before route setup.
+- Fulfill only exact synthetic fixture URLs. The exact build `POST` returns a
+  `303` redirect to the exact fixture job URL; all other methods/URLs abort and
+  record bounded sanitized misses.
+- Keep fixture helpers modular and preserve `template-report-fixture.ts` as the
+  public facade. Report mode does not follow the build route.
+
 ## Non-functional requirements
 
 | Area | Requirement |
@@ -143,6 +163,20 @@ and failure semantics are validated before side effects.
 - [x] Focused unit tests cover the trigger, auto-build runner, and report
   selection boundary without live Jenkins calls.
 
+## Phase 3 acceptance criteria
+
+- [x] The loader fails before browser startup when the saved build link,
+  canonical URL, form/action, sticker, or button contract drifts.
+- [x] Build identity is derived from saved links/canonicals rather than a
+  hard-coded branch or project field.
+- [x] The exact build `GET`/`POST` route and `303` redirect are fulfilled
+  offline; unknown requests remain default-deny and misses are sanitized.
+- [x] Auto-build E2E proves one build `POST`, exact request order, and no
+  Snyk/SonarQube capture requests; report flow remains unchanged.
+- [x] Fixture implementation is split into focused sub-200-line modules behind
+  the supported public facade.
+
+
 ## Operational constraints
 
 Before an authorized build, an operator or integration must verify the exact
@@ -164,13 +198,15 @@ configuration and secret values outside the repository.
 | Report runner | `src/runner.ts`, `src/project/project-runner.ts` | [architecture](./architecture.md) |
 | Jenkins identity and trigger | `src/jenkins/url-identity.ts`, `src/jenkins/build-trigger*.ts` | [system architecture](./system-architecture.md) |
 | Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
-| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts` | [release gates](./release-gates.md) |
+| Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
+| Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
+| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect preflight | `plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md` | Plan safety contract |
 
 ## Open scope
 
-Phase 2 does not expose a user-facing auto-build command or control API. Any
-future control-plane implementation must revalidate configuration on the
-server, select one exact project, require explicit user confirmation, preserve
-single-run/concurrency rules, and map only the safe outcome fields described
-above.
+Phase 3 provides deterministic fixture proof but does not expose a production
+auto-build command or control API. Any future control-plane implementation must
+revalidate configuration on the server, select one exact project, require
+explicit user confirmation, preserve single-run/concurrency rules, and map only
+the safe outcome fields described above.

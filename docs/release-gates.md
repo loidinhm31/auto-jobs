@@ -1,9 +1,9 @@
 # Release gates
 
-This project has deterministic local gates for native browsers and an
-offline-template gate. The commands below are the current release contract;
-test counts are intentionally not hard-coded because they change with the
-test suite.
+This project has deterministic local gates for native browsers, offline report
+fixtures, and the Phase 3 build-page fixture. The commands below are the
+current release contract; test counts are intentionally not hard-coded because
+they change with the test suite.
 
 ## Gate order
 
@@ -50,6 +50,28 @@ npm run test:release:webkit
 
 It runs the same production workflow and exact route map without a controller,
 vendor service, or published port.
+
+## Phase 3 build-page fixture gate
+
+Run the focused fixture checks directly:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/template-build-fixture.spec.ts \
+  --config=playwright.unit.config.ts
+node scripts/run-playwright.mjs playwright test \
+  tests/e2e/template-auto-build.spec.ts \
+  --config=playwright.config.ts
+```
+
+The unit suite loads the ninth checked-in template file and rejects drift in
+the saved build link, canonical URL, `POST` form/action, `#bottom-sticker`,
+button classes/text, or file-size budget. The E2E test runs the production
+auto-build workflow against the offline route map and proves
+`GET login -> POST login -> GET job -> GET build -> POST build -> GET job`,
+exactly one build `POST`, no Snyk/SonarQube requests, and no unmatched route.
+These commands do not contact Jenkins or vendor services and do not prove that
+a live build was created.
 
 ## Report gate
 
@@ -166,9 +188,11 @@ hosting.
 
 ## Browser-fixture boundary
 
-The report workflow does not depend on a Jenkins controller fixture. Current
-acceptance uses native Playwright tests and the checked-in offline template
-corpus; controller/container experiments are outside the report contract.
+The report workflow does not depend on a Jenkins controller. Current
+acceptance uses native Playwright tests and the checked-in nine-file offline
+corpus, including `templates/jenkins-template/template-build.html`. The
+build-detail route is synthetic, exact, default-deny, and test-only;
+controller/container experiments are outside the report and fixture contracts.
 
 ## Artifact verification
 

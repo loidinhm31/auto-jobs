@@ -33,13 +33,42 @@ schema or security validation.
 | `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
 | `src/reporting/` | Static report rendering, links, and read-only report serving. |
 | `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
-| `src/templates/` | Offline fixture loading and template-report execution only. |
+| `src/templates/` | Offline fixture types, safe file loading, HTML/Sonar/build validation, exact route installation, and the public facade only. |
 | `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
 | `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
 
 A module may depend inward on shared contracts and policy helpers, but a
 validator must not launch a browser or submit a request. Report artifact code
 must not become a dependency of the auto-build side-effect path.
+
+## Template fixture boundaries
+
+Keep the fixture implementation as a one-way DAG:
+
+```text
+types -> file-io/html -> sonarqube/build-validation -> loader/routes -> facade
+```
+
+| Module | Standard responsibility |
+| --- | --- |
+| `template-fixture-types.ts` | Define fixture, response, recorder, identity, budget, artifact-link, and Sonar route contracts; do not perform I/O. |
+| `template-fixture-file-io.ts` | Resolve canonical roots and read regular files with no-follow, identity, symlink, and 4 MiB per-file/16 MiB total limits. |
+| `template-fixture-html.ts` | Parse and rewrite saved HTML only through credential-free URL checks and exact cardinality helpers. |
+| `template-fixture-sonarqube.ts` | Validate the saved SonarQube project identity and rewrite only approved dashboard/issues links. |
+| `template-fixture-build-validation.ts` | Derive the build URL from the unique saved `#side-panel` link and validate canonical, form/action, sticker, and button structure. |
+| `template-fixture-loader.ts` | Read nine fixture files, validate identities before route installation, and assemble synthetic URLs/HTML. |
+| `template-fixture-routes.ts` | Fulfill exact `GET`/`HEAD` fixture URLs, exact Jenkins login actions, the same-origin SonarQube `/sessions/new` authentication path, and the exact build `POST`; default-deny everything else. |
+| `template-report-fixture.ts` | Be the only supported import surface for fixture loading/routes/types and build `templateProjectDocument` with explicit run type. |
+
+The checked-in `templates/jenkins-template/template-build.html` must remain
+minimal and inert: one saved-origin canonical URL, one `POST` form with the
+same-job `/build` action, one `#bottom-sticker`, and one classed `Build`
+submit button. Never inspect, reflect, or log its hidden/default parameter
+values. Route misses may retain only bounded method/origin/path metadata.
+
+Keep the report fixture's default `runType` as `report`; tests requesting
+auto-build must pass that mode explicitly. Preserve the facade import path
+when extracting helpers, and keep each production module below 200 lines.
 
 ## TypeScript and module conventions
 

@@ -1,6 +1,6 @@
 # System architecture
 
-This is the component-level view of `auto-jobs` after Phase 2. The repository
+This is the component-level view of `auto-jobs` after Phase 3. The repository
 has two intentionally separate execution paths:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
@@ -8,6 +8,8 @@ has two intentionally separate execution paths:
 - **Auto-build:** authenticate, inspect one exact Jenkins job, validate the
   parameterized-build controls, and submit one Jenkins form. It returns a
   safe in-memory outcome and does not capture or publish reports.
+- **Offline fixture:** load the checked-in nine-file corpus and fulfill only
+  exact synthetic URLs for deterministic report and auto-build tests.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
@@ -26,14 +28,14 @@ flowchart TB
   Jenkins --> ReportSources[Snyk / SonarQube publisher pages]
   Executor --> ReportRoot[Canonical report root]
   ReportRoot --> ReadOnlyServer[Read-only report server]
-  Templates[Checked-in offline fixtures] -. test-only exact routes .-> Executor
+  Templates[Checked-in offline fixtures] -. exact synthetic URL routes, tests only .-> Executor
 ```
 
 The loader and selection helpers are pure configuration boundaries. Browser
 launch, credentials, and network I/O begin only after a caller has selected an
 executor. The report server reads an existing canonical report root; it is not
 a build or report-generation API. No writable control-plane server is part of
-the current Phase 2 implementation.
+the current implementation.
 
 ## Mode dispatch
 
@@ -192,6 +194,42 @@ leases, recovers aggregate publication, and performs bounded orphan cleanup.
 and serves only safe GET/HEAD files below the canonical root. The server is
 read-only, unauthenticated, and loopback by default.
 
+## Offline template fixture subsystem
+
+The fixture subsystem has a one-way dependency graph:
+
+```text
+types -> file-io/html -> sonarqube/build-validation -> loader/routes -> facade
+```
+
+| Module or asset | Contract |
+| --- | --- |
+| `template-fixture-types.ts` | Readonly fixture, response, route-miss/recorder, file-identity, budget, artifact-link, and Sonar route types. |
+| `template-fixture-file-io.ts` | Canonical root resolution and descriptor/no-follow reads with identity, symlink, 4 MiB per-file, and 16 MiB total checks. |
+| `template-fixture-html.ts` | HTML tag/attribute parsing, URL policy, canonical/form/link rewrites, artifact selection, and exact URL comparison. |
+| `template-fixture-sonarqube.ts` | Saved SonarQube origin/project identity checks and dashboard/issues link rewrites. |
+| `template-fixture-build-validation.ts` | Unique `#side-panel` build-link discovery plus canonical, form/action, sticker, and button validation. |
+| `template-fixture-loader.ts` | Reads nine files, derives build/report/Sonar destinations, rewrites selected links/actions, and assembles `TemplateReportFixture`. |
+| `template-fixture-routes.ts` | Installs the catch-all Playwright route handler, fulfills exact responses, handles exact POST exceptions, and records sanitized misses. |
+| `template-report-fixture.ts` | Public facade exporting the supported loader, route installer, response helper, types, origin, and total-size boundary. |
+| `templates/jenkins-template/template-build.html` | Minimal saved-origin build detail page: one canonical URL, one `POST` form, one `#bottom-sticker`, and one classed `Build` button. |
+
+The loader derives the build identity from the unique saved job-page
+`Build with Parameters` anchor. It permits only the approved saved origin, the
+same-job `/build` path, and the detail-page `delay=0sec` query. The build
+template canonical must match that URL; its form action must be the same
+`/build` path without query or fragment. Only the selected job href and
+validated build form action are remapped to the synthetic origin.
+
+The route map fulfills nine exact `GET`/`HEAD` fixture URLs. It also permits
+the exact Jenkins login actions, the same-origin SonarQube `/sessions/new`
+authentication path, and the exact build-action `POST`. The build action
+returns `303 Location: <fixture.jobUrl>` without reading or reflecting form
+data; the browser then requests the exact job page. Any other method or URL is
+aborted and recorded with bounded method, origin, and pathname fields only.
+SonarQube home serves the login page until the context-local login `POST` marks
+that route authenticated.
+
 ## Test architecture
 
 - Configuration and selection tests exercise normalization, explicit mode
@@ -205,8 +243,11 @@ read-only, unauthenticated, and loopback by default.
 - `tests/unit/sequential-runner.spec.ts` preserves shared launch options,
   sequential report behavior, and exclusion of auto-build projects from
   `runFromConfig`.
-- Template E2E tests use exact default-deny routes and checked-in fixtures;
-  they do not claim live Jenkins or vendor execution.
+- Template unit and E2E tests use exact default-deny routes and checked-in
+  fixtures; `template-build-fixture.spec.ts` proves build-page drift and
+  redirect contracts, while `template-auto-build.spec.ts` exercises the
+  production auto-build workflow with one build `POST`. They do not claim live
+  Jenkins or vendor execution.
 
 ## Invariants for extensions
 

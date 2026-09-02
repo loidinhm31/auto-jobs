@@ -1,10 +1,11 @@
 # Current architecture
 
 This document describes the implemented schema-v1 configuration and the two
-explicit execution paths: report capture and the Phase 2 Jenkins
-target-branch auto-build workflow. The report command remains report-only;
-auto-build is an explicit library boundary and is not inferred from URLs,
-selectors, CLI names, or environment.
+explicit execution paths: report capture and the target-branch Jenkins
+auto-build workflow. Phase 3 adds an offline build-page fixture and an exact
+route map so the auto-build path can be exercised without live side effects.
+The report command remains report-only; auto-build is an explicit library
+boundary and is not inferred from URLs, selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -109,6 +110,24 @@ flowchart LR
   manages staging leases and aggregate recovery, and performs bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
+- `src/templates/template-report-fixture.ts` is the public template facade; it
+  re-exports the supported loader, response, route, types, and size-boundary API.
+- `src/templates/template-fixture-types.ts` defines the fixture, response, route
+  miss/recorder, file-identity, read-budget, artifact-link, and Sonar route contracts.
+- `src/templates/template-fixture-file-io.ts` resolves a canonical template root
+  and performs descriptor/no-follow, identity, symlink, and byte-budgeted reads.
+- `src/templates/template-fixture-html.ts` owns bounded HTML parsing, URL checks,
+  canonical/form/link rewrites, artifact selection, and exact fixture matching.
+- `src/templates/template-fixture-sonarqube.ts` validates SonarQube identities
+  and rewrites dashboard/issues links for the synthetic fixture origin.
+- `src/templates/template-fixture-build-validation.ts` derives the build link
+  from `#side-panel` and validates build canonical, form, sticker, and button controls.
+- `src/templates/template-fixture-loader.ts` reads and validates the nine saved
+  inputs, derives build/report/Sonar destinations, and assembles the fixture.
+- `src/templates/template-fixture-routes.ts` fulfills exact fixture URLs and
+  records sanitized default-deny route misses.
+- `templates/jenkins-template/template-build.html` is the minimal saved-origin
+  build-detail page used for canonical/action and DOM-contract validation.
 - `templates/` is the checked-in browser fixture corpus. Test-only routes map
   exact URLs from saved pages to those files and abort unmatched network.
 
@@ -207,10 +226,52 @@ must never contain passwords, tokens, cookies, or credential-bearing URLs.
 ### Test configuration
 
 Tests load the same schema-v1 shape with non-routable fixture URLs. The
-test-only router reads checked-in files below `templates/`, derives exact Snyk
-and SonarQube destinations embedded in saved pages, and fulfills only those
-URLs. Fixture paths are canonical, traversal- and symlink-safe, size-bounded,
-and never read from runtime project JSON.
+test-only router reads nine checked-in files below `templates/`, derives the
+build detail URL from the unique saved Jenkins link, derives Snyk and SonarQube
+destinations from saved canonical pages, and fulfills only exact synthetic URLs.
+Fixture paths are canonical, traversal- and symlink-safe, size-bounded, and
+never read from runtime project JSON.
+
+## Phase 3 template fixture and route contract
+
+`loadTemplateReportFixture(env, origin?)` resolves the checked-in template root
+(or the optional `TEMPLATES_DIR` override), reads nine bounded files, and fails
+before browser startup when a saved identity or DOM contract drifts. The
+per-file limit is 4 MiB and the cumulative fixture limit remains 16 MiB.
+
+Build identity is derived, never hand-constructed:
+
+1. `extractSidePanelBuildLink` requires exactly one `Build with Parameters`
+   anchor in the saved Jenkins `#side-panel`, then validates its approved
+   origin, same-job `/build` path, and optional `delay=0sec` query.
+2. `validateBuildTemplate` requires one canonical URL matching that discovered
+   build page, one `POST` form with the same exact `/build` action, one
+   `#bottom-sticker`, and one `Build` submit button with all required Jenkins
+   class tokens.
+3. The loader rewrites only the selected job anchor and validated build form
+   action to the synthetic fixture origin; unrelated saved links remain untouched.
+
+The route sequence is:
+
+```text
+GET loginUrl -> POST loginActionUrl -> GET jobUrl -> GET buildPageUrl
+-> POST buildActionUrl -> 303 Location: jobUrl -> GET jobUrl
+```
+
+`templateResponse` matches all nine fixture URLs exactly, including query and
+fragment identity. `installTemplateReportRoutes` permits only `GET`/`HEAD` for
+those responses plus the exact Jenkins login actions, the same-origin
+SonarQube `/sessions/new` authentication path, and exact build-action `POST`.
+The build `POST` returns `303` with only the exact job URL; form data is neither
+read nor reflected. Every other method or URL aborts, and the recorder retains
+at most 32 sanitized method/origin/path misses. Report mode never follows the
+build anchor, so its request sequence remains report-only.
+
+The focused unit and E2E contracts are
+`tests/unit/template-build-fixture.spec.ts` and
+`tests/e2e/template-auto-build.spec.ts`; they prove fixture drift rejection,
+exact build redirect, one build `POST`, and no Snyk/SonarQube capture in
+auto-build mode.
 
 ## Per-project workflow
 
