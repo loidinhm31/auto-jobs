@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { MAX_CONTROL_LOG_ENTRIES, MAX_CONTROL_LOG_LENGTH, MAX_RETAINED_RUNS } from './report-server-constants.js';
 import type { ConfigStore } from './report-server-config-store.js';
+import type { SecretStore } from './report-server-secret-store.js';
 import { runConfiguredProjects, type RunnerDependencies } from '../runner.js';
 import { runAutoBuildProject, type AutoBuildRunnerDependencies } from '../project/auto-build-runner.js';
 import type { NormalizedProjectConfig } from '../config/config-types.js';
@@ -41,6 +42,7 @@ export interface ControlRunRecord {
 
 export interface RunManagerOptions {
   readonly configStore: ConfigStore;
+  readonly secretStore?: SecretStore | undefined;
   readonly reportRoot: string;
   readonly reportExecutor?: ((projects: readonly NormalizedProjectConfig[], deps?: RunnerDependencies) => Promise<RunnerExecutionResult>) | undefined;
   readonly autoBuildExecutor?: ((project: NormalizedProjectConfig, deps?: AutoBuildRunnerDependencies) => Promise<AutoBuildRunOutcome>) | undefined;

@@ -2,9 +2,10 @@
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build,
-Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–02  
-**Current milestone:** Phase 02 Control Secrets API — **DONE** (2026-09-03)  
-**Prior completed milestone:** Phase 3 fixture flow — **DONE**
+Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–03  
+**Current milestone:** Phase 03 Run Executor Environment Injection —
+**DONE** (2026-09-03T17:18:32+07:00)  
+**Prior completed milestone:** Phase 02 Control Secrets API — **DONE**
 
 ## Product summary
 
@@ -20,11 +21,16 @@ Jenkins or vendor services.
 Phase 01 adds a local `SecretStore` persistence seam for the control plane.
 It stores validated environment-style key/value pairs in the git-ignored
 `config/secrets.local.json` using deterministic, atomic, write-locked updates.
-Phase 02 exposes that store only through a loopback `/api/secrets` presence API:
+Phase 02 exposes that store through a loopback `/api/secrets` presence API:
 responses contain booleans, while PUT/DELETE mutations require Host, Origin,
 Fetch Metadata, CSRF, and bounded JSON gates. Control mode constructs the
-store and exposes it to the router; current executors still do not inject
-stored values into runs.
+store and exposes it to the router.
+
+Phase 03 completes the run-executor boundary. Each control run reads one
+SecretStore snapshot, overlays it on a fresh copy of the caller environment,
+and passes the merged `runtimeEnvironment` to report or auto-build execution.
+Stored values override same-named base values without mutating `process.env`;
+control logs, warnings, errors, and auto-build result URLs are redacted.
 
 The product treats Jenkins navigation and build submission as high-risk external
 operations. Configuration, target identity, selectors, credentials, deadlines,
@@ -56,9 +62,11 @@ and failure semantics are validated before side effects.
 - Claiming that checked-in fixtures or deterministic tests prove a live build.
 - Returning dynamic credential values over HTTP or exposing them in diagnostics,
   responses, or logs. Phase 02 exposes presence booleans only.
-- Merging SecretStore values into execution environments in Phase 02. Later
-  run-executor work must preserve explicit selection and confirmation
-  boundaries.
+- Mutating `process.env` or a caller-owned environment when injecting stored
+  values. Control-run injection is per-run and does not alter direct
+  file-mode/library environment behavior.
+- Replacing the Phase 04 control UI credential modal/state or Phase 05
+  end-to-end verification.
 
 ## Users and use cases
 
@@ -129,10 +137,16 @@ and failure semantics are validated before side effects.
 - Use one absolute `WorkflowDeadline` for each project build workflow.
 - Create a fresh Playwright context/page and close resources with bounded
   best-effort cleanup.
-- Current report and auto-build execution resolves credentials from
-  environment-variable references only; future run-environment integration may
-  consume a SecretStore snapshot without mutating `process.env`.
-- Redact secret values from diagnostics and clear mutable secret copies.
+- File-mode and direct library execution resolve credential references from the
+  caller-supplied environment. Control runs read one current SecretStore
+  snapshot at execution start and construct `{ ...env, ...storedSecrets }`;
+  stored values take precedence, and neither `process.env` nor the caller
+  environment is mutated.
+- Normalize the project document against that merged environment and pass it
+  as `runtimeEnvironment` to the report or auto-build executor.
+- Redact every non-empty stored value from control `addLog` messages, report
+  warnings, caught errors/stacks, and auto-build `jobUrl`/`buildPageUrl` result
+  fields. Clear mutable resolved credential copies during auto-build cleanup.
 - Do not persist auto-build artifacts, cookies, headers, bodies, crumbs, queue
   IDs, build numbers, or response bodies.
 
@@ -154,8 +168,9 @@ and failure semantics are validated before side effects.
 - Keep secret values out of errors and diagnostics. The `config/*.local.json`
   ignore rule prevents the local file from entering version control.
 - In control mode, expose the store through `ReportServerHandle` and
-  `ControlRouterContext`; Phase 02 also exposes guarded presence-only API
-  operations described in FR-8. Run-environment injection remains later work.
+  `ControlRouterContext`; Phase 02 exposes guarded presence-only API operations
+  described in FR-8, and Phase 03 passes the store through `RunManagerOptions`
+  into the run executor for per-run environment injection.
 
 ### FR-8: Control secrets API
 
@@ -221,8 +236,9 @@ and failure semantics are validated before side effects.
 - [x] Errors do not include secret values; Windows mode-bit limitations are
   documented as an ACL concern.
 - [x] Control mode creates the store and exposes it through the server handle
-  and router context; Phase 02 adds the guarded presence-only HTTP API without
-  adding run-environment injection.
+  and router context; Phase 02 adds the guarded presence-only HTTP API, and
+  Phase 03 wires the store into each control run without mutating
+  `process.env`.
 
 ## Dynamic-credentials Phase 02 acceptance criteria
 
@@ -240,6 +256,23 @@ and failure semantics are validated before side effects.
 - [x] Invalid keys/values/bodies, wrong content type, unsupported methods, and
   missing store produce bounded status/error contracts; all responses use
   `Cache-Control: no-store` and omit plaintext.
+
+## Dynamic-credentials Phase 03 acceptance criteria
+
+- [x] `RunManagerOptions.secretStore` is optional, and control-mode
+  `createReportServer` passes its `SecretStore` to `createRunManager`.
+- [x] `executeControlRun` reads one current SecretStore snapshot, builds
+  `{ ...env, ...storedSecrets }`, and uses the merged environment for config
+  normalization and both report/auto-build executor dependencies.
+- [x] Stored values override same-named base values without mutating the base
+  environment or `process.env`; direct file-mode/library callers remain
+  environment-driven.
+- [x] Non-empty stored values are redacted from control logs, report warnings,
+  caught errors/stacks, and auto-build result URL fields before run-record
+  persistence.
+- [x] `control-run-executor-secrets.spec.ts` covers report and auto-build
+  injection, precedence, non-mutation, redaction, and asynchronous
+  `createRunManager` integration using shared fixture helpers.
 
 ## Phase 2 acceptance criteria
 
@@ -285,12 +318,12 @@ The checked-in `config/projects.example.json` remains non-runnable with
 `.invalid` placeholders and a disabled auto-build example. Keep live project
 configuration and secret values outside the repository.
 
-For Phase 01/02, local values may be persisted only in
+For Phases 01–03, local values may be persisted only in
 `config/secrets.local.json`, which is ignored by `config/*.local.json`; keep
 that file and its directory protected by the operator/CI account's ACLs.
-The Phase 02 API exposes only presence booleans and remains loopback-only.
-Because execution injection is not part of these phases, current report and
-auto-build runs still require the environment variables named by project
+The Phase 02 API remains loopback-only and exposes presence booleans. Phase 03
+control runs consume a per-run snapshot from that store; direct report CLI and
+library runs still require the environment variables named by project
 configuration.
 
 ## Traceability
@@ -306,19 +339,25 @@ configuration.
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts` | [release gates](./release-gates.md) |
+| Run-executor environment injection | `src/reporting/report-server-run-manager.ts`, `src/reporting/report-server-run-executor.ts`, `src/reporting/report-server.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
-| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
+| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect policy | `src/jenkins/build-trigger.ts`, `src/project/auto-build-runner.ts` | [architecture](./architecture.md), [release gates](./release-gates.md) |
 
 ## Open scope
 
-Dynamic-credentials Phase 02 completes presence-only secret status and guarded
-mutation/deletion for loopback control mode. It does not merge stored values
-into execution environments; Phase 03 must add per-run injection without
-mutating `process.env`. Phase 04 still owns the control UI credential modal
-and state, and Phase 05 owns end-to-end verification. All future work must
-preserve server-side configuration validation, loopback and CSRF protections,
-single-run/concurrency rules, explicit auto-build confirmation, and safe
-outcome mapping. The current report CLI still has no production auto-build
-command.
+Dynamic-credentials Phase 03 completes per-run SecretStore environment
+injection and redaction for loopback control execution. Phase 04 still owns
+the control UI credential modal and state, and Phase 05 owns end-to-end
+verification. All future work must preserve server-side configuration
+validation, loopback and CSRF protections, single-run/concurrency rules,
+explicit auto-build confirmation, no-process-global mutation, and safe outcome
+mapping. The current report CLI still has no production auto-build command.
+
+## Changelog
+
+### 0.1.0 (development) — 2026-09-03
+
+- Completed Phase 03 run-executor environment injection and redaction for
+  control-mode report and auto-build runs.

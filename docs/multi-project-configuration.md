@@ -2,9 +2,12 @@
 
 The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
 projects, and exposes explicit report and auto-build execution boundaries.
-Mode is never inferred from a URL, selector, CLI name, or environment. The
+Mode is never inferred from a URL, selector, CLI name, or environment. Direct
+callers use the normalized configuration; loopback control runs additionally
+overlay a per-run SecretStore snapshot before executor dispatch. The
 configuration contract is implemented in `src/config/` and consumed by
-`src/runner.ts` (report) or `src/project/auto-build-runner.ts` (auto-build).
+`src/runner.ts` (report), `src/project/auto-build-runner.ts` (auto-build), or
+`src/reporting/report-server-run-executor.ts` (control dispatch).
 
 ## Source selection
 
@@ -133,6 +136,12 @@ authentication if the SonarQube dashboard redirects to its login page
 (`/sessions/new`). Neither the JSON nor its selectors may contain secret
 values.
 
+File-mode and direct library calls resolve those names from their supplied
+environment. In loopback control mode, the run executor reads the local
+SecretStore snapshot and overlays it on the server's base environment, so a
+stored value wins when it uses the same name as a base value. The merge is
+per-run and does not mutate the caller environment or `process.env`.
+
 ```json
 {
   "schemaVersion": 1,
@@ -161,7 +170,7 @@ Set the referenced names in the shell or CI secret store before running. Do
 not put usernames, passwords, tokens, cookies, or credential-bearing URLs in
 the JSON, source tree, traces, screenshots, or reports.
 
-#### Local SecretStore and control API (Phases 01–02)
+#### Local SecretStore and control API (Phases 01–03)
 
 Dynamic credential persistence is deliberately separate from the schema-v1
 document. In control mode, `createReportServer` initializes
@@ -202,8 +211,34 @@ every request. PUT/DELETE additionally require the exact same-origin
 HTTP(S) Origin, accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode`, the generated
 CSRF token, and `application/json` content type; bodies are bounded at 1 MiB.
 Responses contain presence booleans only and set `Cache-Control: no-store`.
-Run executors still resolve caller-provided environment values; SecretStore
-environment injection is a later phase.
+Control-run execution reads a current SecretStore snapshot, constructs a
+fresh merged environment, and passes it to the selected report or auto-build
+executor. Secret values are not included in the `/api/run` request or API
+responses.
+
+### Control-run environment injection (Phase 03)
+
+`createReportServer` passes the control-mode `SecretStore` to
+`createRunManager` through the optional `RunManagerOptions.secretStore`
+dependency. When `POST /api/run` starts execution,
+`report-server-run-executor.ts` reads one snapshot and creates:
+
+```ts
+const runEnv = { ...env, ...storedSecrets };
+```
+
+The merged `runEnv` is used for config normalization and passed as
+`runtimeEnvironment` to `runConfiguredProjects` for report mode or
+`runAutoBuildProject` for auto-build mode. This keeps SecretStore values out of
+project JSON and avoids process-global environment mutation. A control run
+uses the store values present at its execution snapshot; later API mutations
+apply to later runs.
+
+The executor collects all non-empty stored values as a redaction set. It
+redacts `addLog` messages, report warnings, caught errors and stacks, and
+auto-build `jobUrl`/`buildPageUrl` result fields before recording the run.
+The report URL is derived from a validated local relative path. The direct
+`npm run report` path remains environment-driven.
 
 ## Source settings and validation
 
@@ -246,10 +281,12 @@ npm run report -- --config config/projects.example.json
 
 The command above is illustrative only until the `.invalid` placeholders in
 the example are replaced. Provide the environment variables named by the
-document separately. The CLI exits nonzero if a project fails, while the
-aggregate keeps outcomes for projects that did complete. A failed publisher
-capture is represented as `partial`; a workflow or persistence failure is
-`failed`.
+document separately for file mode. Control-mode callers populate
+`secrets.local.json` through the guarded `/api/secrets` API instead; the
+control executor overlays that snapshot only for the selected run. The CLI
+exits nonzero if a project fails, while the aggregate keeps outcomes for
+projects that did complete. A failed publisher capture is represented as
+`partial`; a workflow or persistence failure is `failed`.
 
 The default report root is `reports/`, or the configured `artifactDir`. Each
 run is immutable and uses:
@@ -306,9 +343,12 @@ The auto-build workflow opens the exact configured job, validates one visible
 **Build** button and `POST` form in `#bottom-sticker`, and clicks once. Its
 result is one of `submitted`, `rejected`, `submission-unknown`, or
 `failed-before-submit`. It never changes parameters, searches jobs, polls a
-queue/build, retries after an observed POST, or writes report artifacts. The
-current report CLI has no auto-build command; a future control-plane caller
-must preserve these selection and confirmation boundaries.
+queue/build, retries after an observed POST, or writes report artifacts.
+For control-mode auto-build runs, the same runner receives the merged
+`runtimeEnvironment` from the control executor; direct integrations supply
+their own environment. The current report CLI has no auto-build command; a
+future control-plane caller must preserve these selection and confirmation
+boundaries.
 
 The schema has no source switch, existing-build mode, job-page override, build
 identity, or polling environment inputs. These are intentionally absent from

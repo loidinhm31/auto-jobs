@@ -2,12 +2,13 @@
 
 This document describes the implemented schema-v1 configuration, report and
 target-branch Jenkins auto-build workflows, the local SecretStore backend, and
-the loopback control secrets API. Phase 3 adds an offline build-page fixture
-and exact routes so the auto-build path can be exercised without live side
-effects. Phase 01 adds validated local persistence; Phase 02 exposes guarded
-presence-only `GET`, `PUT`, and `DELETE /api/secrets` operations. The report
-command remains report-only; auto-build is an explicit library boundary and is
-not inferred from URLs, selectors, CLI names, or environment.
+the loopback control secrets API. Phase 03 adds per-run SecretStore environment
+injection and redaction to control runs. Phase 3 adds an offline build-page
+fixture and exact routes so the auto-build path can be exercised without live
+side effects. Phase 01 adds validated local persistence; Phase 02 exposes
+guarded presence-only `GET`, `PUT`, and `DELETE /api/secrets` operations. The
+report command remains report-only; auto-build is an explicit library boundary
+and is not inferred from URLs, selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -124,6 +125,11 @@ flowchart LR
 - `src/reporting/report-server-control-security.ts` centralizes control
   security headers plus Host, Origin, Fetch Metadata, timing-safe CSRF, and
   mutation content-type gates.
+- `src/reporting/report-server-run-manager.ts` owns the single-active-run
+  lifecycle and carries the optional `SecretStore` dependency into execution.
+- `src/reporting/report-server-run-executor.ts` snapshots stored secrets,
+  builds the per-run environment, dispatches report/auto-build executors, and
+  redacts control-run logs and result diagnostics.
 - `src/templates/template-report-fixture.ts` is the public template facade; it
   re-exports the supported loader, response, route, types, and size-boundary API.
 - `src/templates/template-fixture-types.ts` defines the fixture, response, route
@@ -225,6 +231,8 @@ CSS. Selector values do not change the configured `jobUrl` or branch identity.
 | `src/reporting/report-server-control-api.ts` | Owns config/run handlers and re-exports the secrets handler as the API facade. |
 | `src/reporting/report-server-control.ts` | Validates Host, routes `/api/secrets`, and carries the optional `SecretStore` context dependency. |
 | `src/reporting/report-server.ts` | Creates the `SecretStore` in loopback control mode and exposes it on `ReportServerHandle`. |
+| `src/reporting/report-server-run-manager.ts` | Owns the single-active-run lifecycle and carries the optional `SecretStore` dependency. |
+| `src/reporting/report-server-run-executor.ts` | Reads one SecretStore snapshot, merges the run environment, dispatches the selected executor, and redacts control-run output. |
 | `tests/unit/report-server-secret-store.spec.ts` | Exercises persistence and control-server wiring. |
 | `tests/unit/control-secrets-api.spec.ts` | Exercises endpoint presence, patch/delete semantics, filtering, and persistence. |
 | `tests/unit/control-secrets-security.spec.ts` | Exercises redaction, validation, method/content-type handling, and security gates. |
@@ -267,9 +275,25 @@ ACL boundary, so directory ACLs remain the protection boundary there.
 
 Control mode initializes one store alongside `ConfigStore` and exposes it on
 the server handle and router context. Phase 02 routes `/api/secrets` through
-the dedicated handler described below. Execution still resolves the
-environment passed by its caller; run-environment injection belongs to a
-later phase.
+the dedicated handler described below.
+
+### Control-run environment injection (Phase 03)
+
+`executeControlRun` reads one `SecretStore` snapshot at execution start and
+creates a new environment object with `{ ...env, ...storedSecrets }`. Stored
+values therefore take precedence over the caller-supplied environment, while
+neither the caller object nor `process.env` is mutated. The merged object is
+used for config normalization and passed as `runtimeEnvironment` to either
+the report executor or the auto-build executor. Direct CLI/library callers
+without a control run continue to resolve credentials from their supplied
+environment.
+
+All non-empty values from the snapshot form the control-run redaction set.
+`addLog` messages, report warnings, caught error messages/stacks, and
+auto-build `jobUrl`/`buildPageUrl` result fields are redacted before they are
+stored in the control run record. The local report URL is generated only from
+the validated report-relative path. Downstream auto-build execution also
+clears its mutable resolved credential copy during cleanup.
 
 ### Control secrets API contract
 
@@ -469,21 +493,26 @@ dashboard (`127.0.0.1:4173`). It exposes:
   `GET`/`PUT`/`DELETE /api/secrets`.
 
 Control mode initializes `SecretStore` against the configured `configRoot`.
-The secrets endpoint reads and writes only the fixed
-`secrets.local.json` target. It returns `{ "secrets": { "<name>": true } }`
-for stored names; `GET /api/secrets?keys=A,B` reports each requested valid
-name as `true` or `false`. PUT accepts a single name/value or a non-empty
-secrets object; null values and `action: "delete"` remove entries. DELETE
-accepts a `name` query or JSON `name`/`names` body.
+The secrets endpoint reads and writes only the fixed `secrets.local.json`
+target. It returns `{ "secrets": { "<name>": true } }` for stored names;
+`GET /api/secrets?keys=A,B` reports each requested valid name as `true` or
+`false`. PUT accepts a single name/value or a non-empty secrets object; null
+values and `action: "delete"` remove entries. DELETE accepts a `name` query or
+JSON `name`/`names` body.
 
 Control mode is restricted strictly to loopback (`127.0.0.1` / `localhost`) and
 refuses LAN binding. The router checks the exact Host before dispatch. Every
-mutation additionally requires an exact same-origin HTTP(S) Origin,
-accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode` values, the generated CSRF token,
-and `application/json` (except bodyless DELETE). Bodies are capped at the
-1 MiB control limit. All responses set `Cache-Control: no-store`; secret
-values never appear in success or error responses. Run-environment injection
-is a later phase.
+mutation additionally requires an exact same-origin HTTP(S) Origin, accepted
+`Sec-Fetch-Site`/`Sec-Fetch-Mode` values, the generated CSRF token, and
+`application/json` (except bodyless DELETE). Bodies are capped at the 1 MiB
+control limit. All responses set `Cache-Control: no-store`; secret values
+never appear in API success or error responses.
+
+When `POST /api/run` starts a control run, the run executor reads the current
+SecretStore snapshot and merges it over the supplied base environment without
+mutating `process.env`. It passes that `runtimeEnvironment` to both report and
+auto-build executors. Control logs, warnings, errors, and auto-build result
+URLs are redacted with all non-empty stored values before persistence.
 
 ## Test and release boundary
 
@@ -494,10 +523,16 @@ test-only routes and checked-in fixtures; they do not claim live Jenkins or
 vendor execution. Runtime smoke validation requires an authorized project
 JSON and injected credentials and is never part of the deterministic suite.
 
-Phase 2 and Phase 3 focused unit coverage is in
+Phase 2, Phase 3, and Phase 03 focused unit coverage is in
 `tests/unit/jenkins-build-trigger.spec.ts`,
 `tests/unit/auto-build-runner.spec.ts`, `tests/unit/template-build-fixture.spec.ts`,
 and the report-selection assertions in `tests/unit/sequential-runner.spec.ts`.
+Phase 03 run-environment coverage is in
+`tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
+`tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection
+for report and auto-build runs, stored-over-base environment precedence,
+non-mutation of the base environment, and redaction of logs, warnings, errors,
+and manager-level run output.
 Control config/run/UI coverage is in `tests/unit/control-config-api.spec.ts`,
 `tests/unit/control-run-api.spec.ts`, and `tests/e2e/control-page.spec.ts`.
 Phase 02 secrets coverage is in `tests/unit/control-secrets-api.spec.ts` and

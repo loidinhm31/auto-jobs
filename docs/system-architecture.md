@@ -1,9 +1,9 @@
 # System architecture
 
-This is the component-level view of `auto-jobs` after Phase 3, Phase 01, and
-Phase 02 of the dynamic-credentials plan. The repository has two intentionally
-separate execution paths plus a local persistence seam and a loopback control
-API:
+This is the component-level view of `auto-jobs` after Phase 3 and dynamic-
+credentials Phases 01–03. The repository has two intentionally separate
+execution paths plus a local persistence seam, a loopback control API, and a
+control-run environment boundary:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
@@ -14,8 +14,11 @@ API:
   exact synthetic URLs for deterministic report and auto-build tests.
 - **SecretStore and secrets API:** persist validated local credential values
   outside project JSON and expose only boolean presence through guarded
-  `/api/secrets` operations. Stored values are not returned or injected into
-  runs by this phase.
+  `/api/secrets` operations.
+- **Control-run executor:** snapshot stored values per run, merge them over
+  the caller environment, pass the merged environment to the selected
+  executor, and redact control-run output. Direct callers remain environment-
+  driven.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
@@ -32,12 +35,17 @@ flowchart TB
   SecretStore --> SecretsApi[Loopback /api/secrets]
   Control[Loopback control server] --> SecretsApi
   SecretsApi -. presence-only status; guarded PUT/DELETE .-> SecretStore
-  Secrets[CI secret store / environment] --> Executor
+  Control --> RunManager[Control run manager]
+  RunManager --> ControlExecutor[Control run executor]
   ConfigFile --> Loader[Validate and normalize]
   Loader --> Selector{Explicit mode and project selection}
+  BaseEnv[Caller environment] --> ControlExecutor
+  SecretStore --> ControlExecutor
+  Secrets[CI secret store / environment] --> Executor
   Selector --> Executor[Mode-specific executor]
-  Executor --> Jenkins[Jenkins controller]
-  Jenkins --> ReportSources[Snyk / SonarQube publisher pages]
+  ControlExecutor --> Executor
+  Jenkins[Jenkins controller] --> ReportSources[Snyk / SonarQube publisher pages]
+  Executor --> Jenkins
   Executor --> ReportRoot[Canonical report root]
   ReportRoot --> ReadOnlyServer[Read-only report server]
   Templates[Checked-in offline fixtures] -. exact synthetic URL routes, tests only .-> Executor
@@ -45,15 +53,40 @@ flowchart TB
 
 The loader and selection helpers are pure configuration boundaries. Browser
 launch, credentials, and network I/O begin only after a caller has selected an
-executor. In control mode, `createReportServer` creates both `ConfigStore` and
-`SecretStore` from the configured `configRoot`; the latter fixes its target to
-`secrets.local.json` under that canonical directory. The loopback control
-router validates `Host` before dispatching every request, and the secrets API
-returns only boolean presence data. Mutations additionally require an accepted
-`Origin`, `Sec-Fetch-*` metadata, CSRF token, and JSON content type. Current
-executors still resolve credentials from their supplied environment, so the
-Phase 02 store is not an execution override. Run-environment injection remains
-a later phase.
+executor. Direct report and auto-build callers pass their environment to the
+selected runner. In control mode, `createReportServer` creates both
+`ConfigStore` and `SecretStore` from the configured `configRoot`; the latter
+fixes its target to `secrets.local.json` under that canonical directory. The
+loopback control router validates `Host` before dispatching every request, and
+the secrets API returns only boolean presence data. Mutations additionally
+require an accepted `Origin`, `Sec-Fetch-*` metadata, CSRF token, and JSON
+content type.
+
+`createRunManager` carries the optional `SecretStore` dependency into
+`executeControlRun`. At execution start, the control executor reads one
+snapshot and creates `{ ...env, ...storedSecrets }`; stored values override
+same-named base values, and neither the caller environment nor `process.env`
+is mutated. It normalizes the configuration and passes the new object as
+`runtimeEnvironment` to either mode-specific executor.
+
+## Control-run environment flow
+
+`POST /api/run` supplies a config name/ETag, an explicit `runType`, and an
+optional auto-build `projectId`; it does not carry secret values. The run
+manager accepts one active run and dispatches asynchronously. The executor
+then applies this sequence:
+
+| Stage | Contract |
+| --- | --- |
+| Snapshot | Read the current `SecretStore` map once for this execution. |
+| Merge | Build a fresh `NodeJS.ProcessEnv` from the supplied base environment, then overlay all stored entries; stored entries win on key collisions. |
+| Normalize | Validate and normalize the config against the merged environment, so credential-variable references resolve from stored values when present. |
+| Dispatch | Pass `runtimeEnvironment` to `runConfiguredProjects` for report mode or `runAutoBuildProject` for auto-build mode. |
+| Redact | Use every non-empty stored value to redact control logs, report warnings, caught errors/stacks, and auto-build URL result fields before recording them. |
+
+The file-mode report CLI and direct library calls keep their existing
+caller-supplied environment behavior; this injection boundary belongs only to
+control-run execution.
 
 ## Mode dispatch
 
@@ -131,6 +164,10 @@ secret copies during cleanup. A failure before a matching POST is represented
 as `failed-before-submit`; once a matching POST is observed, indeterminate
 completion is `submission-unknown` and must not be retried.
 
+Control runs invoke this same runner with the merged `runtimeEnvironment`
+created by `executeControlRun`; direct integrations can continue to provide
+their own environment through `AutoBuildRunnerDependencies`.
+
 ## Jenkins component contracts
 
 ### Authentication and identity
@@ -188,6 +225,10 @@ Diagnostics use the existing redaction helpers. URLs are sanitized before
 persistence or display. Report failure artifacts retain a safe project/run
 identity; auto-build results stay in memory and contain only bounded safe
 fields.
+For control runs, `report-server-run-executor.ts` redacts all non-empty values
+from the SecretStore snapshot before adding logs or persisting result
+diagnostics. Auto-build URL fields (`jobUrl` and `buildPageUrl`) are redacted
+as well; report links are generated from validated local relative paths.
 
 ## Persistence and serving
 
@@ -245,9 +286,16 @@ config directory with appropriate user/CI ACLs.
 `createReportServer` creates the store only in loopback control mode and
 exposes it through `ReportServerHandle` and `ControlRouterContext`. The
 control router dispatches `/api/secrets` to the dedicated
-`report-server-control-secrets-api.ts` handler; report/auto-build execution
-still consumes its supplied environment. Run-environment injection remains a
-later phase.
+`report-server-control-secrets-api.ts` handler; `report-server-control-api.ts`
+remains the config/run facade.
+
+For a control run, `report-server-run-manager.ts` carries the optional store
+to `report-server-run-executor.ts`. That executor reads one current snapshot,
+merges it over the supplied environment without mutating `process.env`, and
+passes `runtimeEnvironment` to report or auto-build execution. Secret values
+are redacted from control logs, warnings, errors, and auto-build result URLs
+before the run record is persisted. The direct report CLI and library runners
+still consume their caller-supplied environment.
 
 ### Control secrets API and security gates
 
@@ -271,6 +319,14 @@ Values never appear in success or error responses. Invalid names/values and
 malformed bodies return `400`; invalid mutation gates return `403`, a
 non-JSON mutation body returns `415`, an unavailable store returns `503`, and
 unsupported methods return `405` with `Allow: GET, PUT, DELETE`.
+### Control-run redaction boundary
+
+SecretStore values are never sent in the `/api/run` request or returned by the
+secrets API. The control executor retains only the non-empty snapshot values
+needed for redaction while the run is in progress. It applies redaction to
+`addLog` messages, report warnings, caught error messages and stacks, and
+auto-build `jobUrl`/`buildPageUrl` fields. The underlying auto-build runner
+also clears its mutable resolved username/password copy during cleanup.
 
 ## Offline template fixture subsystem
 
@@ -317,6 +373,12 @@ that route authenticated.
   handling, sorted and frozen snapshots, bulk updates/deletions, concurrent
   mutation serialization, redaction, and control-server wiring. It does not
   contact a live service.
+- `tests/unit/control-run-executor-secrets.spec.ts` uses isolated stores and
+  injected report/auto-build executors to prove per-run SecretStore injection,
+  stored-over-base precedence, non-mutation of the base environment, and
+  redaction of logs, warnings, errors, and manager-level results. Its shared
+  config/record/result helpers live in
+  `tests/unit/control-run-executor-fixture.ts`.
 - `tests/unit/jenkins-build-trigger.spec.ts` uses an in-process HTTP server to
   prove exact request order, scoped controls, form/action validation, one POST,
   HTTP response states, unknown-after-POST, and diagnostic redaction.
@@ -358,6 +420,8 @@ that route authenticated.
 8. Keep control mutations behind exact Host/Origin, accepted Fetch Metadata,
    timing-safe CSRF, and JSON-size/content-type gates; return presence booleans
    rather than values.
-9. Treat Windows file-mode bits as advisory; rely on protected
-   config-directory ACLs, and keep run-environment injection behind its own
-   phase.
+9. For control runs, read one SecretStore snapshot, overlay it on a fresh
+   environment object without mutating `process.env`, pass it as
+   `runtimeEnvironment`, and redact every stored value from control output.
+10. Treat Windows file-mode bits as advisory; rely on protected
+    config-directory ACLs.

@@ -38,6 +38,8 @@ schema or security validation.
 | `src/reporting/report-server-control-security.ts` | Shared control response headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
 | `src/reporting/report-server-control-api.ts` | Config/run handlers plus the re-export facade for the modular secrets handler. |
 | `src/reporting/report-server-control.ts` | Loopback control routing, Host preflight, and `ControlRouterContext` dependencies. |
+| `src/reporting/report-server-run-manager.ts` | Single-active control-run lifecycle and optional `SecretStore` dependency carried into execution. |
+| `src/reporting/report-server-run-executor.ts` | Per-run SecretStore snapshot, environment merge, mode dispatch, and control-output redaction. |
 | `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
 | `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
 
@@ -111,8 +113,10 @@ Compiler settings in `tsconfig.json` are the source of truth:
 
 ## Jenkins and browser safety
 
-- Resolve credentials by environment-variable name. Never place secret values
-  in JSON, source, diagnostics, logs, screenshots, traces, or result DTOs.
+- Resolve credentials by environment-variable name. File-mode and direct
+  runners use their supplied environment; control runs overlay a per-run
+  SecretStore snapshot. Never place secret values in JSON, source, diagnostics,
+  logs, screenshots, traces, or result DTOs.
 - Validate every configured, discovered, redirected, and final URL as
   credential-free HTTP(S) inside the allowed canonical origin/base context.
 - Use `locatorFor` for configured selector kinds and scope controls to the
@@ -165,6 +169,24 @@ Compiler settings in `tsconfig.json` are the source of truth:
   bodies, or raw errors. Set `Cache-Control: no-store` through the shared
   control response helper.
 
+### Control-run environment injection
+
+- `RunManagerOptions.secretStore` is optional. `createReportServer` supplies
+  the control-mode store to `createRunManager`; direct callers may omit it.
+- `executeControlRun` reads one current snapshot at execution start and builds
+  a fresh environment with `{ ...env, ...storedSecrets }`. Stored values win
+  on key collisions. Never assign stored values into `process.env` or mutate a
+  caller-owned environment object.
+- Normalize the configuration against the merged environment, then pass that
+  same object as `runtimeEnvironment` to the selected report or auto-build
+  executor. Keep this boundary in the control executor rather than duplicating
+  SecretStore reads in mode-specific runners.
+- Collect all non-empty snapshot values for redaction. Redact `addLog`
+  messages, report warnings, caught error messages/stacks, and auto-build
+  `jobUrl`/`buildPageUrl` result fields before the control record is persisted.
+- The `/api/run` request carries names/ETags and mode selection, never secret
+  values. Secret API responses remain presence-only.
+
 ## Deadlines, cleanup, and errors
 
 - Create one `WorkflowDeadline` per project execution and pass it through
@@ -174,8 +196,10 @@ Compiler settings in `tsconfig.json` are the source of truth:
 - Preserve the primary outcome when cleanup fails; record a bounded warning
   where the owning result contract supports one.
 - Format diagnostics through `formatDiagnostic` or the Jenkins failure helper,
-  passing the resolved secret values for redaction. Do not return raw errors
-  from a user-facing result.
+  passing resolved secret values for redaction. For control runs,
+  `report-server-run-executor.ts` must redact stored values from logs, warnings,
+  errors/stacks, and auto-build URL result fields before persistence. Do not
+  return raw errors from a user-facing result.
 - Report runs retain an allocated project/run identity for failure artifacts.
   Auto-build runs return an in-memory `failed-before-submit` outcome when a
   failure occurs before a matching POST; they do not allocate report output.
@@ -200,6 +224,12 @@ Tests must defend observable behavior and fail on plausible regressions:
   non-JSON content types, invalid keys/values/bodies, unsupported methods, and
   the unavailable-store response. Use the real loopback server plus a direct
   handler test only for the missing dependency boundary.
+- For control-run execution, `tests/unit/control-run-executor-secrets.spec.ts`
+  must cover report and auto-build `runtimeEnvironment` injection,
+  stored-over-base precedence, non-mutation of the base environment, and
+  redaction of logs, warnings, errors, and result URLs. Reuse
+  `tests/unit/control-run-executor-fixture.ts` for isolated config/record/result
+  setup.
 - For auto-build, assert structural scoping, exact action identity, form
   method/classes, one POST, response classification, unknown-after-POST, no
   retry, mode/enabled gates, secret redaction, and resource cleanup.
@@ -219,7 +249,9 @@ Before opening a change, verify:
    was introduced.
 2. Public types, normalization, all callers, and tests agree on the contract.
 3. URLs, selectors, form actions, origins, and paths are validated before use.
-4. Secrets are resolved only at execution time and redacted from diagnostics.
+4. Control runs snapshot SecretStore values once, merge into a fresh
+   `runtimeEnvironment` without mutating `process.env`, and redact all stored
+   values from control output. Direct runners remain caller-environment driven.
 5. One absolute deadline and bounded cleanup cover every browser resource.
 6. A possible external side effect is never retried automatically.
 7. Documentation links point to files under `docs/` or verified repository

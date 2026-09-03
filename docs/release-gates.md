@@ -2,9 +2,10 @@
 
 This project has deterministic local gates for native browsers, offline report
 fixtures, the Phase 3 build-page fixture, the Phase 01 SecretStore backend,
-and the Phase 02 control secrets API/security boundary. The commands below are
-the current release contract; test counts are intentionally not hard-coded
-because they change with the test suite.
+the Phase 02 control secrets API/security boundary, and the Phase 03 control
+run-environment boundary. The commands below are the current release contract;
+test counts are intentionally not hard-coded because they change with the test
+suite.
 
 ## Gate order
 
@@ -205,6 +206,29 @@ npm run test:control
 ```
 which exercises config reading/atomic saving, validation errors, report execution, auto-build confirmation dialogs, and WCAG A/AA accessibility scanning in Chromium and WebKit.
 
+## Phase 03 run-executor environment gate
+
+Run the focused control-run contract:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-run-executor-secrets.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The suite uses isolated `ConfigStore`/`SecretStore` roots and injected
+executors. It proves that both report and auto-build control runs receive
+stored values through `runtimeEnvironment`, stored values override same-named
+base values, and the base environment remains unchanged. It also proves
+redaction of stored values from `addLog` messages, report warnings, thrown
+errors, and auto-build result URLs, including the asynchronous
+`createRunManager` path. The fixture builders are shared from
+`tests/unit/control-run-executor-fixture.ts`.
+
+This gate performs local filesystem I/O and injected executor calls only. It
+does not contact Jenkins or vendor services and does not replace the report,
+auto-build, or control UI gates.
+
 ## Phase 01 SecretStore gate
 
 Run the focused backend contract:
@@ -228,8 +252,9 @@ The test uses isolated temporary config/report roots and verifies:
 - `createReportServer(..., { mode: 'control' })` wiring the store to the
   server handle and fixed `secrets.local.json` path.
 
-This gate performs local filesystem I/O only. It does not inject values into an
-execution environment, contact Jenkins, or prove Windows ACL enforcement. On
+This gate performs local filesystem I/O only. It does not itself execute a
+report or auto-build run and does not contact Jenkins or prove Windows ACL
+enforcement. The Phase 03 gate below covers per-run environment injection. On
 Windows, review the config-directory ACL separately because POSIX `0o600` mode
 bits are advisory.
 
@@ -263,7 +288,8 @@ These tests create isolated loopback control servers and verify:
 
 The gate writes only isolated temporary SecretStore files and does not contact
 Jenkins or vendor services. It proves request-level API behavior, not Windows
-ACL enforcement or run-environment injection.
+ACL enforcement or run-executor behavior; per-run environment merging and
+redaction are covered by the Phase 03 gate above.
 
 ## Browser-fixture boundary
 
@@ -311,13 +337,17 @@ not a distributed lock.
 ## Security checks
 
 - Never inline credentials in JSON, shell history, fixtures, logs, or examples.
-  Use environment-variable references and a trusted CI secret store.
+  Use environment-variable references, the local SecretStore in control mode,
+  or a trusted CI secret store.
 - Native browser gates do not contact Jenkins or vendor services. Keep any
   authorized runtime credentials in environment variables or a trusted CI
-  secret store.
+  secret store; control runs read a per-run SecretStore snapshot instead of
+  mutating `process.env`.
 - The runner validates origins, rejects credential-like URL data and traversal,
   redacts diagnostics, keeps authentication state ephemeral, and does not copy
-  raw vendor HTML into generated reports.
+  raw vendor HTML into generated reports. The control executor additionally
+  redacts every non-empty stored value from logs, warnings, errors/stacks, and
+  auto-build result URL fields.
 - The report server has no authentication. Keep it on loopback unless a
   trusted-LAN decision, firewall, and `--allow-lan`/`REPORT_ALLOW_LAN=1` are in
   place.

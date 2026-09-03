@@ -81,6 +81,7 @@ export async function createReportServer(
     secretStore = await createSecretStore(configRoot);
     const runManager = createRunManager({
       configStore,
+      secretStore,
       reportRoot: root,
       ...options.runManagerOptions,
     });

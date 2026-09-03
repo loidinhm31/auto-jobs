@@ -10,8 +10,9 @@
 - **Date**: 2026-09-03
 - **Description**: Inject stored secrets from `SecretStore` into the execution environment during `executeControlRun` so that `resolveProjectSecrets` seamlessly finds credentials.
 - **Priority**: P1
-- **Implementation Status**: pending
-- **Review Status**: pending
+- **Implementation Status**: **DONE**
+- **Review Status**: **DONE** (approved, 10/10)
+- **Completed At**: 2026-09-03T17:18:32+07:00
 - **Estimated Effort**: 1.0h
 
 ## Key Insights
@@ -70,11 +71,11 @@ executeControlRun(record, options, addLog)
    - Collect secret values for diagnostic redaction in `addLog`.
 
 ## Todo List
-- [ ] Add `secretStore` to `RunManagerOptions` interface.
-- [ ] Wire `secretStore` into `createRunManager` in `src/reporting/report-server.ts`.
-- [ ] Merge stored secrets with base environment in `src/reporting/report-server-run-executor.ts`.
-- [ ] Pass `runEnv` to `normalizeProjectConfigDocument` and runners.
-- [ ] Ensure log redaction strips stored secret values from execution logs.
+- [x] Add `secretStore` to `RunManagerOptions` interface.
+- [x] Wire `secretStore` into `createRunManager` in `src/reporting/report-server.ts`.
+- [x] Merge stored secrets with base environment in `src/reporting/report-server-run-executor.ts`.
+- [x] Pass `runEnv` to `normalizeProjectConfigDocument` and runners.
+- [x] Ensure log redaction strips stored secret values from execution logs.
 
 ## Success Criteria
 - Running a report or auto-build with credentials in `secrets.local.json` succeeds even when shell environment variables are unset.
@@ -88,6 +89,12 @@ executeControlRun(record, options, addLog)
 ## Security Considerations
 - Keep `runEnv` ephemeral and scoped to the run promise.
 - Avoid printing child-process command lines with credential arguments.
+
+## Validation
+- **Full unit validation**: `npm run test:unit` — **239/239 passed, 0 failed, 0 skipped**.
+- **Targeted validation**: executor/secrets control tests — **37/37 passed, 0 failed, 0 skipped**.
+- **Code review**: **APPROVED, 10/10**.
+- **Typecheck**: `npm run typecheck` (`tsc --noEmit`) — **passed, 0 errors**.
 
 ## Next Steps
 Proceed to Phase 04: Control UI Credential Modal & State.

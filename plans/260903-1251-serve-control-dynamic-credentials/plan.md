@@ -35,12 +35,20 @@ This plan implements a clean, secure, and persistent credential management mecha
 |---|-------|--------|--------|------|
 | 01 | SecretStore Backend Module | **DONE** | 1.5h | [phase-01-backend-secret-store.md](./phase-01-backend-secret-store.md) |
 | 02 | Control Secrets API & Security Gates | **DONE** | 1.0h | [phase-02-control-secrets-api.md](./phase-02-control-secrets-api.md) |
-| 03 | Run Executor Environment Injection | pending | 1.0h | [phase-03-run-executor-environment-injection.md](./phase-03-run-executor-environment-injection.md) |
+| 03 | Run Executor Environment Injection | **DONE** | 1.0h | [phase-03-run-executor-environment-injection.md](./phase-03-run-executor-environment-injection.md) |
 | 04 | Control UI Credential Modal & State | pending | 1.5h | [phase-04-control-ui-credential-management.md](./phase-04-control-ui-credential-management.md) |
 | 05 | Unit, API & Playwright E2E Verification | pending | 1.0h | [phase-05-test-suite-and-e2e-verification.md](./phase-05-test-suite-and-e2e-verification.md) |
 
 Phase 01 completion: **DONE** — 2026-09-03T14:40:00+07:00
 Phase 02 completion: **DONE** — 2026-09-03T15:25:00+07:00
+Phase 03 completion: **DONE** — 2026-09-03T17:18:32+07:00
+
+### Phase 03 Delivery Evidence
+- **Status**: **DONE** — 2026-09-03T17:18:32+07:00.
+- **Full unit validation**: `npm run test:unit` — **239/239 passed, 0 failed, 0 skipped**.
+- **Targeted validation**: executor/secrets control tests — **37/37 passed, 0 failed, 0 skipped**.
+- **Code review**: **APPROVED, 10/10**.
+- **Scope delivered**: per-run SecretStore snapshots merge into `runEnv`, flow through config normalization and report/auto-build runners, and redact stored secret values from diagnostic logs without mutating global `process.env`.
 
 ## Dependencies
 
