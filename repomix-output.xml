@@ -1,50 +1,47 @@
 This file is a merged representation of the entire codebase, combined into a single document by Repomix.
 
-================================================================
-File Summary
-================================================================
+<file_summary>
+This section contains a summary of this file.
 
-Purpose:
---------
+<purpose>
 This file contains a packed representation of the entire repository's contents.
 It is designed to be easily consumable by AI systems for analysis, code review,
 or other automated processes.
+</purpose>
 
-File Format:
-------------
+<file_format>
 The content is organized as follows:
 1. This summary section
 2. Repository information
 3. Directory structure
-4. Multiple file entries, each consisting of:
-  a. A separator line (================)
-  b. The file path (File: path/to/file)
-  c. Another separator line
-  d. The full contents of the file
-  e. A blank line
+4. Repository files, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
 
-Usage Guidelines:
------------------
+<usage_guidelines>
 - This file should be treated as read-only. Any changes should be made to the
   original repository files, not this packed version.
 - When processing this file, use the file path to distinguish
   between different files in the repository.
 - Be aware that this file may contain sensitive information. Handle it with
   the same level of security as you would the original repository.
+</usage_guidelines>
 
-Notes:
-------
+<notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
+</notes>
 
-Additional Info:
-----------------
+<additional_info>
 
-================================================================
-Directory Structure
-================================================================
+</additional_info>
+
+</file_summary>
+
+<directory_structure>
 .codegraph/.gitignore
 .gitignore
 .repomixignore
@@ -213,6 +210,7 @@ tests/unit/control-config-api.spec.ts
 tests/unit/control-run-api.spec.ts
 tests/unit/control-run-executor-fixture.ts
 tests/unit/control-run-executor-secrets.spec.ts
+tests/unit/control-secret-store.spec.ts
 tests/unit/control-secrets-api.spec.ts
 tests/unit/control-secrets-security.spec.ts
 tests/unit/diagnostics.spec.ts
@@ -238,23 +236,20 @@ tests/unit/template-build-fixture.spec.ts
 tests/unit/template-report.spec.ts
 tsconfig.build.json
 tsconfig.json
+</directory_structure>
 
-================================================================
-Files
-================================================================
+<files>
+This section contains the contents of the repository's files.
 
-================
-File: .codegraph/.gitignore
-================
+<file path=".codegraph/.gitignore">
 # CodeGraph data files — local to each machine, not for committing.
 # Ignore everything in .codegraph/ except this file itself, so transient
 # files (the database, daemon.pid, sockets, logs) never show up in git.
 *
 !.gitignore
+</file>
 
-================
-File: .gitignore
-================
+<file path=".gitignore">
 [n]ode_modules/
 
 .*env*
@@ -280,10 +275,9 @@ reports/
 coverage/
 .DS_Store
 .idea/
+</file>
 
-================
-File: .repomixignore
-================
+<file path=".repomixignore">
 # Dot-folders (not covered by .gitignore defaults)
 .omp/
 .git/
@@ -338,20 +332,18 @@ Cargo.lock
 
 # Repomix output
 repomix-output.*
+</file>
 
-================
-File: config/ci-env.template
-================
+<file path="config/ci-env.template">
 # Inject the credential values referenced by config/projects.example.json.
 # Keep actual values in the CI secret store; these placeholders are examples.
 JENKINS_USERNAME=replace-with-jenkins-username
 JENKINS_PASSWORD=replace-with-jenkins-password
 SERVICE_B_JENKINS_USERNAME=replace-with-service-b-username
 SERVICE_B_JENKINS_PASSWORD=replace-with-service-b-password
+</file>
 
-================
-File: config/projects.example.json
-================
+<file path="config/projects.example.json">
 {
   "schemaVersion": 1,
   "defaults": {
@@ -396,21 +388,25 @@ File: config/projects.example.json
     }
   ]
 }
+</file>
 
-================
-File: docs/architecture.md
-================
+<file path="docs/architecture.md">
 # Current architecture
 
 This document describes the implemented schema-v1 configuration, report and
-target-branch Jenkins auto-build workflows, the local SecretStore backend, and
-the loopback control secrets API. Phase 03 adds per-run SecretStore environment
-injection and redaction to control runs. Phase 3 adds an offline build-page
-fixture and exact routes so the auto-build path can be exercised without live
-side effects. Phase 01 adds validated local persistence; Phase 02 exposes
-guarded presence-only `GET`, `PUT`, and `DELETE /api/secrets` operations. The
-report command remains report-only; auto-build is an explicit library boundary
-and is not inferred from URLs, selectors, CLI names, or environment.
+target-branch Jenkins auto-build workflows, the local SecretStore backend, the
+loopback control secrets API, the Phase 04 credential-management UI, and the
+Phase 05 verification boundary. Phase 03 adds per-run SecretStore environment
+injection and redaction to control runs. Phase 04 adds a CSRF-aware modal that
+discovers referenced variable names, displays presence only, persists
+replacements, and wipes password inputs. Phase 05 verifies the persistence,
+API, and browser contracts without live services. Phase 3 adds an offline
+build-page fixture and exact routes so the auto-build path can be exercised
+without live side effects. Phase 01 adds validated local persistence; Phase 02
+exposes guarded presence-only `GET`, `PUT`, and `DELETE /api/secrets`
+operations. The report command remains report-only; auto-build is an explicit
+library boundary and is not inferred from URLs, selectors, CLI names, or
+environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -518,6 +514,9 @@ flowchart LR
 - `src/reporting/report-server-control.ts` validates the Host header for every
   control request, dispatches API paths, and carries the optional
   `ControlRouterContext.secretStore` dependency.
+- `src/reporting/control-page/control-page.html`, `.css`, and `.js` implement
+  the Credentials dialog, dynamic presence state, guarded save/clear actions,
+  and input cleanup without rendering secret values.
 - `src/reporting/report-server-control-api.ts` remains the config/run handler
   facade and re-exports `handleSecretsApi`; the implementation lives in
   `report-server-control-secrets-api.ts`.
@@ -635,8 +634,9 @@ CSS. Selector values do not change the configured `jobUrl` or branch identity.
 | `src/reporting/report-server.ts` | Creates the `SecretStore` in loopback control mode and exposes it on `ReportServerHandle`. |
 | `src/reporting/report-server-run-manager.ts` | Owns the single-active-run lifecycle and carries the optional `SecretStore` dependency. |
 | `src/reporting/report-server-run-executor.ts` | Reads one SecretStore snapshot, merges the run environment, dispatches the selected executor, and redacts control-run output. |
-| `tests/unit/report-server-secret-store.spec.ts` | Exercises persistence and control-server wiring. |
-| `tests/unit/control-secrets-api.spec.ts` | Exercises endpoint presence, patch/delete semantics, filtering, and persistence. |
+| `tests/unit/report-server-secret-store.spec.ts` | Exercises Phase 01 persistence and control-server wiring. |
+| `tests/unit/control-secret-store.spec.ts` | Exercises Phase 05 SecretStore lifecycle, atomic-file cleanup, platform permission handling, key/value validation, concurrent writes, and deletion. |
+| `tests/unit/control-secrets-api.spec.ts` | Exercises Phase 05 endpoint presence, guarded patch/delete semantics, filtering, persistence, and plaintext-free responses. |
 | `tests/unit/control-secrets-security.spec.ts` | Exercises redaction, validation, method/content-type handling, and security gates. |
 
 ### Secret resolution
@@ -910,6 +910,14 @@ mutation additionally requires an exact same-origin HTTP(S) Origin, accepted
 control limit. All responses set `Cache-Control: no-store`; secret values
 never appear in API success or error responses.
 
+The page's **Credentials** dialog derives a deduplicated, sorted key list from
+the active configuration, then calls the filtered presence GET. It renders
+blank password inputs with **Configured**/**Missing** badges. Save sends only
+non-empty trimmed values through the CSRF-bearing JSON PUT; clear sends a
+CSRF-bearing bodyless DELETE for one key. Successful save/clear and every
+dialog close wipe input values, so the browser retains no submitted or
+unsaved plaintext. Status text and API responses contain names/presence only.
+
 When `POST /api/run` starts a control run, the run executor reads the current
 SecretStore snapshot and merges it over the supplied base environment without
 mutating `process.env`. It passes that `runtimeEnvironment` to both report and
@@ -918,41 +926,54 @@ URLs are redacted with all non-empty stored values before persistence.
 
 ## Test and release boundary
 
-The deterministic order is `npm ci`, `npm run install:browsers`, `npm run typecheck`, `npm run build`,
-`npm run test:unit`, `npm run test:e2e:templates`, `npm run test:control`, `npm run test:report`, and `npm run test:release:webkit`. `npm run test:release` is the shorthand for typecheck,
-build, unit, template, control, generated-report, and WebKit gates. Template tests use exact-URL
-test-only routes and checked-in fixtures; they do not claim live Jenkins or
-vendor execution. Runtime smoke validation requires an authorized project
-JSON and injected credentials and is never part of the deterministic suite.
+The deterministic order is `npm ci`, `npm run install:browsers`,
+`npm run typecheck`, `npm run build`, `npm run test:unit`,
+`npm run test:e2e:templates`, `npm run test:control`, `npm run test:report`,
+and `npm run test:release:webkit`. `npm run test:release` is the shorthand
+for typecheck, build, unit, template, control, generated-report, and WebKit
+gates. Template tests use exact-URL test-only routes and checked-in fixtures;
+they do not claim live Jenkins or vendor execution. Runtime smoke validation
+requires an authorized project JSON and injected credentials and is never part
+of the deterministic suite.
 
 Phase 2, Phase 3, and Phase 03 focused unit coverage is in
 `tests/unit/jenkins-build-trigger.spec.ts`,
-`tests/unit/auto-build-runner.spec.ts`, `tests/unit/template-build-fixture.spec.ts`,
-and the report-selection assertions in `tests/unit/sequential-runner.spec.ts`.
-Phase 03 run-environment coverage is in
-`tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
-`tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection
-for report and auto-build runs, stored-over-base environment precedence,
-non-mutation of the base environment, and redaction of logs, warnings, errors,
-and manager-level run output.
-Control config/run/UI coverage is in `tests/unit/control-config-api.spec.ts`,
-`tests/unit/control-run-api.spec.ts`, and `tests/e2e/control-page.spec.ts`.
-Phase 02 secrets coverage is in `tests/unit/control-secrets-api.spec.ts` and
-`tests/unit/control-secrets-security.spec.ts`; it proves presence-only GET
-responses, filtering, single/batch PUT, deletion, persistence, redaction,
-Host/Origin/Fetch Metadata/CSRF gates, bounded JSON validation, content-type
-handling, and method/store-availability errors without contacting a live
-Jenkins controller.
+`tests/unit/auto-build-runner.spec.ts`,
+`tests/unit/template-build-fixture.spec.ts`, and the report-selection
+assertions in `tests/unit/sequential-runner.spec.ts`. Phase 03 run-environment
+coverage is in `tests/unit/control-run-executor-secrets.spec.ts`; its fixture
+helpers are in `tests/unit/control-run-executor-fixture.ts`. It proves
+SecretStore injection for report and auto-build runs, stored-over-base
+environment precedence, non-mutation of the base environment, and redaction
+of logs, warnings, errors, and manager-level run output.
 
-================
-File: docs/code-standards.md
-================
+Phase 04 control-page coverage and Phase 05 browser verification use
+`tests/e2e/control-page.spec.ts`. The control suite proves config/run/UI
+behavior, accessible credential management, dynamic key discovery,
+Missing/Configured transitions, guarded save/clear operations, persistence
+after reload, injected-credential execution, and zero leakage from cleared
+inputs, page HTML, and run logs. Its three scenarios run in Chromium and
+WebKit, producing six E2E checks.
+
+Phase 05 SecretStore/API unit additions are
+`tests/unit/control-secret-store.spec.ts` and
+`tests/unit/control-secrets-api.spec.ts`. The first has seven isolated
+lifecycle checks; the second has ten operation checks. The security suite
+continues to cover plaintext redaction, Host/Origin/Fetch Metadata/CSRF gates,
+bounded JSON validation, content-type handling, unsupported methods, and
+store-availability errors. The Phase 05 verification snapshot recorded
+248/248 unit checks, 6/6 control E2E checks, 254/254 combined passes, zero
+secret leakage, and zero TypeScript errors. None of these deterministic
+checks contacts a live Jenkins controller or vendor service.
+</file>
+
+<file path="docs/code-standards.md">
 # Code standards
 
 This guide describes the conventions enforced by the current TypeScript
-source tree. It complements [architecture](./architecture.md) and the
-[system architecture](./system-architecture.md); it is not a replacement for
-schema or security validation.
+source tree and the Phase 05 verification boundary. It complements
+[architecture](./architecture.md) and the [system architecture](./system-architecture.md);
+it is not a replacement for schema or security validation.
 
 ## Core principles
 
@@ -1118,6 +1139,22 @@ Compiler settings in `tsconfig.json` are the source of truth:
   bodies, or raw errors. Set `Cache-Control: no-store` through the shared
   control response helper.
 
+### Control UI credential state
+
+- Render the server-provided CSRF token in the page meta tag and let the
+  shared `apiFetch` helper attach it to mutations; do not hand-copy tokens in
+  individual handlers.
+- Derive a deduplicated, sorted key list from the active configuration and
+  use `GET /api/secrets?keys=...` for presence only. Never request or render
+  stored values.
+- Use password inputs with blank values for configured keys. Save only
+  non-empty trimmed values; clear submitted values after a successful PUT.
+- Use the per-key bodyless DELETE contract for clear actions. On success,
+  update the presence badge and remove the clear action.
+- Register a dialog `close` cleanup that wipes every credential input and
+  transient message. Render only names, booleans, and bounded status text;
+  never place plaintext in labels, attributes, URLs, HTML, or responses.
+
 ### Control-run environment injection
 
 - `RunManagerOptions.secretStore` is optional. `createReportServer` supplies
@@ -1165,14 +1202,24 @@ Tests must defend observable behavior and fail on plausible regressions:
 - For `SecretStore`, use isolated temporary directories and assert empty/missing
   reads, strict key/value validation, size and malformed-content rejection,
   sorted/frozen snapshots, atomic mutation/deletion, concurrent update
-  preservation, redaction, and control-server wiring.
+  preservation, redaction, and control-server wiring. The dedicated
+  `tests/unit/control-secret-store.spec.ts` suite additionally proves
+  temporary-file cleanup and platform-specific permission handling.
 - For the secrets API, cover unfiltered and filtered boolean presence maps,
   single/batch patch and deletion forms, persistence, and the invariant that
-  plaintext never appears in responses.
+  plaintext never appears in responses. The operation contract is exercised by
+  `tests/unit/control-secrets-api.spec.ts`; security-gate cases remain in
+  `tests/unit/control-secrets-security.spec.ts`.
 - For the security boundary, cover invalid Host/Origin/Fetch Metadata/CSRF,
   non-JSON content types, invalid keys/values/bodies, unsupported methods, and
   the unavailable-store response. Use the real loopback server plus a direct
   handler test only for the missing dependency boundary.
+- For the dynamic-credential browser flow, `tests/e2e/control-page.spec.ts`
+  must run against isolated temporary roots in Chromium and WebKit. Cover
+  accessible modal state, key discovery, Missing/Configured transitions,
+  guarded save/clear requests, persistence after reopen/reload, injected
+  execution, input wiping, and absence of submitted values from page HTML and
+  run logs.
 - For control-run execution, `tests/unit/control-run-executor-secrets.spec.ts`
   must cover report and auto-build `runtimeEnvironment` injection,
   stored-over-base precedence, non-mutation of the base environment, and
@@ -1207,16 +1254,15 @@ Before opening a change, verify:
    paths, and each changed Markdown file remains below 800 lines.
 8. Run the narrowest behavioral proof first, then the repository release gates
    once all concurrent work is integrated.
+</file>
 
-================
-File: docs/codebase-summary.md
-================
+<file path="docs/codebase-summary.md">
 # Codebase summary
 
 This summary is derived from the repository compaction generated by Repomix
 (`repomix-output.xml`) and the checked-in source/configuration files. It records
-the current implementation boundary through Phase 3 and dynamic-credentials
-Phases 01–03; it does not claim a live Jenkins run.
+the current implementation and verification boundary through Phase 05 dynamic
+credentials; it does not claim a live Jenkins run.
 
 ## Repository profile
 
@@ -1242,10 +1288,16 @@ Phases 01–03; it does not claim a live Jenkins run.
   one SecretStore snapshot, overlays it on the caller environment for that run,
   passes `runtimeEnvironment` to report/auto-build executors, and redacts stored
   values from control output without mutating `process.env`.
-- Repomix inventory: 193 repository files were packed; binary/ignored files
-  remain outside the summary. The current XML compaction contains the Phase 03
+- Phase 04 addition: the loopback Control UI discovers configured credential
+  variable names, checks boolean presence, saves non-empty values through the
+  CSRF-gated secrets API, and wipes password inputs on save, clear, or close.
+- Phase 05 addition: focused SecretStore lifecycle coverage, expanded secrets
+  API operation coverage, and Chromium/WebKit Control UI E2E verification for
+  dynamic credential persistence, injected execution, and zero leakage.
+- Repomix inventory: 194 repository files were packed; binary/ignored files
+  remain outside the summary. The current XML compaction contains the Phase 05
   source, tests, fixtures, plans, and documentation.
-- Compaction metrics: 4,658,441 characters and 1,377,055 tokens.
+- Compaction metrics: 4,715,073 characters and 1,390,111 tokens.
 - Repomix's security scan excluded two unit-test files containing basic-auth
   test strings; those tests remain repository inputs and are not treated as
   runtime behavior.
@@ -1271,6 +1323,7 @@ Phases 01–03; it does not claim a live Jenkins run.
 | `src/reporting/report-server-control-api.ts` | Owns config/run handlers and re-exports the modular secrets handler. |
 | `src/reporting/report-server-control.ts` | Validates Host, dispatches control routes, and carries router context. |
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
+| `src/reporting/control-page/control-page.html` / `.css` / `.js` | Control Dashboard markup, styling, CSRF-aware credential modal, presence state, save/clear actions, and DOM wiping. |
 
 Useful package scripts include `typecheck`, `build`, `test:unit`,
 `test:e2e:templates`, `test:control`, `test:report`, `test:release:webkit`,
@@ -1392,6 +1445,35 @@ executor redacts `addLog` messages, report warnings, caught error messages and
 stacks, and auto-build `jobUrl`/`buildPageUrl` result fields before recording
 the run. Local report URLs come only from validated relative report paths.
 
+### Control UI credential workflow (Phases 04–05)
+
+The `/` page renders a per-server CSRF token into a meta tag. The browser
+discovers credential-variable names from the loaded project document, applying
+project references before defaults and falling back to
+`JENKINS_USERNAME`/`JENKINS_PASSWORD`; names are deduplicated and sorted.
+Opening **Credentials** calls `GET /api/secrets?keys=...` and renders blank
+password inputs with boolean **Configured**/**Missing** badges. Values are never
+loaded into the page.
+
+Save collects only non-empty, trimmed inputs and sends
+`PUT /api/secrets` with `{ "secrets": { ... } }`. `apiFetch` attaches the
+CSRF header to the mutation; the server additionally checks Host, same-origin
+Origin, Fetch Metadata, JSON content type, and body size. On success the UI
+clears submitted inputs and updates presence badges. Per-row **Clear** sends
+bodyless `DELETE /api/secrets?name=...`; success clears the input, marks it
+**Missing**, and removes the clear action. Dialog close clears every input and
+the modal message, including unsaved values; reopening performs a fresh
+presence lookup.
+
+Secret values exist only transiently in an active password input and the
+mutation request body. They are not reflected in labels, status messages,
+URLs, page HTML after save/close, or API success/error payloads. The browser
+contract in `tests/e2e/control-page.spec.ts` covers modal accessibility,
+dynamic key discovery, Missing/Configured transitions, save/clear/reopen
+state, injected-credential execution, input wiping, and absence of test
+secrets from page HTML and run logs. The control configuration uses Chromium
+and WebKit projects, so the three browser scenarios produce six E2E checks.
+
 ## Local SecretStore backend
 
 `src/reporting/report-server-secret-store.ts` is a persistence-only module.
@@ -1468,6 +1550,7 @@ set `Cache-Control: no-store`.
 | `src/reporting/report-server-control-api.ts` | Config/run handlers and re-export facade for the secrets handler. |
 | `src/reporting/report-server-control.ts` | Host preflight, control routing, report links, and `ControlRouterContext` dependencies. |
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
+| `src/reporting/control-page/control-page.html` / `.css` / `.js` | Control Dashboard assets: credential modal structure, responsive styling, CSRF-aware presence/save/clear state, and DOM secret wiping. |
 | `src/reporting/report-server-run-manager.ts` | Single-active control-run lifecycle and optional SecretStore dependency. |
 | `src/reporting/report-server-run-executor.ts` | Per-run SecretStore snapshot, environment merge, mode dispatch, and redaction. |
 | `src/security/` | Origin, base-path, relative URL, credential-like URL, traversal, and containment checks. |
@@ -1482,7 +1565,8 @@ set `Cache-Control: no-store`.
 | `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, and manager integration coverage. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
-| `tests/unit/report-server-secret-store.spec.ts` | Isolated SecretStore contract and control-mode wiring coverage. |
+| `tests/unit/report-server-secret-store.spec.ts` | Phase 01 backend contract and control-mode wiring coverage. |
+| `tests/unit/control-secret-store.spec.ts` | Phase 05 SecretStore lifecycle coverage: empty reads, atomic file cleanup, platform permissions, key/value rejection, concurrent writes, and deletion. |
 | `src/templates/template-report-fixture.ts` | Public facade exports plus explicit `templateProjectDocument` run type. |
 | `templates/jenkins-template/template-build.html` | Minimal saved-origin build page with canonical URL, `POST` form, `#bottom-sticker`, and classed `Build` button. |
 | `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus, including the build detail page. |
@@ -1502,7 +1586,12 @@ checked-in files with default-deny routes and do not contact Jenkins or vendor
 services. `template-build-fixture.spec.ts` validates the ninth file and
 `template-auto-build.spec.ts` proves one build POST without Snyk/Sonar capture.
 The Phase 03 unit gate separately proves control-run SecretStore injection and
-redaction with injected executors.
+redaction with injected executors. The Phase 04 control-page E2E gate proves
+credential-modal accessibility and presence-state transitions. The Phase 05
+unit/API and control-page E2E gates extend that evidence to SecretStore
+lifecycle requirements, API persistence semantics, injected-credential
+execution, and zero leakage from inputs, page HTML, and run logs; the recorded
+snapshot is 248 unit plus 6 control E2E checks, 254 total.
 
 ## Offline template fixture flow
 
@@ -1544,6 +1633,9 @@ project; `runType` defaults to `report`, while the auto-build E2E passes
   timing-safe CSRF, JSON content type, and bounded bodies for mutations.
 - Return only boolean presence maps from the API, set `Cache-Control: no-store`,
   and keep secret values out of success/error responses and diagnostics.
+- Keep credential values out of the Control UI after each save, clear, or
+  close. Render only variable names, boolean presence, and bounded messages;
+  do not echo values into DOM attributes, URLs, HTML, or API responses.
 - Treat `jobUrl` as the sole Jenkins job/branch identity; do not add a second
   branch field or infer identity from selector data.
 - Keep mode selection explicit and project-scoped; never mass-enable auto-build
@@ -1557,18 +1649,19 @@ project; `runType` defaults to `report`, while the auto-build E2E passes
 - Update [multi-project configuration](./multi-project-configuration.md) for
   field-level changes, [architecture](./architecture.md) for data-flow
   changes, and [code standards](./code-standards.md) for implementation rules.
+</file>
 
-================
-File: docs/multi-project-configuration.md
-================
+<file path="docs/multi-project-configuration.md">
 # Multi-project configuration
 
 The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
 projects, and exposes explicit report and auto-build execution boundaries.
 Mode is never inferred from a URL, selector, CLI name, or environment. Direct
 callers use the normalized configuration; loopback control runs additionally
-overlay a per-run SecretStore snapshot before executor dispatch. The
-configuration contract is implemented in `src/config/` and consumed by
+overlay a per-run SecretStore snapshot before executor dispatch and expose the
+Phase 04 credential modal for presence-only local management. Phase 05 verifies
+the persistence, API, and browser contracts around that flow.
+The configuration contract is implemented in `src/config/` and consumed by
 `src/runner.ts` (report), `src/project/auto-build-runner.ts` (auto-build), or
 `src/reporting/report-server-run-executor.ts` (control dispatch).
 
@@ -1733,7 +1826,7 @@ Set the referenced names in the shell or CI secret store before running. Do
 not put usernames, passwords, tokens, cookies, or credential-bearing URLs in
 the JSON, source tree, traces, screenshots, or reports.
 
-#### Local SecretStore and control API (Phases 01–03)
+#### Local SecretStore and control API/UI (Phases 01–05)
 
 Dynamic credential persistence is deliberately separate from the schema-v1
 document. In control mode, `createReportServer` initializes
@@ -1778,6 +1871,36 @@ Control-run execution reads a current SecretStore snapshot, constructs a
 fresh merged environment, and passes it to the selected report or auto-build
 executor. Secret values are not included in the `/api/run` request or API
 responses.
+
+The loopback Control UI's **Credentials** dialog derives the deduplicated,
+sorted variable names referenced by the active document (project references
+before defaults, then `JENKINS_USERNAME`/`JENKINS_PASSWORD` fallbacks). It
+requests `GET /api/secrets?keys=...` and renders only boolean presence badges
+with blank password inputs. Non-empty trimmed replacements use the CSRF-bearing
+JSON PUT; each Clear action uses the CSRF-bearing bodyless DELETE. Successful
+save/clear and every close wipe input values, so status text, page HTML, and
+API payloads never contain plaintext values.
+
+#### Phase 05 verification
+
+The dedicated `tests/unit/control-secret-store.spec.ts` suite runs against
+isolated temporary directories and verifies missing/empty reads, atomic
+`secrets.local.json` replacement with temporary-file cleanup, POSIX/Windows
+permission handling, invalid and reserved key rejection, non-string value
+errors without secret leakage, concurrent write preservation, and deletion or
+bulk operations. `tests/unit/control-secrets-api.spec.ts` verifies boolean-only
+presence maps, filtered reads, guarded single/batch updates, null/action
+deletion, query/body deletion, persistence, and plaintext-free responses.
+
+`tests/e2e/control-page.spec.ts` exercises the operator flow in Chromium and
+WebKit: accessible dialog discovery, Missing/Configured badges, guarded save
+and clear requests, persistence after close/reopen and reload, a failed run
+before credentials are configured, and a successful run after
+SecretStore-injected credentials. It asserts that submitted values are wiped
+from inputs and absent from page HTML and run logs. The completed verification
+recorded 7/7 SecretStore tests, 10/10 API operation tests, 248/248 unit tests,
+and 6/6 control-page E2E checks (254/254 combined), with zero leakage
+observed.
 
 ### Control-run environment injection (Phase 03)
 
@@ -1969,18 +2092,18 @@ root can race publication. Use a trusted isolated root for sensitive runs.
 For the complete command and release boundary, see
 [release-gates.md](./release-gates.md). This repository documentation does not
 claim that a live Jenkins or browser execution has been run.
+</file>
 
-================
-File: docs/project-overview-pdr.md
-================
+<file path="docs/project-overview-pdr.md">
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build,
-Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–03  
-**Current milestone:** Phase 03 Run Executor Environment Injection —
-**DONE** (2026-09-03T17:18:32+07:00)  
-**Prior completed milestone:** Phase 02 Control Secrets API — **DONE**
+Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–05<br>
+**Current milestone:** Phase 05 Unit, API, and Playwright E2E Verification —
+**DONE** (2026-09-03)<br>
+**Prior completed milestone:** Phase 04 Control UI Credential Modal and State —
+**DONE**
 
 ## Product summary
 
@@ -2006,6 +2129,17 @@ SecretStore snapshot, overlays it on a fresh copy of the caller environment,
 and passes the merged `runtimeEnvironment` to report or auto-build execution.
 Stored values override same-named base values without mutating `process.env`;
 control logs, warnings, errors, and auto-build result URLs are redacted.
+
+Phase 04 adds the operator-facing credential workflow to the loopback control
+page. It discovers the variable names referenced by the active configuration,
+checks presence without loading values, and persists only entered replacements
+through the guarded `/api/secrets` API. The modal masks values and wipes its
+inputs on save, clear, or close; it never reflects plaintext in status text,
+URLs, page HTML, or API responses.
+Phase 05 adds focused lifecycle and operation tests for the local SecretStore
+and `/api/secrets`, plus Chromium/WebKit Control UI E2E scenarios. The gate
+proves dynamic credential persistence and injected execution while asserting
+zero plaintext leakage from inputs, page HTML, run logs, and API responses.
 
 The product treats Jenkins navigation and build submission as high-risk external
 operations. Configuration, target identity, selectors, credentials, deadlines,
@@ -2040,8 +2174,8 @@ and failure semantics are validated before side effects.
 - Mutating `process.env` or a caller-owned environment when injecting stored
   values. Control-run injection is per-run and does not alter direct
   file-mode/library environment behavior.
-- Replacing the Phase 04 control UI credential modal/state or Phase 05
-  end-to-end verification.
+- Treating the Phase 05 unit/API/Playwright end-to-end verification as complete
+  without recorded test evidence and zero-leakage assertions.
 
 ## Users and use cases
 
@@ -2164,7 +2298,24 @@ and failure semantics are validated before side effects.
   security gates, 415 for mutation content type, 503 for missing store, and
   405 with `Allow` for unsupported methods.
 
-### FR-9: Offline build-page fixture
+### FR-9: Control UI credential modal and state
+
+- Render a native Credentials dialog from the loopback control page with
+  accessible labels, loading/error status, password-masked inputs, and
+  **Configured**/**Missing** presence badges.
+- Derive a deduplicated, sorted key list from project credential references
+  and defaults, falling back to `JENKINS_USERNAME` and `JENKINS_PASSWORD`.
+- Fetch only boolean presence using `GET /api/secrets?keys=...`; never load
+  stored values into the page.
+- Save only non-empty trimmed values through CSRF-protected JSON
+  `PUT /api/secrets`; update badges and wipe submitted inputs on success.
+- Clear one key through CSRF-protected bodyless
+  `DELETE /api/secrets?name=...`; mark it missing and wipe its input.
+- Wipe all credential input values and modal messages on dialog close, and
+  keep secret values out of labels, status messages, URLs, page HTML, and API
+  success/error payloads.
+
+### FR-10: Offline build-page fixture
 
 - Keep `templates/jenkins-template/template-build.html` minimal, inert, and
   free of credentials, scripts, external assets, production hosts, and report links.
@@ -2187,7 +2338,7 @@ and failure semantics are validated before side effects.
 | --- | --- |
 | Safety | Fail closed on invalid origins, actions, selectors, cardinality, forms, modes, or identities. |
 | Idempotency | No automatic retry after a matching build POST; preserve unknown state. |
-| Security | Credential-free URLs, environment references or local SecretStore values (never project JSON), boolean-only secret API responses, strict mutation gates, bounded diagnostics, and no hidden-form inspection. |
+| Security | Credential-free URLs, environment references or local SecretStore values (never project JSON), boolean-only secret API responses, strict mutation gates, CSRF-aware credential UI, DOM input wiping, bounded diagnostics, and no hidden-form inspection. |
 | Persistence | Secret updates are bounded, sorted, serialized under an in-process lock, atomically renamed, and close their file handle on write/sync failure; rename failures clean up temporary files. |
 | Availability | Report projects continue after a project failure; cleanup is bounded. |
 | Determinism | Unit and fixture tests use injected dependencies or exact default-deny routes. |
@@ -2249,6 +2400,40 @@ and failure semantics are validated before side effects.
   injection, precedence, non-mutation, redaction, and asynchronous
   `createRunManager` integration using shared fixture helpers.
 
+## Dynamic-credentials Phase 04 acceptance criteria
+
+- [x] The loopback control page exposes an accessible Credentials dialog with
+  dynamic discovery of referenced variable names and fallback defaults.
+- [x] Opening the dialog performs a filtered presence-only GET and renders
+  blank password inputs with **Configured**/**Missing** badges.
+- [x] Save sends only non-empty trimmed values through the CSRF-gated JSON
+  PUT contract, updates badges, and clears submitted input values.
+- [x] Per-key clear sends the CSRF-gated bodyless DELETE contract, marks the
+  key missing, removes its clear action, and clears the input.
+- [x] Dialog close wipes every credential input and modal message, and no
+  secret value is reflected in page HTML, status text, URLs, or API output.
+- [x] `tests/e2e/control-page.spec.ts` proves modal accessibility, presence
+  transitions, persistence/reopen behavior, input wiping, and zero leakage.
+
+## Dynamic-credentials Phase 05 acceptance criteria
+
+- [x] `tests/unit/control-secret-store.spec.ts` verifies missing/empty reads,
+  atomic `secrets.local.json` writes without temporary-file residue,
+  POSIX/Windows permission handling, invalid and reserved names, non-string
+  value rejection without leakage, concurrent writes, and single/bulk
+  deletion.
+- [x] `tests/unit/control-secrets-api.spec.ts` verifies empty/full/filtered
+  boolean presence maps, guarded single and batch updates, null/action
+  deletion, query/body deletion, persistence, and plaintext-free responses.
+- [x] `tests/e2e/control-page.spec.ts` verifies accessible dynamic credential
+  discovery, Missing/Configured transitions, save/clear/reopen and reload
+  persistence, execution failure before credentials, successful execution
+  after SecretStore injection, and zero leakage from inputs, page HTML, and
+  run logs in Chromium and WebKit.
+- [x] Phase 05 verification records `npm run typecheck` with 0 errors,
+  `npm run test:unit` at 248/248, `npm run test:control` at 6/6, and
+  254/254 combined unit and control E2E checks with zero secret leakage.
+
 ## Phase 2 acceptance criteria
 
 - [x] Exact job-action URL validation rejects sibling jobs, foreign origins,
@@ -2293,13 +2478,15 @@ The checked-in `config/projects.example.json` remains non-runnable with
 `.invalid` placeholders and a disabled auto-build example. Keep live project
 configuration and secret values outside the repository.
 
-For Phases 01–03, local values may be persisted only in
+For Phases 01–05, local values may be persisted only in
 `config/secrets.local.json`, which is ignored by `config/*.local.json`; keep
 that file and its directory protected by the operator/CI account's ACLs.
 The Phase 02 API remains loopback-only and exposes presence booleans. Phase 03
-control runs consume a per-run snapshot from that store; direct report CLI and
-library runs still require the environment variables named by project
-configuration.
+control runs consume a per-run snapshot from that store; Phase 04 manages
+presence and guarded updates through the modal while wiping its input values.
+Phase 05 verifies those persistence, API, and UI boundaries locally without
+contacting Jenkins or vendor services. Direct report CLI and library runs still
+require the environment variables named by project configuration.
 
 ## Traceability
 
@@ -2311,24 +2498,26 @@ configuration.
 | Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
 | Local secret persistence | `src/reporting/report-server-secret-store.ts`, `src/reporting/report-server-constants.ts` | [architecture](./architecture.md), [multi-project configuration](./multi-project-configuration.md), [code standards](./code-standards.md) |
 | Control secrets API and security gates | `src/reporting/report-server-control-secrets-api.ts`, `src/reporting/report-server-control-api.ts`, `src/reporting/report-server-control-security.ts`, `src/reporting/report-server-control.ts` | [system architecture](./system-architecture.md), [architecture](./architecture.md), [code standards](./code-standards.md) |
+| Control UI credential management | `src/reporting/control-page/control-page.html`, `src/reporting/control-page/control-page.css`, `src/reporting/control-page/control-page.js` | [system architecture](./system-architecture.md), [codebase summary](./codebase-summary.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
-| SecretStore verification | `tests/unit/report-server-secret-store.spec.ts` | [release gates](./release-gates.md) |
+| SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |
 | Run-executor environment injection | `src/reporting/report-server-run-manager.ts`, `src/reporting/report-server-run-executor.ts`, `src/reporting/report-server.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
-| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
+| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, `tests/unit/control-secret-store.spec.ts`, `tests/unit/control-secrets-api.spec.ts`, `tests/e2e/control-page.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect policy | `src/jenkins/build-trigger.ts`, `src/project/auto-build-runner.ts` | [architecture](./architecture.md), [release gates](./release-gates.md) |
 
 ## Open scope
 
-Dynamic-credentials Phase 03 completes per-run SecretStore environment
-injection and redaction for loopback control execution. Phase 04 still owns
-the control UI credential modal and state, and Phase 05 owns end-to-end
-verification. All future work must preserve server-side configuration
-validation, loopback and CSRF protections, single-run/concurrency rules,
-explicit auto-build confirmation, no-process-global mutation, and safe outcome
-mapping. The current report CLI still has no production auto-build command.
+Dynamic-credentials Phases 01–05 are complete through the local store, guarded
+presence API, per-run environment injection/redaction, Control UI
+credential modal/state, and unit/API/Playwright end-to-end verification. No
+planned phase remains in this plan. All future work must preserve server-side
+configuration validation, loopback and CSRF protections, single-run/concurrency
+rules, explicit auto-build confirmation, no-process-global mutation, DOM
+secret wiping, and safe outcome mapping. The current report CLI still has no
+production auto-build command.
 
 ## Changelog
 
@@ -2337,22 +2526,30 @@ mapping. The current report CLI still has no production auto-build command.
 - Completed Phase 03 run-executor environment injection and redaction for
   control-mode report and auto-build runs.
 
-================
-File: docs/project-roadmap.md
-================
+- Completed Phase 04 Control UI credential modal/state with dynamic discovery,
+  guarded persistence/clear actions, presence badges, and zero-leakage input
+  cleanup.
+
+- Completed Phase 05 unit, API, and Playwright E2E verification with
+  254/254 checks passing, zero secret leakage, and approved 9.5/10 review.
+</file>
+
+<file path="docs/project-roadmap.md">
 # Project roadmap
 
-Last updated: 2026-09-03T17:18:32+07:00  
+Last updated: 2026-09-03  
 Plan: [Dynamic Credential Management and Persistence for Serve Control](../plans/260903-1251-serve-control-dynamic-credentials/plan.md)
 
 ## Overall status
 
-- Status: **In progress**
-- Progress: **58%** (3.5 of 6 weighted planned hours; 3 of 5 phases complete)
-- Current milestone: **Phase 03 — Run executor environment injection DONE**
+- Status: **Complete**
+- Progress: **100%** (6.0 of 6 weighted planned hours; 5 of 5 phases complete)
+- Current milestone: **Phase 05 — Unit, API, and Playwright E2E verification DONE**
 - Phase 01 completed: **2026-09-03T14:40:00+07:00**
 - Phase 02 completed: **2026-09-03T15:25:00+07:00**
 - Phase 03 completed: **2026-09-03T17:18:32+07:00**
+- Phase 04 completed: **2026-09-03T18:35:00+07:00**
+- Phase 05 completed: **2026-09-03**
 
 ## Phase progress
 
@@ -2361,8 +2558,8 @@ Plan: [Dynamic Credential Management and Persistence for Serve Control](../plans
 | 1. SecretStore backend module | **DONE** | **100%** | 1.5h | [Phase 01](../plans/260903-1251-serve-control-dynamic-credentials/phase-01-backend-secret-store.md); [review](../plans/260903-1251-serve-control-dynamic-credentials/reports/code-review-260903-1422-secret-store-backend.md) |
 | 2. Control secrets API and security gates | **DONE** | **100%** | 1.0h | [Phase 02](../plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md); [API tests](../tests/unit/control-secrets-api.spec.ts); [security tests](../tests/unit/control-secrets-security.spec.ts); [review](../plans/reports/code-review-260903-1510-phase-02-control-secrets-api.md) |
 | 3. Run executor environment injection | **DONE** | 100% | 1.0h | [Phase 03](../plans/260903-1251-serve-control-dynamic-credentials/phase-03-run-executor-environment-injection.md); [validation](../plans/reports/tester-260903-1640-phase-03-run-executor-environment-injection-cycle-2.md) — 239/239 unit, 37/37 targeted, 10/10 review |
-| 4. Control UI credential modal and state | Pending | 0% | 1.5h | [Phase 04](../plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md) |
-| 5. Unit, API, and Playwright E2E verification | Pending | 0% | 1.0h | [Phase 05](../plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md) |
+| 4. Control UI credential modal and state | **DONE** | **100%** | 1.5h | [Phase 04](../plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md); [validation](../plans/reports/tester-260903-1825-phase-04-control-ui-credential-modal-state-validation.md); [review](../plans/reports/code-review-260903-1829-phase-04-control-ui-credential-modal.md) |
+| 5. Unit, API, and Playwright E2E verification | **DONE** | **100%** | 1.0h | [Phase 05](../plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md); [SecretStore tests](../tests/unit/control-secret-store.spec.ts) 7/7; [API tests](../tests/unit/control-secrets-api.spec.ts) 10/10; [control E2E](../tests/e2e/control-page.spec.ts) 6/6; [review](../plans/reports/code-review-260903-1945-phase05-verification.md) — **APPROVED, 9.5/10** |
 
 ## Phase 01 milestone
 
@@ -2408,17 +2605,46 @@ Validation evidence:
 - [Targeted validation](../plans/reports/tester-260903-1640-phase-03-run-executor-environment-injection-cycle-2.md) — **37/37 passed, 0 failed, 0 skipped**.
 - **Code review** — **APPROVED, 10/10**.
 
+## Phase 04 milestone
+
+Delivered the secure `serve:control` credential management experience:
+
+- Added a native Credentials modal with dynamic discovery of required variables and presence-only status badges.
+- Added guarded save and clear actions with CSRF protection, password masking, and immediate input cleanup.
+- Preserved zero-secret-leakage guarantees across the DOM, API responses, and execution diagnostics.
+
+Validation evidence:
+
+- [Phase 04 validation](../plans/reports/tester-260903-1825-phase-04-control-ui-credential-modal-state-validation.md): **243/243 passed, 0 failed, 0 skipped** (239 unit + 4 control E2E).
+- **Axe accessibility audit**: **0 violations**.
+- [Phase 04 code review](../plans/reports/code-review-260903-1829-phase-04-control-ui-credential-modal.md): **APPROVED, 9.5/10**.
+- **Secret leakage**: zero observed; saved values absent from DOM, API responses, and execution logs.
+
+## Phase 05 milestone
+
+Completed the unit, API, and browser verification for dynamic credentials:
+
+- Added seven isolated `SecretStore` lifecycle tests for missing/empty reads, atomic writes and temporary-file cleanup, POSIX/Windows file handling, invalid and reserved keys, non-string value redaction, concurrent updates, and deletion/bulk operations.
+- Extended the secrets API operation tests to cover empty/full/filtered presence maps, guarded single and batch updates, null/action deletion, query/body deletion, persistence, and plaintext-free responses.
+- Extended the control-page E2E workflow to cover accessible credential management, Missing/Configured transitions, save/clear/reopen persistence, injected-credential execution, and zero leakage from inputs, page HTML, and run logs.
+
+Validation evidence:
+
+- `npm run typecheck` (`tsc --noEmit`): passed, 0 errors.
+- `npm run test:unit`: **248/248 passed, 0 failed, 0 skipped**.
+- `npm run test:control`: **6/6 passed, 0 failed, 0 skipped** across Chromium and WebKit.
+- Combined Phase 05 evidence: **254/254 passed**; zero secret leakage observed.
+- [Phase 05 code review](../plans/reports/code-review-260903-1945-phase05-verification.md): **APPROVED, 9.5/10**.
+
 ## Next milestones
 
-1. **Phase 04 — Control UI credential modal and state (0%)**: provide discovery, masking, persistence status, and clear actions.
-2. **Phase 05 — Unit, API, and Playwright E2E verification (0%)**: complete end-to-end security and regression evidence.
- 
+1. **Production hardening and release readiness**: retain the non-blocking follow-ups below, including Windows ACL review, before any live credential or Jenkins run.
+
 ## Review follow-up
 
-- Non-blocking review recommendation: reject prototype keys (`__proto__`, `prototype`, `constructor`) in a follow-up hardening change before production release.
-- Non-blocking Phase 02 follow-up: body-less `DELETE /api/secrets?name=...` currently encounters the shared JSON content-type gate; align the UI/request contract or gate behavior.
-- Non-blocking Phase 02 follow-up: normalize the 415 error code to `UNSUPPORTED_MEDIA_TYPE` and add any remaining direct Host-header regression coverage.
-- Keep `report-server-secret-store.ts` focused; it is at the 200-line maintainability threshold.
+- Reserved prototype keys are explicitly rejected and covered by the Phase 05 SecretStore tests.
+- The `415` response maps to `UNSUPPORTED_MEDIA_TYPE`, and direct invalid-Host coverage is present in the control secrets security tests.
+- Before live use, review config-directory ACLs on Windows and keep `report-server-secret-store.ts` focused at the 200-line maintainability threshold.
 
 ## Changelog
 
@@ -2435,21 +2661,28 @@ Validation evidence:
 - Added per-run stored credential merging, runner propagation, and diagnostic redaction without global environment mutation.
 - Recorded Phase 03 validation: 239/239 unit tests, 37/37 targeted tests, and 10/10 code review approval.
 
+- Completed Phase 04 Control UI Credential Modal and State at 100%.
+- Added dynamic credential discovery, masked local save/clear flows, persistence status badges, and input cleanup.
+- Recorded Phase 04 validation: 243/243 tests passed, 0 Axe violations, zero secret leakage, and 9.5/10 approved code review.
+
+- Completed Phase 05 unit, API, and Playwright E2E verification at 100%.
+- Recorded 248/248 unit tests, 6/6 control E2E tests across Chromium and WebKit, 254/254 combined passes, zero secret leakage, and 9.5/10 code review approval.
+
 ## Unresolved questions
 
 None.
+</file>
 
-================
-File: docs/release-gates.md
-================
+<file path="docs/release-gates.md">
 # Release gates
 
 This project has deterministic local gates for native browsers, offline report
 fixtures, the Phase 3 build-page fixture, the Phase 01 SecretStore backend,
-the Phase 02 control secrets API/security boundary, and the Phase 03 control
-run-environment boundary. The commands below are the current release contract;
-test counts are intentionally not hard-coded because they change with the test
-suite.
+the Phase 02 control secrets API/security boundary, the Phase 03 control
+run-environment boundary, the Phase 04 control UI credential dialog, and the
+Phase 05 dynamic-credential verification suite. The commands below are the
+current release contract; test counts are intentionally not hard-coded except
+where a dated verification snapshot is recorded for traceability.
 
 ## Gate order
 
@@ -2650,6 +2883,24 @@ npm run test:control
 ```
 which exercises config reading/atomic saving, validation errors, report execution, auto-build confirmation dialogs, and WCAG A/AA accessibility scanning in Chromium and WebKit.
 
+### Phase 04 credential dialog gate
+
+`npm run test:control` also exercises the browser-facing credential workflow
+against an isolated loopback server and temporary config/report roots. The
+Control UI contract includes:
+
+- an accessible native Credentials dialog and loading/error states;
+- discovery of configured credential-variable names with default fallbacks;
+- filtered, presence-only `GET /api/secrets?keys=...` rendering;
+- password-masked inputs and **Configured**/**Missing** badges;
+- CSRF-bearing JSON save and per-key bodyless clear requests;
+- persistence/status transitions followed by immediate input wiping; and
+- close/reopen cleanup, with no submitted test value in page HTML.
+
+This browser gate proves the UI/API boundary and zero-leakage DOM behavior. It
+does not contact Jenkins or vendor services; per-run SecretStore injection and
+diagnostic redaction remain covered by the Phase 03 gate below.
+
 ## Phase 03 run-executor environment gate
 
 Run the focused control-run contract:
@@ -2701,6 +2952,59 @@ report or auto-build run and does not contact Jenkins or prove Windows ACL
 enforcement. The Phase 03 gate below covers per-run environment injection. On
 Windows, review the config-directory ACL separately because POSIX `0o600` mode
 bits are advisory.
+
+## Phase 05 dynamic-credentials verification gate
+
+Run the focused Phase 05 additions directly:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-secret-store.spec.ts \
+  tests/unit/control-secrets-api.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The `control-secret-store.spec.ts` suite uses an isolated temporary config
+directory and verifies missing/empty reads, atomic `secrets.local.json` writes
+with no temporary-file residue, POSIX `0o600` handling with a Windows-safe
+fallback, invalid/traversal/reserved key rejection, non-string value errors
+without value leakage, concurrent write preservation, and single/bulk
+deletion. The API operation suite verifies empty/full/filtered boolean
+presence maps, CSRF/origin-guarded single and batch updates, null/action
+deletion, query/body deletion, disk persistence, and plaintext-free responses.
+
+Run the complete unit and control-page gates as the release evidence:
+
+```sh
+npm run typecheck
+npm run test:unit
+npm run test:control
+```
+
+`npm run test:control` runs `tests/e2e/control-page.spec.ts` in both Chromium
+and WebKit. The browser contract verifies an accessible credential dialog,
+dynamic credential-name discovery, Missing/Configured presence transitions,
+CSRF-protected save and clear flows, persistence after close/reopen and page
+reload, and a run that fails without credentials then succeeds after
+SecretStore-injected credentials. It also asserts that submitted values are
+absent from cleared inputs, page HTML, and run logs. The E2E server uses
+temporary roots and injected executors; it does not contact Jenkins or vendor
+services.
+
+The 2026-09-03 Phase 05 verification snapshot recorded:
+
+| Command/scope | Result |
+| --- | --- |
+| `npm run typecheck` | 0 TypeScript errors |
+| `tests/unit/control-secret-store.spec.ts` | 7/7 passed |
+| `tests/unit/control-secrets-api.spec.ts` | 10/10 passed |
+| `npm run test:unit` | 248/248 passed |
+| `npm run test:control` (Chromium + WebKit) | 6/6 passed |
+| Combined unit and control E2E checks | 254/254 passed |
+| Secret leakage checks | Zero observed |
+
+These checks prove local persistence, API/UI contracts, and no-leakage
+invariants; they do not prove a live Jenkins build or vendor-service run.
 
 ## Phase 02 control secrets API gate
 
@@ -2808,16 +3112,15 @@ running the relevant command; the command output is the release evidence.
 
 Native browser, fixture startup, and live Jenkins results are environment
 evidence only when their commands are freshly run in the target environment.
+</file>
 
-================
-File: docs/system-architecture.md
-================
+<file path="docs/system-architecture.md">
 # System architecture
 
 This is the component-level view of `auto-jobs` after Phase 3 and dynamic-
-credentials Phases 01–03. The repository has two intentionally separate
-execution paths plus a local persistence seam, a loopback control API, and a
-control-run environment boundary:
+credentials Phases 01–05. The repository has two intentionally separate
+execution paths plus a local persistence seam, a loopback control API/UI, a
+control-run environment boundary, and deterministic Phase 05 verification:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
@@ -2829,10 +3132,16 @@ control-run environment boundary:
 - **SecretStore and secrets API:** persist validated local credential values
   outside project JSON and expose only boolean presence through guarded
   `/api/secrets` operations.
+- **Control UI:** discover credential-variable names from the active
+  configuration, show presence-only state, persist guarded replacements, and
+  wipe password inputs on save, clear, or close.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
   driven.
+- **Verification:** isolated SecretStore/API unit contracts and Chromium/WebKit
+  control-page E2E scenarios prove dynamic credential persistence, injected
+  execution, and zero leakage without contacting Jenkins.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
@@ -3111,6 +3420,12 @@ are redacted from control logs, warnings, errors, and auto-build result URLs
 before the run record is persisted. The direct report CLI and library runners
 still consume their caller-supplied environment.
 
+The Phase 05 SecretStore lifecycle suite adds focused checks for empty reads,
+atomic file replacement and temporary-file cleanup, platform permission
+handling, invalid/reserved keys, value-type error redaction, concurrent
+updates, and bulk deletion. The API operation suite and control-page E2E
+scenarios are described in the test architecture below.
+
 ### Control secrets API and security gates
 
 The secrets handler is intentionally separate from
@@ -3133,6 +3448,81 @@ Values never appear in success or error responses. Invalid names/values and
 malformed bodies return `400`; invalid mutation gates return `403`, a
 non-JSON mutation body returns `415`, an unavailable store returns `503`, and
 unsupported methods return `405` with `Allow: GET, PUT, DELETE`.
+
+### Control UI credential dialog (Phases 04–05)
+
+The loopback page at `/` includes a `Credentials` action and a native
+`<dialog>` backed by `control-page.html`, `control-page.css`, and
+`control-page.js`. Control-page rendering replaces the HTML CSRF placeholder
+with the server's per-instance token. The UI reads that token from the
+`meta[name="csrf-token"]` element; `apiFetch` adds it as `x-csrf-token` to
+every `POST`, `PUT`, and `DELETE`.
+
+Opening the dialog derives the required environment-variable names from the
+currently loaded configuration. Project credential references take precedence
+over defaults (including normalized `credentialVariables` references); when
+references are omitted, the UI uses `JENKINS_USERNAME` and
+`JENKINS_PASSWORD`. Names are deduplicated and sorted before the request. The
+dialog then calls `GET /api/secrets?keys=...`, which is Host-checked and
+returns only `true`/`false` presence values. Each key is rendered as a
+**Configured** or **Missing** badge with a blank `type="password"` input. A
+configured key also gets a per-row **Clear** action.
+
+The operator workflow is:
+
+1. Click **Credentials**; the dialog shows a loading state while presence is
+   fetched, or a bounded error message when the request fails.
+2. Enter one or more replacement values. Blank inputs mean “keep the existing
+   value”; the browser collects only non-empty, trimmed fields.
+3. Click **Save Credentials**. The UI sends
+   `PUT /api/secrets` with a JSON `{ "secrets": { ... } }` patch. The server
+   applies the Host, same-origin Origin, Fetch Metadata, timing-safe CSRF,
+   JSON-content-type, and body-size gates, persists the patch atomically, and
+   returns a presence map. On success the changed inputs are immediately
+cleared, their badges become **Configured**, and **Clear** actions are added.
+4. Click a row's **Clear** action to send a CSRF-protected,
+   bodyless `DELETE /api/secrets?name=...`. A successful deletion clears that
+   input, changes its badge to **Missing**, and removes the row action.
+5. Cancel or otherwise close the dialog. Its `close` handler clears every
+   credential input and the modal status message, so unsaved values do not
+   remain in the DOM. Reopening performs a fresh presence-only lookup.
+
+Secret values are transient in the password control while being edited and in
+the one mutation request body. They are never used as labels, status text,
+URLs, or HTML; API success/error payloads contain no values. Save, clear, and
+close wipe input values, while persistence and later control runs use the
+server-side SecretStore/redaction boundary described below. This keeps the
+modal's observable state limited to variable names, presence badges, and
+bounded operation messages.
+
+```mermaid
+sequenceDiagram
+  participant Operator
+  participant UI as Control page
+  participant API as Loopback secrets API
+  participant Store as SecretStore
+  Operator->>UI: Open Credentials
+  UI->>API: GET /api/secrets?keys=...
+  API->>Store: Read names/presence
+  Store-->>API: Boolean presence map
+  API-->>UI: Presence only
+  Operator->>UI: Enter non-empty values
+  UI->>API: PUT /api/secrets + CSRF + JSON
+  API->>Store: Validate and atomic update
+  Store-->>API: Updated presence
+  API-->>UI: Presence only
+  UI->>UI: Wipe submitted inputs; update badges
+  Operator->>UI: Clear or close
+  UI->>API: DELETE /api/secrets?name=... or wipe locally
+```
+
+The browser-facing contract is covered by
+`tests/e2e/control-page.spec.ts`: it checks modal accessibility, dynamic key
+discovery, Missing/Configured transitions, save/clear/reopen state, injected
+credential execution, input wiping, and absence of test secrets in page HTML
+and run logs. The isolated E2E fixture runs the three scenarios in both
+Chromium and WebKit, for six checks total, and does not contact Jenkins.
+
 ### Control-run redaction boundary
 
 SecretStore values are never sent in the `/api/run` request or returned by the
@@ -3187,6 +3577,10 @@ that route authenticated.
   handling, sorted and frozen snapshots, bulk updates/deletions, concurrent
   mutation serialization, redaction, and control-server wiring. It does not
   contact a live service.
+- `tests/unit/control-secret-store.spec.ts` adds seven isolated lifecycle
+  checks for missing/empty reads, atomic writes and temporary-file cleanup,
+  POSIX/Windows file handling, invalid and reserved keys, non-string value
+  redaction, concurrent writes, and deletion/bulk operations.
 - `tests/unit/control-run-executor-secrets.spec.ts` uses isolated stores and
   injected report/auto-build executors to prove per-run SecretStore injection,
   stored-over-base precedence, non-mutation of the base environment, and
@@ -3202,9 +3596,10 @@ that route authenticated.
 - `tests/unit/sequential-runner.spec.ts` preserves shared launch options,
   sequential report behavior, and exclusion of auto-build projects from
   `runFromConfig`.
-- `tests/unit/control-secrets-api.spec.ts` exercises empty/full/filtered
-  presence maps, single and batch PUT updates, null/action deletion, query and
-  body DELETE forms, and persistence without returning values.
+- `tests/unit/control-secrets-api.spec.ts` exercises ten operation cases:
+  empty/full/filtered presence maps, guarded single and batch PUT updates,
+  null/action deletion, query and body DELETE forms, persistence, and no
+  plaintext response.
 - `tests/unit/control-secrets-security.spec.ts` exercises plaintext redaction,
   Host/Origin/Fetch Metadata/CSRF gates, key/value/body validation,
   content-type rejection, unsupported methods, and the unavailable-store
@@ -3239,10 +3634,9 @@ that route authenticated.
    `runtimeEnvironment`, and redact every stored value from control output.
 10. Treat Windows file-mode bits as advisory; rely on protected
     config-directory ACLs.
+</file>
 
-================
-File: package.json
-================
+<file path="package.json">
 {
   "name": "auto-jobs",
   "version": "0.1.0",
@@ -3277,10 +3671,9 @@ File: package.json
     "typescript": "7.0.2"
   }
 }
+</file>
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/cmd-plan.md
-================
+<file path="plans/260903-1251-serve-control-dynamic-credentials/cmd-plan.md">
 # Implementation Plan: Serve Control Dynamic Credentials
 
 > Quick access overview for tracking implementation progress.
@@ -3307,10 +3700,9 @@ File: plans/260903-1251-serve-control-dynamic-credentials/cmd-plan.md
 - [ ] **Phase 05: Unit, API & Playwright E2E Verification** (1.0h)
   - Path: [`phase-05-test-suite-and-e2e-verification.md`](./phase-05-test-suite-and-e2e-verification.md)
   - Core: SecretStore unit tests, API tests, E2E browser credential lifecycle test.
+</file>
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/phase-01-backend-secret-store.md
-================
+<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-01-backend-secret-store.md">
 # Phase 01: SecretStore Backend Module
 
 ## Context Links
@@ -3406,10 +3798,9 @@ File: plans/260903-1251-serve-control-dynamic-credentials/phase-01-backend-secre
 
 ## Next Steps
 Proceed to Phase 02: Control Secrets API & Security Gates.
+</file>
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md
-================
+<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md">
 # Phase 02: Control Secrets API & Security Gates
 
 ## Context Links
@@ -3523,10 +3914,9 @@ handleApiRequest ('/api/secrets')
 
 ## Next Steps
 Proceed to Phase 03: Run Executor Environment Injection.
+</file>
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/phase-03-run-executor-environment-injection.md
-================
+<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-03-run-executor-environment-injection.md">
 # Phase 03: Run Executor Environment Injection
 
 ## Context Links
@@ -3627,10 +4017,9 @@ executeControlRun(record, options, addLog)
 
 ## Next Steps
 Proceed to Phase 04: Control UI Credential Modal & State.
+</file>
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md
-================
+<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md">
 # Phase 04: Control UI Credential Modal & State
 
 ## Context Links
@@ -3644,8 +4033,9 @@ File: plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-cr
 - **Date**: 2026-09-03
 - **Description**: Implement a native credential management modal in the `serve:control` dashboard, enabling operators to inspect presence of required variables and securely update credentials.
 - **Priority**: P1
-- **Implementation Status**: pending
-- **Review Status**: pending
+- **Implementation Status**: **DONE**
+- **Review Status**: **DONE** (approved, 9.5/10)
+- **Completed At**: 2026-09-03T18:35:00+07:00
 - **Estimated Effort**: 1.5h
 
 ## Key Insights
@@ -3720,12 +4110,12 @@ Header
    - Handle empty state when no projects require credentials.
 
 ## Todo List
-- [ ] Add Credentials button and dialog markup to `control-page.html`.
-- [ ] Add dialog and form styling to `control-page.css`.
-- [ ] Implement variable discovery logic in `control-page.js`.
-- [ ] Implement `GET /api/secrets` fetch and badge rendering.
-- [ ] Implement `PUT /api/secrets` submission and success handling.
-- [ ] Ensure input fields use `type="password"` and clear upon save.
+- [x] Add Credentials button and dialog markup to `control-page.html`.
+- [x] Add dialog and form styling to `control-page.css`.
+- [x] Implement variable discovery logic in `control-page.js`.
+- [x] Implement `GET /api/secrets` fetch and badge rendering.
+- [x] Implement `PUT /api/secrets` submission and success handling.
+- [x] Ensure input fields use `type="password"` and clear upon save.
 
 ## Success Criteria
 - Clicking "Credentials" opens the modal displaying all required variables for the active config.
@@ -3743,10 +4133,9 @@ Header
 
 ## Next Steps
 Proceed to Phase 05: Unit, API & Playwright E2E Verification.
+</file>
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md
-================
+<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md">
 # Phase 05: Unit, API & Playwright E2E Verification
 
 ## Context Links
@@ -3758,8 +4147,9 @@ File: plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-an
 - **Date**: 2026-09-03
 - **Description**: Add unit tests for `SecretStore`, API tests for `/api/secrets`, and Playwright E2E browser tests covering the full credential lifecycle in `serve:control`.
 - **Priority**: P1
-- **Implementation Status**: pending
-- **Review Status**: pending
+- **Implementation Status**: **DONE**
+- **Review Status**: **APPROVED**
+- **Completed At**: 2026-09-03T19:50:00+07:00
 - **Estimated Effort**: 1.0h
 
 ## Key Insights
@@ -3811,12 +4201,12 @@ Test Suite Hierarchy
 4. Run `npm run test:unit` and `npm run test:control` to verify all quality gates pass.
 
 ## Todo List
-- [ ] Implement `tests/unit/control-secret-store.spec.ts`.
-- [ ] Implement `tests/unit/control-secrets-api.spec.ts`.
-- [ ] Add credential lifecycle test to `tests/e2e/control-page.spec.ts`.
-- [ ] Run `npm run typecheck` and ensure zero diagnostic errors.
-- [ ] Run `npm run test:unit` to ensure all unit tests pass.
-- [ ] Run `npm run test:control` to verify E2E browser interactions pass.
+- [x] Implement `tests/unit/control-secret-store.spec.ts`.
+- [x] Implement `tests/unit/control-secrets-api.spec.ts`.
+- [x] Add credential lifecycle test to `tests/e2e/control-page.spec.ts`.
+- [x] Run `npm run typecheck` and ensure zero diagnostic errors.
+- [x] Run `npm run test:unit` to ensure all unit tests pass.
+- [x] Run `npm run test:control` to verify E2E browser interactions pass.
 
 ## Success Criteria
 - 100% pass rate on new unit tests.
@@ -3831,16 +4221,30 @@ Test Suite Hierarchy
 - Clean up all temporary secret files in `afterEach` hooks.
 - Assert that neither mock tokens nor test passwords remain in persistent directories.
 
-## Next Steps
-Plan complete. Await user validation interview.
+## Verification Evidence & Delivery
+- **Implementation Status**: **DONE** — 2026-09-03T19:50:00+07:00
+- **Review Status**: **APPROVED (9.5/10)** — [Phase 05 Code Review](../reports/code-review-260903-1945-phase05-verification.md)
+- **Typecheck**: `npm run typecheck` passed with 0 errors.
+- **Unit Validation**:
+  - `tests/unit/control-secret-store.spec.ts`: 7/7 passed (~0.98s).
+  - `tests/unit/control-secrets-api.spec.ts`: 10/10 passed (~1.4s).
+  - Full suite `npm run test:unit`: 248/248 passed (21.8s).
+- **E2E Validation**: `npm run test:control` across Chromium and WebKit: 6/6 passed (5.5s).
+- **Security & Integrity**:
+  - Zero credential leakage verified in DOM, API text, and run execution logs.
+  - POSIX 0o600 file mode and Windows fallback asserted.
+  - Concurrency verified with 25 concurrent write operations.
+  - Persistence across browser reload verified.
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/plan.md
-================
+## Next Steps
+All phases (Phase 01 through Phase 05) completed. Proceed to final plan closure and release verification.
+</file>
+
+<file path="plans/260903-1251-serve-control-dynamic-credentials/plan.md">
 ---
 title: "Dynamic Credential Management and Persistence for Serve Control"
 description: "Enable operators to dynamically configure, persist, and update credentials via the serve:control UI into git-ignored config/secrets.local.json."
-status: in-progress
+status: completed
 priority: P2
 effort: 6h
 branch: main
@@ -3875,12 +4279,15 @@ This plan implements a clean, secure, and persistent credential management mecha
 | 01 | SecretStore Backend Module | **DONE** | 1.5h | [phase-01-backend-secret-store.md](./phase-01-backend-secret-store.md) |
 | 02 | Control Secrets API & Security Gates | **DONE** | 1.0h | [phase-02-control-secrets-api.md](./phase-02-control-secrets-api.md) |
 | 03 | Run Executor Environment Injection | **DONE** | 1.0h | [phase-03-run-executor-environment-injection.md](./phase-03-run-executor-environment-injection.md) |
-| 04 | Control UI Credential Modal & State | pending | 1.5h | [phase-04-control-ui-credential-management.md](./phase-04-control-ui-credential-management.md) |
-| 05 | Unit, API & Playwright E2E Verification | pending | 1.0h | [phase-05-test-suite-and-e2e-verification.md](./phase-05-test-suite-and-e2e-verification.md) |
+| 04 | Control UI Credential Modal & State | **DONE** | 1.5h | [phase-04-control-ui-credential-management.md](./phase-04-control-ui-credential-management.md) |
+| 05 | Unit, API & Playwright E2E Verification | **DONE** | 1.0h | [phase-05-test-suite-and-e2e-verification.md](./phase-05-test-suite-and-e2e-verification.md) |
 
 Phase 01 completion: **DONE** — 2026-09-03T14:40:00+07:00
 Phase 02 completion: **DONE** — 2026-09-03T15:25:00+07:00
 Phase 03 completion: **DONE** — 2026-09-03T17:18:32+07:00
+Phase 04 completion: **DONE** — 2026-09-03T18:35:00+07:00
+Phase 05 completion: **DONE** — 2026-09-03T19:50:00+07:00
+Overall plan completion: **COMPLETED** — 2026-09-03T19:50:00+07:00
 
 ### Phase 03 Delivery Evidence
 - **Status**: **DONE** — 2026-09-03T17:18:32+07:00.
@@ -3888,6 +4295,26 @@ Phase 03 completion: **DONE** — 2026-09-03T17:18:32+07:00
 - **Targeted validation**: executor/secrets control tests — **37/37 passed, 0 failed, 0 skipped**.
 - **Code review**: **APPROVED, 10/10**.
 - **Scope delivered**: per-run SecretStore snapshots merge into `runEnv`, flow through config normalization and report/auto-build runners, and redact stored secret values from diagnostic logs without mutating global `process.env`.
+
+### Phase 04 Delivery Evidence
+- **Status**: **DONE** — 2026-09-03T18:35:00+07:00.
+- **Combined validation**: [Phase 04 validation](../reports/tester-260903-1825-phase-04-control-ui-credential-modal-state-validation.md) — **243/243 tests passed, 0 failed, 0 skipped** (239 unit + 4 control E2E).
+- **Code review**: [Phase 04 code review](../reports/code-review-260903-1829-phase-04-control-ui-credential-modal.md) — **APPROVED, 9.5/10**.
+- **Accessibility**: **0 Axe violations** in the dashboard and credential modal checks.
+- **Security**: **zero secret leakage**; saved values were absent from the DOM, API responses, and execution diagnostics.
+
+### Phase 05 Delivery Evidence
+- **Status**: **DONE** — 2026-09-03T19:50:00+07:00.
+- **Full Unit Validation**: `npm run test:unit` — **248/248 passed, 0 failed, 0 skipped**.
+- **Targeted Unit Specs**:
+  - `tests/unit/control-secret-store.spec.ts`: **7/7 passed**.
+  - `tests/unit/control-secrets-api.spec.ts`: **10/10 passed**.
+- **E2E Control Page Validation**: `npm run test:control` (Chromium + WebKit) — **6/6 passed, 0 failed, 0 skipped**.
+- **Code Review**: [Phase 05 Code Review](../reports/code-review-260903-1945-phase05-verification.md) — **APPROVED, 9.5/10**.
+- **Security Scope Delivered**:
+  - Atomicity, isolated locks, and 0o600 POSIX permissions verified in `SecretStore`.
+  - Redaction-by-default and CSRF/Origin 403 enforcement tested on `/api/secrets`.
+  - Full browser E2E lifecycle verified: initial run failure -> credential entry -> badge transition -> execution success -> zero DOM/log leakage -> persistence across reload.
 
 ## Dependencies
 
@@ -3918,10 +4345,9 @@ Phase 03 completion: **DONE** — 2026-09-03T17:18:32+07:00
 - **Typecheck**: `npm run typecheck` (`tsc --noEmit`) — **passed, 0 errors**.
 - **Review**: [Phase 02 code review](../reports/code-review-260903-1510-phase-02-control-secrets-api.md) — **APPROVED WITH WARNINGS, 9.0/10**, no critical issues.
 - **Security scope delivered**: presence-only GET responses; guarded PUT/DELETE mutations; strict key/value validation; no-store responses; zero plaintext leakage.
+</file>
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/research/researcher-01-backend-secret-store.md
-================
+<file path="plans/260903-1251-serve-control-dynamic-credentials/research/researcher-01-backend-secret-store.md">
 # Backend secret storage / control API research
 
 ## Scope and existing seams
@@ -4008,10 +4434,9 @@ const runEnv = { ...baseEnv, ...stored };
 - Confirm whether the established JSON envelope uses `secrets`, `variables`, or an array; preserve the control API's existing response/error conventions while retaining the presence-only semantics above.
 - Confirm whether the product needs deletion/clearing. If yes, specify `DELETE` or an explicit `{value:null}` contract plus presence semantics; do not infer it from PUT.
 - Confirm desired precedence if operators intentionally use process-level overrides; recommendation here is stored-dashboard values win for dynamic credential updates.
+</file>
 
-================
-File: plans/260903-1251-serve-control-dynamic-credentials/research/researcher-02-ui-credential-flow.md
-================
+<file path="plans/260903-1251-serve-control-dynamic-credentials/research/researcher-02-ui-credential-flow.md">
 # UI credential flow research
 
 ## Existing surface and conventions
@@ -4089,10 +4514,9 @@ Extend `control-config-api.spec.ts` or add a focused `control-secrets-api.spec.t
 - Whether `credentialVariables` is available on normalized config today, and whether disabled projects should contribute keys, needs a single documented rule.
 - PUT semantics for omitted, blank, and explicit-clear values; define before implementing UI/tests.
 - Windows permission guarantee (mode bits vs ACL) needs the chosen SecretStore policy reflected in platform-guarded assertions.
+</file>
 
-================
-File: playwright.config.ts
-================
+<file path="playwright.config.ts">
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -4140,10 +4564,9 @@ export default defineConfig({
     },
   ],
 });
+</file>
 
-================
-File: playwright.control.config.ts
-================
+<file path="playwright.control.config.ts">
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -4187,10 +4610,9 @@ export default defineConfig({
     { name: 'webkit-control', use: { browserName: 'webkit' } },
   ],
 });
+</file>
 
-================
-File: playwright.template.config.ts
-================
+<file path="playwright.template.config.ts">
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -4231,10 +4653,9 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium-template', use: { browserName: 'chromium' } }],
 });
+</file>
 
-================
-File: playwright.unit.config.ts
-================
+<file path="playwright.unit.config.ts">
 import { defineConfig } from '@playwright/test';
 
 import { parseBrowserName } from './src/config.js';
@@ -4285,10 +4706,9 @@ export default defineConfig({
     },
   ],
 });
+</file>
 
-================
-File: playwright.webkit.config.ts
-================
+<file path="playwright.webkit.config.ts">
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -4329,10 +4749,9 @@ export default defineConfig({
   },
   projects: [{ name: 'webkit-template', use: { browserName: 'webkit' } }],
 });
+</file>
 
-================
-File: README.md
-================
+<file path="README.md">
 # Jenkins Playwright vulnerability reports
 
 This project collects bounded Snyk and SonarQube evidence from configured
@@ -4621,10 +5040,9 @@ then uses a bounded fallback and records a warning if both attempts fail.
   The lock owner record contains a token, PID, and hostname—not a UID—so the
   lock is not a same-UID authorization boundary or a distributed lock.
 - This documentation does not claim live Jenkins or browser execution.
+</file>
 
-================
-File: scripts/copy-report-assets.mjs
-================
+<file path="scripts/copy-report-assets.mjs">
 import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -4648,10 +5066,9 @@ for (const asset of controlAssets) {
     resolve(controlOutput, asset),
   );
 }
+</file>
 
-================
-File: scripts/report-runtime.mjs
-================
+<file path="scripts/report-runtime.mjs">
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -4850,10 +5267,9 @@ export async function createRuntimeDirectory() {
     throw error;
   }
 }
+</file>
 
-================
-File: scripts/run-playwright.mjs
-================
+<file path="scripts/run-playwright.mjs">
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 
@@ -4986,10 +5402,9 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
+</file>
 
-================
-File: scripts/run-report.mjs
-================
+<file path="scripts/run-report.mjs">
 import { spawn } from 'node:child_process';
 
 import { createRuntimeDirectory, removeRuntimeDirectory } from './report-runtime.mjs';
@@ -5118,10 +5533,9 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
+</file>
 
-================
-File: scripts/run-template-report.mjs
-================
+<file path="scripts/run-template-report.mjs">
 import { spawn } from 'node:child_process';
 
 import { createRuntimeDirectory, removeRuntimeDirectory } from './report-runtime.mjs';
@@ -5250,10 +5664,9 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
+</file>
 
-================
-File: src/artifacts/aggregate-manifest-reader.ts
-================
+<file path="src/artifacts/aggregate-manifest-reader.ts">
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -5563,10 +5976,9 @@ export async function discoverRunManifests(
   });
   return { manifests, warnings, ignoredIncompatibleCount };
 }
+</file>
 
-================
-File: src/artifacts/aggregate-publication-recovery.ts
-================
+<file path="src/artifacts/aggregate-publication-recovery.ts">
 import { constants } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -5693,10 +6105,9 @@ export async function recoverAggregatePublication(reportRoot: string): Promise<v
     await fs.unlink(journalPath);
   }
 }
+</file>
 
-================
-File: src/artifacts/aggregate-report-publisher.ts
-================
+<file path="src/artifacts/aggregate-report-publisher.ts">
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -5840,15 +6251,13 @@ export async function writeAggregateDataPair(
     }
   }
 }
+</file>
 
-================
-File: src/artifacts/artifact-identity.ts
-================
+<file path="src/artifacts/artifact-identity.ts">
 export const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,80}$/u;
+</file>
 
-================
-File: src/artifacts/artifact-manifest.ts
-================
+<file path="src/artifacts/artifact-manifest.ts">
 import type { ProjectOutcomeState } from '../project/project-types.js';
 
 export interface ProjectRunManifest {
@@ -5899,10 +6308,9 @@ export interface ManifestDiscoveryResult {
   readonly warnings: readonly string[];
   readonly ignoredIncompatibleCount: number;
 }
+</file>
 
-================
-File: src/artifacts/artifact-paths.ts
-================
+<file path="src/artifacts/artifact-paths.ts">
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -6111,10 +6519,9 @@ export class ArtifactPaths {
     return acquireReportRootLock(this.reportRoot, options);
   }
 }
+</file>
 
-================
-File: src/artifacts/failure-artifact-inventory.ts
-================
+<file path="src/artifacts/failure-artifact-inventory.ts">
 import * as crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import type { Dirent } from 'node:fs';
@@ -6457,10 +6864,9 @@ export async function failureManifestWithAvailableArtifacts(
     warnings,
   });
 }
+</file>
 
-================
-File: src/artifacts/orphan-cleanup.ts
-================
+<file path="src/artifacts/orphan-cleanup.ts">
 import type { Dirent, Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -6712,10 +7118,9 @@ export async function cleanupOrphans(
   await cleanupReportRoot(report, state);
   return { inspected: state.inspected, removed: state.removed, warnings: state.warnings };
 }
+</file>
 
-================
-File: src/artifacts/process-instance-inspector.ts
-================
+<file path="src/artifacts/process-instance-inspector.ts">
 import { execFile } from 'node:child_process';
 
 const MAX_INSPECTOR_OUTPUT_BYTES = 1_024;
@@ -6802,10 +7207,9 @@ export const inspectProcessInstance: ProcessInstanceInspector = async (pid) => {
   if (!Number.isSafeInteger(pid) || pid < 1) return { state: 'unknown' };
   return process.platform === 'win32' ? inspectWithPowerShell(pid) : inspectWithNode(pid);
 };
+</file>
 
-================
-File: src/artifacts/report-root-lock-owner.ts
-================
+<file path="src/artifacts/report-root-lock-owner.ts">
 import { constants, type Dirent, type Stats } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -7063,10 +7467,9 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
     }
   }
 }
+</file>
 
-================
-File: src/artifacts/report-root-lock.ts
-================
+<file path="src/artifacts/report-root-lock.ts">
 export {
   acquireReportRootLock,
   REPORT_LOCK_HEARTBEAT_MS,
@@ -7074,10 +7477,9 @@ export {
   REPORT_LOCK_WAIT_MS,
 } from './report-root-lock-owner.js';
 export type { ReportRootLock, ReportRootLockOptions } from './report-root-lock-owner.js';
+</file>
 
-================
-File: src/artifacts/result-sanitizer.ts
-================
+<file path="src/artifacts/result-sanitizer.ts">
 import { redactText, sanitizeUrl } from '../config-errors.js';
 import type {
   CaptureMetadata,
@@ -7255,10 +7657,9 @@ export function safeFailure(value: ProjectFailureResultV3): ProjectFailureResult
 }
 
 export { assertValidFailureResult, assertValidProjectResult };
+</file>
 
-================
-File: src/artifacts/result-validation.ts
-================
+<file path="src/artifacts/result-validation.ts">
 import type {
   AggregateProjectSummary,
   AggregateReportResult,
@@ -7666,10 +8067,9 @@ export function isValidAggregateResult(value: unknown): value is AggregateReport
 export function assertValidAggregateResult(value: unknown): asserts value is AggregateReportResult {
   if (!isValidAggregateResult(value)) throw new Error('aggregate result schema is invalid');
 }
+</file>
 
-================
-File: src/artifacts/result-writer.ts
-================
+<file path="src/artifacts/result-writer.ts">
 import * as crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
@@ -7874,10 +8274,9 @@ export async function writeAggregateData(
 ): Promise<string> {
   return writeAggregateDataPair(reportRoot, aggregate);
 }
+</file>
 
-================
-File: src/artifacts/snyk-result-sanitizer.ts
-================
+<file path="src/artifacts/snyk-result-sanitizer.ts">
 import { redactText } from '../config-errors.js';
 import type {
   SnykFinding,
@@ -7956,10 +8355,9 @@ export function safeSnykSource(
     ...(value.findings === undefined ? {} : { findings: value.findings.slice(0, MAX_SNYK_FINDINGS).map((finding) => safeFinding(finding, sanitize)) }),
   };
 }
+</file>
 
-================
-File: src/artifacts/staging-lease.ts
-================
+<file path="src/artifacts/staging-lease.ts">
 import { constants } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -8093,10 +8491,9 @@ export async function releaseStagingLease(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 }
+</file>
 
-================
-File: src/browser-launcher.ts
-================
+<file path="src/browser-launcher.ts">
 import { chromium, firefox, webkit, type Browser } from '@playwright/test';
 
 import type { BrowserName } from './types.js';
@@ -8150,10 +8547,9 @@ export async function defaultLaunch(
   if (browserName === 'webkit') return webkit.launch(options);
   return chromium.launch(options);
 }
+</file>
 
-================
-File: src/cli.ts
-================
+<file path="src/cli.ts">
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8279,10 +8675,9 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     process.exitCode = 1;
   }
 }
+</file>
 
-================
-File: src/config-errors.ts
-================
+<file path="src/config-errors.ts">
 export class ConfigError extends Error {
   readonly issues: readonly string[];
 
@@ -8355,10 +8750,9 @@ export function sanitizeUrl(value: string): string {
     return redactText(value);
   }
 }
+</file>
 
-================
-File: src/config-selectors.ts
-================
+<file path="src/config-selectors.ts">
 import type {
   LocatorSelector,
   SelectorConfig,
@@ -8478,10 +8872,9 @@ export function parseSelectorValue(
   }
   return selector;
 }
+</file>
 
-================
-File: src/config-values.ts
-================
+<file path="src/config-values.ts">
 import type { BrowserName } from './types.js';
 
 import { ConfigError } from './config-errors.js';
@@ -8565,10 +8958,9 @@ export function parseBrowserName(value: string | undefined): BrowserName {
   }
   return input as BrowserName;
 }
+</file>
 
-================
-File: src/config.ts
-================
+<file path="src/config.ts">
 export {
   ConfigError,
   formatDiagnostic,
@@ -8619,10 +9011,9 @@ export {
   isWithinBasePath,
 } from './security/url-policy.js';
 export { resolveSafeRelativeUrl } from './security/relative-url-policy.js';
+</file>
 
-================
-File: src/config/config-types.ts
-================
+<file path="src/config/config-types.ts">
 import type {
   BrowserName,
   RunType,
@@ -8716,10 +9107,9 @@ export interface ProjectSecrets {
   readonly username: string;
   readonly password: string;
 }
+</file>
 
-================
-File: src/config/project-config-environment.ts
-================
+<file path="src/config/project-config-environment.ts">
 import { ConfigError } from '../config-errors.js';
 import type {
   NormalizedProjectConfig,
@@ -8777,10 +9167,9 @@ export function resolveProjectSecrets(
   if (issues.length > 0) throw new ConfigError(issues);
   return Object.freeze({ username: username as string, password: password as string });
 }
+</file>
 
-================
-File: src/config/project-config-field-validation.ts
-================
+<file path="src/config/project-config-field-validation.ts">
 import * as path from 'node:path';
 
 import { ConfigError } from '../config-errors.js';
@@ -8899,10 +9288,9 @@ export function safeArtifactPath(value: unknown, fieldName: string, issues: stri
     issues.push(`${fieldName} must not be the filesystem root`);
   }
 }
+</file>
 
-================
-File: src/config/project-config-loader.ts
-================
+<file path="src/config/project-config-loader.ts">
 import * as path from 'node:path';
 
 import { ConfigError } from '../config-errors.js';
@@ -9072,10 +9460,9 @@ export function loadProjectConfig(
   assertNoLegacyEnvironmentInputs(env);
   return normalizeDocument(readDocument(filePath), env, validateSecrets);
 }
+</file>
 
-================
-File: src/config/project-config-normalization.ts
-================
+<file path="src/config/project-config-normalization.ts">
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -9237,10 +9624,9 @@ export function normalizedSource(
     ...(input?.projectId === undefined ? {} : { projectId: input.projectId.trim() }),
   });
 }
+</file>
 
-================
-File: src/config/project-config-project-validation.ts
-================
+<file path="src/config/project-config-project-validation.ts">
 import { ConfigError } from '../config-errors.js';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
 import { DEFAULT_SELECTORS, isRecord, parseSelectorValue } from '../config-selectors.js';
@@ -9422,10 +9808,9 @@ export function validateDefaults(value: unknown, issues: string[]): void {
     issues.push('config.defaults must be an object');
   }
 }
+</file>
 
-================
-File: src/config/project-config-schema.ts
-================
+<file path="src/config/project-config-schema.ts">
 import { ConfigError } from '../config-errors.js';
 import { isRecord } from '../config-selectors.js';
 import type { ProjectConfigDocumentV1 } from './config-types.js';
@@ -9477,10 +9862,9 @@ export function assertProjectConfigDocument(value: unknown): ProjectConfigDocume
   if (issues.length > 0) throw new ConfigError(issues);
   return value as unknown as ProjectConfigDocumentV1;
 }
+</file>
 
-================
-File: src/config/project-run-selection.ts
-================
+<file path="src/config/project-run-selection.ts">
 import { ConfigError } from '../config-errors.js';
 import type { NormalizedProjectConfig } from './config-types.js';
 
@@ -9515,10 +9899,9 @@ export function selectAutoBuildProject(
   }
   return project;
 }
+</file>
 
-================
-File: src/jenkins/auth.ts
-================
+<file path="src/jenkins/auth.ts">
 import {
   expect,
   type Browser,
@@ -9742,10 +10125,9 @@ export async function createJenkinsSession(
     throw error;
   }
 }
+</file>
 
-================
-File: src/jenkins/build-trigger-validation.ts
-================
+<file path="src/jenkins/build-trigger-validation.ts">
 import type { Locator, Page } from '@playwright/test';
 
 import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
@@ -9863,10 +10245,9 @@ export async function locateAndValidateBuildFormAndButton(
 
   return buildButton;
 }
+</file>
 
-================
-File: src/jenkins/build-trigger.ts
-================
+<file path="src/jenkins/build-trigger.ts">
 import type { Page, Request, Response } from '@playwright/test';
 
 import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
@@ -9980,10 +10361,9 @@ export async function triggerParameterizedBuild(
     page.off('response', onResponse);
   }
 }
+</file>
 
-================
-File: src/jenkins/errors.ts
-================
+<file path="src/jenkins/errors.ts">
 import type { Page } from '@playwright/test';
 
 import {
@@ -10022,10 +10402,9 @@ export function formatJenkinsFailure(
   const safeUrl = formatDiagnostic(sanitizeUrl(currentUrl), [config.username, config.password]);
   return `${action} at ${safeUrl}: ${formatJenkinsObservation(error, config)}${suffix}`;
 }
+</file>
 
-================
-File: src/jenkins/locators.ts
-================
+<file path="src/jenkins/locators.ts">
 import type { Locator, Page } from '@playwright/test';
 
 import type { LocatorSelector } from '../types.js';
@@ -10084,10 +10463,9 @@ export function selectorDescription(selector: LocatorSelector): string {
   const name = selector.name === undefined ? '' : ` name=${selector.name}`;
   return `${selector.kind}:${selector.value}${name}`;
 }
+</file>
 
-================
-File: src/jenkins/runner-config.ts
-================
+<file path="src/jenkins/runner-config.ts">
 import type { BrowserName, LocatorSelector } from '../types.js';
 
 export interface JenkinsRunnerSelectors {
@@ -10127,10 +10505,9 @@ export const DEFAULT_JENKINS_RUNNER_SELECTORS: JenkinsRunnerSelectors = {
     required: true,
   },
 };
+</file>
 
-================
-File: src/jenkins/url-identity.ts
-================
+<file path="src/jenkins/url-identity.ts">
 import { assertAllowedUrl } from '../security/url-policy.js';
 
 export function normalizedPathname(url: string): string {
@@ -10233,10 +10610,9 @@ export function validateJenkinsJobActionUrl(
 export function validateJenkinsUrl(candidateUrl: string, baseUrl: string): string {
   return assertAllowedUrl(candidateUrl, baseUrl, [], 'Jenkins URL');
 }
+</file>
 
-================
-File: src/project/auto-build-runner.ts
-================
+<file path="src/project/auto-build-runner.ts">
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 import { formatDiagnostic } from '../config-errors.js';
@@ -10361,10 +10737,9 @@ export async function runAutoBuildProject(
     }
   }
 }
+</file>
 
-================
-File: src/project/project-capture.ts
-================
+<file path="src/project/project-capture.ts">
 import type { Page } from '@playwright/test';
 
 import { redactText, sanitizeUrl } from '../config-errors.js';
@@ -10592,10 +10967,9 @@ export function sanitizeProjectDiagnostics(
     observationErrors: boundedDiagnostics(diagnostics.observationErrors.map((value) => redactText(value, secretValues))),
   };
 }
+</file>
 
-================
-File: src/project/project-manifest.ts
-================
+<file path="src/project/project-manifest.ts">
 import type { NormalizedProjectConfig } from '../config/config-types.js';
 import type { ProjectRunManifest } from '../artifacts/artifact-manifest.js';
 import { boundedDiagnostics } from '../workflow/diagnostics.js';
@@ -10644,10 +11018,9 @@ export function createProjectManifest(
     }),
   };
 }
+</file>
 
-================
-File: src/project/project-run-state.ts
-================
+<file path="src/project/project-run-state.ts">
 import type { ProjectRunIdentity } from './project-types.js';
 
 export type ProjectRunPhase =
@@ -10696,10 +11069,9 @@ export class ProjectRunState {
     this.currentPhase = 'failed';
   }
 }
+</file>
 
-================
-File: src/project/project-runner.ts
-================
+<file path="src/project/project-runner.ts">
 import type { BrowserContext, Browser, Page } from '@playwright/test';
 
 import { formatDiagnostic, sanitizeUrl } from '../config-errors.js';
@@ -11001,10 +11373,9 @@ export async function runProject(
     };
   }
 }
+</file>
 
-================
-File: src/project/project-types.ts
-================
+<file path="src/project/project-types.ts">
 import type { AggregateReportResult } from '../result-types.js';
 import type { DiscoveredRunManifest } from '../artifacts/artifact-manifest.js';
 
@@ -11037,10 +11408,9 @@ export interface RunnerExecutionResult {
   readonly warnings: readonly string[];
   readonly exitCode: 0 | 1;
 }
+</file>
 
-================
-File: src/project/project-workflow.ts
-================
+<file path="src/project/project-workflow.ts">
 import type { Page } from '@playwright/test';
 
 import { deriveJenkinsBaseUrl } from '../config-values.js';
@@ -11126,10 +11496,9 @@ export async function executeJenkinsAutoBuildWorkflow(
   await openJenkinsJob(page, config, deadline);
   return triggerParameterizedBuild(page, config, deadline);
 }
+</file>
 
-================
-File: src/reporting/aggregate-report-renderer.ts
-================
+<file path="src/reporting/aggregate-report-renderer.ts">
 import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from '../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from './html-escape.js';
 import { localManifestHref, localReportHref } from './report-links.js';
@@ -11183,10 +11552,9 @@ export function renderAggregateReport(aggregate: AggregateReportResult): string 
 </html>
 `;
 }
+</file>
 
-================
-File: src/reporting/control-page/control-page.css
-================
+<file path="src/reporting/control-page/control-page.css">
 :root {
   --bg-color: #f8fafc;
   --card-bg: #ffffff;
@@ -11579,10 +11947,9 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+</file>
 
-================
-File: src/reporting/control-page/control-page.html
-================
+<file path="src/reporting/control-page/control-page.html">
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11689,10 +12056,9 @@ File: src/reporting/control-page/control-page.html
   <script src="/assets/control-page.js"></script>
 </body>
 </html>
+</file>
 
-================
-File: src/reporting/control-page/control-page.js
-================
+<file path="src/reporting/control-page/control-page.js">
 (function () {
   'use strict';
 
@@ -12307,10 +12673,9 @@ File: src/reporting/control-page/control-page.js
   });
   loadConfigList();
 })();
+</file>
 
-================
-File: src/reporting/html-escape.ts
-================
+<file path="src/reporting/html-escape.ts">
 const HTML_ENTITIES: Readonly<Record<string, string>> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -12333,10 +12698,9 @@ export function escapeHtmlText(value: string): string {
 export function escapeHtmlAttribute(value: string): string {
   return escape(value);
 }
+</file>
 
-================
-File: src/reporting/project-report-renderer.ts
-================
+<file path="src/reporting/project-report-renderer.ts">
 import { escapeHtmlAttribute, escapeHtmlText } from './html-escape.js';
 import { REPORT_ANCHORS, stateClass, stateLabel, type ProjectReportViewModel } from './report-view-model.js';
 import { renderArtifactSection } from './sections/artifact-section.js';
@@ -12383,10 +12747,9 @@ export function renderProjectReport(model: ProjectReportViewModel): string {
 </html>
 `;
 }
+</file>
 
-================
-File: src/reporting/report-links.ts
-================
+<file path="src/reporting/report-links.ts">
 import { assertSafeReferenceUrl } from '../security/url-policy.js';
 
 const SAFE_LOCAL_SEGMENT = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
@@ -12428,10 +12791,9 @@ export function localReportHref(value: string | undefined): string | undefined {
 export function localManifestHref(value: string | undefined): string | undefined {
   return value === undefined || !value.endsWith('/manifest.json') ? undefined : safeLocalPath(value);
 }
+</file>
 
-================
-File: src/reporting/report-output.ts
-================
+<file path="src/reporting/report-output.ts">
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -12572,10 +12934,9 @@ export function reportFileExists(filename: string): boolean {
     return false;
   }
 }
+</file>
 
-================
-File: src/reporting/report-server-cli.ts
-================
+<file path="src/reporting/report-server-cli.ts">
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12689,10 +13050,9 @@ if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLTo
     process.exitCode = 1;
   });
 }
+</file>
 
-================
-File: src/reporting/report-server-config-store.ts
-================
+<file path="src/reporting/report-server-config-store.ts">
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -12857,10 +13217,9 @@ export async function createConfigStore(configDirectory: string): Promise<Config
     writeConfig,
   };
 }
+</file>
 
-================
-File: src/reporting/report-server-constants.ts
-================
+<file path="src/reporting/report-server-constants.ts">
 export const MAX_STATIC_FILE_BYTES = 16 * 1_048_576;
 export const MAX_CONFIG_FILE_BYTES = 1_048_576;
 export const MAX_CONTROL_BODY_BYTES = 1_048_576;
@@ -12872,10 +13231,9 @@ export const REPORT_CSP = "default-src 'none'; img-src 'self' data:; style-src '
 export const CONTROL_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 export const SECRETS_FILE_NAME = 'secrets.local.json';
 export const MAX_SECRET_FILE_BYTES = 1_048_576;
+</file>
 
-================
-File: src/reporting/report-server-control-api.ts
-================
+<file path="src/reporting/report-server-control-api.ts">
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { validateMutationRequest } from './report-server-control-security.js';
@@ -13016,10 +13374,9 @@ export async function handleRunApi(
   response.setHeader('allow', 'GET, POST');
   sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/run');
 }
+</file>
 
-================
-File: src/reporting/report-server-control-page.ts
-================
+<file path="src/reporting/report-server-control-page.ts">
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13067,10 +13424,9 @@ export async function getControlJs(): Promise<string> {
   const { js } = await loadControlAssets();
   return js;
 }
+</file>
 
-================
-File: src/reporting/report-server-control-secrets-api.ts
-================
+<file path="src/reporting/report-server-control-secrets-api.ts">
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { validateMutationRequest } from './report-server-control-security.js';
@@ -13250,10 +13606,9 @@ export async function handleSecretsApi(
   response.setHeader('allow', 'GET, PUT, DELETE');
   sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/secrets');
 }
+</file>
 
-================
-File: src/reporting/report-server-control-security.ts
-================
+<file path="src/reporting/report-server-control-security.ts">
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -13364,10 +13719,9 @@ export function validateMutationRequest(
   }
   return { valid: true };
 }
+</file>
 
-================
-File: src/reporting/report-server-control.ts
-================
+<file path="src/reporting/report-server-control.ts">
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as path from 'node:path';
 
@@ -13517,10 +13871,9 @@ async function handleApiRequest(
 
   sendError(response, 404, 'NOT_FOUND', 'API endpoint not found');
 }
+</file>
 
-================
-File: src/reporting/report-server-file-io.ts
-================
+<file path="src/reporting/report-server-file-io.ts">
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -13781,10 +14134,9 @@ export async function readBounded(file: OpenedReportFile): Promise<Buffer> {
   }
   return Buffer.concat(chunks, total);
 }
+</file>
 
-================
-File: src/reporting/report-server-files.ts
-================
+<file path="src/reporting/report-server-files.ts">
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as path from 'node:path';
 
@@ -13876,10 +14228,9 @@ export async function handleReportRequest(root: string, request: IncomingMessage
     await file.handle.close().catch(() => undefined);
   }
 }
+</file>
 
-================
-File: src/reporting/report-server-json.ts
-================
+<file path="src/reporting/report-server-json.ts">
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { MAX_CONTROL_BODY_BYTES } from './report-server-constants.js';
@@ -13967,10 +14318,9 @@ export async function readBoundedJsonBody(
     request.on('error', onError);
   });
 }
+</file>
 
-================
-File: src/reporting/report-server-run-executor.ts
-================
+<file path="src/reporting/report-server-run-executor.ts">
 import * as path from 'node:path';
 
 import { redactText } from '../config-errors.js';
@@ -14070,10 +14420,9 @@ export async function executeControlRun(
     throw error;
   }
 }
+</file>
 
-================
-File: src/reporting/report-server-run-manager.ts
-================
+<file path="src/reporting/report-server-run-manager.ts">
 import { randomUUID } from 'node:crypto';
 
 import { MAX_CONTROL_LOG_ENTRIES, MAX_CONTROL_LOG_LENGTH, MAX_RETAINED_RUNS } from './report-server-constants.js';
@@ -14242,10 +14591,9 @@ export function createRunManager(options: RunManagerOptions): RunManager {
     getActiveRun,
   };
 }
+</file>
 
-================
-File: src/reporting/report-server-secret-store.ts
-================
+<file path="src/reporting/report-server-secret-store.ts">
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -14439,10 +14787,9 @@ export async function createSecretStore(configDirectory: string): Promise<Secret
     },
   };
 }
+</file>
 
-================
-File: src/reporting/report-server.ts
-================
+<file path="src/reporting/report-server.ts">
 import { createServer, type Server } from 'node:http';
 import { isIP, type Socket } from 'node:net';
 import { randomBytes } from 'node:crypto';
@@ -14613,10 +14960,9 @@ export async function createReportServer(
     close,
   };
 }
+</file>
 
-================
-File: src/reporting/report-view-model.ts
-================
+<file path="src/reporting/report-view-model.ts">
 import type { ProjectFailureResultV3, ProjectRunManifest } from '../artifacts/artifact-manifest.js';
 import type {
   CaptureMetadata,
@@ -14735,10 +15081,9 @@ export function createProjectReportViewModel(
     ...(manifest.artifacts.trace === undefined ? {} : { trace: manifest.artifacts.trace }),
   };
 }
+</file>
 
-================
-File: src/reporting/report.css
-================
+<file path="src/reporting/report.css">
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -14809,10 +15154,9 @@ footer { padding: 0 0 3rem; color: var(--ink-muted); font-size: 0.86rem; }
   th, td { padding: 0.45rem; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+</file>
 
-================
-File: src/reporting/sections/artifact-section.ts
-================
+<file path="src/reporting/sections/artifact-section.ts">
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref } from '../report-links.js';
 import { REPORT_ANCHORS, type ProjectReportViewModel } from '../report-view-model.js';
@@ -14841,10 +15185,9 @@ export function renderArtifactSection(model: ProjectReportViewModel): string {
     <p class="security-note">When served over HTTP, add a response-header CSP with <code>frame-ancestors 'none'</code>; a meta policy cannot enforce that directive.</p>
   </section>`;
 }
+</file>
 
-================
-File: src/reporting/sections/jenkins-section.ts
-================
+<file path="src/reporting/sections/jenkins-section.ts">
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localAnchorHref, safeExternalHref } from '../report-links.js';
 import { REPORT_ANCHORS, stateClass, stateLabel, type ProjectReportViewModel } from '../report-view-model.js';
@@ -14891,10 +15234,9 @@ export function renderJenkinsSection(model: ProjectReportViewModel): string {
     <nav aria-label="Report sections"><h3>Evidence navigation</h3>${navigationLinks(model)}</nav>
   </section>`;
 }
+</file>
 
-================
-File: src/reporting/sections/snyk-section.ts
-================
+<file path="src/reporting/sections/snyk-section.ts">
 import type { CaptureMetadata, SnykFinding, SnykSourceEvidence } from '../../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref, safeExternalHref } from '../report-links.js';
@@ -14953,10 +15295,9 @@ export function renderSnykSection(model: ProjectReportViewModel): string {
   if (source === undefined) return `<section id="snyk-test-report" aria-labelledby="snyk-heading"><h2 id="snyk-heading">Snyk test report</h2><p class="state-message">Snyk evidence was not available for this failed run.</p></section>`;
   return `<section id="snyk-test-report" aria-labelledby="snyk-heading"><div class="section-heading"><div><p class="eyebrow">Snyk</p><h2 id="snyk-heading">Snyk test report</h2></div>${badge(source.state)}</div><p class="state-message">${source.state === 'found' ? 'Normalized evidence captured.' : source.state === 'not_found' ? 'No Snyk report link was found on the Jenkins job page.' : 'Snyk evidence is incomplete; warnings explain what was retained.'}</p>${screenshot(source, model.artifacts)}${summary(source)}<h3>Detailed findings</h3>${findings(source)}${source.captures.length === 0 ? '' : `<h3>Capture provenance</h3><ul class="provenance-list">${source.captures.map(sourceLine).join('')}</ul>`}${source.warnings.length === 0 ? '' : `<ul class="warning-list">${source.warnings.map((warning) => `<li>${escapeHtmlText(warning)}</li>`).join('')}</ul>`}</section>`;
 }
+</file>
 
-================
-File: src/reporting/sections/sonarqube-section.ts
-================
+<file path="src/reporting/sections/sonarqube-section.ts">
 import type { CaptureMetadata, SonarFacetValue, SonarSourceEvidence } from '../../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref, safeExternalHref } from '../report-links.js';
@@ -15006,10 +15347,9 @@ export function renderSonarqubeSection(model: ProjectReportViewModel): string {
   const issuesTarget = source.navigation.find((item) => item.key === 'sonarqube-issues');
   return `<section id="sonarqube-overall" aria-labelledby="sonarqube-heading"><div class="section-heading"><div><p class="eyebrow">SonarQube</p><h2 id="sonarqube-heading">Overall and Issues evidence</h2></div>${badge(source.state)}</div>${homeSection(source)}<div class="subsection"><div class="section-heading"><h3>Overall</h3>${badge(overallTarget?.state ?? 'incomplete')}</div>${evidenceImage(source, 'sonarqube-overall.png', model.artifacts, 'SonarQube Overall evidence screenshot')} ${sourceAction(overall)}</div><section id="sonarqube-issues" class="subsection" aria-labelledby="sonarqube-issues-heading"><div class="section-heading"><h3 id="sonarqube-issues-heading">Issues</h3>${badge(issuesTarget?.state ?? 'incomplete')}</div>${evidenceImage(source, 'sonarqube-issues.png', model.artifacts, 'SonarQube Issues Type and Severity evidence screenshot')} ${sourceAction(issues)}<div class="facet-grid">${facetTable('Type', source.facets?.types)}${facetTable('Severity', source.facets?.severities)}</div></section>${source.warnings.length === 0 ? '' : `<ul class="warning-list">${source.warnings.map((warning) => `<li>${escapeHtmlText(warning)}</li>`).join('')}</ul>`}</section>`;
 }
+</file>
 
-================
-File: src/reports/snyk/snyk-capture-support.ts
-================
+<file path="src/reports/snyk/snyk-capture-support.ts">
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -15389,10 +15729,9 @@ export async function screenshotReport(
 export function captureFailureMessage(error: unknown): string {
   return formatDiagnostic(error);
 }
+</file>
 
-================
-File: src/reports/snyk/snyk-capture.ts
-================
+<file path="src/reports/snyk/snyk-capture.ts">
 import type { Page } from '@playwright/test';
 
 import { sanitizeUrl } from '../../config-errors.js';
@@ -15652,10 +15991,9 @@ export async function captureSnykEvidence(input: {
     );
   }
 }
+</file>
 
-================
-File: src/reports/snyk/snyk-html-extractor.ts
-================
+<file path="src/reports/snyk/snyk-html-extractor.ts">
 import type { Page } from '@playwright/test';
 
 import type {
@@ -15890,10 +16228,9 @@ export async function extractSnykHtml(page: Page): Promise<SnykHtmlEvidence> {
     };
   }, { severityNames: [...SEVERITIES], maxDetailCards: MAX_DETAIL_CARDS });
 }
+</file>
 
-================
-File: src/reports/snyk/snyk-normalize.ts
-================
+<file path="src/reports/snyk/snyk-normalize.ts">
 import type {
   SnykFinding,
   SnykScanMetadata,
@@ -16085,10 +16422,9 @@ export function normalizeSnykEvidence(input: SnykNormalizationInput): Normalized
     warnings,
   };
 }
+</file>
 
-================
-File: src/reports/snyk/snyk-summary-parser.ts
-================
+<file path="src/reports/snyk/snyk-summary-parser.ts">
 import type { SnykSeverity, SnykSeverityCounts } from '../../result-types.js';
 import { isRecord } from '../../config-selectors.js';
 
@@ -16132,10 +16468,9 @@ export function parseSnykSummaryJson(text: string): ParsedSnykSummary {
     return { warnings: ['Snyk summary JSON could not be parsed'] };
   }
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-capture-step-types.ts
-================
+<file path="src/reports/sonarqube/sonarqube-capture-step-types.ts">
 import type { Page } from '@playwright/test';
 
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
@@ -16161,10 +16496,9 @@ export interface SonarStepResult {
 export interface SonarIssuesStepResult extends SonarStepResult {
   facets: SonarIssueFacets;
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-capture-steps.ts
-================
+<file path="src/reports/sonarqube/sonarqube-capture-steps.ts">
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import type { NavigationTargets } from '../../result-types.js';
@@ -16295,10 +16629,9 @@ export async function assertHomeIdentity(
   }
   return `${identityStrategy};${overview.strategy}`;
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-capture-support.ts
-================
+<file path="src/reports/sonarqube/sonarqube-capture-support.ts">
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -16508,10 +16841,9 @@ export function createRouteHandler(
 export function captureFailureMessage(error: unknown): string {
   return formatDiagnostic(error);
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-capture.ts
-================
+<file path="src/reports/sonarqube/sonarqube-capture.ts">
 import { expect, type Page, type Route } from '@playwright/test';
 
 import type { NormalizedProjectConfig, ProjectSecrets } from '../../config/config-types.js';
@@ -16737,10 +17069,9 @@ export async function captureSonarqubeEvidence(input: SonarCaptureInput): Promis
     }
   }
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-facet-locators.ts
-================
+<file path="src/reports/sonarqube/sonarqube-facet-locators.ts">
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import { MAX_SONAR_FACETS, type SonarFacetCandidate } from './sonarqube-issue-facets.js';
@@ -16901,10 +17232,9 @@ export async function facetCandidates(
 ): Promise<SonarFacetCandidate[]> {
   return (await facetCandidatesWithStatus(facet, kind, deadline)).values;
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-issue-facets.ts
-================
+<file path="src/reports/sonarqube/sonarqube-issue-facets.ts">
 import type { SonarFacetValue, SonarIssueFacets } from '../../result-types.js';
 
 export const MAX_SONAR_FACETS = 64;
@@ -16987,10 +17317,9 @@ export function sanitizeSonarIssueFacets(
     })),
   };
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-issues-capture-step.ts
-================
+<file path="src/reports/sonarqube/sonarqube-issues-capture-step.ts">
 import { expect, type Locator } from '@playwright/test';
 
 import type { SonarIssueFacets } from '../../result-types.js';
@@ -17180,10 +17509,9 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
     warnings: [...new Set(warnings)],
   };
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-locators.ts
-================
+<file path="src/reports/sonarqube/sonarqube-locators.ts">
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
@@ -17453,10 +17781,9 @@ export function sonarLoginSubmitCandidates(page: Page): SonarLocator[] {
     { locator: page.getByRole('button', { name: /^sign in$/iu }), strategy: 'role:button:Sign in' },
   ];
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-login-step.ts
-================
+<file path="src/reports/sonarqube/sonarqube-login-step.ts">
 import type { Page } from '@playwright/test';
 
 import type { ProjectSecrets } from '../../config/config-types.js';
@@ -17516,10 +17843,9 @@ export async function submitSonarqubeLogin(
     );
   }
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-project-identity-locators.ts
-================
+<file path="src/reports/sonarqube/sonarqube-project-identity-locators.ts">
 import type { Locator, Page } from '@playwright/test';
 
 import type { SonarLocator } from './sonarqube-locators.js';
@@ -17587,10 +17913,9 @@ export async function projectIdentityHrefCandidates(page: Page, projectKey: stri
   }
   return candidates;
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-source-link-classifier.ts
-================
+<file path="src/reports/sonarqube/sonarqube-source-link-classifier.ts">
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
@@ -17675,10 +18000,9 @@ export function classifySonarLinks(
   const single = unique.length === 1 ? unique[0] : undefined;
   return { ...(single === undefined ? {} : { home: single }), warnings };
 }
+</file>
 
-================
-File: src/reports/sonarqube/sonarqube-url-identity.ts
-================
+<file path="src/reports/sonarqube/sonarqube-url-identity.ts">
 export function exactQueryValue(url: URL, key: string): string | undefined {
   const values = url.searchParams.getAll(key);
   if (values.length !== 1) return undefined;
@@ -17709,10 +18033,9 @@ export function isSonarqubeLoginLocation(url: URL): boolean {
     /\/sessions\/(?:new|login|init)(?:\/|$)/iu.test(path)
   );
 }
+</file>
 
-================
-File: src/reports/source-link-classifier.ts
-================
+<file path="src/reports/source-link-classifier.ts">
 import type { NormalizedProjectConfig } from '../config/config-types.js';
 import { assertAllowedUrl } from '../security/url-policy.js';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
@@ -17943,10 +18266,9 @@ export function classifySnykLinks(
 
 export type { SonarLinkClassification } from './sonarqube/sonarqube-source-link-classifier.js';
 export { classifySonarLinks } from './sonarqube/sonarqube-source-link-classifier.js';
+</file>
 
-================
-File: src/result-types.ts
-================
+<file path="src/result-types.ts">
 import type { ReportState } from './types.js';
 
 export interface CaptureMetadata {
@@ -18124,10 +18446,9 @@ export interface AggregateReportResult {
   projects: AggregateProjectSummary[];
   warnings: string[];
 }
+</file>
 
-================
-File: src/runner.ts
-================
+<file path="src/runner.ts">
 import type { Browser, BrowserContext } from '@playwright/test';
 
 import { ArtifactPaths } from './artifacts/artifact-paths.js';
@@ -18323,10 +18644,9 @@ export async function runFromConfig(
   const reportProjects = selectReportProjects(allProjects);
   return runConfiguredProjects(reportProjects, { ...dependencies, runtimeEnvironment: env });
 }
+</file>
 
-================
-File: src/security/relative-url-policy.ts
-================
+<file path="src/security/relative-url-policy.ts">
 import { ConfigError } from '../config-errors.js';
 import {
   canonicalizeBaseUrl,
@@ -18360,10 +18680,9 @@ export function resolveSafeRelativeUrl(
   }
   return result;
 }
+</file>
 
-================
-File: src/security/url-policy.ts
-================
+<file path="src/security/url-policy.ts">
 import { ConfigError } from '../config-errors.js';
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
@@ -18559,10 +18878,9 @@ export function isSafeReferenceUrl(value: unknown): value is string {
     return false;
   }
 }
+</file>
 
-================
-File: src/templates/template-fixture-build-validation.ts
-================
+<file path="src/templates/template-fixture-build-validation.ts">
 import {
   attribute,
   decodeHtmlEntities,
@@ -18644,10 +18962,9 @@ export function validateBuildTemplate(
   }
   return { buildCanonical, buildAction };
 }
+</file>
 
-================
-File: src/templates/template-fixture-file-io.ts
-================
+<file path="src/templates/template-fixture-file-io.ts">
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18783,10 +19100,9 @@ export async function resolveTemplateRoot(
     rootIdentity: { dev: rootStat.dev, ino: rootStat.ino },
   };
 }
+</file>
 
-================
-File: src/templates/template-fixture-html.ts
-================
+<file path="src/templates/template-fixture-html.ts">
 import type { ArtifactLink } from './template-fixture-types.js';
 
 export function escapeHtml(value: string): string {
@@ -18979,10 +19295,9 @@ export function isExactFixtureUrl(candidate: URL, expected: string): boolean {
     candidate.hash === target.hash
   );
 }
+</file>
 
-================
-File: src/templates/template-fixture-loader.ts
-================
+<file path="src/templates/template-fixture-loader.ts">
 import {
   extractSidePanelBuildLink,
   validateBuildTemplate,
@@ -19141,10 +19456,9 @@ export async function loadTemplateReportFixture(
     sonarqubeProjectId,
   };
 }
+</file>
 
-================
-File: src/templates/template-fixture-routes.ts
-================
+<file path="src/templates/template-fixture-routes.ts">
 import type { BrowserContext, Route } from '@playwright/test';
 
 import { sanitizeUrl } from '../config-errors.js';
@@ -19305,10 +19619,9 @@ export async function installTemplateReportRoutes(
 
   return recorder;
 }
+</file>
 
-================
-File: src/templates/template-fixture-sonarqube.ts
-================
+<file path="src/templates/template-fixture-sonarqube.ts">
 import {
   escapeHtml,
   escapedPattern,
@@ -19369,10 +19682,9 @@ export function rewriteSonarqubeLinks(
     (_whole: string, prefix: string, suffix: string) => `${prefix}${escapeHtml(projectName)}${suffix}`,
   );
 }
+</file>
 
-================
-File: src/templates/template-fixture-types.ts
-================
+<file path="src/templates/template-fixture-types.ts">
 export interface TemplateReportFixture {
   readonly loginUrl: string;
   readonly loginActionUrl: string;
@@ -19441,10 +19753,9 @@ export interface SonarqubeRouteMap {
   readonly overallUrl: string;
   readonly issuesUrl: string;
 }
+</file>
 
-================
-File: src/templates/template-report-cli.ts
-================
+<file path="src/templates/template-report-cli.ts">
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -19488,10 +19799,9 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     process.exitCode = 1;
   }
 }
+</file>
 
-================
-File: src/templates/template-report-fixture.ts
-================
+<file path="src/templates/template-report-fixture.ts">
 import type { ProjectConfigDocumentV1, RunType } from '../config/config-types.js';
 import { parseBrowserName, parsePositiveInteger } from '../config-values.js';
 import { MAX_TEMPLATE_TOTAL_BYTES } from './template-fixture-file-io.js';
@@ -19566,10 +19876,9 @@ export function templateProjectDocument(
     ],
   };
 }
+</file>
 
-================
-File: src/templates/template-report-runner.ts
-================
+<file path="src/templates/template-report-runner.ts">
 import type { Page } from '@playwright/test';
 import { normalizeProjectConfigDocument } from '../config/project-config-loader.js';
 import { runProject } from '../project/project-runner.js';
@@ -19659,10 +19968,9 @@ export async function runFromTemplates(
     }),
   });
 }
+</file>
 
-================
-File: src/types.ts
-================
+<file path="src/types.ts">
 export type ReportState = 'found' | 'not_found' | 'incomplete';
 export type RunType = 'report' | 'auto-build';
 export type SourceName = 'snyk' | 'sonarqube';
@@ -19735,10 +20043,9 @@ export type {
   ProjectRunIdentity,
   RunnerExecutionResult,
 } from './project/project-types.js';
+</file>
 
-================
-File: src/workflow/diagnostics.ts
-================
+<file path="src/workflow/diagnostics.ts">
 export const MAX_DIAGNOSTIC_ITEMS = 32;
 export const MAX_DIAGNOSTIC_LENGTH = 500;
 
@@ -19750,10 +20057,9 @@ export function pushDiagnostic(target: string[], value: string): void {
 export function boundedDiagnostics(values: readonly string[]): string[] {
   return values.slice(-MAX_DIAGNOSTIC_ITEMS).map((value) => value.slice(0, MAX_DIAGNOSTIC_LENGTH));
 }
+</file>
 
-================
-File: src/workflow/workflow-deadline.ts
-================
+<file path="src/workflow/workflow-deadline.ts">
 export class WorkflowDeadlineExceededError extends Error {
   public constructor() {
     super('Jenkins workflow deadline expired');
@@ -19852,10 +20158,9 @@ export async function withWorkflowDeadlineAndLateResource<T>(
     if (timer !== undefined) clearTimeout(timer);
   }
 }
+</file>
 
-================
-File: templates/jenkins-template/login.html
-================
+<file path="templates/jenkins-template/login.html">
 <!DOCTYPE html>
 <html lang="en-US" data-theme="none">
 
@@ -21422,10 +21727,9 @@ File: templates/jenkins-template/login.html
 </body>
 
 </html>
+</file>
 
-================
-File: templates/jenkins-template/README.md
-================
+<file path="templates/jenkins-template/README.md">
 url:
 https://jenkins-example.example-domain.com/job/Container%20Platform/job/XX/job/job-id/job/Service%20Name/job/Build/job/Build%20Servie%20Name/job/release%252Fsit/
 
@@ -21499,10 +21803,9 @@ public network. For narrower exposure, use `--host <this-machine-LAN-IP>`
 with `--allow-lan`. The server is read-only and has no authentication. Use
 `--root <directory>` or `REPORT_ROOT=<directory>` only for an intentionally
 different, canonical report root.
+</file>
 
-================
-File: templates/jenkins-template/template-build.html
-================
+<file path="templates/jenkins-template/template-build.html">
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21534,10 +21837,9 @@ File: templates/jenkins-template/template-build.html
   </main>
 </body>
 </html>
+</file>
 
-================
-File: templates/jenkins-template/template.html
-================
+<file path="templates/jenkins-template/template.html">
 <!DOCTYPE html>
 <html data-theme="none">
 
@@ -53762,10 +54064,9 @@ start of main content ⇒
 </body>
 
 </html>
+</file>
 
-================
-File: templates/snyk-template/snyk-sca-results-summary.json
-================
+<file path="templates/snyk-template/snyk-sca-results-summary.json">
 {
   "source": {
     "com.example-domain.example-package:com.example-domain.example-package.service": {
@@ -53780,10 +54081,9 @@ File: templates/snyk-template/snyk-sca-results-summary.json
     "low": 0
   }
 }
+</file>
 
-================
-File: templates/snyk-template/template.html
-================
+<file path="templates/snyk-template/template.html">
 <!DOCTYPE html>
 <!-- saved from url=(0227)https://jenkins-example.example-domain.com/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/10/artifact/snyk-results.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -54708,10 +55008,9 @@ File: templates/snyk-template/template.html
 
 
 </body></html>
+</file>
 
-================
-File: templates/sonarqube-template/template-home.html
-================
+<file path="templates/sonarqube-template/template-home.html">
 <!DOCTYPE html>
 <html lang="en">
 
@@ -74104,10 +74403,9 @@ File: templates/sonarqube-template/template-home.html
 </body>
 
 </html>
+</file>
 
-================
-File: templates/sonarqube-template/template-issues.html
-================
+<file path="templates/sonarqube-template/template-issues.html">
 <!DOCTYPE html>
 <html lang="en">
 
@@ -93420,10 +93718,9 @@ File: templates/sonarqube-template/template-issues.html
 </body>
 
 </html>
+</file>
 
-================
-File: templates/sonarqube-template/template-login.html
-================
+<file path="templates/sonarqube-template/template-login.html">
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><script type="application/ld+json">{
   "@context": "https://schema.org",
@@ -93469,10 +93766,9 @@ File: templates/sonarqube-template/template-login.html
 
 
 </body></html>
+</file>
 
-================
-File: templates/sonarqube-template/template-overall.html
-================
+<file path="templates/sonarqube-template/template-overall.html">
 <!DOCTYPE html>
 <html lang="en">
 
@@ -109056,10 +109352,9 @@ File: templates/sonarqube-template/template-overall.html
 </body>
 
 </html>
+</file>
 
-================
-File: tests/e2e/control-page.spec.ts
-================
+<file path="tests/e2e/control-page.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -109099,8 +109394,10 @@ test.describe('Control Page Dashboard E2E', () => {
   let reportRoot: string;
   let serverUrl: string;
   let closeServer: () => Promise<void>;
+  let requireCredentialsInExecutor = false;
 
   test.beforeEach(async () => {
+    requireCredentialsInExecutor = false;
     configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-ui-config-'));
     reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-ui-report-'));
 
@@ -109116,7 +109413,22 @@ test.describe('Control Page Dashboard E2E', () => {
       host: '127.0.0.1',
       port: 0,
       runManagerOptions: {
-        reportExecutor: async (projects: readonly NormalizedProjectConfig[]) => {
+        reportExecutor: async (
+          projects: readonly NormalizedProjectConfig[],
+          context?: { runtimeEnvironment?: NodeJS.ProcessEnv },
+        ) => {
+          const env = context?.runtimeEnvironment ?? process.env;
+          if (requireCredentialsInExecutor) {
+            for (const p of projects) {
+              const u = env[p.credentialVariables.usernameVariable];
+              const pw = env[p.credentialVariables.passwordVariable];
+              if (!u || !pw) {
+                throw new Error(
+                  `Invalid configuration: ${p.credentialVariables.usernameVariable} is required; ${p.credentialVariables.passwordVariable} is required`,
+                );
+              }
+            }
+          }
           return {
             reportRoot,
             outcomes: projects.map((p) => ({
@@ -109145,7 +109457,20 @@ test.describe('Control Page Dashboard E2E', () => {
             exitCode: 0,
           };
         },
-        autoBuildExecutor: async (project: NormalizedProjectConfig) => {
+        autoBuildExecutor: async (
+          project: NormalizedProjectConfig,
+          context?: { runtimeEnvironment?: NodeJS.ProcessEnv },
+        ) => {
+          const env = context?.runtimeEnvironment ?? process.env;
+          if (requireCredentialsInExecutor) {
+            const u = env[project.credentialVariables.usernameVariable];
+            const pw = env[project.credentialVariables.passwordVariable];
+            if (!u || !pw) {
+              throw new Error(
+                `Invalid configuration: ${project.credentialVariables.usernameVariable} is required; ${project.credentialVariables.passwordVariable} is required`,
+              );
+            }
+          }
           return {
             projectId: project.id,
             projectName: project.name,
@@ -109316,11 +109641,75 @@ test.describe('Control Page Dashboard E2E', () => {
     await cancelBtn.click();
     await expect(credDialog).not.toBeVisible();
   });
-});
 
-================
-File: tests/e2e/generated-report-fixtures.ts
-================
+  test('configures credentials in dialog and enables successful execution run with injected credentials', async ({ page }) => {
+    requireCredentialsInExecutor = true;
+
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    // 1. Initial attempt to execute reports fails because credentials are not configured yet
+    const runReportsBtn = page.locator('#btn-run-reports');
+    await runReportsBtn.click();
+    await expect(page.locator('#run-status-badge')).toHaveText('failed', { timeout: 10_000 });
+    await expect(page.locator('#run-logs')).toContainText(
+      'Invalid configuration: JENKINS_USERNAME is required; JENKINS_PASSWORD is required',
+    );
+
+    // 2. Open Credentials dialog and verify initial Missing badges
+    const credBtn = page.locator('#btn-credentials');
+    await credBtn.click();
+    const credDialog = page.locator('#credentials-dialog');
+    await expect(credDialog).toBeVisible();
+
+    const usernameRow = credDialog.locator('.credential-row', { hasText: 'JENKINS_USERNAME' });
+    const passwordRow = credDialog.locator('.credential-row', { hasText: 'JENKINS_PASSWORD' });
+    await expect(usernameRow.locator('.badge')).toHaveText('Missing');
+    await expect(passwordRow.locator('.badge')).toHaveText('Missing');
+
+    // 3. Enter secret values
+    const testUsername = 'operator-service-account';
+    const testPassword = 'highly-secret-password-xyz987';
+    await page.locator('#secret-input-JENKINS_USERNAME').fill(testUsername);
+    await page.locator('#secret-input-JENKINS_PASSWORD').fill(testPassword);
+
+    // 4. Save credentials
+    await page.locator('#btn-save-credentials').click();
+    await expect(page.locator('#credentials-message')).toHaveText(/Credentials saved successfully/i);
+
+    // 5. Verify badges transition to 'Configured'
+    await expect(usernameRow.locator('.badge')).toHaveText('Configured');
+    await expect(passwordRow.locator('.badge')).toHaveText('Configured');
+
+    // 6. Close Credentials dialog
+    await page.locator('#btn-cancel-credentials').click();
+    await expect(credDialog).not.toBeVisible();
+
+    // 7. Trigger report execution again: now it must succeed with injected credentials
+    await runReportsBtn.click();
+    await expect(page.locator('#run-status-badge')).toHaveText('succeeded', { timeout: 10_000 });
+    await expect(page.locator('#run-logs')).toContainText('Report run finished with status: succeeded');
+
+    // 8. Zero secret leakage check: password must not appear in DOM or run logs
+    const logsContent = await page.locator('#run-logs').innerText();
+    expect(logsContent).not.toContain(testPassword);
+    const pageHtml = await page.content();
+    expect(pageHtml).not.toContain(testPassword);
+
+    // 9. Verify persistence across page reload
+    await page.reload();
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+    await credBtn.click();
+    await expect(credDialog).toBeVisible();
+    await expect(credDialog.locator('.credential-row', { hasText: 'JENKINS_USERNAME' }).locator('.badge')).toHaveText('Configured');
+    await expect(credDialog.locator('.credential-row', { hasText: 'JENKINS_PASSWORD' }).locator('.badge')).toHaveText('Configured');
+    await page.locator('#btn-cancel-credentials').click();
+    await expect(credDialog).not.toBeVisible();
+  });
+});
+</file>
+
+<file path="tests/e2e/generated-report-fixtures.ts">
 import * as http from 'node:http';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -109434,10 +109823,9 @@ export async function createGeneratedReportFixture(): Promise<{ baseUrl: string;
   const server = await listen(root);
   return { ...server, reportPath: `/reports/${reportPath}` };
 }
+</file>
 
-================
-File: tests/e2e/generated-report-image.ts
-================
+<file path="tests/e2e/generated-report-image.ts">
 import { deflateSync } from 'node:zlib';
 
 const WIDTH = 320;
@@ -109493,10 +109881,9 @@ export function generatedReportImage(): Buffer {
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
+</file>
 
-================
-File: tests/e2e/generated-report.spec.ts
-================
+<file path="tests/e2e/generated-report.spec.ts">
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
@@ -109595,10 +109982,9 @@ test.describe('generated offline reports', () => {
     await expect(page.getByRole('heading', { name: 'Overall and Issues evidence' })).toBeVisible();
   });
 });
+</file>
 
-================
-File: tests/e2e/multi-project-report-flow.spec.ts
-================
+<file path="tests/e2e/multi-project-report-flow.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -109695,10 +110081,9 @@ test('runs two projects in order with fresh browser state and later-project cont
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/e2e/template-auto-build.spec.ts
-================
+<file path="tests/e2e/template-auto-build.spec.ts">
 import { expect, test } from '@playwright/test';
 
 import { normalizeProjectConfigDocument } from '../../src/config/project-config-loader.js';
@@ -109779,10 +110164,9 @@ test.describe('template auto-build e2e workflow', () => {
     expect(requestSequence).toContain(`POST ${fixture.buildActionUrl}`);
   });
 });
+</file>
 
-================
-File: tests/e2e/template-navigation.spec.ts
-================
+<file path="tests/e2e/template-navigation.spec.ts">
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -109833,10 +110217,9 @@ test('runs the production direct workflow against exact checked-in template rout
     await fs.rm(reportRoot, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/e2e/vendor-template-capture.spec.ts
-================
+<file path="tests/e2e/vendor-template-capture.spec.ts">
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -110107,10 +110490,9 @@ test('captures SonarQube through login template redirect to Overall to Issues', 
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/artifact-lifecycle.spec.ts
-================
+<file path="tests/unit/artifact-lifecycle.spec.ts">
 import * as fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import * as os from 'node:os';
@@ -110420,10 +110802,9 @@ test('rejects overlapping report and staging roots before creating output', asyn
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/artifact-paths.spec.ts
-================
+<file path="tests/unit/artifact-paths.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -110604,10 +110985,9 @@ test('rejects unsafe manifest discovery limits', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/auto-build-runner.spec.ts
-================
+<file path="tests/unit/auto-build-runner.spec.ts">
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 import { normalizeProjectConfigDocument } from '../../src/config.js';
@@ -110778,10 +111158,9 @@ test('cleans up context and browser resources even when workflow throws', async 
   expect(contextClosed).toBe(true);
   expect(browserClosed).toBe(true);
 });
+</file>
 
-================
-File: tests/unit/contract-hardening.spec.ts
-================
+<file path="tests/unit/contract-hardening.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -110970,10 +111349,9 @@ test('requires all five keyed navigation targets', () => {
   expect(hasCompleteNavigationTargets(complete)).toBe(false);
   expect(hasCompleteNavigationTargets(Object.values(complete))).toBe(false);
 });
+</file>
 
-================
-File: tests/unit/control-config-api.spec.ts
-================
+<file path="tests/unit/control-config-api.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -111141,10 +111519,9 @@ test.describe('Control Config API', () => {
     expect(putRes.status()).toBe(403);
   });
 });
+</file>
 
-================
-File: tests/unit/control-run-api.spec.ts
-================
+<file path="tests/unit/control-run-api.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -111307,10 +111684,9 @@ test.describe('Control Run API', () => {
     expect(statuses).toContain(202);
   });
 });
+</file>
 
-================
-File: tests/unit/control-run-executor-fixture.ts
-================
+<file path="tests/unit/control-run-executor-fixture.ts">
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import type { ControlRunRecord, RunManager } from '../../src/reporting/report-server-run-manager.js';
@@ -111400,10 +111776,9 @@ export async function waitForRunCompletion(
   }
   return runManager.getRun(runId);
 }
+</file>
 
-================
-File: tests/unit/control-run-executor-secrets.spec.ts
-================
+<file path="tests/unit/control-run-executor-secrets.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -111589,10 +111964,189 @@ test.describe('Run Executor Environment Injection & Secret Redaction', () => {
     expect(run?.result?.warnings?.[0]).not.toContain(secretVal);
   });
 });
+</file>
 
-================
-File: tests/unit/control-secrets-api.spec.ts
-================
+<file path="tests/unit/control-secret-store.spec.ts">
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { expect, test } from '@playwright/test';
+
+import {
+  assertValidSecretKey,
+  createSecretStore,
+  isValidSecretKey,
+} from '../../src/reporting/report-server-secret-store.js';
+import { SECRETS_FILE_NAME } from '../../src/reporting/report-server-constants.js';
+
+test.describe('Control SecretStore - Unit & Lifecycle', () => {
+  let configRoot: string;
+
+  test.beforeEach(async () => {
+    configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-secret-store-test-'));
+  });
+
+  test.afterEach(async () => {
+    fs.rmSync(configRoot, { recursive: true, force: true });
+  });
+
+  test('verifies empty store on missing file', async () => {
+    const store = await createSecretStore(configRoot);
+    const names = await store.listSecretNames();
+    expect(names).toEqual([]);
+
+    const secrets = await store.readSecrets();
+    expect(secrets).toEqual({});
+    expect(Object.isFrozen(secrets)).toBe(true);
+
+    const secretsFilePath = path.join(configRoot, SECRETS_FILE_NAME);
+    expect(fs.existsSync(secretsFilePath)).toBe(false);
+  });
+
+  test('putSecret creates secrets.local.json atomically without lingering tmp files', async () => {
+    const store = await createSecretStore(configRoot);
+    await store.putSecret('JENKINS_PASSWORD', 'super-secret-value-123');
+
+    const secretsFilePath = path.join(configRoot, SECRETS_FILE_NAME);
+    expect(fs.existsSync(secretsFilePath)).toBe(true);
+
+    const fileContent = fs.readFileSync(secretsFilePath, 'utf8');
+    const parsed = JSON.parse(fileContent);
+    expect(parsed).toEqual({ JENKINS_PASSWORD: 'super-secret-value-123' });
+
+    // Verify no temporary swap/tmp files remain in configRoot
+    const dirEntries = fs.readdirSync(configRoot);
+    const tmpFiles = dirEntries.filter((f) => f.includes('.tmp') || f.startsWith('.secrets.local.json'));
+    expect(tmpFiles).toHaveLength(0);
+  });
+
+  test('verifies 0o600 file mode on POSIX platforms', async () => {
+    const store = await createSecretStore(configRoot);
+    await store.putSecret('API_KEY', 'test-key-val');
+
+    const secretsFilePath = path.join(configRoot, SECRETS_FILE_NAME);
+    const stat = fs.statSync(secretsFilePath);
+
+    if (process.platform !== 'win32') {
+      // In POSIX systems, mode must be strictly rw------- (0o600)
+      const mode = stat.mode & 0o777;
+      expect(mode).toBe(0o600);
+    } else {
+      // On Windows, verify file is created and has nonzero size
+      expect(stat.isFile()).toBe(true);
+      expect(stat.size).toBeGreaterThan(0);
+    }
+  });
+
+  test('rejects invalid key names including traversal and non-identifiers', async () => {
+    const invalidKeys = [
+      'traversal/key',
+      '../TRAVERSAL',
+      '../../etc/passwd',
+      'non-identifier-with-dashes',
+      'has spaces in key',
+      '123_STARTS_WITH_NUMBER',
+      'INVALID.DOTS',
+      '@SPECIAL_CHARS!',
+      '__proto__',
+      'prototype',
+      'constructor',
+      '',
+    ];
+
+    const store = await createSecretStore(configRoot);
+
+    for (const key of invalidKeys) {
+      expect(isValidSecretKey(key)).toBe(false);
+      expect(() => assertValidSecretKey(key)).toThrow(/invalid secret key name/i);
+
+      await expect(
+        store.putSecret(key, 'value'),
+      ).rejects.toThrow(/invalid secret key name/i);
+    }
+  });
+
+  test('rejects non-string values without leaking secret value in error', async () => {
+    const store = await createSecretStore(configRoot);
+    const secretValue = 'sensitive-leak-value-999';
+
+    // @ts-expect-error - testing runtime type validation
+    await expect(store.putSecret('VALID_KEY', 12345)).rejects.toThrow(
+      /must be a string/i,
+    );
+
+    // @ts-expect-error - testing runtime type validation
+    await expect(store.putSecret('VALID_KEY', null)).rejects.toThrow(
+      /must be a string/i,
+    );
+
+    // @ts-expect-error - testing runtime type validation
+    await expect(store.putSecret('VALID_KEY', { secret: secretValue })).rejects.toThrow(
+      /must be a string/i,
+    );
+
+    try {
+      // @ts-expect-error - testing runtime type validation
+      await store.putSecret('VALID_KEY', { value: secretValue });
+    } catch (err: unknown) {
+      expect((err as Error).message).not.toContain(secretValue);
+    }
+  });
+
+  test('concurrent writes serialize cleanly and preserve all keys', async () => {
+    const store = await createSecretStore(configRoot);
+    const writeCount = 25;
+
+    const promises = Array.from({ length: writeCount }, (_, i) => {
+      const key = `CONCURRENT_VAR_${String(i).padStart(2, '0')}`;
+      return store.putSecret(key, `val-${i}`);
+    });
+
+    await Promise.all(promises);
+
+    const names = await store.listSecretNames();
+    expect(names).toHaveLength(writeCount);
+
+    const secrets = await store.readSecrets();
+    for (let i = 0; i < writeCount; i++) {
+      const key = `CONCURRENT_VAR_${String(i).padStart(2, '0')}`;
+      expect(secrets[key]).toBe(`val-${i}`);
+    }
+
+    // Keys in disk file must be alphabetized
+    const onDisk = JSON.parse(fs.readFileSync(path.join(configRoot, SECRETS_FILE_NAME), 'utf8'));
+    const diskKeys = Object.keys(onDisk);
+    expect(diskKeys).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  });
+
+  test('supports selective deletion and bulk operations', async () => {
+    const store = await createSecretStore(configRoot);
+
+    await store.putSecrets({
+      ALPHA: '1',
+      BETA: '2',
+      GAMMA: '3',
+      DELTA: '4',
+    });
+
+    let names = await store.listSecretNames();
+    expect(names).toEqual(['ALPHA', 'BETA', 'DELTA', 'GAMMA']);
+
+    await store.deleteSecret('BETA');
+    names = await store.listSecretNames();
+    expect(names).toEqual(['ALPHA', 'DELTA', 'GAMMA']);
+
+    await store.deleteSecrets(['ALPHA', 'DELTA']);
+    names = await store.listSecretNames();
+    expect(names).toEqual(['GAMMA']);
+
+    const secrets = await store.readSecrets();
+    expect(secrets).toEqual({ GAMMA: '3' });
+  });
+});
+</file>
+
+<file path="tests/unit/control-secrets-api.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -111636,13 +112190,18 @@ test.describe('Control Secrets API - Operations', () => {
     expect(body).toEqual({ secrets: {} });
   });
 
-  test('GET /api/secrets returns boolean presence map for stored secrets', async ({ request }) => {
-    await serverHandle.secretStore!.putSecret('KEY_1', 'val-1');
-    await serverHandle.secretStore!.putSecret('KEY_2', 'val-2');
+  test('GET /api/secrets returns boolean presence map for stored secrets without leaking values', async ({ request }) => {
+    const rawVal1 = 'super-secret-pw-val-1';
+    const rawVal2 = 'super-secret-pw-val-2';
+    await serverHandle.secretStore!.putSecret('KEY_1', rawVal1);
+    await serverHandle.secretStore!.putSecret('KEY_2', rawVal2);
 
     const res = await request.get(`${serverUrl}api/secrets`);
     expect(res.status()).toBe(200);
-    const body = await res.json();
+    const rawText = await res.text();
+    expect(rawText).not.toContain(rawVal1);
+    expect(rawText).not.toContain(rawVal2);
+    const body = JSON.parse(rawText);
     expect(body).toEqual({
       secrets: {
         KEY_1: true,
@@ -111682,6 +112241,39 @@ test.describe('Control Secrets API - Operations', () => {
 
     const rawDisk = JSON.parse(fs.readFileSync(path.join(configRoot, SECRETS_FILE_NAME), 'utf8'));
     expect(rawDisk['JENKINS_PASSWORD']).toBe('secret-pass-789');
+  });
+  test('PUT /api/secrets without CSRF returns 403', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        origin,
+        'sec-fetch-site': 'same-origin',
+        'content-type': 'application/json',
+      },
+      data: { name: 'SOME_SECRET', value: 'secret-val' },
+    });
+
+    expect(res.status()).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.message).toContain('CSRF token');
+  });
+
+  test('PUT /api/secrets with invalid origin returns 403', async ({ request }) => {
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin: 'https://evil-attacker.example.com',
+        'sec-fetch-site': 'cross-site',
+        'content-type': 'application/json',
+      },
+      data: { name: 'SOME_SECRET', value: 'secret-val' },
+    });
+
+    expect(res.status()).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.message).toContain('Origin header');
   });
 
   test('PUT /api/secrets updates batch secrets with secrets object', async ({ request }) => {
@@ -111757,10 +112349,9 @@ test.describe('Control Secrets API - Operations', () => {
     expect(await res.json()).toEqual({ secrets: { VAR_3: true } });
   });
 });
+</file>
 
-================
-File: tests/unit/control-secrets-security.spec.ts
-================
+<file path="tests/unit/control-secrets-security.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -111942,10 +112533,9 @@ test.describe('Control Secrets API - Security & Validation', () => {
     expect(JSON.parse(responseBody).error.code).toBe('SERVICE_UNAVAILABLE');
   });
 });
+</file>
 
-================
-File: tests/unit/diagnostics.spec.ts
-================
+<file path="tests/unit/diagnostics.spec.ts">
 import { expect, test } from '@playwright/test';
 
 import { boundedDiagnostics, pushDiagnostic } from '../../src/workflow/diagnostics.js';
@@ -111958,10 +112548,9 @@ test('caps diagnostic history and each persisted observation', () => {
   expect(values.every((value) => value.length <= 500)).toBe(true);
   expect(boundedDiagnostics(values)).toHaveLength(32);
 });
+</file>
 
-================
-File: tests/unit/immutable-run-history.spec.ts
-================
+<file path="tests/unit/immutable-run-history.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -112071,10 +112660,9 @@ test('keeps direct same-job reruns in immutable report folders and aggregate lin
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/jenkins-build-trigger.spec.ts
-================
+<file path="tests/unit/jenkins-build-trigger.spec.ts">
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test, expect } from '@playwright/test';
@@ -112276,10 +112864,9 @@ test('redacts credentials from error diagnostics', async ({ page }) => {
   expect(thrownError).toBeDefined();
   expect(thrownError?.message).not.toContain('super-secret-password');
 });
+</file>
 
-================
-File: tests/unit/jenkins-phase-02.spec.ts
-================
+<file path="tests/unit/jenkins-phase-02.spec.ts">
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -112843,10 +113430,9 @@ test('redacts credentials from Jenkins diagnostics', async ({ page }) => {
   expect(message).not.toContain('password');
   expect(message).toContain('[REDACTED]');
 });
+</file>
 
-================
-File: tests/unit/launch-arguments.spec.ts
-================
+<file path="tests/unit/launch-arguments.spec.ts">
 import { expect, test } from '@playwright/test';
 
 // @ts-expect-error JavaScript script module has no declarations
@@ -112909,10 +113495,9 @@ test('parses --env arguments for template report runner', () => {
     },
   });
 });
+</file>
 
-================
-File: tests/unit/project-config.spec.ts
-================
+<file path="tests/unit/project-config.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -113134,10 +113719,9 @@ test('canonicalizes origins and contains relative navigation', () => {
     ['https://sonar.example'],
   )).toThrow(/configured origins/u);
 });
+</file>
 
-================
-File: tests/unit/project-run-state.spec.ts
-================
+<file path="tests/unit/project-run-state.spec.ts">
 import { expect, test } from '@playwright/test';
 
 import { ProjectRunState } from '../../src/project/project-run-state.js';
@@ -113180,10 +113764,9 @@ test('allows a failure from an active phase only once', () => {
   expect(run.failure).toBe('safe diagnostic');
   expect(() => run.fail('again')).toThrow(/Cannot fail/u);
 });
+</file>
 
-================
-File: tests/unit/report-root-lock-owner.spec.ts
-================
+<file path="tests/unit/report-root-lock-owner.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -113323,10 +113906,9 @@ test('reports the current and an impossible process safely', async () => {
     expect(current).toEqual({ state: 'live' });
   }
 });
+</file>
 
-================
-File: tests/unit/report-server-secret-store.spec.ts
-================
+<file path="tests/unit/report-server-secret-store.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -113483,10 +114065,9 @@ test.describe('SecretStore Backend Module', () => {
     }
   });
 });
+</file>
 
-================
-File: tests/unit/report-server.spec.ts
-================
+<file path="tests/unit/report-server.spec.ts">
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as os from 'node:os';
@@ -113624,10 +114205,9 @@ async function pageRequest(url: string): Promise<{ status(): number }> {
     request.once('error', reject);
   });
 }
+</file>
 
-================
-File: tests/unit/reporting-output.spec.ts
-================
+<file path="tests/unit/reporting-output.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -113925,10 +114505,9 @@ test('bounds cumulative historical artifact discovery reads', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/result-writer.spec.ts
-================
+<file path="tests/unit/result-writer.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -114327,10 +114906,9 @@ test('bounds run-directory entries and bytes during allowlist validation', async
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/run-type-config.spec.ts
-================
+<file path="tests/unit/run-type-config.spec.ts">
 import { expect, test } from '@playwright/test';
 
 import {
@@ -114483,10 +115061,9 @@ test('selectAutoBuildProject rejects missing, disabled, and non-auto-build proje
   expect(() => selectAutoBuildProject(normalized, 'build-disabled')).toThrow(/project 'build-disabled' is disabled/u);
   expect(() => selectAutoBuildProject(normalized, 'report-project')).toThrow(/project 'report-project' is not configured for auto-build/u);
 });
+</file>
 
-================
-File: tests/unit/sequential-runner.spec.ts
-================
+<file path="tests/unit/sequential-runner.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -114819,10 +115396,9 @@ test('runFromConfig executes report projects only and excludes auto-build projec
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/snyk-io-regressions.spec.ts
-================
+<file path="tests/unit/snyk-io-regressions.spec.ts">
 import { createServer } from 'node:http';
 
 import { expect, test } from '@playwright/test';
@@ -114936,10 +115512,9 @@ test('fails closed when page link metadata exceeds field or total budgets', asyn
   expect(oversizedTotal.truncated).toBe(true);
   expect(oversizedTotal.candidates.length).toBeLessThan(256);
 });
+</file>
 
-================
-File: tests/unit/snyk-phase-04.spec.ts
-================
+<file path="tests/unit/snyk-phase-04.spec.ts">
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -115192,10 +115767,9 @@ test('captures and retains double-encoded branch in Snyk report and summary capt
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/snyk-review-regressions.spec.ts
-================
+<file path="tests/unit/snyk-review-regressions.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -115394,10 +115968,9 @@ test('blocks an unallowlisted report redirect before the fixture receives it', a
   expect(result.source.state).toBe('incomplete');
   expect(result.warnings.join(' ')).not.toMatch(/sessionid|evil\.example/iu);
 });
+</file>
 
-================
-File: tests/unit/snyk-screenshot-retry.spec.ts
-================
+<file path="tests/unit/snyk-screenshot-retry.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -115477,10 +116050,9 @@ test('does not retry non-protocol Snyk screenshot failures', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/sonarqube-phase-05.spec.ts
-================
+<file path="tests/unit/sonarqube-phase-05.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -116308,10 +116880,9 @@ test('automatically dismisses onboarding popup with Got it button on first dashb
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tests/unit/template-build-fixture.spec.ts
-================
+<file path="tests/unit/template-build-fixture.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -116478,10 +117049,9 @@ test.describe('template build fixture', () => {
     }
   });
 });
+</file>
 
-================
-File: tests/unit/template-report.spec.ts
-================
+<file path="tests/unit/template-report.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -116601,10 +117171,9 @@ test('rejects symlinked and oversized template sources before capture', async ()
     fs.rmSync(oversizedRoot, { recursive: true, force: true });
   }
 });
+</file>
 
-================
-File: tsconfig.build.json
-================
+<file path="tsconfig.build.json">
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -116617,10 +117186,9 @@ File: tsconfig.build.json
   "include": ["src/**/*.ts"],
   "exclude": ["tests", "test-results", "playwright-report", ".runner-build"]
 }
+</file>
 
-================
-File: tsconfig.json
-================
+<file path="tsconfig.json">
 {
   "compilerOptions": {
     "target": "ES2023",
@@ -116649,9 +117217,6 @@ File: tsconfig.json
   ],
   "exclude": ["test-results", "playwright-report"]
 }
+</file>
 
-
-
-================================================================
-End of Codebase
-================================================================
+</files>

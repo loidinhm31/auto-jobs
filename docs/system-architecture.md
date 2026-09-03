@@ -1,9 +1,9 @@
 # System architecture
 
 This is the component-level view of `auto-jobs` after Phase 3 and dynamic-
-credentials Phases 01–04. The repository has two intentionally separate
-execution paths plus a local persistence seam, a loopback control API/UI, and
-a control-run environment boundary:
+credentials Phases 01–05. The repository has two intentionally separate
+execution paths plus a local persistence seam, a loopback control API/UI, a
+control-run environment boundary, and deterministic Phase 05 verification:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
@@ -22,6 +22,9 @@ a control-run environment boundary:
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
   driven.
+- **Verification:** isolated SecretStore/API unit contracts and Chromium/WebKit
+  control-page E2E scenarios prove dynamic credential persistence, injected
+  execution, and zero leakage without contacting Jenkins.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
@@ -300,6 +303,12 @@ are redacted from control logs, warnings, errors, and auto-build result URLs
 before the run record is persisted. The direct report CLI and library runners
 still consume their caller-supplied environment.
 
+The Phase 05 SecretStore lifecycle suite adds focused checks for empty reads,
+atomic file replacement and temporary-file cleanup, platform permission
+handling, invalid/reserved keys, value-type error redaction, concurrent
+updates, and bulk deletion. The API operation suite and control-page E2E
+scenarios are described in the test architecture below.
+
 ### Control secrets API and security gates
 
 The secrets handler is intentionally separate from
@@ -323,7 +332,7 @@ malformed bodies return `400`; invalid mutation gates return `403`, a
 non-JSON mutation body returns `415`, an unavailable store returns `503`, and
 unsupported methods return `405` with `Allow: GET, PUT, DELETE`.
 
-### Control UI credential dialog (Phase 04)
+### Control UI credential dialog (Phases 04–05)
 
 The loopback page at `/` includes a `Credentials` action and a native
 `<dialog>` backed by `control-page.html`, `control-page.css`, and
@@ -391,10 +400,11 @@ sequenceDiagram
 ```
 
 The browser-facing contract is covered by
-`tests/e2e/control-page.spec.ts`: it checks modal accessibility, default
-missing badges, save/clear/reopen transitions, input wiping, and absence of a
-test secret in page HTML. The E2E fixture uses an isolated temporary
-SecretStore and injected run executors; it does not contact Jenkins.
+`tests/e2e/control-page.spec.ts`: it checks modal accessibility, dynamic key
+discovery, Missing/Configured transitions, save/clear/reopen state, injected
+credential execution, input wiping, and absence of test secrets in page HTML
+and run logs. The isolated E2E fixture runs the three scenarios in both
+Chromium and WebKit, for six checks total, and does not contact Jenkins.
 
 ### Control-run redaction boundary
 
@@ -450,6 +460,10 @@ that route authenticated.
   handling, sorted and frozen snapshots, bulk updates/deletions, concurrent
   mutation serialization, redaction, and control-server wiring. It does not
   contact a live service.
+- `tests/unit/control-secret-store.spec.ts` adds seven isolated lifecycle
+  checks for missing/empty reads, atomic writes and temporary-file cleanup,
+  POSIX/Windows file handling, invalid and reserved keys, non-string value
+  redaction, concurrent writes, and deletion/bulk operations.
 - `tests/unit/control-run-executor-secrets.spec.ts` uses isolated stores and
   injected report/auto-build executors to prove per-run SecretStore injection,
   stored-over-base precedence, non-mutation of the base environment, and
@@ -465,9 +479,10 @@ that route authenticated.
 - `tests/unit/sequential-runner.spec.ts` preserves shared launch options,
   sequential report behavior, and exclusion of auto-build projects from
   `runFromConfig`.
-- `tests/unit/control-secrets-api.spec.ts` exercises empty/full/filtered
-  presence maps, single and batch PUT updates, null/action deletion, query and
-  body DELETE forms, and persistence without returning values.
+- `tests/unit/control-secrets-api.spec.ts` exercises ten operation cases:
+  empty/full/filtered presence maps, guarded single and batch PUT updates,
+  null/action deletion, query and body DELETE forms, persistence, and no
+  plaintext response.
 - `tests/unit/control-secrets-security.spec.ts` exercises plaintext redaction,
   Host/Origin/Fetch Metadata/CSRF gates, key/value/body validation,
   content-type rejection, unsupported methods, and the unavailable-store

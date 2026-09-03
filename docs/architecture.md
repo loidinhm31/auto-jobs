@@ -2,16 +2,18 @@
 
 This document describes the implemented schema-v1 configuration, report and
 target-branch Jenkins auto-build workflows, the local SecretStore backend, the
-loopback control secrets API, and the Phase 04 credential-management UI.
-Phase 03 adds per-run SecretStore environment injection and redaction to
-control runs. Phase 04 adds a CSRF-aware modal that discovers referenced
-variable names, displays presence only, persists replacements, and wipes
-password inputs. Phase 3 adds an offline build-page fixture and exact routes
-so the auto-build path can be exercised without live side effects. Phase 01
-adds validated local persistence; Phase 02 exposes guarded presence-only
-`GET`, `PUT`, and `DELETE /api/secrets` operations. The report command remains
-report-only; auto-build is an explicit library boundary and is not inferred
-from URLs, selectors, CLI names, or environment.
+loopback control secrets API, the Phase 04 credential-management UI, and the
+Phase 05 verification boundary. Phase 03 adds per-run SecretStore environment
+injection and redaction to control runs. Phase 04 adds a CSRF-aware modal that
+discovers referenced variable names, displays presence only, persists
+replacements, and wipes password inputs. Phase 05 verifies the persistence,
+API, and browser contracts without live services. Phase 3 adds an offline
+build-page fixture and exact routes so the auto-build path can be exercised
+without live side effects. Phase 01 adds validated local persistence; Phase 02
+exposes guarded presence-only `GET`, `PUT`, and `DELETE /api/secrets`
+operations. The report command remains report-only; auto-build is an explicit
+library boundary and is not inferred from URLs, selectors, CLI names, or
+environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -239,8 +241,9 @@ CSS. Selector values do not change the configured `jobUrl` or branch identity.
 | `src/reporting/report-server.ts` | Creates the `SecretStore` in loopback control mode and exposes it on `ReportServerHandle`. |
 | `src/reporting/report-server-run-manager.ts` | Owns the single-active-run lifecycle and carries the optional `SecretStore` dependency. |
 | `src/reporting/report-server-run-executor.ts` | Reads one SecretStore snapshot, merges the run environment, dispatches the selected executor, and redacts control-run output. |
-| `tests/unit/report-server-secret-store.spec.ts` | Exercises persistence and control-server wiring. |
-| `tests/unit/control-secrets-api.spec.ts` | Exercises endpoint presence, patch/delete semantics, filtering, and persistence. |
+| `tests/unit/report-server-secret-store.spec.ts` | Exercises Phase 01 persistence and control-server wiring. |
+| `tests/unit/control-secret-store.spec.ts` | Exercises Phase 05 SecretStore lifecycle, atomic-file cleanup, platform permission handling, key/value validation, concurrent writes, and deletion. |
+| `tests/unit/control-secrets-api.spec.ts` | Exercises Phase 05 endpoint presence, guarded patch/delete semantics, filtering, persistence, and plaintext-free responses. |
 | `tests/unit/control-secrets-security.spec.ts` | Exercises redaction, validation, method/content-type handling, and security gates. |
 
 ### Secret resolution
@@ -530,29 +533,43 @@ URLs are redacted with all non-empty stored values before persistence.
 
 ## Test and release boundary
 
-The deterministic order is `npm ci`, `npm run install:browsers`, `npm run typecheck`, `npm run build`,
-`npm run test:unit`, `npm run test:e2e:templates`, `npm run test:control`, `npm run test:report`, and `npm run test:release:webkit`. `npm run test:release` is the shorthand for typecheck,
-build, unit, template, control, generated-report, and WebKit gates. Template tests use exact-URL
-test-only routes and checked-in fixtures; they do not claim live Jenkins or
-vendor execution. Runtime smoke validation requires an authorized project
-JSON and injected credentials and is never part of the deterministic suite.
+The deterministic order is `npm ci`, `npm run install:browsers`,
+`npm run typecheck`, `npm run build`, `npm run test:unit`,
+`npm run test:e2e:templates`, `npm run test:control`, `npm run test:report`,
+and `npm run test:release:webkit`. `npm run test:release` is the shorthand
+for typecheck, build, unit, template, control, generated-report, and WebKit
+gates. Template tests use exact-URL test-only routes and checked-in fixtures;
+they do not claim live Jenkins or vendor execution. Runtime smoke validation
+requires an authorized project JSON and injected credentials and is never part
+of the deterministic suite.
 
 Phase 2, Phase 3, and Phase 03 focused unit coverage is in
 `tests/unit/jenkins-build-trigger.spec.ts`,
-`tests/unit/auto-build-runner.spec.ts`, `tests/unit/template-build-fixture.spec.ts`,
-and the report-selection assertions in `tests/unit/sequential-runner.spec.ts`.
-Phase 03 run-environment coverage is in
-`tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
-`tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection
-for report and auto-build runs, stored-over-base environment precedence,
-non-mutation of the base environment, and redaction of logs, warnings, errors,
-and manager-level run output.
-Control config/run/UI coverage is in `tests/unit/control-config-api.spec.ts`,
-`tests/unit/control-run-api.spec.ts`, and `tests/e2e/control-page.spec.ts`.
-Phase 02 secrets coverage is in `tests/unit/control-secrets-api.spec.ts` and
-`tests/unit/control-secrets-security.spec.ts`; it proves presence-only GET
-responses, filtering, single/batch PUT, deletion, persistence, redaction,
-Host/Origin/Fetch Metadata/CSRF gates, bounded JSON validation, content-type
-handling, and method/store-availability errors without contacting a live
-Jenkins controller.
+`tests/unit/auto-build-runner.spec.ts`,
+`tests/unit/template-build-fixture.spec.ts`, and the report-selection
+assertions in `tests/unit/sequential-runner.spec.ts`. Phase 03 run-environment
+coverage is in `tests/unit/control-run-executor-secrets.spec.ts`; its fixture
+helpers are in `tests/unit/control-run-executor-fixture.ts`. It proves
+SecretStore injection for report and auto-build runs, stored-over-base
+environment precedence, non-mutation of the base environment, and redaction
+of logs, warnings, errors, and manager-level run output.
+
+Phase 04 control-page coverage and Phase 05 browser verification use
+`tests/e2e/control-page.spec.ts`. The control suite proves config/run/UI
+behavior, accessible credential management, dynamic key discovery,
+Missing/Configured transitions, guarded save/clear operations, persistence
+after reload, injected-credential execution, and zero leakage from cleared
+inputs, page HTML, and run logs. Its three scenarios run in Chromium and
+WebKit, producing six E2E checks.
+
+Phase 05 SecretStore/API unit additions are
+`tests/unit/control-secret-store.spec.ts` and
+`tests/unit/control-secrets-api.spec.ts`. The first has seven isolated
+lifecycle checks; the second has ten operation checks. The security suite
+continues to cover plaintext redaction, Host/Origin/Fetch Metadata/CSRF gates,
+bounded JSON validation, content-type handling, unsupported methods, and
+store-availability errors. The Phase 05 verification snapshot recorded
+248/248 unit checks, 6/6 control E2E checks, 254/254 combined passes, zero
+secret leakage, and zero TypeScript errors. None of these deterministic
+checks contacts a live Jenkins controller or vendor service.
 

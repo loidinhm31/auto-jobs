@@ -5,8 +5,9 @@ projects, and exposes explicit report and auto-build execution boundaries.
 Mode is never inferred from a URL, selector, CLI name, or environment. Direct
 callers use the normalized configuration; loopback control runs additionally
 overlay a per-run SecretStore snapshot before executor dispatch and expose the
-Phase 04 credential modal for presence-only local management. The
-configuration contract is implemented in `src/config/` and consumed by
+Phase 04 credential modal for presence-only local management. Phase 05 verifies
+the persistence, API, and browser contracts around that flow.
+The configuration contract is implemented in `src/config/` and consumed by
 `src/runner.ts` (report), `src/project/auto-build-runner.ts` (auto-build), or
 `src/reporting/report-server-run-executor.ts` (control dispatch).
 
@@ -171,7 +172,7 @@ Set the referenced names in the shell or CI secret store before running. Do
 not put usernames, passwords, tokens, cookies, or credential-bearing URLs in
 the JSON, source tree, traces, screenshots, or reports.
 
-#### Local SecretStore and control API/UI (Phases 01–04)
+#### Local SecretStore and control API/UI (Phases 01–05)
 
 Dynamic credential persistence is deliberately separate from the schema-v1
 document. In control mode, `createReportServer` initializes
@@ -225,6 +226,27 @@ with blank password inputs. Non-empty trimmed replacements use the CSRF-bearing
 JSON PUT; each Clear action uses the CSRF-bearing bodyless DELETE. Successful
 save/clear and every close wipe input values, so status text, page HTML, and
 API payloads never contain plaintext values.
+
+#### Phase 05 verification
+
+The dedicated `tests/unit/control-secret-store.spec.ts` suite runs against
+isolated temporary directories and verifies missing/empty reads, atomic
+`secrets.local.json` replacement with temporary-file cleanup, POSIX/Windows
+permission handling, invalid and reserved key rejection, non-string value
+errors without secret leakage, concurrent write preservation, and deletion or
+bulk operations. `tests/unit/control-secrets-api.spec.ts` verifies boolean-only
+presence maps, filtered reads, guarded single/batch updates, null/action
+deletion, query/body deletion, persistence, and plaintext-free responses.
+
+`tests/e2e/control-page.spec.ts` exercises the operator flow in Chromium and
+WebKit: accessible dialog discovery, Missing/Configured badges, guarded save
+and clear requests, persistence after close/reopen and reload, a failed run
+before credentials are configured, and a successful run after
+SecretStore-injected credentials. It asserts that submitted values are wiped
+from inputs and absent from page HTML and run logs. The completed verification
+recorded 7/7 SecretStore tests, 10/10 API operation tests, 248/248 unit tests,
+and 6/6 control-page E2E checks (254/254 combined), with zero leakage
+observed.
 
 ### Control-run environment injection (Phase 03)
 

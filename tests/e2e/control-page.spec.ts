@@ -37,8 +37,10 @@ test.describe('Control Page Dashboard E2E', () => {
   let reportRoot: string;
   let serverUrl: string;
   let closeServer: () => Promise<void>;
+  let requireCredentialsInExecutor = false;
 
   test.beforeEach(async () => {
+    requireCredentialsInExecutor = false;
     configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-ui-config-'));
     reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-ui-report-'));
 
@@ -54,7 +56,22 @@ test.describe('Control Page Dashboard E2E', () => {
       host: '127.0.0.1',
       port: 0,
       runManagerOptions: {
-        reportExecutor: async (projects: readonly NormalizedProjectConfig[]) => {
+        reportExecutor: async (
+          projects: readonly NormalizedProjectConfig[],
+          context?: { runtimeEnvironment?: NodeJS.ProcessEnv },
+        ) => {
+          const env = context?.runtimeEnvironment ?? process.env;
+          if (requireCredentialsInExecutor) {
+            for (const p of projects) {
+              const u = env[p.credentialVariables.usernameVariable];
+              const pw = env[p.credentialVariables.passwordVariable];
+              if (!u || !pw) {
+                throw new Error(
+                  `Invalid configuration: ${p.credentialVariables.usernameVariable} is required; ${p.credentialVariables.passwordVariable} is required`,
+                );
+              }
+            }
+          }
           return {
             reportRoot,
             outcomes: projects.map((p) => ({
@@ -83,7 +100,20 @@ test.describe('Control Page Dashboard E2E', () => {
             exitCode: 0,
           };
         },
-        autoBuildExecutor: async (project: NormalizedProjectConfig) => {
+        autoBuildExecutor: async (
+          project: NormalizedProjectConfig,
+          context?: { runtimeEnvironment?: NodeJS.ProcessEnv },
+        ) => {
+          const env = context?.runtimeEnvironment ?? process.env;
+          if (requireCredentialsInExecutor) {
+            const u = env[project.credentialVariables.usernameVariable];
+            const pw = env[project.credentialVariables.passwordVariable];
+            if (!u || !pw) {
+              throw new Error(
+                `Invalid configuration: ${project.credentialVariables.usernameVariable} is required; ${project.credentialVariables.passwordVariable} is required`,
+              );
+            }
+          }
           return {
             projectId: project.id,
             projectName: project.name,
@@ -252,6 +282,71 @@ test.describe('Control Page Dashboard E2E', () => {
 
     // Close dialog again
     await cancelBtn.click();
+    await expect(credDialog).not.toBeVisible();
+  });
+
+  test('configures credentials in dialog and enables successful execution run with injected credentials', async ({ page }) => {
+    requireCredentialsInExecutor = true;
+
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    // 1. Initial attempt to execute reports fails because credentials are not configured yet
+    const runReportsBtn = page.locator('#btn-run-reports');
+    await runReportsBtn.click();
+    await expect(page.locator('#run-status-badge')).toHaveText('failed', { timeout: 10_000 });
+    await expect(page.locator('#run-logs')).toContainText(
+      'Invalid configuration: JENKINS_USERNAME is required; JENKINS_PASSWORD is required',
+    );
+
+    // 2. Open Credentials dialog and verify initial Missing badges
+    const credBtn = page.locator('#btn-credentials');
+    await credBtn.click();
+    const credDialog = page.locator('#credentials-dialog');
+    await expect(credDialog).toBeVisible();
+
+    const usernameRow = credDialog.locator('.credential-row', { hasText: 'JENKINS_USERNAME' });
+    const passwordRow = credDialog.locator('.credential-row', { hasText: 'JENKINS_PASSWORD' });
+    await expect(usernameRow.locator('.badge')).toHaveText('Missing');
+    await expect(passwordRow.locator('.badge')).toHaveText('Missing');
+
+    // 3. Enter secret values
+    const testUsername = 'operator-service-account';
+    const testPassword = 'highly-secret-password-xyz987';
+    await page.locator('#secret-input-JENKINS_USERNAME').fill(testUsername);
+    await page.locator('#secret-input-JENKINS_PASSWORD').fill(testPassword);
+
+    // 4. Save credentials
+    await page.locator('#btn-save-credentials').click();
+    await expect(page.locator('#credentials-message')).toHaveText(/Credentials saved successfully/i);
+
+    // 5. Verify badges transition to 'Configured'
+    await expect(usernameRow.locator('.badge')).toHaveText('Configured');
+    await expect(passwordRow.locator('.badge')).toHaveText('Configured');
+
+    // 6. Close Credentials dialog
+    await page.locator('#btn-cancel-credentials').click();
+    await expect(credDialog).not.toBeVisible();
+
+    // 7. Trigger report execution again: now it must succeed with injected credentials
+    await runReportsBtn.click();
+    await expect(page.locator('#run-status-badge')).toHaveText('succeeded', { timeout: 10_000 });
+    await expect(page.locator('#run-logs')).toContainText('Report run finished with status: succeeded');
+
+    // 8. Zero secret leakage check: password must not appear in DOM or run logs
+    const logsContent = await page.locator('#run-logs').innerText();
+    expect(logsContent).not.toContain(testPassword);
+    const pageHtml = await page.content();
+    expect(pageHtml).not.toContain(testPassword);
+
+    // 9. Verify persistence across page reload
+    await page.reload();
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+    await credBtn.click();
+    await expect(credDialog).toBeVisible();
+    await expect(credDialog.locator('.credential-row', { hasText: 'JENKINS_USERNAME' }).locator('.badge')).toHaveText('Configured');
+    await expect(credDialog.locator('.credential-row', { hasText: 'JENKINS_PASSWORD' }).locator('.badge')).toHaveText('Configured');
+    await page.locator('#btn-cancel-credentials').click();
     await expect(credDialog).not.toBeVisible();
   });
 });

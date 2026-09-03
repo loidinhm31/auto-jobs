@@ -3,9 +3,10 @@
 This project has deterministic local gates for native browsers, offline report
 fixtures, the Phase 3 build-page fixture, the Phase 01 SecretStore backend,
 the Phase 02 control secrets API/security boundary, the Phase 03 control
-run-environment boundary, and the Phase 04 control UI credential dialog. The
-commands below are the current release contract; test counts are intentionally
-not hard-coded because they change with the test suite.
+run-environment boundary, the Phase 04 control UI credential dialog, and the
+Phase 05 dynamic-credential verification suite. The commands below are the
+current release contract; test counts are intentionally not hard-coded except
+where a dated verification snapshot is recorded for traceability.
 
 ## Gate order
 
@@ -275,6 +276,59 @@ report or auto-build run and does not contact Jenkins or prove Windows ACL
 enforcement. The Phase 03 gate below covers per-run environment injection. On
 Windows, review the config-directory ACL separately because POSIX `0o600` mode
 bits are advisory.
+
+## Phase 05 dynamic-credentials verification gate
+
+Run the focused Phase 05 additions directly:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-secret-store.spec.ts \
+  tests/unit/control-secrets-api.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The `control-secret-store.spec.ts` suite uses an isolated temporary config
+directory and verifies missing/empty reads, atomic `secrets.local.json` writes
+with no temporary-file residue, POSIX `0o600` handling with a Windows-safe
+fallback, invalid/traversal/reserved key rejection, non-string value errors
+without value leakage, concurrent write preservation, and single/bulk
+deletion. The API operation suite verifies empty/full/filtered boolean
+presence maps, CSRF/origin-guarded single and batch updates, null/action
+deletion, query/body deletion, disk persistence, and plaintext-free responses.
+
+Run the complete unit and control-page gates as the release evidence:
+
+```sh
+npm run typecheck
+npm run test:unit
+npm run test:control
+```
+
+`npm run test:control` runs `tests/e2e/control-page.spec.ts` in both Chromium
+and WebKit. The browser contract verifies an accessible credential dialog,
+dynamic credential-name discovery, Missing/Configured presence transitions,
+CSRF-protected save and clear flows, persistence after close/reopen and page
+reload, and a run that fails without credentials then succeeds after
+SecretStore-injected credentials. It also asserts that submitted values are
+absent from cleared inputs, page HTML, and run logs. The E2E server uses
+temporary roots and injected executors; it does not contact Jenkins or vendor
+services.
+
+The 2026-09-03 Phase 05 verification snapshot recorded:
+
+| Command/scope | Result |
+| --- | --- |
+| `npm run typecheck` | 0 TypeScript errors |
+| `tests/unit/control-secret-store.spec.ts` | 7/7 passed |
+| `tests/unit/control-secrets-api.spec.ts` | 10/10 passed |
+| `npm run test:unit` | 248/248 passed |
+| `npm run test:control` (Chromium + WebKit) | 6/6 passed |
+| Combined unit and control E2E checks | 254/254 passed |
+| Secret leakage checks | Zero observed |
+
+These checks prove local persistence, API/UI contracts, and no-leakage
+invariants; they do not prove a live Jenkins build or vendor-service run.
 
 ## Phase 02 control secrets API gate
 

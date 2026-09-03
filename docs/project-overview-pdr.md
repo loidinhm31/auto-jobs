@@ -2,10 +2,10 @@
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build,
-Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–04<br>
-**Current milestone:** Phase 04 Control UI Credential Modal and State —
-**DONE** (2026-09-03T18:35:00+07:00)<br>
-**Prior completed milestone:** Phase 03 Run Executor Environment Injection —
+Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–05<br>
+**Current milestone:** Phase 05 Unit, API, and Playwright E2E Verification —
+**DONE** (2026-09-03)<br>
+**Prior completed milestone:** Phase 04 Control UI Credential Modal and State —
 **DONE**
 
 ## Product summary
@@ -39,6 +39,10 @@ checks presence without loading values, and persists only entered replacements
 through the guarded `/api/secrets` API. The modal masks values and wipes its
 inputs on save, clear, or close; it never reflects plaintext in status text,
 URLs, page HTML, or API responses.
+Phase 05 adds focused lifecycle and operation tests for the local SecretStore
+and `/api/secrets`, plus Chromium/WebKit Control UI E2E scenarios. The gate
+proves dynamic credential persistence and injected execution while asserting
+zero plaintext leakage from inputs, page HTML, run logs, and API responses.
 
 The product treats Jenkins navigation and build submission as high-risk external
 operations. Configuration, target identity, selectors, credentials, deadlines,
@@ -73,8 +77,8 @@ and failure semantics are validated before side effects.
 - Mutating `process.env` or a caller-owned environment when injecting stored
   values. Control-run injection is per-run and does not alter direct
   file-mode/library environment behavior.
-- Claiming the Phase 05 unit/API/Playwright end-to-end verification is
-  complete before it runs.
+- Treating the Phase 05 unit/API/Playwright end-to-end verification as complete
+  without recorded test evidence and zero-leakage assertions.
 
 ## Users and use cases
 
@@ -314,6 +318,25 @@ and failure semantics are validated before side effects.
 - [x] `tests/e2e/control-page.spec.ts` proves modal accessibility, presence
   transitions, persistence/reopen behavior, input wiping, and zero leakage.
 
+## Dynamic-credentials Phase 05 acceptance criteria
+
+- [x] `tests/unit/control-secret-store.spec.ts` verifies missing/empty reads,
+  atomic `secrets.local.json` writes without temporary-file residue,
+  POSIX/Windows permission handling, invalid and reserved names, non-string
+  value rejection without leakage, concurrent writes, and single/bulk
+  deletion.
+- [x] `tests/unit/control-secrets-api.spec.ts` verifies empty/full/filtered
+  boolean presence maps, guarded single and batch updates, null/action
+  deletion, query/body deletion, persistence, and plaintext-free responses.
+- [x] `tests/e2e/control-page.spec.ts` verifies accessible dynamic credential
+  discovery, Missing/Configured transitions, save/clear/reopen and reload
+  persistence, execution failure before credentials, successful execution
+  after SecretStore injection, and zero leakage from inputs, page HTML, and
+  run logs in Chromium and WebKit.
+- [x] Phase 05 verification records `npm run typecheck` with 0 errors,
+  `npm run test:unit` at 248/248, `npm run test:control` at 6/6, and
+  254/254 combined unit and control E2E checks with zero secret leakage.
+
 ## Phase 2 acceptance criteria
 
 - [x] Exact job-action URL validation rejects sibling jobs, foreign origins,
@@ -358,14 +381,15 @@ The checked-in `config/projects.example.json` remains non-runnable with
 `.invalid` placeholders and a disabled auto-build example. Keep live project
 configuration and secret values outside the repository.
 
-For Phases 01–04, local values may be persisted only in
+For Phases 01–05, local values may be persisted only in
 `config/secrets.local.json`, which is ignored by `config/*.local.json`; keep
 that file and its directory protected by the operator/CI account's ACLs.
 The Phase 02 API remains loopback-only and exposes presence booleans. Phase 03
 control runs consume a per-run snapshot from that store; Phase 04 manages
 presence and guarded updates through the modal while wiping its input values.
-Direct report CLI and library runs still require the environment variables
-named by project configuration.
+Phase 05 verifies those persistence, API, and UI boundaries locally without
+contacting Jenkins or vendor services. Direct report CLI and library runs still
+require the environment variables named by project configuration.
 
 ## Traceability
 
@@ -380,19 +404,19 @@ named by project configuration.
 | Control UI credential management | `src/reporting/control-page/control-page.html`, `src/reporting/control-page/control-page.css`, `src/reporting/control-page/control-page.js` | [system architecture](./system-architecture.md), [codebase summary](./codebase-summary.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
-| SecretStore verification | `tests/unit/report-server-secret-store.spec.ts` | [release gates](./release-gates.md) |
+| SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |
 | Run-executor environment injection | `src/reporting/report-server-run-manager.ts`, `src/reporting/report-server-run-executor.ts`, `src/reporting/report-server.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
-| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, `tests/e2e/control-page.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
+| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, `tests/unit/control-secret-store.spec.ts`, `tests/unit/control-secrets-api.spec.ts`, `tests/e2e/control-page.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect policy | `src/jenkins/build-trigger.ts`, `src/project/auto-build-runner.ts` | [architecture](./architecture.md), [release gates](./release-gates.md) |
 
 ## Open scope
 
-Dynamic-credentials Phases 01–04 are complete through the local store, guarded
-presence API, per-run environment injection/redaction, and Control UI
-credential modal/state. Phase 05 owns the remaining unit/API/Playwright
-end-to-end verification. All future work must preserve server-side
+Dynamic-credentials Phases 01–05 are complete through the local store, guarded
+presence API, per-run environment injection/redaction, Control UI
+credential modal/state, and unit/API/Playwright end-to-end verification. No
+planned phase remains in this plan. All future work must preserve server-side
 configuration validation, loopback and CSRF protections, single-run/concurrency
 rules, explicit auto-build confirmation, no-process-global mutation, DOM
 secret wiping, and safe outcome mapping. The current report CLI still has no
@@ -408,3 +432,6 @@ production auto-build command.
 - Completed Phase 04 Control UI credential modal/state with dynamic discovery,
   guarded persistence/clear actions, presence badges, and zero-leakage input
   cleanup.
+
+- Completed Phase 05 unit, API, and Playwright E2E verification with
+  254/254 checks passing, zero secret leakage, and approved 9.5/10 review.

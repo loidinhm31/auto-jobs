@@ -41,13 +41,18 @@ test.describe('Control Secrets API - Operations', () => {
     expect(body).toEqual({ secrets: {} });
   });
 
-  test('GET /api/secrets returns boolean presence map for stored secrets', async ({ request }) => {
-    await serverHandle.secretStore!.putSecret('KEY_1', 'val-1');
-    await serverHandle.secretStore!.putSecret('KEY_2', 'val-2');
+  test('GET /api/secrets returns boolean presence map for stored secrets without leaking values', async ({ request }) => {
+    const rawVal1 = 'super-secret-pw-val-1';
+    const rawVal2 = 'super-secret-pw-val-2';
+    await serverHandle.secretStore!.putSecret('KEY_1', rawVal1);
+    await serverHandle.secretStore!.putSecret('KEY_2', rawVal2);
 
     const res = await request.get(`${serverUrl}api/secrets`);
     expect(res.status()).toBe(200);
-    const body = await res.json();
+    const rawText = await res.text();
+    expect(rawText).not.toContain(rawVal1);
+    expect(rawText).not.toContain(rawVal2);
+    const body = JSON.parse(rawText);
     expect(body).toEqual({
       secrets: {
         KEY_1: true,
@@ -87,6 +92,39 @@ test.describe('Control Secrets API - Operations', () => {
 
     const rawDisk = JSON.parse(fs.readFileSync(path.join(configRoot, SECRETS_FILE_NAME), 'utf8'));
     expect(rawDisk['JENKINS_PASSWORD']).toBe('secret-pass-789');
+  });
+  test('PUT /api/secrets without CSRF returns 403', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        origin,
+        'sec-fetch-site': 'same-origin',
+        'content-type': 'application/json',
+      },
+      data: { name: 'SOME_SECRET', value: 'secret-val' },
+    });
+
+    expect(res.status()).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.message).toContain('CSRF token');
+  });
+
+  test('PUT /api/secrets with invalid origin returns 403', async ({ request }) => {
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin: 'https://evil-attacker.example.com',
+        'sec-fetch-site': 'cross-site',
+        'content-type': 'application/json',
+      },
+      data: { name: 'SOME_SECRET', value: 'secret-val' },
+    });
+
+    expect(res.status()).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.message).toContain('Origin header');
   });
 
   test('PUT /api/secrets updates batch secrets with secrets object', async ({ request }) => {

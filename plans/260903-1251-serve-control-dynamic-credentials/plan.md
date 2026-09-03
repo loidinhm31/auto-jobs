@@ -1,7 +1,7 @@
 ---
 title: "Dynamic Credential Management and Persistence for Serve Control"
 description: "Enable operators to dynamically configure, persist, and update credentials via the serve:control UI into git-ignored config/secrets.local.json."
-status: in-progress
+status: completed
 priority: P2
 effort: 6h
 branch: main
@@ -37,12 +37,14 @@ This plan implements a clean, secure, and persistent credential management mecha
 | 02 | Control Secrets API & Security Gates | **DONE** | 1.0h | [phase-02-control-secrets-api.md](./phase-02-control-secrets-api.md) |
 | 03 | Run Executor Environment Injection | **DONE** | 1.0h | [phase-03-run-executor-environment-injection.md](./phase-03-run-executor-environment-injection.md) |
 | 04 | Control UI Credential Modal & State | **DONE** | 1.5h | [phase-04-control-ui-credential-management.md](./phase-04-control-ui-credential-management.md) |
-| 05 | Unit, API & Playwright E2E Verification | pending | 1.0h | [phase-05-test-suite-and-e2e-verification.md](./phase-05-test-suite-and-e2e-verification.md) |
+| 05 | Unit, API & Playwright E2E Verification | **DONE** | 1.0h | [phase-05-test-suite-and-e2e-verification.md](./phase-05-test-suite-and-e2e-verification.md) |
 
 Phase 01 completion: **DONE** — 2026-09-03T14:40:00+07:00
 Phase 02 completion: **DONE** — 2026-09-03T15:25:00+07:00
 Phase 03 completion: **DONE** — 2026-09-03T17:18:32+07:00
 Phase 04 completion: **DONE** — 2026-09-03T18:35:00+07:00
+Phase 05 completion: **DONE** — 2026-09-03T19:50:00+07:00
+Overall plan completion: **COMPLETED** — 2026-09-03T19:50:00+07:00
 
 ### Phase 03 Delivery Evidence
 - **Status**: **DONE** — 2026-09-03T17:18:32+07:00.
@@ -57,6 +59,19 @@ Phase 04 completion: **DONE** — 2026-09-03T18:35:00+07:00
 - **Code review**: [Phase 04 code review](../reports/code-review-260903-1829-phase-04-control-ui-credential-modal.md) — **APPROVED, 9.5/10**.
 - **Accessibility**: **0 Axe violations** in the dashboard and credential modal checks.
 - **Security**: **zero secret leakage**; saved values were absent from the DOM, API responses, and execution diagnostics.
+
+### Phase 05 Delivery Evidence
+- **Status**: **DONE** — 2026-09-03T19:50:00+07:00.
+- **Full Unit Validation**: `npm run test:unit` — **248/248 passed, 0 failed, 0 skipped**.
+- **Targeted Unit Specs**:
+  - `tests/unit/control-secret-store.spec.ts`: **7/7 passed**.
+  - `tests/unit/control-secrets-api.spec.ts`: **10/10 passed**.
+- **E2E Control Page Validation**: `npm run test:control` (Chromium + WebKit) — **6/6 passed, 0 failed, 0 skipped**.
+- **Code Review**: [Phase 05 Code Review](../reports/code-review-260903-1945-phase05-verification.md) — **APPROVED, 9.5/10**.
+- **Security Scope Delivered**:
+  - Atomicity, isolated locks, and 0o600 POSIX permissions verified in `SecretStore`.
+  - Redaction-by-default and CSRF/Origin 403 enforcement tested on `/api/secrets`.
+  - Full browser E2E lifecycle verified: initial run failure -> credential entry -> badge transition -> execution success -> zero DOM/log leakage -> persistence across reload.
 
 ## Dependencies
 

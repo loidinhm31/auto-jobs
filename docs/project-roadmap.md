@@ -1,17 +1,18 @@
 # Project roadmap
 
-Last updated: 2026-09-03T18:35:00+07:00  
+Last updated: 2026-09-03  
 Plan: [Dynamic Credential Management and Persistence for Serve Control](../plans/260903-1251-serve-control-dynamic-credentials/plan.md)
 
 ## Overall status
 
-- Status: **In progress**
-- Progress: **83%** (5.0 of 6 weighted planned hours; 4 of 5 phases complete)
-- Current milestone: **Phase 04 — Control UI credential modal and state DONE**
+- Status: **Complete**
+- Progress: **100%** (6.0 of 6 weighted planned hours; 5 of 5 phases complete)
+- Current milestone: **Phase 05 — Unit, API, and Playwright E2E verification DONE**
 - Phase 01 completed: **2026-09-03T14:40:00+07:00**
 - Phase 02 completed: **2026-09-03T15:25:00+07:00**
 - Phase 03 completed: **2026-09-03T17:18:32+07:00**
 - Phase 04 completed: **2026-09-03T18:35:00+07:00**
+- Phase 05 completed: **2026-09-03**
 
 ## Phase progress
 
@@ -21,7 +22,7 @@ Plan: [Dynamic Credential Management and Persistence for Serve Control](../plans
 | 2. Control secrets API and security gates | **DONE** | **100%** | 1.0h | [Phase 02](../plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md); [API tests](../tests/unit/control-secrets-api.spec.ts); [security tests](../tests/unit/control-secrets-security.spec.ts); [review](../plans/reports/code-review-260903-1510-phase-02-control-secrets-api.md) |
 | 3. Run executor environment injection | **DONE** | 100% | 1.0h | [Phase 03](../plans/260903-1251-serve-control-dynamic-credentials/phase-03-run-executor-environment-injection.md); [validation](../plans/reports/tester-260903-1640-phase-03-run-executor-environment-injection-cycle-2.md) — 239/239 unit, 37/37 targeted, 10/10 review |
 | 4. Control UI credential modal and state | **DONE** | **100%** | 1.5h | [Phase 04](../plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md); [validation](../plans/reports/tester-260903-1825-phase-04-control-ui-credential-modal-state-validation.md); [review](../plans/reports/code-review-260903-1829-phase-04-control-ui-credential-modal.md) |
-| 5. Unit, API, and Playwright E2E verification | Pending | 0% | 1.0h | [Phase 05](../plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md) |
+| 5. Unit, API, and Playwright E2E verification | **DONE** | **100%** | 1.0h | [Phase 05](../plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md); [SecretStore tests](../tests/unit/control-secret-store.spec.ts) 7/7; [API tests](../tests/unit/control-secrets-api.spec.ts) 10/10; [control E2E](../tests/e2e/control-page.spec.ts) 6/6; [review](../plans/reports/code-review-260903-1945-phase05-verification.md) — **APPROVED, 9.5/10** |
 
 ## Phase 01 milestone
 
@@ -82,15 +83,31 @@ Validation evidence:
 - [Phase 04 code review](../plans/reports/code-review-260903-1829-phase-04-control-ui-credential-modal.md): **APPROVED, 9.5/10**.
 - **Secret leakage**: zero observed; saved values absent from DOM, API responses, and execution logs.
 
+## Phase 05 milestone
+
+Completed the unit, API, and browser verification for dynamic credentials:
+
+- Added seven isolated `SecretStore` lifecycle tests for missing/empty reads, atomic writes and temporary-file cleanup, POSIX/Windows file handling, invalid and reserved keys, non-string value redaction, concurrent updates, and deletion/bulk operations.
+- Extended the secrets API operation tests to cover empty/full/filtered presence maps, guarded single and batch updates, null/action deletion, query/body deletion, persistence, and plaintext-free responses.
+- Extended the control-page E2E workflow to cover accessible credential management, Missing/Configured transitions, save/clear/reopen persistence, injected-credential execution, and zero leakage from inputs, page HTML, and run logs.
+
+Validation evidence:
+
+- `npm run typecheck` (`tsc --noEmit`): passed, 0 errors.
+- `npm run test:unit`: **248/248 passed, 0 failed, 0 skipped**.
+- `npm run test:control`: **6/6 passed, 0 failed, 0 skipped** across Chromium and WebKit.
+- Combined Phase 05 evidence: **254/254 passed**; zero secret leakage observed.
+- [Phase 05 code review](../plans/reports/code-review-260903-1945-phase05-verification.md): **APPROVED, 9.5/10**.
+
 ## Next milestones
 
-1. **Phase 05 — Unit, API, and Playwright E2E verification (0%)**: complete end-to-end security and regression evidence.
- 
+1. **Production hardening and release readiness**: retain the non-blocking follow-ups below, including Windows ACL review, before any live credential or Jenkins run.
+
 ## Review follow-up
 
-- Non-blocking review recommendation: reject prototype keys (`__proto__`, `prototype`, `constructor`) in a follow-up hardening change before production release.
-- Non-blocking Phase 02 follow-up: normalize the 415 error code to `UNSUPPORTED_MEDIA_TYPE` and add any remaining direct Host-header regression coverage.
-- Keep `report-server-secret-store.ts` focused; it is at the 200-line maintainability threshold.
+- Reserved prototype keys are explicitly rejected and covered by the Phase 05 SecretStore tests.
+- The `415` response maps to `UNSUPPORTED_MEDIA_TYPE`, and direct invalid-Host coverage is present in the control secrets security tests.
+- Before live use, review config-directory ACLs on Windows and keep `report-server-secret-store.ts` focused at the 200-line maintainability threshold.
 
 ## Changelog
 
@@ -110,6 +127,9 @@ Validation evidence:
 - Completed Phase 04 Control UI Credential Modal and State at 100%.
 - Added dynamic credential discovery, masked local save/clear flows, persistence status badges, and input cleanup.
 - Recorded Phase 04 validation: 243/243 tests passed, 0 Axe violations, zero secret leakage, and 9.5/10 approved code review.
+
+- Completed Phase 05 unit, API, and Playwright E2E verification at 100%.
+- Recorded 248/248 unit tests, 6/6 control E2E tests across Chromium and WebKit, 254/254 combined passes, zero secret leakage, and 9.5/10 code review approval.
 
 ## Unresolved questions
 

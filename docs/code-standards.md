@@ -1,9 +1,9 @@
 # Code standards
 
 This guide describes the conventions enforced by the current TypeScript
-source tree. It complements [architecture](./architecture.md) and the
-[system architecture](./system-architecture.md); it is not a replacement for
-schema or security validation.
+source tree and the Phase 05 verification boundary. It complements
+[architecture](./architecture.md) and the [system architecture](./system-architecture.md);
+it is not a replacement for schema or security validation.
 
 ## Core principles
 
@@ -232,14 +232,24 @@ Tests must defend observable behavior and fail on plausible regressions:
 - For `SecretStore`, use isolated temporary directories and assert empty/missing
   reads, strict key/value validation, size and malformed-content rejection,
   sorted/frozen snapshots, atomic mutation/deletion, concurrent update
-  preservation, redaction, and control-server wiring.
+  preservation, redaction, and control-server wiring. The dedicated
+  `tests/unit/control-secret-store.spec.ts` suite additionally proves
+  temporary-file cleanup and platform-specific permission handling.
 - For the secrets API, cover unfiltered and filtered boolean presence maps,
   single/batch patch and deletion forms, persistence, and the invariant that
-  plaintext never appears in responses.
+  plaintext never appears in responses. The operation contract is exercised by
+  `tests/unit/control-secrets-api.spec.ts`; security-gate cases remain in
+  `tests/unit/control-secrets-security.spec.ts`.
 - For the security boundary, cover invalid Host/Origin/Fetch Metadata/CSRF,
   non-JSON content types, invalid keys/values/bodies, unsupported methods, and
   the unavailable-store response. Use the real loopback server plus a direct
   handler test only for the missing dependency boundary.
+- For the dynamic-credential browser flow, `tests/e2e/control-page.spec.ts`
+  must run against isolated temporary roots in Chromium and WebKit. Cover
+  accessible modal state, key discovery, Missing/Configured transitions,
+  guarded save/clear requests, persistence after reopen/reload, injected
+  execution, input wiping, and absence of submitted values from page HTML and
+  run logs.
 - For control-run execution, `tests/unit/control-run-executor-secrets.spec.ts`
   must cover report and auto-build `runtimeEnvironment` injection,
   stored-over-base precedence, non-mutation of the base environment, and
