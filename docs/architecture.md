@@ -4,8 +4,11 @@ This document describes the implemented schema-v1 configuration and the two
 explicit execution paths: report capture and the target-branch Jenkins
 auto-build workflow. Phase 3 adds an offline build-page fixture and an exact
 route map so the auto-build path can be exercised without live side effects.
-The report command remains report-only; auto-build is an explicit library
-boundary and is not inferred from URLs, selectors, CLI names, or environment.
+Phase 01 adds a local, validated SecretStore persistence seam for future
+control-plane credential management; it is wired only in control mode and is
+not yet an HTTP API or run-environment source. The report command remains
+report-only; auto-build is an explicit library boundary and is not inferred
+from URLs, selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -204,6 +207,11 @@ CSS. Selector values do not change the configured `jobUrl` or branch identity.
 | `src/config.ts` | Re-exports config types, loader, and selection helpers. |
 | `src/jenkins/runner-config.ts` | Carries required build selectors into Jenkins runner configuration. |
 | `config/projects.example.json` | Shows explicit enabled report and disabled auto-build project entries. |
+| `src/reporting/report-server-constants.ts` | Defines the fixed secret filename and 1 MiB secret-file boundary. |
+| `src/reporting/report-server-secret-store.ts` | Canonical, atomic, locked local secret persistence and validated read/list/update/delete operations. |
+| `src/reporting/report-server-control.ts` | Carries the optional `SecretStore` dependency in `ControlRouterContext`; no secret endpoint is dispatched yet. |
+| `src/reporting/report-server.ts` | Creates the `SecretStore` in loopback control mode and exposes it on `ReportServerHandle`. |
+| `tests/unit/report-server-secret-store.spec.ts` | Exercises key/value validation, empty/malformed input, deterministic persistence, deletion, concurrency, redaction, and server wiring. |
 
 ### Secret resolution
 
@@ -222,6 +230,28 @@ At run time, the corresponding environment values are required for each
 enabled project. Values are not copied into normalized configuration,
 diagnostics, URLs, screenshots, traces, storage state, or reports. The JSON
 must never contain passwords, tokens, cookies, or credential-bearing URLs.
+
+Phase 01 adds a separate local `SecretStore` backend for control-plane
+credential persistence. `createSecretStore(configRoot)` canonicalizes an
+existing, non-symlinked directory and fixes the target to
+`config/secrets.local.json`; callers cannot choose a filename or path. A
+missing or empty file reads as an empty map. Existing content must be a JSON
+object no larger than `MAX_SECRET_FILE_BYTES` (1 MiB), with keys matching
+`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and string values.
+
+`readSecrets()` and `listSecretNames()` return frozen snapshots. Mutations use
+`putSecret`, `putSecrets`, `deleteSecret`, or `deleteSecrets`; each validates
+names and values, reads the latest map under an in-memory write lock, sorts
+keys, and serializes deterministic JSON. Writes create an exclusive sibling
+temporary file with mode `0o600`, write and sync it, close it, then rename it
+over the fixed target. A failed rename removes the temporary file and leaves
+the previous target in place. Windows does not enforce POSIX mode bits as an
+ACL boundary, so directory ACLs remain the protection boundary there.
+
+Control mode initializes one store alongside `ConfigStore` and exposes it on
+the server handle and router context. Phase 01 does not expose secret values
+through an HTTP endpoint or inject them into execution environments; those
+operations belong to later control-plane phases.
 
 ### Test configuration
 
@@ -394,6 +424,10 @@ GET/HEAD below the canonical root.
 - Single-mode execution (`POST /api/run`) for `report` or `auto-build` runs;
 - Run status and live logs (`GET /api/run`);
 - Local immutable report links (`GET /reports/...`).
+Control mode also initializes `SecretStore` against the configured `configRoot`.
+The Phase 01 backend is available to later API and run-executor phases, but
+the current router does not expose `/api/secrets` and no execution environment
+is merged from this file yet.
 
 Control mode is restricted strictly to loopback (`127.0.0.1` / `localhost`) and refuses LAN binding. All mutations require strict Host and Origin validation and CSRF protection.
 

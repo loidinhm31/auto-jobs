@@ -1,7 +1,8 @@
 # System architecture
 
-This is the component-level view of `auto-jobs` after Phase 3. The repository
-has two intentionally separate execution paths:
+This is the component-level view of `auto-jobs` after Phase 3 and Phase 01 of
+the dynamic-credentials plan. The repository has two intentionally separate
+execution paths plus a local persistence seam:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
@@ -10,16 +11,22 @@ has two intentionally separate execution paths:
   safe in-memory outcome and does not capture or publish reports.
 - **Offline fixture:** load the checked-in nine-file corpus and fulfill only
   exact synthetic URLs for deterministic report and auto-build tests.
+- **SecretStore backend:** persist validated local credential values outside
+  project JSON; Phase 01 wires the store into control mode without exposing a
+  secret API or injecting values into runs yet.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
-for JSON details and [release gates](./release-gates.md) for validation commands.
+for JSON and credential details and [release gates](./release-gates.md) for
+validation commands.
 
 ## Context and boundaries
 
 ```mermaid
 flowchart TB
   Operator[Operator or future integration] --> ConfigFile[Schema-v1 project JSON]
+  ConfigRoot[Existing config/ directory] --> SecretStore[SecretStore backend]
+  SecretStore -. control mode handle/context; no API or run injection yet .-> Control[Loopback control server]
   Secrets[CI secret store / environment] --> Executor
   ConfigFile --> Loader[Validate and normalize]
   Loader --> Selector{Explicit mode and project selection}
@@ -33,9 +40,13 @@ flowchart TB
 
 The loader and selection helpers are pure configuration boundaries. Browser
 launch, credentials, and network I/O begin only after a caller has selected an
-executor. The report server reads an existing canonical report root; it is not
-a build or report-generation API. No writable control-plane server is part of
-the current implementation.
+executor. In control mode, `createReportServer` creates both `ConfigStore` and
+`SecretStore` from the configured `configRoot`; the latter fixes its target to
+`secrets.local.json` under that canonical directory. Current executors still
+resolve credentials from their supplied environment, so the Phase 01 store is
+not an execution override. The report server reads an existing canonical report
+root and is not a build or report-generation API. Control mode is loopback-only;
+its secret-management HTTP API and run-environment injection are later phases.
 
 ## Mode dispatch
 
@@ -173,8 +184,8 @@ fields.
 
 ## Persistence and serving
 
-Only the report path writes artifacts. Each report run uses a validated project
-ID and immutable run ID below the canonical report root:
+Only the report path writes report artifacts. Each report run uses a validated
+project ID and immutable run ID below the canonical report root:
 
 ```text
 reports/
@@ -193,6 +204,41 @@ leases, recovers aggregate publication, and performs bounded orphan cleanup.
 `src/reporting/` escapes rendered values, validates links, sets CSP headers,
 and serves only safe GET/HEAD files below the canonical root. The server is
 read-only, unauthenticated, and loopback by default.
+
+## Local secret-store subsystem
+
+`src/reporting/report-server-secret-store.ts` is a persistence-only backend
+for control-plane credentials. `createSecretStore(configRoot)` accepts an
+existing real directory, resolves it to its canonical path, and derives one
+fixed target: `secrets.local.json`. It rejects a missing/non-directory or
+symlinked root; it never accepts a path or filename from a request.
+
+The store contract is:
+
+| Operation | Observable contract |
+| --- | --- |
+| `readSecrets()` | Reads a fresh validated map; missing or empty files return `{}` and the returned object is frozen. |
+| `listSecretNames()` | Returns sorted, frozen key names without values. |
+| `putSecret(name, value)` | Validates one environment-style name and string value, then read-modify-writes under the lock. |
+| `putSecrets(entries)` | Validates all entries before applying a bulk read-modify-write. |
+| `deleteSecret(name)` / `deleteSecrets(names)` | Validate names and remove existing keys; deleting absent keys is a no-op. |
+
+Keys must match `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`; values remain strings and
+are never coerced. The file and serialized payload are capped at
+`MAX_SECRET_FILE_BYTES` (1 MiB). Updates use one in-memory write mutex so
+concurrent callers preserve each other's changes. Serialization sorts keys
+lexicographically and writes a sibling temporary file with exclusive creation,
+mode `0o600`, `fsync`, close, and same-directory rename. A rename failure
+removes the temporary file and leaves the prior target unchanged; write/sync
+failures close the handle, while cleanup of a partially written temporary file
+is best-effort. On Windows, mode bits are not an ACL boundary; protect the
+config directory with appropriate user/CI ACLs.
+
+`createReportServer` creates the store only in loopback control mode and
+exposes it through `ReportServerHandle` and `ControlRouterContext`. The current
+router has no `/api/secrets` dispatch, and current report/auto-build execution
+still consumes its supplied environment. Secret API and run-environment
+injection are separate follow-on phases.
 
 ## Offline template fixture subsystem
 
@@ -234,6 +280,11 @@ that route authenticated.
 
 - Configuration and selection tests exercise normalization, explicit mode
   gating, disabled projects, selector requirements, and legacy-key rejection.
+- `tests/unit/report-server-secret-store.spec.ts` uses isolated temporary
+  config/report roots to prove key/value validation, empty/malformed/object
+  handling, sorted and frozen snapshots, bulk updates/deletions, concurrent
+  mutation serialization, redaction, and control-server wiring. It does not
+  contact a live service.
 - `tests/unit/jenkins-build-trigger.spec.ts` uses an in-process HTTP server to
   prove exact request order, scoped controls, form/action validation, one POST,
   HTTP response states, unknown-after-POST, and diagnostic redaction.
@@ -262,3 +313,8 @@ that route authenticated.
    matching POST.
 6. Preserve one absolute deadline, bounded cleanup, secret redaction, and the
    existing canonical report-root/security policy.
+7. Keep local secrets outside project JSON, restrict names and payload size,
+   serialize sorted keys atomically, and never expose values in diagnostics or
+   HTTP responses.
+8. Treat Windows file-mode bits as advisory; rely on protected config-directory
+   ACLs and keep secret API/run-environment integration behind its own phase.

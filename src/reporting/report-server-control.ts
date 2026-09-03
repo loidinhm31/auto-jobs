@@ -9,12 +9,14 @@ import {
 } from './report-server-control-security.js';
 import { sendError, sendJson } from './report-server-json.js';
 import type { ConfigStore } from './report-server-config-store.js';
+import type { SecretStore } from './report-server-secret-store.js';
 import type { RunManager } from './report-server-run-manager.js';
 import { getControlCss, getControlJs, renderControlPageHtml } from './report-server-control-page.js';
 import { handleConfigApi, handleRunApi } from './report-server-control-api.js';
 
 export interface ControlRouterContext {
   readonly configStore: ConfigStore;
+  readonly secretStore?: SecretStore;
   readonly runManager: RunManager;
   readonly reportRoot: string;
   readonly host: string;

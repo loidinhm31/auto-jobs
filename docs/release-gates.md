@@ -1,9 +1,9 @@
 # Release gates
 
 This project has deterministic local gates for native browsers, offline report
-fixtures, and the Phase 3 build-page fixture. The commands below are the
-current release contract; test counts are intentionally not hard-coded because
-they change with the test suite.
+fixtures, the Phase 3 build-page fixture, and the Phase 01 SecretStore backend.
+The commands below are the current release contract; test counts are
+intentionally not hard-coded because they change with the test suite.
 
 ## Gate order
 
@@ -136,9 +136,9 @@ The focused tests cover:
 
 These tests use an in-process HTTP server or injected browser/workflow
 dependencies. They do not contact a live Jenkins controller and do not prove
-that a build was created. Before any authorized live run, follow the
-[preflight contract](../plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md)
-and treat `submission-unknown` as an indeterminate external side effect.
+that a build was created. Before any authorized live run, apply the exact
+side-effect rules in [architecture](./architecture.md) and treat
+`submission-unknown` as an indeterminate external side effect.
 
 ## Report server gate
 
@@ -203,6 +203,34 @@ Deterministic testing of the Control API and UI is executed via:
 npm run test:control
 ```
 which exercises config reading/atomic saving, validation errors, report execution, auto-build confirmation dialogs, and WCAG A/AA accessibility scanning in Chromium and WebKit.
+
+## Phase 01 SecretStore gate
+
+Run the focused backend contract:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/report-server-secret-store.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The test uses isolated temporary config/report roots and verifies:
+
+- environment-style key validation and rejection of traversal/dashed/dotted or
+  numeric-leading names;
+- missing/empty, malformed, array/null, non-string, and non-existent-root
+  handling;
+- sorted JSON persistence, frozen read/list snapshots, bulk updates and
+  deletions, and the 1 MiB boundary;
+- concurrent read-modify-write preservation under the in-memory lock;
+- secret values absent from validation errors; and
+- `createReportServer(..., { mode: 'control' })` wiring the store to the
+  server handle and fixed `secrets.local.json` path.
+
+This gate performs local filesystem I/O only. It does not expose an HTTP secret
+endpoint, inject values into an execution environment, contact Jenkins, or
+prove Windows ACL enforcement. On Windows, review the config-directory ACL
+separately because POSIX `0o600` mode bits are advisory.
 
 ## Browser-fixture boundary
 

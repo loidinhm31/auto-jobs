@@ -161,6 +161,34 @@ Set the referenced names in the shell or CI secret store before running. Do
 not put usernames, passwords, tokens, cookies, or credential-bearing URLs in
 the JSON, source tree, traces, screenshots, or reports.
 
+#### Local SecretStore (Phase 01)
+
+Dynamic credential persistence is deliberately separate from the schema-v1
+document. In control mode, `createReportServer` initializes
+`createSecretStore(configRoot)` and fixes its target to
+`<configRoot>/secrets.local.json`; the directory must already exist, be a real
+directory, and not be a symlink. The filename is not configurable.
+
+`secrets.local.json` is covered by the repository's `config/*.local.json`
+ignore rule. Store content is a JSON object capped at 1 MiB. Keys must match
+`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and values must be strings. Missing or empty
+files read as an empty map; malformed JSON, arrays, non-string values, invalid
+names, oversized files, and non-regular/symlinked files fail closed.
+
+The backend exposes `readSecrets`, `listSecretNames`, `putSecret`,
+`putSecrets`, `deleteSecret`, and `deleteSecrets`. Reads return frozen
+snapshots. Mutations perform a latest-file read/modify/write under an
+in-process lock, sort keys, and atomically replace the target through an
+exclusive sibling temporary file (`0o600`, sync, close, rename). Secret values
+are never returned by a names-only listing or included in diagnostics. POSIX
+mode bits are not a Windows ACL boundary; protect the config directory with
+appropriate user/CI ACLs.
+
+Phase 01 only supplies this persistence backend to the control server. The
+current `/api` router has no secrets endpoint, and report/auto-build execution
+still resolves the environment passed by its caller. API exposure and
+run-environment merging are later phases.
+
 ## Source settings and validation
 
 Source settings are optional but useful for complete evidence:

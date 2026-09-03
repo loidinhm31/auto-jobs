@@ -1,71 +1,57 @@
 # Project roadmap
 
-Last updated: 2026-09-02T16:57:40+07:00  
-Plan: [Jenkins Control Page and Auto-Build](../plans/260902-0251-jenkins-control-page-and-auto-build/plan.md)
+Last updated: 2026-09-03T14:40:00+07:00  
+Plan: [Dynamic Credential Management and Persistence for Serve Control](../plans/260903-1251-serve-control-dynamic-credentials/plan.md)
 
 ## Overall status
 
 - Status: **In progress**
-- Progress: **46%** (24 of 52 weighted planned hours; 3 of 5 phases complete)
-- Current milestone: **Phase 3 — Build-page fixture and exact routes DONE**
-- Phase 3 completed: **2026-09-02T16:57:40+07:00**
-- Phase 2 completed: **2026-09-02T14:30:11+07:00**
+- Progress: **25%** (1.5 of 6 weighted planned hours; 1 of 5 phases complete)
+- Current milestone: **Phase 01 — SecretStore Backend Module DONE**
+- Phase 01 completed: **2026-09-03T14:40:00+07:00**
 
 ## Phase progress
 
 | Phase | Status | Progress | Effort | Evidence/detail |
 |---|---|---:|---:|---|
-| 1. Configuration and run contracts | Completed | 100% | 6h | [Phase 1](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-01-configuration-run-contracts.md) |
-| 2. Jenkins auto-build workflow | **DONE** | **100%** | 10h | [Phase 2](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-02-jenkins-auto-build-workflow.md) |
-| 3. Build-page fixture and routes | **DONE** | **100%** | 8h | [Phase 3](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-03-build-template-fixture.md) |
-| 4. Control Page server, API, and UI | Pending | 0% | 18h | [Phase 4](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-04-control-page-server-and-ui.md) |
-| 5. Verification, quality gates, and docs | Pending | 0% | 10h | [Phase 5](../plans/260902-0251-jenkins-control-page-and-auto-build/phase-05-verification-and-documentation.md) |
+| 1. SecretStore backend module | **DONE** | **100%** | 1.5h | [Phase 01](../plans/260903-1251-serve-control-dynamic-credentials/phase-01-backend-secret-store.md); [review](../plans/260903-1251-serve-control-dynamic-credentials/reports/code-review-260903-1422-secret-store-backend.md) |
+| 2. Control secrets API and security gates | Pending | 0% | 1.0h | [Phase 02](../plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md) |
+| 3. Run executor environment injection | Pending | 0% | 1.0h | [Phase 03](../plans/260903-1251-serve-control-dynamic-credentials/phase-03-run-executor-environment-injection.md) |
+| 4. Control UI credential modal and state | Pending | 0% | 1.5h | [Phase 04](../plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md) |
+| 5. Unit, API, and Playwright E2E verification | Pending | 0% | 1.0h | [Phase 05](../plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md) |
 
-## Phase 2 milestone
+## Phase 01 milestone
 
-Delivered the isolated, target-branch auto-build path:
+Delivered the secure local SecretStore foundation:
 
-- Reuses validated Jenkins login and exact configured `jobUrl` navigation.
-- Validates the scoped **Build with Parameters** link and **Build** button/form before any side effect.
-- Observes exactly one build POST and classifies `submitted`, `rejected`, or `submission-unknown` without automatic retry.
-- Keeps auto-build execution separate from report capture; `npm run report` excludes auto-build projects.
-- Uses a fresh browser context, bounded cleanup, and secret-redacted outcomes.
-
-Validation evidence:
-
-- [Tester validation](../plans/reports/tester-260902-1302-phase-02-jenkins-auto-build-workflow.md): fresh `npm test` passed with 190 unit and 5 e2e tests; direct full Playwright run passed 201 tests.
-- [Code review](../plans/reports/code-review-260902-1311-phase-02-jenkins-auto-build-workflow.md): 10/10, no critical issues or warnings; all modified production files remain below 200 lines.
-
-The earlier failed test run is superseded by the fresh passing rerun; no Phase 2 blocker remains. Live Jenkins execution remains intentionally outside deterministic validation and requires the [preflight contract](../plans/260902-0251-jenkins-control-page-and-auto-build/preflight-contract-and-side-effects.md).
-
-## Phase 3 milestone
-
-Delivered the bounded build-page fixture and exact offline routes:
-
-- Added the ninth fixture file under existing per-file and cumulative read budgets.
-- Validated canonical build-page/form identities derived from saved Jenkins links.
-- Fulfilled only the exact build-page GET and one build-action POST; redirect returns the exact job URL.
-- Preserved report-only navigation and blocked unmatched methods/URLs with sanitized misses.
+- Persists only to git-ignored `config/secrets.local.json`.
+- Validates secret names and values, enforces the 1 MiB payload limit, and redacts errors.
+- Serializes concurrent writes and uses `0o600` temp files, `sync`, and atomic rename.
+- Returns immutable secret maps and name lists without exposing plaintext through server wiring.
 
 Validation evidence:
 
-- [Tester validation](../plans/reports/tester-260902-1443-phase-03-build-template-fixture.md): final requested runs passed 203/203; typecheck and production build passed.
-- [Code review](../plans/reports/code-review-260902-1443-phase-03-build-template-fixture.md): 10/10, no critical issues or warnings; all changed files remain under 200 LOC.
+- [Code review](../plans/260903-1251-serve-control-dynamic-credentials/reports/code-review-260903-1422-secret-store-backend.md): approved at 9.5/10 with no critical issues; typecheck, production build, 215 unit tests, and git-ignore verification passed.
 
 ## Next milestones
 
-1. **Phase 4 — Control Page server, API, and UI (0%)**: expose loopback-only config/run controls with CSRF, ETag, and sanitized DTO boundaries.
-2. **Phase 5 — Verification, quality gates, and docs (0%)**: complete cross-browser/UI/security evidence and release documentation.
+1. **Phase 02 — Control secrets API and security gates (0%)**: expose redacted secret status and guarded mutation/clear operations.
+2. **Phase 03 — Run executor environment injection (0%)**: apply stored secrets per execution without mutating `process.env`.
+3. **Phase 04 — Control UI credential modal and state (0%)**: provide discovery, masking, persistence status, and clear actions.
+4. **Phase 05 — Unit, API, and Playwright E2E verification (0%)**: complete end-to-end security and regression evidence.
+
+## Review follow-up
+
+- Non-blocking review recommendation: reject prototype keys (`__proto__`, `prototype`, `constructor`) in a follow-up hardening change before production release.
+- Keep `report-server-secret-store.ts` focused; it is at the 200-line maintainability threshold.
 
 ## Changelog
 
-### 0.1.0 (development) — 2026-09-02
+### 0.1.0 (development) — 2026-09-03
 
-- Completed Phase 2 Jenkins target-branch auto-build workflow at 100%.
-- Recorded exactly-once POST and unknown-after-POST safety semantics.
-- Updated plan status/progress and linked validation/review evidence.
-- Completed Phase 3 build-page fixture and exact offline routes at 100%.
-- Linked final validation evidence (203 passing executions, typecheck, production build) and 10/10 code review.
+- Completed Phase 01 SecretStore backend module at 100%.
+- Added atomic, bounded, permission-conscious local secret persistence with redacted error handling.
+- Linked Phase 01 implementation and 9.5/10 review evidence.
 
 ## Unresolved questions
 

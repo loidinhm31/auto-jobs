@@ -33,6 +33,7 @@ schema or security validation.
 | `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
 | `src/reporting/` | Static report rendering, links, and read-only report serving. |
 | `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
+| `src/reporting/report-server-secret-store.ts` | Local credential persistence only: canonical fixed filename, validation, atomic locked writes, and read/list/update/delete operations. |
 | `src/templates/` | Offline fixture types, safe file loading, HTML/Sonar/build validation, exact route installation, and the public facade only. |
 | `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
 | `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
@@ -125,6 +126,26 @@ Compiler settings in `tsconfig.json` are the source of truth:
   Environment precedence is explicit in `launchOptions`; do not duplicate
   parsing in another runner.
 
+## Local secret persistence
+
+- Keep credential values out of project JSON. The `SecretStore` target is the
+  fixed `secrets.local.json` filename below the canonical, existing config
+  directory; never accept a path or filename from a caller.
+- Validate every key against
+  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and require string values. Reject
+  malformed JSON, arrays/null, non-regular or symlinked files, and files or
+  serialized payloads over `MAX_SECRET_FILE_BYTES` (1 MiB). A missing/empty file
+  is an empty map.
+- Return frozen snapshots from reads/listing. Validate complete bulk input
+  before mutation. Serialize lexicographically sorted keys.
+- Serialize each read-modify-write under an in-memory mutex. Write to an
+  exclusive sibling temporary file with `0o600`, sync and close it, then rename
+  it over the target. Remove the temporary file after a failed rename; never
+  truncate the target in place.
+- Do not include values in errors, logs, HTTP responses, test output, or
+  diagnostics. POSIX mode bits are advisory on Windows; rely on config-directory
+  ACLs for access control.
+
 ## Deadlines, cleanup, and errors
 
 - Create one `WorkflowDeadline` per project execution and pass it through
@@ -149,6 +170,10 @@ Tests must defend observable behavior and fail on plausible regressions:
 - Use injected browser/workflow dependencies or an in-process HTTP server for
   Jenkins action tests. Do not contact a live controller from deterministic
   gates.
+- For `SecretStore`, use isolated temporary directories and assert empty/missing
+  reads, strict key/value validation, size and malformed-content rejection,
+  sorted/frozen snapshots, atomic mutation/deletion, concurrent update
+  preservation, redaction, and control-server wiring.
 - For auto-build, assert structural scoping, exact action identity, form
   method/classes, one POST, response classification, unknown-after-POST, no
   retry, mode/enabled gates, secret redaction, and resource cleanup.

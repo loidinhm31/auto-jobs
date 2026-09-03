@@ -6,6 +6,7 @@ import { assertReportRoot } from './report-server-file-io.js';
 import { handleReportRequest } from './report-server-files.js';
 import { handleControlRequest } from './report-server-control.js';
 import { createConfigStore } from './report-server-config-store.js';
+import { createSecretStore, type SecretStore } from './report-server-secret-store.js';
 import { createRunManager, type RunManagerOptions } from './report-server-run-manager.js';
 
 const SHUTDOWN_GRACE_MS = 2_000;
@@ -27,6 +28,7 @@ export interface ReportServerHandle {
   readonly url: string;
   readonly mode: 'report' | 'control';
   readonly csrfToken?: string | undefined;
+  readonly secretStore?: SecretStore | undefined;
   readonly close: () => Promise<void>;
 }
 
@@ -69,12 +71,14 @@ export async function createReportServer(
   const rootIdentity = mode === 'report' ? (await assertReportRoot(reportRoot)).identity : undefined;
 
   let csrfToken: string | undefined;
+  let secretStore: SecretStore | undefined;
   let controlContext: Parameters<typeof handleControlRequest>[0] | undefined;
 
   if (mode === 'control') {
     csrfToken = randomBytes(32).toString('hex');
     const configRoot = options.configRoot ?? 'config';
     const configStore = await createConfigStore(configRoot);
+    secretStore = await createSecretStore(configRoot);
     const runManager = createRunManager({
       configStore,
       reportRoot: root,
@@ -82,6 +86,7 @@ export async function createReportServer(
     });
     controlContext = {
       configStore,
+      secretStore,
       runManager,
       reportRoot: root,
       host,
@@ -158,6 +163,7 @@ export async function createReportServer(
     url: `http://${formattedHost}:${address.port}/`,
     mode,
     csrfToken,
+    secretStore,
     close,
   };
 }
