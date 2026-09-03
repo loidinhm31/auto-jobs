@@ -1,9 +1,9 @@
 # System architecture
 
 This is the component-level view of `auto-jobs` after Phase 3 and dynamic-
-credentials Phases 01–03. The repository has two intentionally separate
-execution paths plus a local persistence seam, a loopback control API, and a
-control-run environment boundary:
+credentials Phases 01–04. The repository has two intentionally separate
+execution paths plus a local persistence seam, a loopback control API/UI, and
+a control-run environment boundary:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
@@ -15,6 +15,9 @@ control-run environment boundary:
 - **SecretStore and secrets API:** persist validated local credential values
   outside project JSON and expose only boolean presence through guarded
   `/api/secrets` operations.
+- **Control UI:** discover credential-variable names from the active
+  configuration, show presence-only state, persist guarded replacements, and
+  wipe password inputs on save, clear, or close.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
@@ -319,6 +322,80 @@ Values never appear in success or error responses. Invalid names/values and
 malformed bodies return `400`; invalid mutation gates return `403`, a
 non-JSON mutation body returns `415`, an unavailable store returns `503`, and
 unsupported methods return `405` with `Allow: GET, PUT, DELETE`.
+
+### Control UI credential dialog (Phase 04)
+
+The loopback page at `/` includes a `Credentials` action and a native
+`<dialog>` backed by `control-page.html`, `control-page.css`, and
+`control-page.js`. Control-page rendering replaces the HTML CSRF placeholder
+with the server's per-instance token. The UI reads that token from the
+`meta[name="csrf-token"]` element; `apiFetch` adds it as `x-csrf-token` to
+every `POST`, `PUT`, and `DELETE`.
+
+Opening the dialog derives the required environment-variable names from the
+currently loaded configuration. Project credential references take precedence
+over defaults (including normalized `credentialVariables` references); when
+references are omitted, the UI uses `JENKINS_USERNAME` and
+`JENKINS_PASSWORD`. Names are deduplicated and sorted before the request. The
+dialog then calls `GET /api/secrets?keys=...`, which is Host-checked and
+returns only `true`/`false` presence values. Each key is rendered as a
+**Configured** or **Missing** badge with a blank `type="password"` input. A
+configured key also gets a per-row **Clear** action.
+
+The operator workflow is:
+
+1. Click **Credentials**; the dialog shows a loading state while presence is
+   fetched, or a bounded error message when the request fails.
+2. Enter one or more replacement values. Blank inputs mean “keep the existing
+   value”; the browser collects only non-empty, trimmed fields.
+3. Click **Save Credentials**. The UI sends
+   `PUT /api/secrets` with a JSON `{ "secrets": { ... } }` patch. The server
+   applies the Host, same-origin Origin, Fetch Metadata, timing-safe CSRF,
+   JSON-content-type, and body-size gates, persists the patch atomically, and
+   returns a presence map. On success the changed inputs are immediately
+cleared, their badges become **Configured**, and **Clear** actions are added.
+4. Click a row's **Clear** action to send a CSRF-protected,
+   bodyless `DELETE /api/secrets?name=...`. A successful deletion clears that
+   input, changes its badge to **Missing**, and removes the row action.
+5. Cancel or otherwise close the dialog. Its `close` handler clears every
+   credential input and the modal status message, so unsaved values do not
+   remain in the DOM. Reopening performs a fresh presence-only lookup.
+
+Secret values are transient in the password control while being edited and in
+the one mutation request body. They are never used as labels, status text,
+URLs, or HTML; API success/error payloads contain no values. Save, clear, and
+close wipe input values, while persistence and later control runs use the
+server-side SecretStore/redaction boundary described below. This keeps the
+modal's observable state limited to variable names, presence badges, and
+bounded operation messages.
+
+```mermaid
+sequenceDiagram
+  participant Operator
+  participant UI as Control page
+  participant API as Loopback secrets API
+  participant Store as SecretStore
+  Operator->>UI: Open Credentials
+  UI->>API: GET /api/secrets?keys=...
+  API->>Store: Read names/presence
+  Store-->>API: Boolean presence map
+  API-->>UI: Presence only
+  Operator->>UI: Enter non-empty values
+  UI->>API: PUT /api/secrets + CSRF + JSON
+  API->>Store: Validate and atomic update
+  Store-->>API: Updated presence
+  API-->>UI: Presence only
+  UI->>UI: Wipe submitted inputs; update badges
+  Operator->>UI: Clear or close
+  UI->>API: DELETE /api/secrets?name=... or wipe locally
+```
+
+The browser-facing contract is covered by
+`tests/e2e/control-page.spec.ts`: it checks modal accessibility, default
+missing badges, save/clear/reopen transitions, input wiping, and absence of a
+test secret in page HTML. The E2E fixture uses an isolated temporary
+SecretStore and injected run executors; it does not contact Jenkins.
+
 ### Control-run redaction boundary
 
 SecretStore values are never sent in the `/api/run` request or returned by the

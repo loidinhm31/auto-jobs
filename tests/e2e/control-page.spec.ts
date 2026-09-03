@@ -165,4 +165,93 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(page.locator('#run-status-badge')).toHaveText('succeeded', { timeout: 10_000 });
     await expect(page.locator('#run-logs')).toContainText('Auto-build run finished with state: submitted');
   });
+
+  test('manages credentials in credential dialog with full a11y, saving, clearing, and zero leakage', async ({ page }) => {
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    const credBtn = page.locator('#btn-credentials');
+    await expect(credBtn).toBeVisible();
+    await credBtn.click();
+
+    const credDialog = page.locator('#credentials-dialog');
+    await expect(credDialog).toBeVisible();
+
+    // Verify Axe accessibility while modal is open
+    const modalA11y = await new AxeBuilder({ page }).analyze();
+    expect(modalA11y.violations).toEqual([]);
+
+    // Check discovered credential keys
+    const passwordInput = page.locator('#secret-input-JENKINS_PASSWORD');
+    const usernameInput = page.locator('#secret-input-JENKINS_USERNAME');
+    await expect(passwordInput).toBeVisible();
+    await expect(usernameInput).toBeVisible();
+
+    // Verify initial badges are 'Missing'
+    const badges = credDialog.locator('.badge');
+    await expect(badges).toHaveCount(2);
+    await expect(badges.nth(0)).toHaveText('Missing');
+    await expect(badges.nth(1)).toHaveText('Missing');
+
+    // Save with no changes entered
+    const saveCredBtn = page.locator('#btn-save-credentials');
+    await saveCredBtn.click();
+    await expect(page.locator('#credentials-message')).toHaveText(/No changes entered/i);
+
+    // Enter secret values
+    const testPass = 'super-secret-pw-12345';
+    const testUser = 'admin-user-jenkins';
+    await passwordInput.fill(testPass);
+    await usernameInput.fill(testUser);
+
+    // Save
+    await saveCredBtn.click();
+
+    await expect(page.locator('#credentials-message')).toHaveText(/Credentials saved successfully/i);
+    await expect(page.locator('#status-banner')).toHaveText(/Credentials saved successfully/i);
+
+    // Verify badges are now 'Configured'
+    await expect(badges.nth(0)).toHaveText('Configured');
+    await expect(badges.nth(1)).toHaveText('Configured');
+
+    // Inputs must be cleared (zero secret leakage in DOM)
+    await expect(passwordInput).toHaveValue('');
+    await expect(usernameInput).toHaveValue('');
+
+    // Ensure secrets are not present anywhere in HTML
+    const htmlContent = await page.content();
+    expect(htmlContent).not.toContain(testPass);
+
+    // Clear buttons should now exist
+    const clearBtns = credDialog.locator('.btn-clear-credential');
+    await expect(clearBtns).toHaveCount(2);
+
+    // Clear JENKINS_PASSWORD
+    const clearPasswordBtn = credDialog.locator('.btn-clear-credential[data-key="JENKINS_PASSWORD"]');
+    await clearPasswordBtn.click();
+
+    await expect(page.locator('#credentials-message')).toHaveText(/JENKINS_PASSWORD cleared/i);
+    const passwordRow = credDialog.locator('.credential-row', { hasText: 'JENKINS_PASSWORD' });
+    await expect(passwordRow.locator('.badge')).toHaveText('Missing');
+    await expect(passwordRow.locator('.btn-clear-credential')).toHaveCount(0);
+
+    // Cancel / Close dialog
+    const cancelBtn = page.locator('#btn-cancel-credentials');
+    await cancelBtn.click();
+    await expect(credDialog).not.toBeVisible();
+
+    // Reopen dialog and verify persisted presence
+    await credBtn.click();
+    await expect(credDialog).toBeVisible();
+
+    const reopenedPassRow = credDialog.locator('.credential-row', { hasText: 'JENKINS_PASSWORD' });
+    const reopenedUserRow = credDialog.locator('.credential-row', { hasText: 'JENKINS_USERNAME' });
+    await expect(reopenedPassRow.locator('.badge')).toHaveText('Missing');
+    await expect(reopenedUserRow.locator('.badge')).toHaveText('Configured');
+    await expect(reopenedUserRow.locator('.btn-clear-credential')).toBeVisible();
+
+    // Close dialog again
+    await cancelBtn.click();
+    await expect(credDialog).not.toBeVisible();
+  });
 });

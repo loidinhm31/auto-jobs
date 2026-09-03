@@ -11,8 +11,9 @@
 - **Date**: 2026-09-03
 - **Description**: Implement a native credential management modal in the `serve:control` dashboard, enabling operators to inspect presence of required variables and securely update credentials.
 - **Priority**: P1
-- **Implementation Status**: pending
-- **Review Status**: pending
+- **Implementation Status**: **DONE**
+- **Review Status**: **DONE** (approved, 9.5/10)
+- **Completed At**: 2026-09-03T18:35:00+07:00
 - **Estimated Effort**: 1.5h
 
 ## Key Insights
@@ -87,12 +88,12 @@ Header
    - Handle empty state when no projects require credentials.
 
 ## Todo List
-- [ ] Add Credentials button and dialog markup to `control-page.html`.
-- [ ] Add dialog and form styling to `control-page.css`.
-- [ ] Implement variable discovery logic in `control-page.js`.
-- [ ] Implement `GET /api/secrets` fetch and badge rendering.
-- [ ] Implement `PUT /api/secrets` submission and success handling.
-- [ ] Ensure input fields use `type="password"` and clear upon save.
+- [x] Add Credentials button and dialog markup to `control-page.html`.
+- [x] Add dialog and form styling to `control-page.css`.
+- [x] Implement variable discovery logic in `control-page.js`.
+- [x] Implement `GET /api/secrets` fetch and badge rendering.
+- [x] Implement `PUT /api/secrets` submission and success handling.
+- [x] Ensure input fields use `type="password"` and clear upon save.
 
 ## Success Criteria
 - Clicking "Credentials" opens the modal displaying all required variables for the active config.

@@ -169,6 +169,22 @@ Compiler settings in `tsconfig.json` are the source of truth:
   bodies, or raw errors. Set `Cache-Control: no-store` through the shared
   control response helper.
 
+### Control UI credential state
+
+- Render the server-provided CSRF token in the page meta tag and let the
+  shared `apiFetch` helper attach it to mutations; do not hand-copy tokens in
+  individual handlers.
+- Derive a deduplicated, sorted key list from the active configuration and
+  use `GET /api/secrets?keys=...` for presence only. Never request or render
+  stored values.
+- Use password inputs with blank values for configured keys. Save only
+  non-empty trimmed values; clear submitted values after a successful PUT.
+- Use the per-key bodyless DELETE contract for clear actions. On success,
+  update the presence badge and remove the clear action.
+- Register a dialog `close` cleanup that wipes every credential input and
+  transient message. Render only names, booleans, and bounded status text;
+  never place plaintext in labels, attributes, URLs, HTML, or responses.
+
 ### Control-run environment injection
 
 - `RunManagerOptions.secretStore` is optional. `createReportServer` supplies

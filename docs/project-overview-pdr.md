@@ -2,10 +2,11 @@
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build,
-Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–03  
-**Current milestone:** Phase 03 Run Executor Environment Injection —
-**DONE** (2026-09-03T17:18:32+07:00)  
-**Prior completed milestone:** Phase 02 Control Secrets API — **DONE**
+Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–04<br>
+**Current milestone:** Phase 04 Control UI Credential Modal and State —
+**DONE** (2026-09-03T18:35:00+07:00)<br>
+**Prior completed milestone:** Phase 03 Run Executor Environment Injection —
+**DONE**
 
 ## Product summary
 
@@ -31,6 +32,13 @@ SecretStore snapshot, overlays it on a fresh copy of the caller environment,
 and passes the merged `runtimeEnvironment` to report or auto-build execution.
 Stored values override same-named base values without mutating `process.env`;
 control logs, warnings, errors, and auto-build result URLs are redacted.
+
+Phase 04 adds the operator-facing credential workflow to the loopback control
+page. It discovers the variable names referenced by the active configuration,
+checks presence without loading values, and persists only entered replacements
+through the guarded `/api/secrets` API. The modal masks values and wipes its
+inputs on save, clear, or close; it never reflects plaintext in status text,
+URLs, page HTML, or API responses.
 
 The product treats Jenkins navigation and build submission as high-risk external
 operations. Configuration, target identity, selectors, credentials, deadlines,
@@ -65,8 +73,8 @@ and failure semantics are validated before side effects.
 - Mutating `process.env` or a caller-owned environment when injecting stored
   values. Control-run injection is per-run and does not alter direct
   file-mode/library environment behavior.
-- Replacing the Phase 04 control UI credential modal/state or Phase 05
-  end-to-end verification.
+- Claiming the Phase 05 unit/API/Playwright end-to-end verification is
+  complete before it runs.
 
 ## Users and use cases
 
@@ -189,7 +197,24 @@ and failure semantics are validated before side effects.
   security gates, 415 for mutation content type, 503 for missing store, and
   405 with `Allow` for unsupported methods.
 
-### FR-9: Offline build-page fixture
+### FR-9: Control UI credential modal and state
+
+- Render a native Credentials dialog from the loopback control page with
+  accessible labels, loading/error status, password-masked inputs, and
+  **Configured**/**Missing** presence badges.
+- Derive a deduplicated, sorted key list from project credential references
+  and defaults, falling back to `JENKINS_USERNAME` and `JENKINS_PASSWORD`.
+- Fetch only boolean presence using `GET /api/secrets?keys=...`; never load
+  stored values into the page.
+- Save only non-empty trimmed values through CSRF-protected JSON
+  `PUT /api/secrets`; update badges and wipe submitted inputs on success.
+- Clear one key through CSRF-protected bodyless
+  `DELETE /api/secrets?name=...`; mark it missing and wipe its input.
+- Wipe all credential input values and modal messages on dialog close, and
+  keep secret values out of labels, status messages, URLs, page HTML, and API
+  success/error payloads.
+
+### FR-10: Offline build-page fixture
 
 - Keep `templates/jenkins-template/template-build.html` minimal, inert, and
   free of credentials, scripts, external assets, production hosts, and report links.
@@ -212,7 +237,7 @@ and failure semantics are validated before side effects.
 | --- | --- |
 | Safety | Fail closed on invalid origins, actions, selectors, cardinality, forms, modes, or identities. |
 | Idempotency | No automatic retry after a matching build POST; preserve unknown state. |
-| Security | Credential-free URLs, environment references or local SecretStore values (never project JSON), boolean-only secret API responses, strict mutation gates, bounded diagnostics, and no hidden-form inspection. |
+| Security | Credential-free URLs, environment references or local SecretStore values (never project JSON), boolean-only secret API responses, strict mutation gates, CSRF-aware credential UI, DOM input wiping, bounded diagnostics, and no hidden-form inspection. |
 | Persistence | Secret updates are bounded, sorted, serialized under an in-process lock, atomically renamed, and close their file handle on write/sync failure; rename failures clean up temporary files. |
 | Availability | Report projects continue after a project failure; cleanup is bounded. |
 | Determinism | Unit and fixture tests use injected dependencies or exact default-deny routes. |
@@ -274,6 +299,21 @@ and failure semantics are validated before side effects.
   injection, precedence, non-mutation, redaction, and asynchronous
   `createRunManager` integration using shared fixture helpers.
 
+## Dynamic-credentials Phase 04 acceptance criteria
+
+- [x] The loopback control page exposes an accessible Credentials dialog with
+  dynamic discovery of referenced variable names and fallback defaults.
+- [x] Opening the dialog performs a filtered presence-only GET and renders
+  blank password inputs with **Configured**/**Missing** badges.
+- [x] Save sends only non-empty trimmed values through the CSRF-gated JSON
+  PUT contract, updates badges, and clears submitted input values.
+- [x] Per-key clear sends the CSRF-gated bodyless DELETE contract, marks the
+  key missing, removes its clear action, and clears the input.
+- [x] Dialog close wipes every credential input and modal message, and no
+  secret value is reflected in page HTML, status text, URLs, or API output.
+- [x] `tests/e2e/control-page.spec.ts` proves modal accessibility, presence
+  transitions, persistence/reopen behavior, input wiping, and zero leakage.
+
 ## Phase 2 acceptance criteria
 
 - [x] Exact job-action URL validation rejects sibling jobs, foreign origins,
@@ -318,13 +358,14 @@ The checked-in `config/projects.example.json` remains non-runnable with
 `.invalid` placeholders and a disabled auto-build example. Keep live project
 configuration and secret values outside the repository.
 
-For Phases 01–03, local values may be persisted only in
+For Phases 01–04, local values may be persisted only in
 `config/secrets.local.json`, which is ignored by `config/*.local.json`; keep
 that file and its directory protected by the operator/CI account's ACLs.
 The Phase 02 API remains loopback-only and exposes presence booleans. Phase 03
-control runs consume a per-run snapshot from that store; direct report CLI and
-library runs still require the environment variables named by project
-configuration.
+control runs consume a per-run snapshot from that store; Phase 04 manages
+presence and guarded updates through the modal while wiping its input values.
+Direct report CLI and library runs still require the environment variables
+named by project configuration.
 
 ## Traceability
 
@@ -336,24 +377,26 @@ configuration.
 | Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
 | Local secret persistence | `src/reporting/report-server-secret-store.ts`, `src/reporting/report-server-constants.ts` | [architecture](./architecture.md), [multi-project configuration](./multi-project-configuration.md), [code standards](./code-standards.md) |
 | Control secrets API and security gates | `src/reporting/report-server-control-secrets-api.ts`, `src/reporting/report-server-control-api.ts`, `src/reporting/report-server-control-security.ts`, `src/reporting/report-server-control.ts` | [system architecture](./system-architecture.md), [architecture](./architecture.md), [code standards](./code-standards.md) |
+| Control UI credential management | `src/reporting/control-page/control-page.html`, `src/reporting/control-page/control-page.css`, `src/reporting/control-page/control-page.js` | [system architecture](./system-architecture.md), [codebase summary](./codebase-summary.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts` | [release gates](./release-gates.md) |
 | Run-executor environment injection | `src/reporting/report-server-run-manager.ts`, `src/reporting/report-server-run-executor.ts`, `src/reporting/report-server.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
-| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
+| Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, `tests/e2e/control-page.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect policy | `src/jenkins/build-trigger.ts`, `src/project/auto-build-runner.ts` | [architecture](./architecture.md), [release gates](./release-gates.md) |
 
 ## Open scope
 
-Dynamic-credentials Phase 03 completes per-run SecretStore environment
-injection and redaction for loopback control execution. Phase 04 still owns
-the control UI credential modal and state, and Phase 05 owns end-to-end
-verification. All future work must preserve server-side configuration
-validation, loopback and CSRF protections, single-run/concurrency rules,
-explicit auto-build confirmation, no-process-global mutation, and safe outcome
-mapping. The current report CLI still has no production auto-build command.
+Dynamic-credentials Phases 01–04 are complete through the local store, guarded
+presence API, per-run environment injection/redaction, and Control UI
+credential modal/state. Phase 05 owns the remaining unit/API/Playwright
+end-to-end verification. All future work must preserve server-side
+configuration validation, loopback and CSRF protections, single-run/concurrency
+rules, explicit auto-build confirmation, no-process-global mutation, DOM
+secret wiping, and safe outcome mapping. The current report CLI still has no
+production auto-build command.
 
 ## Changelog
 
@@ -361,3 +404,7 @@ mapping. The current report CLI still has no production auto-build command.
 
 - Completed Phase 03 run-executor environment injection and redaction for
   control-mode report and auto-build runs.
+
+- Completed Phase 04 Control UI credential modal/state with dynamic discovery,
+  guarded persistence/clear actions, presence badges, and zero-leakage input
+  cleanup.

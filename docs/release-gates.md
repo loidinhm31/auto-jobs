@@ -2,10 +2,10 @@
 
 This project has deterministic local gates for native browsers, offline report
 fixtures, the Phase 3 build-page fixture, the Phase 01 SecretStore backend,
-the Phase 02 control secrets API/security boundary, and the Phase 03 control
-run-environment boundary. The commands below are the current release contract;
-test counts are intentionally not hard-coded because they change with the test
-suite.
+the Phase 02 control secrets API/security boundary, the Phase 03 control
+run-environment boundary, and the Phase 04 control UI credential dialog. The
+commands below are the current release contract; test counts are intentionally
+not hard-coded because they change with the test suite.
 
 ## Gate order
 
@@ -205,6 +205,24 @@ Deterministic testing of the Control API and UI is executed via:
 npm run test:control
 ```
 which exercises config reading/atomic saving, validation errors, report execution, auto-build confirmation dialogs, and WCAG A/AA accessibility scanning in Chromium and WebKit.
+
+### Phase 04 credential dialog gate
+
+`npm run test:control` also exercises the browser-facing credential workflow
+against an isolated loopback server and temporary config/report roots. The
+Control UI contract includes:
+
+- an accessible native Credentials dialog and loading/error states;
+- discovery of configured credential-variable names with default fallbacks;
+- filtered, presence-only `GET /api/secrets?keys=...` rendering;
+- password-masked inputs and **Configured**/**Missing** badges;
+- CSRF-bearing JSON save and per-key bodyless clear requests;
+- persistence/status transitions followed by immediate input wiping; and
+- close/reopen cleanup, with no submitted test value in page HTML.
+
+This browser gate proves the UI/API boundary and zero-leakage DOM behavior. It
+does not contact Jenkins or vendor services; per-run SecretStore injection and
+diagnostic redaction remain covered by the Phase 03 gate below.
 
 ## Phase 03 run-executor environment gate
 

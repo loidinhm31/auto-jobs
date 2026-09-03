@@ -18,6 +18,7 @@
         <select id="config-select" aria-label="Select Configuration"></select>
         <button id="btn-reload" type="button" class="btn btn-secondary">Reload</button>
         <button id="btn-save" type="button" class="btn btn-primary" disabled>Save Config</button>
+        <button id="btn-credentials" type="button" class="btn btn-secondary">Credentials</button>
       </div>
     </div>
   </header>
@@ -82,6 +83,20 @@
       <div class="dialog-actions">
         <button type="button" id="btn-cancel-build" class="btn btn-secondary">Cancel</button>
         <button type="button" id="btn-confirm-build" class="btn btn-danger">Confirm & Submit Build</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="credentials-dialog" class="confirm-dialog credentials-dialog" aria-labelledby="credentials-dialog-title">
+    <form method="dialog" class="dialog-content" id="credentials-form">
+      <h2 id="credentials-dialog-title">Local Credential Management</h2>
+      <p class="credentials-notice">Stored locally in <code>config/secrets.local.json</code> (git-ignored).</p>
+      <div id="credentials-message" class="status-banner hidden" role="status" aria-live="polite"></div>
+      <div id="credentials-loading" class="credentials-loading hidden" aria-live="polite">Loading credentials...</div>
+      <div id="credentials-form-rows" class="credentials-form-rows"></div>
+      <div class="dialog-actions">
+        <button type="button" id="btn-cancel-credentials" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-save-credentials" class="btn btn-primary">Save Credentials</button>
       </div>
     </form>
   </dialog>

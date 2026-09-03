@@ -33,6 +33,14 @@
   const btnConfirmBuild = document.getElementById('btn-confirm-build');
   let pendingBuildProjectId = null;
 
+  const credentialsDialog = document.getElementById('credentials-dialog');
+  const credentialsFormRows = document.getElementById('credentials-form-rows');
+  const credentialsLoading = document.getElementById('credentials-loading');
+  const credentialsMessage = document.getElementById('credentials-message');
+  const btnCredentials = document.getElementById('btn-credentials');
+  const btnCancelCredentials = document.getElementById('btn-cancel-credentials');
+  const btnSaveCredentials = document.getElementById('btn-save-credentials');
+
   function showBanner(type, message) {
     statusBanner.className = 'status-banner ' + type;
     statusBanner.textContent = message;
@@ -55,7 +63,7 @@
 
   async function apiFetch(url, options = {}) {
     const headers = new Headers(options.headers || {});
-    if (csrfToken && (options.method === 'POST' || options.method === 'PUT')) {
+    if (csrfToken && (options.method === 'POST' || options.method === 'PUT' || options.method === 'DELETE')) {
       headers.set('x-csrf-token', csrfToken);
     }
     const resp = await fetch(url, { ...options, headers });
@@ -371,5 +379,236 @@
     }
   }
 
+
+  function showCredentialsMessage(type, message) {
+    credentialsMessage.className = 'status-banner ' + type;
+    credentialsMessage.textContent = message;
+    credentialsMessage.classList.remove('hidden');
+  }
+
+  function hideCredentialsMessage() {
+    credentialsMessage.className = 'status-banner hidden';
+    credentialsMessage.textContent = '';
+  }
+
+  function discoverRequiredCredentialKeys(doc) {
+    if (!doc || !Array.isArray(doc.projects) || doc.projects.length === 0) {
+      return [];
+    }
+
+    const defaultCreds = doc.defaults?.credentials || doc.defaults?.credentialVariables;
+    const defaultUser = (typeof defaultCreds === 'object' && defaultCreds !== null && typeof defaultCreds.usernameVariable === 'string' && defaultCreds.usernameVariable.trim()) || 'JENKINS_USERNAME';
+    const defaultPass = (typeof defaultCreds === 'object' && defaultCreds !== null && typeof defaultCreds.passwordVariable === 'string' && defaultCreds.passwordVariable.trim()) || 'JENKINS_PASSWORD';
+
+    const keys = new Set();
+
+    for (const p of doc.projects) {
+      if (!p || typeof p !== 'object') continue;
+
+      if (Array.isArray(p.credentialVariables)) {
+        for (const k of p.credentialVariables) {
+          if (typeof k === 'string' && k.trim().length > 0) {
+            keys.add(k.trim());
+          }
+        }
+      } else {
+        const userVar = (typeof p.credentialVariables?.usernameVariable === 'string' && p.credentialVariables.usernameVariable.trim()) ||
+                        (typeof p.credentials?.usernameVariable === 'string' && p.credentials.usernameVariable.trim()) ||
+                        defaultUser;
+
+        const passVar = (typeof p.credentialVariables?.passwordVariable === 'string' && p.credentialVariables.passwordVariable.trim()) ||
+                        (typeof p.credentials?.passwordVariable === 'string' && p.credentials.passwordVariable.trim()) ||
+                        defaultPass;
+
+        if (userVar && userVar.length > 0) keys.add(userVar);
+        if (passVar && passVar.length > 0) keys.add(passVar);
+      }
+    }
+
+    return Array.from(keys).sort();
+  }
+
+  function createClearButton(key, badge, input) {
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'btn btn-secondary btn-sm btn-clear-credential';
+    clearBtn.dataset.key = key;
+    clearBtn.textContent = 'Clear';
+    clearBtn.addEventListener('click', async () => {
+      hideCredentialsMessage();
+      clearBtn.disabled = true;
+      try {
+        const resp = await apiFetch('/api/secrets?name=' + encodeURIComponent(key), { method: 'DELETE' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error?.message || 'HTTP ' + resp.status);
+        }
+        badge.className = 'badge badge-missing';
+        badge.textContent = 'Missing';
+        input.value = '';
+        clearBtn.remove();
+        showCredentialsMessage('success', key + ' cleared.');
+      } catch (err) {
+        clearBtn.disabled = false;
+        showCredentialsMessage('error', 'Failed to clear ' + key + ': ' + err.message);
+      }
+    });
+    return clearBtn;
+  }
+
+  function renderCredentialRows(keys, presenceMap) {
+    credentialsFormRows.replaceChildren();
+
+    for (const key of keys) {
+      const isConfigured = Boolean(presenceMap[key]);
+
+      const row = document.createElement('div');
+      row.className = 'credential-row';
+
+      const field = document.createElement('div');
+      field.className = 'credential-field';
+
+      const label = document.createElement('label');
+      label.htmlFor = 'secret-input-' + key;
+      label.textContent = key;
+      field.appendChild(label);
+
+      const badges = document.createElement('div');
+      badges.className = 'credential-badges';
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + (isConfigured ? 'badge-configured' : 'badge-missing');
+      badge.textContent = isConfigured ? 'Configured' : 'Missing';
+      badges.appendChild(badge);
+      field.appendChild(badges);
+      row.appendChild(field);
+
+      const inputGroup = document.createElement('div');
+      inputGroup.className = 'credential-input-group';
+
+      const input = document.createElement('input');
+      input.type = 'password';
+      input.id = 'secret-input-' + key;
+      input.name = key;
+      input.className = 'credential-input';
+      input.autocomplete = 'new-password';
+      input.placeholder = '•••••••• (leave blank to keep)';
+      input.spellcheck = false;
+      inputGroup.appendChild(input);
+
+      if (isConfigured) {
+        const clearBtn = createClearButton(key, badge, input);
+        inputGroup.appendChild(clearBtn);
+      }
+
+      row.appendChild(inputGroup);
+      credentialsFormRows.appendChild(row);
+    }
+  }
+
+  async function openCredentialsDialog() {
+    hideCredentialsMessage();
+    credentialsDialog.showModal();
+
+    const keys = discoverRequiredCredentialKeys(currentDoc);
+    if (keys.length === 0) {
+      credentialsLoading.classList.add('hidden');
+      credentialsFormRows.replaceChildren();
+      const p = document.createElement('p');
+      p.className = 'empty-msg';
+      p.textContent = 'No credential variables required for the current configuration.';
+      credentialsFormRows.appendChild(p);
+      return;
+    }
+
+    credentialsLoading.classList.remove('hidden');
+    credentialsFormRows.replaceChildren();
+
+    try {
+      const resp = await apiFetch('/api/secrets?keys=' + encodeURIComponent(keys.join(',')));
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error?.message || 'HTTP ' + resp.status);
+      }
+      const data = await resp.json();
+      const presenceMap = data.secrets || {};
+      renderCredentialRows(keys, presenceMap);
+    } catch (err) {
+      showCredentialsMessage('error', 'Failed to load credentials: ' + err.message);
+    } finally {
+      credentialsLoading.classList.add('hidden');
+    }
+  }
+
+  btnCredentials.addEventListener('click', () => {
+    openCredentialsDialog();
+  });
+
+  btnCancelCredentials.addEventListener('click', () => {
+    credentialsDialog.close();
+  });
+
+  credentialsDialog.addEventListener('close', () => {
+    credentialsFormRows.querySelectorAll('.credential-input').forEach((input) => {
+      input.value = '';
+    });
+    hideCredentialsMessage();
+  });
+
+  btnSaveCredentials.addEventListener('click', async () => {
+    hideCredentialsMessage();
+    const inputs = credentialsFormRows.querySelectorAll('.credential-input');
+    const secrets = {};
+    inputs.forEach((input) => {
+      const val = input.value.trim();
+      if (val.length > 0) {
+        secrets[input.name] = val;
+      }
+    });
+
+    const changedKeys = Object.keys(secrets);
+    if (changedKeys.length === 0) {
+      showCredentialsMessage('info', 'No changes entered.');
+      return;
+    }
+
+    btnSaveCredentials.disabled = true;
+    try {
+      const resp = await apiFetch('/api/secrets', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secrets }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error?.message || 'HTTP ' + resp.status);
+      }
+      for (const key of changedKeys) {
+        const input = document.getElementById('secret-input-' + key);
+        if (input) {
+          input.value = '';
+          const row = input.closest('.credential-row');
+          if (row) {
+            const badge = row.querySelector('.badge');
+            if (badge) {
+              badge.className = 'badge badge-configured';
+              badge.textContent = 'Configured';
+            }
+            let clearBtn = row.querySelector('.btn-clear-credential');
+            if (!clearBtn && badge) {
+              clearBtn = createClearButton(key, badge, input);
+              const inputGroup = row.querySelector('.credential-input-group') || row;
+              inputGroup.appendChild(clearBtn);
+            }
+          }
+        }
+      }
+      showBanner('success', 'Credentials saved successfully.');
+      showCredentialsMessage('success', 'Credentials saved successfully.');
+    } catch (err) {
+      showCredentialsMessage('error', 'Failed to save credentials: ' + err.message);
+    } finally {
+      btnSaveCredentials.disabled = false;
+    }
+  });
   loadConfigList();
 })();

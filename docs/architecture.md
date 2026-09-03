@@ -1,14 +1,17 @@
 # Current architecture
 
 This document describes the implemented schema-v1 configuration, report and
-target-branch Jenkins auto-build workflows, the local SecretStore backend, and
-the loopback control secrets API. Phase 03 adds per-run SecretStore environment
-injection and redaction to control runs. Phase 3 adds an offline build-page
-fixture and exact routes so the auto-build path can be exercised without live
-side effects. Phase 01 adds validated local persistence; Phase 02 exposes
-guarded presence-only `GET`, `PUT`, and `DELETE /api/secrets` operations. The
-report command remains report-only; auto-build is an explicit library boundary
-and is not inferred from URLs, selectors, CLI names, or environment.
+target-branch Jenkins auto-build workflows, the local SecretStore backend, the
+loopback control secrets API, and the Phase 04 credential-management UI.
+Phase 03 adds per-run SecretStore environment injection and redaction to
+control runs. Phase 04 adds a CSRF-aware modal that discovers referenced
+variable names, displays presence only, persists replacements, and wipes
+password inputs. Phase 3 adds an offline build-page fixture and exact routes
+so the auto-build path can be exercised without live side effects. Phase 01
+adds validated local persistence; Phase 02 exposes guarded presence-only
+`GET`, `PUT`, and `DELETE /api/secrets` operations. The report command remains
+report-only; auto-build is an explicit library boundary and is not inferred
+from URLs, selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -116,6 +119,9 @@ flowchart LR
 - `src/reporting/report-server-control.ts` validates the Host header for every
   control request, dispatches API paths, and carries the optional
   `ControlRouterContext.secretStore` dependency.
+- `src/reporting/control-page/control-page.html`, `.css`, and `.js` implement
+  the Credentials dialog, dynamic presence state, guarded save/clear actions,
+  and input cleanup without rendering secret values.
 - `src/reporting/report-server-control-api.ts` remains the config/run handler
   facade and re-exports `handleSecretsApi`; the implementation lives in
   `report-server-control-secrets-api.ts`.
@@ -507,6 +513,14 @@ mutation additionally requires an exact same-origin HTTP(S) Origin, accepted
 `application/json` (except bodyless DELETE). Bodies are capped at the 1 MiB
 control limit. All responses set `Cache-Control: no-store`; secret values
 never appear in API success or error responses.
+
+The page's **Credentials** dialog derives a deduplicated, sorted key list from
+the active configuration, then calls the filtered presence GET. It renders
+blank password inputs with **Configured**/**Missing** badges. Save sends only
+non-empty trimmed values through the CSRF-bearing JSON PUT; clear sends a
+CSRF-bearing bodyless DELETE for one key. Successful save/clear and every
+dialog close wipe input values, so the browser retains no submitted or
+unsaved plaintext. Status text and API responses contain names/presence only.
 
 When `POST /api/run` starts a control run, the run executor reads the current
 SecretStore snapshot and merges it over the supplied base environment without

@@ -4,7 +4,8 @@ The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
 projects, and exposes explicit report and auto-build execution boundaries.
 Mode is never inferred from a URL, selector, CLI name, or environment. Direct
 callers use the normalized configuration; loopback control runs additionally
-overlay a per-run SecretStore snapshot before executor dispatch. The
+overlay a per-run SecretStore snapshot before executor dispatch and expose the
+Phase 04 credential modal for presence-only local management. The
 configuration contract is implemented in `src/config/` and consumed by
 `src/runner.ts` (report), `src/project/auto-build-runner.ts` (auto-build), or
 `src/reporting/report-server-run-executor.ts` (control dispatch).
@@ -170,7 +171,7 @@ Set the referenced names in the shell or CI secret store before running. Do
 not put usernames, passwords, tokens, cookies, or credential-bearing URLs in
 the JSON, source tree, traces, screenshots, or reports.
 
-#### Local SecretStore and control API (Phases 01–03)
+#### Local SecretStore and control API/UI (Phases 01–04)
 
 Dynamic credential persistence is deliberately separate from the schema-v1
 document. In control mode, `createReportServer` initializes
@@ -215,6 +216,15 @@ Control-run execution reads a current SecretStore snapshot, constructs a
 fresh merged environment, and passes it to the selected report or auto-build
 executor. Secret values are not included in the `/api/run` request or API
 responses.
+
+The loopback Control UI's **Credentials** dialog derives the deduplicated,
+sorted variable names referenced by the active document (project references
+before defaults, then `JENKINS_USERNAME`/`JENKINS_PASSWORD` fallbacks). It
+requests `GET /api/secrets?keys=...` and renders only boolean presence badges
+with blank password inputs. Non-empty trimmed replacements use the CSRF-bearing
+JSON PUT; each Clear action uses the CSRF-bearing bodyless DELETE. Successful
+save/clear and every close wipe input values, so status text, page HTML, and
+API payloads never contain plaintext values.
 
 ### Control-run environment injection (Phase 03)
 
