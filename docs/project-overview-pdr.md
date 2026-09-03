@@ -2,9 +2,9 @@
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build,
-Phase 3 offline build-page fixtures, and Phase 01 local SecretStore backend  
-**Current milestone:** Phase 3 — **DONE** (2026-09-02T16:57:40+07:00)  
-**Credential milestone:** Phase 01 SecretStore backend — **DONE** (2026-09-03)
+Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–02  
+**Current milestone:** Phase 02 Control Secrets API — **DONE** (2026-09-03)  
+**Prior completed milestone:** Phase 3 fixture flow — **DONE**
 
 ## Product summary
 
@@ -17,12 +17,14 @@ evidence or write report artifacts. Phase 3 adds a minimal checked-in build
 detail page and exact offline routes so both paths can be proven without live
 Jenkins or vendor services.
 
-Phase 01 adds a local `SecretStore` persistence seam for the future control
-plane. It stores validated environment-style key/value pairs in the
-git-ignored `config/secrets.local.json` using deterministic, atomic,
-write-locked updates. Control mode constructs the store and exposes it to
-trusted in-process callers; the current HTTP router and executors do not yet
-read or inject these values.
+Phase 01 adds a local `SecretStore` persistence seam for the control plane.
+It stores validated environment-style key/value pairs in the git-ignored
+`config/secrets.local.json` using deterministic, atomic, write-locked updates.
+Phase 02 exposes that store only through a loopback `/api/secrets` presence API:
+responses contain booleans, while PUT/DELETE mutations require Host, Origin,
+Fetch Metadata, CSRF, and bounded JSON gates. Control mode constructs the
+store and exposes it to the router; current executors still do not inject
+stored values into runs.
 
 The product treats Jenkins navigation and build submission as high-risk external
 operations. Configuration, target identity, selectors, credentials, deadlines,
@@ -41,7 +43,7 @@ and failure semantics are validated before side effects.
 7. Provide deterministic fixture and unit tests without live Jenkins/vendor
    dependencies.
 8. Keep future dynamic credential updates isolated from versioned project
-   configuration and process-global environment state.
+   configuration, process-global environment state, and plaintext API output.
 
 ## Non-goals
 
@@ -52,9 +54,11 @@ and failure semantics are validated before side effects.
 - Running auto-build from `npm run report` or from an environment-wide switch.
 - Capturing Snyk/SonarQube evidence during an auto-build run.
 - Claiming that checked-in fixtures or deterministic tests prove a live build.
-- Exposing dynamic credentials over HTTP or merging SecretStore values into
-  execution environments in Phase 01. Later control-plane phases must preserve
-  explicit selection and confirmation boundaries.
+- Returning dynamic credential values over HTTP or exposing them in diagnostics,
+  responses, or logs. Phase 02 exposes presence booleans only.
+- Merging SecretStore values into execution environments in Phase 02. Later
+  run-executor work must preserve explicit selection and confirmation
+  boundaries.
 
 ## Users and use cases
 
@@ -64,7 +68,7 @@ and failure semantics are validated before side effects.
 | Build integration | Submit one selected target-branch build | `selectAutoBuildProject` → `runAutoBuildProject` |
 | Maintainer | Prove behavior without external services | Unit tests and exact offline fixtures |
 | Reviewer | Inspect safe outputs and release gates | Static report root, manifests, and documented commands |
-| Control maintainer | Persist local credential values without changing project JSON | `SecretStore` in control mode (in-process only in Phase 01) |
+| Control maintainer | Inspect presence and manage local credential values without changing project JSON | `GET`/`PUT`/`DELETE /api/secrets` in loopback control mode |
 
 ## Functional requirements
 
@@ -140,7 +144,8 @@ and failure semantics are validated before side effects.
   non-directory roots; never accept a caller-selected path or filename.
 - Treat a missing/empty file as `{}`. Require a JSON object no larger than
   `MAX_SECRET_FILE_BYTES` (1 MiB), keys matching
-  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`, and string values.
+  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` except `__proto__`, `prototype`, and
+  `constructor`, and string values.
 - Provide `readSecrets`, `listSecretNames`, `putSecret`, `putSecrets`,
   `deleteSecret`, and `deleteSecrets`. Return frozen snapshots and sorted names.
 - Serialize read-modify-write updates under an in-memory lock and replace the
@@ -148,11 +153,28 @@ and failure semantics are validated before side effects.
   sync, close, rename). Remove temporary files after failed writes.
 - Keep secret values out of errors and diagnostics. The `config/*.local.json`
   ignore rule prevents the local file from entering version control.
-- In control mode, expose the store to trusted in-process callers through
-  `ReportServerHandle`/`ControlRouterContext`; defer HTTP API exposure and
-  run-environment injection to later phases.
+- In control mode, expose the store through `ReportServerHandle` and
+  `ControlRouterContext`; Phase 02 also exposes guarded presence-only API
+  operations described in FR-8. Run-environment injection remains later work.
 
-### FR-8: Offline build-page fixture
+### FR-8: Control secrets API
+
+- Route exact `GET`, `PUT`, and `DELETE /api/secrets` paths from loopback
+  control mode through a dedicated modular handler.
+- Enforce Host validation for every request. For PUT/DELETE, require exact
+  same-origin HTTP(S) Origin, accepted Fetch Metadata, timing-safe CSRF, and
+  `application/json` (except bodyless DELETE).
+- Support full and filtered GET presence maps with boolean values only.
+- Accept single or batch PUT patches with valid environment-style names and
+  string values; support null/`action: "delete"` removal. Support query or
+  JSON body deletion forms.
+- Bound JSON bodies at 1 MiB and return `Cache-Control: no-store`; never
+  return plaintext values in success or error responses.
+- Return clear status boundaries: 400 for malformed input, 403 for rejected
+  security gates, 415 for mutation content type, 503 for missing store, and
+  405 with `Allow` for unsupported methods.
+
+### FR-9: Offline build-page fixture
 
 - Keep `templates/jenkins-template/template-build.html` minimal, inert, and
   free of credentials, scripts, external assets, production hosts, and report links.
@@ -175,7 +197,7 @@ and failure semantics are validated before side effects.
 | --- | --- |
 | Safety | Fail closed on invalid origins, actions, selectors, cardinality, forms, modes, or identities. |
 | Idempotency | No automatic retry after a matching build POST; preserve unknown state. |
-| Security | Credential-free URLs, environment references or local SecretStore values (never project JSON), bounded diagnostics, and no hidden-form inspection. |
+| Security | Credential-free URLs, environment references or local SecretStore values (never project JSON), boolean-only secret API responses, strict mutation gates, bounded diagnostics, and no hidden-form inspection. |
 | Persistence | Secret updates are bounded, sorted, serialized under an in-process lock, atomically renamed, and close their file handle on write/sync failure; rename failures clean up temporary files. |
 | Availability | Report projects continue after a project failure; cleanup is bounded. |
 | Determinism | Unit and fixture tests use injected dependencies or exact default-deny routes. |
@@ -199,7 +221,25 @@ and failure semantics are validated before side effects.
 - [x] Errors do not include secret values; Windows mode-bit limitations are
   documented as an ACL concern.
 - [x] Control mode creates the store and exposes it through the server handle
-  and router context without adding an HTTP secret endpoint or run injection.
+  and router context; Phase 02 adds the guarded presence-only HTTP API without
+  adding run-environment injection.
+
+## Dynamic-credentials Phase 02 acceptance criteria
+
+- [x] Exact `/api/secrets` GET/PUT/DELETE routes are dispatched through the
+  modular secrets handler in control mode.
+- [x] GET returns only boolean presence maps, supports validated `keys` filters,
+  and never returns stored values.
+- [x] PUT accepts single and batch patches, persists string values, supports
+  null/`action: "delete"` removal, and returns only post-update presence.
+- [x] DELETE accepts a query name or JSON name/names body and returns only
+  post-delete presence.
+- [x] Host is checked before dispatch; mutations require exact Origin,
+  accepted Fetch Metadata, timing-safe CSRF, JSON content type, and bounded
+  request bodies.
+- [x] Invalid keys/values/bodies, wrong content type, unsupported methods, and
+  missing store produce bounded status/error contracts; all responses use
+  `Cache-Control: no-store` and omit plaintext.
 
 ## Phase 2 acceptance criteria
 
@@ -245,10 +285,11 @@ The checked-in `config/projects.example.json` remains non-runnable with
 `.invalid` placeholders and a disabled auto-build example. Keep live project
 configuration and secret values outside the repository.
 
-For Phase 01, local values may be persisted only in
+For Phase 01/02, local values may be persisted only in
 `config/secrets.local.json`, which is ignored by `config/*.local.json`; keep
 that file and its directory protected by the operator/CI account's ACLs.
-Because execution injection is not part of this phase, current report and
+The Phase 02 API exposes only presence booleans and remains loopback-only.
+Because execution injection is not part of these phases, current report and
 auto-build runs still require the environment variables named by project
 configuration.
 
@@ -261,6 +302,8 @@ configuration.
 | Jenkins identity and trigger | `src/jenkins/url-identity.ts`, `src/jenkins/build-trigger*.ts` | [system architecture](./system-architecture.md) |
 | Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
 | Local secret persistence | `src/reporting/report-server-secret-store.ts`, `src/reporting/report-server-constants.ts` | [architecture](./architecture.md), [multi-project configuration](./multi-project-configuration.md), [code standards](./code-standards.md) |
+| Control secrets API and security gates | `src/reporting/report-server-control-secrets-api.ts`, `src/reporting/report-server-control-api.ts`, `src/reporting/report-server-control-security.ts`, `src/reporting/report-server-control.ts` | [system architecture](./system-architecture.md), [architecture](./architecture.md), [code standards](./code-standards.md) |
+| Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts` | [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
@@ -270,10 +313,12 @@ configuration.
 
 ## Open scope
 
-Phase 01 provides the persistence backend and control-mode wiring only. It does
-not expose a secret-management API or merge stored values into execution
-environments. The remaining dynamic-credentials phases must add those
-boundaries without weakening server-side configuration validation, loopback
-and CSRF protections, single-run/concurrency rules, explicit auto-build
-confirmation, or safe outcome mapping. The current report CLI still has no
-production auto-build command.
+Dynamic-credentials Phase 02 completes presence-only secret status and guarded
+mutation/deletion for loopback control mode. It does not merge stored values
+into execution environments; Phase 03 must add per-run injection without
+mutating `process.env`. Phase 04 still owns the control UI credential modal
+and state, and Phase 05 owns end-to-end verification. All future work must
+preserve server-side configuration validation, loopback and CSRF protections,
+single-run/concurrency rules, explicit auto-build confirmation, and safe
+outcome mapping. The current report CLI still has no production auto-build
+command.

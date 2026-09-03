@@ -17,7 +17,7 @@ The `serve:control` dashboard currently reads project configurations that specif
 
 This plan implements a clean, secure, and persistent credential management mechanism within `serve:control`:
 1. **Local Secret Store**: Stores credentials in `config/secrets.local.json` (strictly ignored by `.gitignore`, file mode `0o600`, atomic write-lock persistence).
-2. **Control Plane API**: Adds `GET /api/secrets` (redacted status only) and `PUT /api/secrets` (CSRF/Host-guarded mutation).
+2. **Control Plane API**: Adds `GET /api/secrets` (redacted status only), guarded `PUT /api/secrets` mutation, and explicit clear/delete operations.
 3. **Execution Injection**: Automatically merges stored secrets into `runEnv` in `report-server-run-executor.ts` before Playwright runs.
 4. **Dashboard UI**: Adds a dedicated "Credentials" modal with password masking, variable discovery, and persistence status chips.
 5. **Quality Gates**: Full unit, API, and Playwright E2E test coverage with zero secret leakage.
@@ -34,12 +34,13 @@ This plan implements a clean, secure, and persistent credential management mecha
 | # | Phase | Status | Effort | File |
 |---|-------|--------|--------|------|
 | 01 | SecretStore Backend Module | **DONE** | 1.5h | [phase-01-backend-secret-store.md](./phase-01-backend-secret-store.md) |
-| 02 | Control Secrets API & Security Gates | pending | 1.0h | [phase-02-control-secrets-api.md](./phase-02-control-secrets-api.md) |
+| 02 | Control Secrets API & Security Gates | **DONE** | 1.0h | [phase-02-control-secrets-api.md](./phase-02-control-secrets-api.md) |
 | 03 | Run Executor Environment Injection | pending | 1.0h | [phase-03-run-executor-environment-injection.md](./phase-03-run-executor-environment-injection.md) |
 | 04 | Control UI Credential Modal & State | pending | 1.5h | [phase-04-control-ui-credential-management.md](./phase-04-control-ui-credential-management.md) |
 | 05 | Unit, API & Playwright E2E Verification | pending | 1.0h | [phase-05-test-suite-and-e2e-verification.md](./phase-05-test-suite-and-e2e-verification.md) |
 
 Phase 01 completion: **DONE** — 2026-09-03T14:40:00+07:00
+Phase 02 completion: **DONE** — 2026-09-03T15:25:00+07:00
 
 ## Dependencies
 
@@ -60,6 +61,13 @@ Phase 01 completion: **DONE** — 2026-09-03T14:40:00+07:00
 4. **CLI Parity**: Standalone CLI runs (`npm run report` / `src/cli.ts`) also load `config/secrets.local.json` when present, ensuring consistent behavior across CLI and Web UI.
 
 ### Action Items
-- [ ] Ensure `SecretStore` supports `deleteSecret(name: string): Promise<void>`.
-- [ ] Ensure `DELETE /api/secrets` or `PUT /api/secrets` with clear action removes keys.
+- [x] Ensure `SecretStore` supports `deleteSecret(name: string): Promise<void>`.
+- [x] Ensure `DELETE /api/secrets` or `PUT /api/secrets` with clear action removes keys.
 - [ ] Add optional local secret loading helper to `src/cli.ts` / `scripts/run-report.mjs` when `config/secrets.local.json` exists.
+
+### Phase 02 Delivery Evidence
+- **Status**: **DONE** — 2026-09-03T15:25:00+07:00.
+- **Targeted validation**: `control-secrets-api.spec.ts` and `control-secrets-security.spec.ts` — **16 passed, 0 failed, 0 skipped**.
+- **Typecheck**: `npm run typecheck` (`tsc --noEmit`) — **passed, 0 errors**.
+- **Review**: [Phase 02 code review](../reports/code-review-260903-1510-phase-02-control-secrets-api.md) — **APPROVED WITH WARNINGS, 9.0/10**, no critical issues.
+- **Security scope delivered**: presence-only GET responses; guarded PUT/DELETE mutations; strict key/value validation; no-store responses; zero plaintext leakage.

@@ -1,9 +1,10 @@
 # Release gates
 
 This project has deterministic local gates for native browsers, offline report
-fixtures, the Phase 3 build-page fixture, and the Phase 01 SecretStore backend.
-The commands below are the current release contract; test counts are
-intentionally not hard-coded because they change with the test suite.
+fixtures, the Phase 3 build-page fixture, the Phase 01 SecretStore backend,
+and the Phase 02 control secrets API/security boundary. The commands below are
+the current release contract; test counts are intentionally not hard-coded
+because they change with the test suite.
 
 ## Gate order
 
@@ -227,10 +228,42 @@ The test uses isolated temporary config/report roots and verifies:
 - `createReportServer(..., { mode: 'control' })` wiring the store to the
   server handle and fixed `secrets.local.json` path.
 
-This gate performs local filesystem I/O only. It does not expose an HTTP secret
-endpoint, inject values into an execution environment, contact Jenkins, or
-prove Windows ACL enforcement. On Windows, review the config-directory ACL
-separately because POSIX `0o600` mode bits are advisory.
+This gate performs local filesystem I/O only. It does not inject values into an
+execution environment, contact Jenkins, or prove Windows ACL enforcement. On
+Windows, review the config-directory ACL separately because POSIX `0o600` mode
+bits are advisory.
+
+## Phase 02 control secrets API gate
+
+Run the focused HTTP contract:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-secrets-api.spec.ts \
+  tests/unit/control-secrets-security.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+These tests create isolated loopback control servers and verify:
+
+- `GET /api/secrets` returns an empty or sorted boolean presence map;
+- `GET /api/secrets?keys=...` validates requested names and reports missing
+  names as `false`;
+- `PUT /api/secrets` accepts single and batch patches, persists string values,
+  supports null/`action: "delete"` removal, and never echoes plaintext;
+- `DELETE /api/secrets` supports query and JSON name lists and returns the
+  resulting presence map;
+- Host validation runs before dispatch, while mutations require same-origin
+  Origin, accepted Fetch Metadata, the generated CSRF token, and JSON content
+  type;
+- invalid keys/values/bodies return `400`, invalid mutation gates return `403`,
+  non-JSON mutation bodies return `415`, unsupported methods return `405` with
+  `Allow`, and a missing store returns `503`; and
+- all API responses use `Cache-Control: no-store` and contain no secret value.
+
+The gate writes only isolated temporary SecretStore files and does not contact
+Jenkins or vendor services. It proves request-level API behavior, not Windows
+ACL enforcement or run-environment injection.
 
 ## Browser-fixture boundary
 

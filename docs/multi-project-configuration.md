@@ -161,7 +161,7 @@ Set the referenced names in the shell or CI secret store before running. Do
 not put usernames, passwords, tokens, cookies, or credential-bearing URLs in
 the JSON, source tree, traces, screenshots, or reports.
 
-#### Local SecretStore (Phase 01)
+#### Local SecretStore and control API (Phases 01–02)
 
 Dynamic credential persistence is deliberately separate from the schema-v1
 document. In control mode, `createReportServer` initializes
@@ -171,9 +171,10 @@ directory, and not be a symlink. The filename is not configurable.
 
 `secrets.local.json` is covered by the repository's `config/*.local.json`
 ignore rule. Store content is a JSON object capped at 1 MiB. Keys must match
-`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and values must be strings. Missing or empty
-files read as an empty map; malformed JSON, arrays, non-string values, invalid
-names, oversized files, and non-regular/symlinked files fail closed.
+`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and must not be `__proto__`,
+`prototype`, or `constructor`; values must be strings. Missing or empty files
+read as an empty map; malformed JSON, arrays, non-string values, invalid names,
+oversized files, and non-regular/symlinked files fail closed.
 
 The backend exposes `readSecrets`, `listSecretNames`, `putSecret`,
 `putSecrets`, `deleteSecret`, and `deleteSecrets`. Reads return frozen
@@ -184,10 +185,25 @@ are never returned by a names-only listing or included in diagnostics. POSIX
 mode bits are not a Windows ACL boundary; protect the config directory with
 appropriate user/CI ACLs.
 
-Phase 01 only supplies this persistence backend to the control server. The
-current `/api` router has no secrets endpoint, and report/auto-build execution
-still resolves the environment passed by its caller. API exposure and
-run-environment merging are later phases.
+Control mode exposes the store through `ReportServerHandle` and
+`ControlRouterContext`; `/api/secrets` is the HTTP boundary:
+
+| Request | Contract |
+| --- | --- |
+| `GET /api/secrets` | Returns `200 { "secrets": { "NAME": true } }` for all stored names. |
+| `GET /api/secrets?keys=NAME_A,NAME_B` | Validates each requested key and returns a filtered map where each value is `true` (present) or `false` (absent). |
+| `PUT /api/secrets` | Accepts `{ "name": "NAME", "value": "VALUE" }` or a non-empty `{ "secrets": { "NAME": "VALUE" } }` patch; returns the full post-update presence map. |
+| `DELETE /api/secrets?name=NAME` | Deletes one valid key and returns the full post-delete presence map. |
+| `DELETE /api/secrets` | Accepts JSON `{ "name": "NAME" }` or `{ "names": ["NAME"] }`; returns the full post-delete presence map. |
+
+PUT also accepts null values in a secrets object or `action: "delete"` in
+the single-entry form to remove a key. The router checks the exact Host on
+every request. PUT/DELETE additionally require the exact same-origin
+HTTP(S) Origin, accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode`, the generated
+CSRF token, and `application/json` content type; bodies are bounded at 1 MiB.
+Responses contain presence booleans only and set `Cache-Control: no-store`.
+Run executors still resolve caller-provided environment values; SecretStore
+environment injection is a later phase.
 
 ## Source settings and validation
 

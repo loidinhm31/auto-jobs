@@ -1,14 +1,13 @@
 # Current architecture
 
-This document describes the implemented schema-v1 configuration and the two
-explicit execution paths: report capture and the target-branch Jenkins
-auto-build workflow. Phase 3 adds an offline build-page fixture and an exact
-route map so the auto-build path can be exercised without live side effects.
-Phase 01 adds a local, validated SecretStore persistence seam for future
-control-plane credential management; it is wired only in control mode and is
-not yet an HTTP API or run-environment source. The report command remains
-report-only; auto-build is an explicit library boundary and is not inferred
-from URLs, selectors, CLI names, or environment.
+This document describes the implemented schema-v1 configuration, report and
+target-branch Jenkins auto-build workflows, the local SecretStore backend, and
+the loopback control secrets API. Phase 3 adds an offline build-page fixture
+and exact routes so the auto-build path can be exercised without live side
+effects. Phase 01 adds validated local persistence; Phase 02 exposes guarded
+presence-only `GET`, `PUT`, and `DELETE /api/secrets` operations. The report
+command remains report-only; auto-build is an explicit library boundary and is
+not inferred from URLs, selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -113,6 +112,18 @@ flowchart LR
   manages staging leases and aggregate recovery, and performs bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
+- `src/reporting/report-server-control.ts` validates the Host header for every
+  control request, dispatches API paths, and carries the optional
+  `ControlRouterContext.secretStore` dependency.
+- `src/reporting/report-server-control-api.ts` remains the config/run handler
+  facade and re-exports `handleSecretsApi`; the implementation lives in
+  `report-server-control-secrets-api.ts`.
+- `src/reporting/report-server-control-secrets-api.ts` implements the
+  presence-only `/api/secrets` GET/PUT/DELETE contract, bounded JSON parsing,
+  key/value validation, and SecretStore updates.
+- `src/reporting/report-server-control-security.ts` centralizes control
+  security headers plus Host, Origin, Fetch Metadata, timing-safe CSRF, and
+  mutation content-type gates.
 - `src/templates/template-report-fixture.ts` is the public template facade; it
   re-exports the supported loader, response, route, types, and size-boundary API.
 - `src/templates/template-fixture-types.ts` defines the fixture, response, route
@@ -197,7 +208,7 @@ rejected for either field. Their Jenkins search scopes (`#side-panel` and
 `#bottom-sticker`, respectively) remain runtime code rather than configurable
 CSS. Selector values do not change the configured `jobUrl` or branch identity.
 
-### Phase 01 implementation map
+### Credential and control-plane implementation map
 
 | Path | Responsibility |
 | --- | --- |
@@ -207,11 +218,16 @@ CSS. Selector values do not change the configured `jobUrl` or branch identity.
 | `src/config.ts` | Re-exports config types, loader, and selection helpers. |
 | `src/jenkins/runner-config.ts` | Carries required build selectors into Jenkins runner configuration. |
 | `config/projects.example.json` | Shows explicit enabled report and disabled auto-build project entries. |
-| `src/reporting/report-server-constants.ts` | Defines the fixed secret filename and 1 MiB secret-file boundary. |
+| `src/reporting/report-server-constants.ts` | Defines the fixed secret filename and 1 MiB secret-file/body boundaries. |
 | `src/reporting/report-server-secret-store.ts` | Canonical, atomic, locked local secret persistence and validated read/list/update/delete operations. |
-| `src/reporting/report-server-control.ts` | Carries the optional `SecretStore` dependency in `ControlRouterContext`; no secret endpoint is dispatched yet. |
+| `src/reporting/report-server-control-security.ts` | Applies control security headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
+| `src/reporting/report-server-control-secrets-api.ts` | Implements the modular presence-only secrets API handler. |
+| `src/reporting/report-server-control-api.ts` | Owns config/run handlers and re-exports the secrets handler as the API facade. |
+| `src/reporting/report-server-control.ts` | Validates Host, routes `/api/secrets`, and carries the optional `SecretStore` context dependency. |
 | `src/reporting/report-server.ts` | Creates the `SecretStore` in loopback control mode and exposes it on `ReportServerHandle`. |
-| `tests/unit/report-server-secret-store.spec.ts` | Exercises key/value validation, empty/malformed input, deterministic persistence, deletion, concurrency, redaction, and server wiring. |
+| `tests/unit/report-server-secret-store.spec.ts` | Exercises persistence and control-server wiring. |
+| `tests/unit/control-secrets-api.spec.ts` | Exercises endpoint presence, patch/delete semantics, filtering, and persistence. |
+| `tests/unit/control-secrets-security.spec.ts` | Exercises redaction, validation, method/content-type handling, and security gates. |
 
 ### Secret resolution
 
@@ -237,7 +253,8 @@ existing, non-symlinked directory and fixes the target to
 `config/secrets.local.json`; callers cannot choose a filename or path. A
 missing or empty file reads as an empty map. Existing content must be a JSON
 object no larger than `MAX_SECRET_FILE_BYTES` (1 MiB), with keys matching
-`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and string values.
+`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`, excluding `__proto__`, `prototype`, and
+`constructor`, and string values.
 
 `readSecrets()` and `listSecretNames()` return frozen snapshots. Mutations use
 `putSecret`, `putSecrets`, `deleteSecret`, or `deleteSecrets`; each validates
@@ -249,9 +266,31 @@ the previous target in place. Windows does not enforce POSIX mode bits as an
 ACL boundary, so directory ACLs remain the protection boundary there.
 
 Control mode initializes one store alongside `ConfigStore` and exposes it on
-the server handle and router context. Phase 01 does not expose secret values
-through an HTTP endpoint or inject them into execution environments; those
-operations belong to later control-plane phases.
+the server handle and router context. Phase 02 routes `/api/secrets` through
+the dedicated handler described below. Execution still resolves the
+environment passed by its caller; run-environment injection belongs to a
+later phase.
+
+### Control secrets API contract
+
+`handleControlRequest` rejects an invalid Host before dispatching an API route.
+`handleSecretsApi` returns a presence map and never serializes secret values:
+
+| Request | Input and gates | Result |
+| --- | --- | --- |
+| `GET /api/secrets` | Exact bound Host; optional `keys=NAME_A,NAME_B` filter | `200 { "secrets": { "NAME_A": true } }` for stored names |
+| `PUT /api/secrets` | Host, same-origin Origin, accepted Fetch Metadata, CSRF token, JSON content type, and ≤1 MiB JSON object | `200` full post-update presence map |
+| `DELETE /api/secrets?name=NAME` | Same mutation gates and valid query name | `200` full post-delete presence map |
+| `DELETE /api/secrets` | Same gates and `{ "name": "NAME" }` or `{ "names": ["NAME"] }` JSON body | `200` full post-delete presence map |
+
+PUT accepts a single `{ "name": "NAME", "value": "VALUE" }` object or a
+non-empty `{ "secrets": { "NAME": "VALUE" } }` patch. A null patch value or
+`action: "delete"` removes a key. Filtered GET responses include each valid
+requested key with `true` or `false`; unfiltered responses include sorted
+stored names with `true`. Invalid keys/values/bodies return `400`; invalid
+mutation security returns `403`; wrong content type returns `415`; an absent
+store returns `503`; unsupported methods return `405` with `Allow`. Every API
+response uses `Cache-Control: no-store`.
 
 ### Test configuration
 
@@ -418,18 +457,33 @@ GET/HEAD below the canonical root.
 
 ### Control Server (`npm run serve:control`)
 
-`npm run serve:control` builds and launches the interactive loopback control dashboard
-(`127.0.0.1:4173`). It exposes:
-- Safe config discovery (`GET /api/configs`) and atomic updates (`PUT /api/config`) with ETag and schema validation;
+`npm run serve:control` builds and launches the interactive loopback control
+dashboard (`127.0.0.1:4173`). It exposes:
+
+- Safe config discovery (`GET /api/configs`) and atomic updates
+  (`PUT /api/config`) with ETag and schema validation;
 - Single-mode execution (`POST /api/run`) for `report` or `auto-build` runs;
 - Run status and live logs (`GET /api/run`);
-- Local immutable report links (`GET /reports/...`).
-Control mode also initializes `SecretStore` against the configured `configRoot`.
-The Phase 01 backend is available to later API and run-executor phases, but
-the current router does not expose `/api/secrets` and no execution environment
-is merged from this file yet.
+- Local immutable report links (`GET /reports/...`); and
+- Presence-only credential status and guarded updates/deletes under
+  `GET`/`PUT`/`DELETE /api/secrets`.
 
-Control mode is restricted strictly to loopback (`127.0.0.1` / `localhost`) and refuses LAN binding. All mutations require strict Host and Origin validation and CSRF protection.
+Control mode initializes `SecretStore` against the configured `configRoot`.
+The secrets endpoint reads and writes only the fixed
+`secrets.local.json` target. It returns `{ "secrets": { "<name>": true } }`
+for stored names; `GET /api/secrets?keys=A,B` reports each requested valid
+name as `true` or `false`. PUT accepts a single name/value or a non-empty
+secrets object; null values and `action: "delete"` remove entries. DELETE
+accepts a `name` query or JSON `name`/`names` body.
+
+Control mode is restricted strictly to loopback (`127.0.0.1` / `localhost`) and
+refuses LAN binding. The router checks the exact Host before dispatch. Every
+mutation additionally requires an exact same-origin HTTP(S) Origin,
+accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode` values, the generated CSRF token,
+and `application/json` (except bodyless DELETE). Bodies are capped at the
+1 MiB control limit. All responses set `Cache-Control: no-store`; secret
+values never appear in success or error responses. Run-environment injection
+is a later phase.
 
 ## Test and release boundary
 
@@ -442,8 +496,14 @@ JSON and injected credentials and is never part of the deterministic suite.
 
 Phase 2 and Phase 3 focused unit coverage is in
 `tests/unit/jenkins-build-trigger.spec.ts`,
-`tests/unit/auto-build-runner.spec.ts`, `tests/unit/template-build-fixture.spec.ts`, and the report-selection assertions in
-`tests/unit/sequential-runner.spec.ts`. Control API and UI coverage is in `tests/unit/control-config-api.spec.ts`, `tests/unit/control-run-api.spec.ts`, and `tests/e2e/control-page.spec.ts`. These tests prove exact scoping,
-URL/form validation, one-POST semantics, redaction, cleanup, and report-mode
-exclusion without contacting a live Jenkins controller.
+`tests/unit/auto-build-runner.spec.ts`, `tests/unit/template-build-fixture.spec.ts`,
+and the report-selection assertions in `tests/unit/sequential-runner.spec.ts`.
+Control config/run/UI coverage is in `tests/unit/control-config-api.spec.ts`,
+`tests/unit/control-run-api.spec.ts`, and `tests/e2e/control-page.spec.ts`.
+Phase 02 secrets coverage is in `tests/unit/control-secrets-api.spec.ts` and
+`tests/unit/control-secrets-security.spec.ts`; it proves presence-only GET
+responses, filtering, single/batch PUT, deletion, persistence, redaction,
+Host/Origin/Fetch Metadata/CSRF gates, bounded JSON validation, content-type
+handling, and method/store-availability errors without contacting a live
+Jenkins controller.
 

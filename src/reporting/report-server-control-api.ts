@@ -4,6 +4,8 @@ import { validateMutationRequest } from './report-server-control-security.js';
 import { sendError, sendJson, readBoundedJsonBody } from './report-server-json.js';
 import type { ControlRouterContext } from './report-server-control.js';
 
+export { handleSecretsApi } from './report-server-control-secrets-api.js';
+
 export async function handleConfigApi(
   context: ControlRouterContext,
   searchParams: URLSearchParams,
@@ -30,7 +32,8 @@ export async function handleConfigApi(
   if (method === 'PUT') {
     const gate = validateMutationRequest(request, context.host, context.port, context.csrfToken);
     if (!gate.valid) {
-      sendError(response, gate.status, 'FORBIDDEN', gate.message);
+      const code = gate.status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : 'FORBIDDEN';
+      sendError(response, gate.status, code, gate.message);
       return;
     }
     const ifMatch = request.headers['if-match'];
@@ -59,6 +62,7 @@ export async function handleConfigApi(
     return;
   }
 
+  response.setHeader('allow', 'GET, PUT');
   sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/config');
 }
 
@@ -72,7 +76,8 @@ export async function handleRunApi(
   if (method === 'POST') {
     const gate = validateMutationRequest(request, context.host, context.port, context.csrfToken);
     if (!gate.valid) {
-      sendError(response, gate.status, 'FORBIDDEN', gate.message);
+      const code = gate.status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : 'FORBIDDEN';
+      sendError(response, gate.status, code, gate.message);
       return;
     }
     const bodyResult = await readBoundedJsonBody(request);
@@ -130,5 +135,6 @@ export async function handleRunApi(
     return;
   }
 
+  response.setHeader('allow', 'GET, POST');
   sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/run');
 }

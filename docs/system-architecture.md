@@ -1,8 +1,9 @@
 # System architecture
 
-This is the component-level view of `auto-jobs` after Phase 3 and Phase 01 of
-the dynamic-credentials plan. The repository has two intentionally separate
-execution paths plus a local persistence seam:
+This is the component-level view of `auto-jobs` after Phase 3, Phase 01, and
+Phase 02 of the dynamic-credentials plan. The repository has two intentionally
+separate execution paths plus a local persistence seam and a loopback control
+API:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
@@ -11,14 +12,16 @@ execution paths plus a local persistence seam:
   safe in-memory outcome and does not capture or publish reports.
 - **Offline fixture:** load the checked-in nine-file corpus and fulfill only
   exact synthetic URLs for deterministic report and auto-build tests.
-- **SecretStore backend:** persist validated local credential values outside
-  project JSON; Phase 01 wires the store into control mode without exposing a
-  secret API or injecting values into runs yet.
+- **SecretStore and secrets API:** persist validated local credential values
+  outside project JSON and expose only boolean presence through guarded
+  `/api/secrets` operations. Stored values are not returned or injected into
+  runs by this phase.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
-for JSON and credential details and [release gates](./release-gates.md) for
-validation commands.
+for JSON, credential, and secrets API details and [release gates](./release-gates.md)
+for validation commands.
+
 
 ## Context and boundaries
 
@@ -26,7 +29,9 @@ validation commands.
 flowchart TB
   Operator[Operator or future integration] --> ConfigFile[Schema-v1 project JSON]
   ConfigRoot[Existing config/ directory] --> SecretStore[SecretStore backend]
-  SecretStore -. control mode handle/context; no API or run injection yet .-> Control[Loopback control server]
+  SecretStore --> SecretsApi[Loopback /api/secrets]
+  Control[Loopback control server] --> SecretsApi
+  SecretsApi -. presence-only status; guarded PUT/DELETE .-> SecretStore
   Secrets[CI secret store / environment] --> Executor
   ConfigFile --> Loader[Validate and normalize]
   Loader --> Selector{Explicit mode and project selection}
@@ -42,11 +47,13 @@ The loader and selection helpers are pure configuration boundaries. Browser
 launch, credentials, and network I/O begin only after a caller has selected an
 executor. In control mode, `createReportServer` creates both `ConfigStore` and
 `SecretStore` from the configured `configRoot`; the latter fixes its target to
-`secrets.local.json` under that canonical directory. Current executors still
-resolve credentials from their supplied environment, so the Phase 01 store is
-not an execution override. The report server reads an existing canonical report
-root and is not a build or report-generation API. Control mode is loopback-only;
-its secret-management HTTP API and run-environment injection are later phases.
+`secrets.local.json` under that canonical directory. The loopback control
+router validates `Host` before dispatching every request, and the secrets API
+returns only boolean presence data. Mutations additionally require an accepted
+`Origin`, `Sec-Fetch-*` metadata, CSRF token, and JSON content type. Current
+executors still resolve credentials from their supplied environment, so the
+Phase 02 store is not an execution override. Run-environment injection remains
+a later phase.
 
 ## Mode dispatch
 
@@ -223,8 +230,9 @@ The store contract is:
 | `putSecrets(entries)` | Validates all entries before applying a bulk read-modify-write. |
 | `deleteSecret(name)` / `deleteSecrets(names)` | Validate names and remove existing keys; deleting absent keys is a no-op. |
 
-Keys must match `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`; values remain strings and
-are never coerced. The file and serialized payload are capped at
+Keys must match `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and must not be the
+prototype names `__proto__`, `prototype`, or `constructor`; values remain
+strings and are never coerced. The file and serialized payload are capped at
 `MAX_SECRET_FILE_BYTES` (1 MiB). Updates use one in-memory write mutex so
 concurrent callers preserve each other's changes. Serialization sorts keys
 lexicographically and writes a sibling temporary file with exclusive creation,
@@ -235,10 +243,34 @@ is best-effort. On Windows, mode bits are not an ACL boundary; protect the
 config directory with appropriate user/CI ACLs.
 
 `createReportServer` creates the store only in loopback control mode and
-exposes it through `ReportServerHandle` and `ControlRouterContext`. The current
-router has no `/api/secrets` dispatch, and current report/auto-build execution
-still consumes its supplied environment. Secret API and run-environment
-injection are separate follow-on phases.
+exposes it through `ReportServerHandle` and `ControlRouterContext`. The
+control router dispatches `/api/secrets` to the dedicated
+`report-server-control-secrets-api.ts` handler; report/auto-build execution
+still consumes its supplied environment. Run-environment injection remains a
+later phase.
+
+### Control secrets API and security gates
+
+The secrets handler is intentionally separate from
+`report-server-control-api.ts`, which keeps the config/run handlers and
+re-exports `handleSecretsApi` as the control API facade. `handleControlRequest`
+performs the Host check before any route dispatch. All JSON responses use
+`Cache-Control: no-store` and the control CSP/security header set.
+
+| Request | Gate and input | Response |
+| --- | --- | --- |
+| `GET /api/secrets` | Exact bound Host; optional comma-separated `keys` query, each validated | `200 { "secrets": { "<name>": true } }`; filtered names are `true` or `false` |
+| `PUT /api/secrets` | Host, Origin, Fetch Metadata, CSRF, JSON content type, and bounded JSON body | `200` full presence map after patch |
+| `DELETE /api/secrets?name=NAME` | Same mutation gates; valid name query | `200` full presence map after deletion |
+| `DELETE /api/secrets` | Same gates; JSON `{ "name": "NAME" }` or `{ "names": ["NAME"] }` | `200` full presence map after deletion |
+
+PUT accepts either `{ "name": "NAME", "value": "VALUE" }` or a non-empty
+`{ "secrets": { "NAME": "VALUE" } }` object. A null value in the object, or
+`action: "delete"` in the single-entry form, deletes instead of storing.
+Values never appear in success or error responses. Invalid names/values and
+malformed bodies return `400`; invalid mutation gates return `403`, a
+non-JSON mutation body returns `415`, an unavailable store returns `503`, and
+unsupported methods return `405` with `Allow: GET, PUT, DELETE`.
 
 ## Offline template fixture subsystem
 
@@ -294,6 +326,13 @@ that route authenticated.
 - `tests/unit/sequential-runner.spec.ts` preserves shared launch options,
   sequential report behavior, and exclusion of auto-build projects from
   `runFromConfig`.
+- `tests/unit/control-secrets-api.spec.ts` exercises empty/full/filtered
+  presence maps, single and batch PUT updates, null/action deletion, query and
+  body DELETE forms, and persistence without returning values.
+- `tests/unit/control-secrets-security.spec.ts` exercises plaintext redaction,
+  Host/Origin/Fetch Metadata/CSRF gates, key/value/body validation,
+  content-type rejection, unsupported methods, and the unavailable-store
+  response through the modular handler.
 - Template unit and E2E tests use exact default-deny routes and checked-in
   fixtures; `template-build-fixture.spec.ts` proves build-page drift and
   redirect contracts, while `template-auto-build.spec.ts` exercises the
@@ -313,8 +352,12 @@ that route authenticated.
    matching POST.
 6. Preserve one absolute deadline, bounded cleanup, secret redaction, and the
    existing canonical report-root/security policy.
-7. Keep local secrets outside project JSON, restrict names and payload size,
-   serialize sorted keys atomically, and never expose values in diagnostics or
-   HTTP responses.
-8. Treat Windows file-mode bits as advisory; rely on protected config-directory
-   ACLs and keep secret API/run-environment integration behind its own phase.
+7. Keep local secrets outside project JSON, reject reserved prototype keys,
+   restrict names and payload size, serialize sorted keys atomically, and
+   never expose values in diagnostics or HTTP responses.
+8. Keep control mutations behind exact Host/Origin, accepted Fetch Metadata,
+   timing-safe CSRF, and JSON-size/content-type gates; return presence booleans
+   rather than values.
+9. Treat Windows file-mode bits as advisory; rely on protected
+   config-directory ACLs, and keep run-environment injection behind its own
+   phase.

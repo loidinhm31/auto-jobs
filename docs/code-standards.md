@@ -31,10 +31,13 @@ schema or security validation.
 | `src/workflow/` | Shared absolute deadlines, hard cleanup timeouts, and diagnostic helpers. |
 | `src/artifacts/` | Immutable report identity, staging/publication, manifest discovery, and bounded cleanup. |
 | `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
-| `src/reporting/` | Static report rendering, links, and read-only report serving. |
 | `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
+| `src/reporting/` | Static report rendering, links, read-only report serving, and control-plane routing. |
 | `src/reporting/report-server-secret-store.ts` | Local credential persistence only: canonical fixed filename, validation, atomic locked writes, and read/list/update/delete operations. |
-| `src/templates/` | Offline fixture types, safe file loading, HTML/Sonar/build validation, exact route installation, and the public facade only. |
+| `src/reporting/report-server-control-secrets-api.ts` | Presence-only `/api/secrets` handler; parse and validate endpoint inputs, invoke SecretStore, and never return values. |
+| `src/reporting/report-server-control-security.ts` | Shared control response headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
+| `src/reporting/report-server-control-api.ts` | Config/run handlers plus the re-export facade for the modular secrets handler. |
+| `src/reporting/report-server-control.ts` | Loopback control routing, Host preflight, and `ControlRouterContext` dependencies. |
 | `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
 | `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
 
@@ -132,10 +135,10 @@ Compiler settings in `tsconfig.json` are the source of truth:
   fixed `secrets.local.json` filename below the canonical, existing config
   directory; never accept a path or filename from a caller.
 - Validate every key against
-  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and require string values. Reject
-  malformed JSON, arrays/null, non-regular or symlinked files, and files or
-  serialized payloads over `MAX_SECRET_FILE_BYTES` (1 MiB). A missing/empty file
-  is an empty map.
+  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`, reject `__proto__`, `prototype`, and
+  `constructor`, and require string values. Reject malformed JSON, arrays/null,
+  non-regular or symlinked files, and files or serialized payloads over
+  `MAX_SECRET_FILE_BYTES` (1 MiB). A missing/empty file is an empty map.
 - Return frozen snapshots from reads/listing. Validate complete bulk input
   before mutation. Serialize lexicographically sorted keys.
 - Serialize each read-modify-write under an in-memory mutex. Write to an
@@ -145,6 +148,22 @@ Compiler settings in `tsconfig.json` are the source of truth:
 - Do not include values in errors, logs, HTTP responses, test output, or
   diagnostics. POSIX mode bits are advisory on Windows; rely on config-directory
   ACLs for access control.
+
+### Control API security
+
+- Keep the secrets implementation in
+  `report-server-control-secrets-api.ts`; keep
+  `report-server-control-api.ts` as the config/run facade and re-export.
+- Route exact `/api/secrets` paths only. `handleControlRequest` must validate
+  Host before dispatch; do not bypass this preflight in a handler.
+- Use `validateMutationRequest` for every PUT/DELETE. It checks exact Host and
+  Origin, accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode`, timing-safe
+  `x-csrf-token`, and JSON content type (bodyless DELETE is the only exception).
+- Parse mutations through `readBoundedJsonBody`; preserve the 1 MiB body limit
+  and reject malformed/non-object JSON before touching SecretStore.
+- Build responses from names/presence booleans only. Never echo values, request
+  bodies, or raw errors. Set `Cache-Control: no-store` through the shared
+  control response helper.
 
 ## Deadlines, cleanup, and errors
 
@@ -174,6 +193,13 @@ Tests must defend observable behavior and fail on plausible regressions:
   reads, strict key/value validation, size and malformed-content rejection,
   sorted/frozen snapshots, atomic mutation/deletion, concurrent update
   preservation, redaction, and control-server wiring.
+- For the secrets API, cover unfiltered and filtered boolean presence maps,
+  single/batch patch and deletion forms, persistence, and the invariant that
+  plaintext never appears in responses.
+- For the security boundary, cover invalid Host/Origin/Fetch Metadata/CSRF,
+  non-JSON content types, invalid keys/values/bodies, unsupported methods, and
+  the unavailable-store response. Use the real loopback server plus a direct
+  handler test only for the missing dependency boundary.
 - For auto-build, assert structural scoping, exact action identity, form
   method/classes, one POST, response classification, unknown-after-POST, no
   retry, mode/enabled gates, secret redaction, and resource cleanup.

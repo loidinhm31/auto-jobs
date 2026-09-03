@@ -100,7 +100,10 @@ export function validateMutationRequest(
     return { valid: false, status: 403, message: 'invalid or missing CSRF token' };
   }
   const contentType = parseHeader(request, 'content-type');
-  if (contentType === undefined || !contentType.toLowerCase().startsWith('application/json')) {
+  const isBodylessDelete = request.method === 'DELETE' &&
+    (request.headers['content-length'] === undefined || request.headers['content-length'] === '0') &&
+    contentType === undefined;
+  if (!isBodylessDelete && (contentType === undefined || !contentType.toLowerCase().startsWith('application/json'))) {
     return { valid: false, status: 415, message: 'Content-Type must be application/json' };
   }
   return { valid: true };

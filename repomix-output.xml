@@ -136,6 +136,7 @@ src/reporting/report-server-config-store.ts
 src/reporting/report-server-constants.ts
 src/reporting/report-server-control-api.ts
 src/reporting/report-server-control-page.ts
+src/reporting/report-server-control-secrets-api.ts
 src/reporting/report-server-control-security.ts
 src/reporting/report-server-control.ts
 src/reporting/report-server-file-io.ts
@@ -210,6 +211,8 @@ tests/unit/auto-build-runner.spec.ts
 tests/unit/contract-hardening.spec.ts
 tests/unit/control-config-api.spec.ts
 tests/unit/control-run-api.spec.ts
+tests/unit/control-secrets-api.spec.ts
+tests/unit/control-secrets-security.spec.ts
 tests/unit/diagnostics.spec.ts
 tests/unit/immutable-run-history.spec.ts
 tests/unit/jenkins-build-trigger.spec.ts
@@ -367,15 +370,9 @@ File: config/projects.example.json
       "loginUrl": "https://jenkins.example.invalid/jenkins/login",
       "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
       "sourceOrigins": {
-        "jenkins": [
-          "https://jenkins.example.invalid"
-        ],
-        "snyk": [
-          "https://snyk.example.invalid"
-        ],
-        "sonarqube": [
-          "https://sonarqube.example.invalid"
-        ]
+        "jenkins": ["https://jenkins.example.invalid"],
+        "snyk": ["https://snyk.example.invalid"],
+        "sonarqube": ["https://sonarqube.example.invalid"]
       }
     },
     {
@@ -390,15 +387,9 @@ File: config/projects.example.json
         "passwordVariable": "SERVICE_B_JENKINS_PASSWORD"
       },
       "sourceOrigins": {
-        "jenkins": [
-          "https://jenkins.example.invalid"
-        ],
-        "snyk": [
-          "https://snyk.example.invalid"
-        ],
-        "sonarqube": [
-          "https://sonarqube.example.invalid"
-        ]
+        "jenkins": ["https://jenkins.example.invalid"],
+        "snyk": ["https://snyk.example.invalid"],
+        "sonarqube": ["https://sonarqube.example.invalid"]
       }
     }
   ]
@@ -409,15 +400,14 @@ File: docs/architecture.md
 ================
 # Current architecture
 
-This document describes the implemented schema-v1 configuration and the two
-explicit execution paths: report capture and the target-branch Jenkins
-auto-build workflow. Phase 3 adds an offline build-page fixture and an exact
-route map so the auto-build path can be exercised without live side effects.
-Phase 01 adds a local, validated SecretStore persistence seam for future
-control-plane credential management; it is wired only in control mode and is
-not yet an HTTP API or run-environment source. The report command remains
-report-only; auto-build is an explicit library boundary and is not inferred
-from URLs, selectors, CLI names, or environment.
+This document describes the implemented schema-v1 configuration, report and
+target-branch Jenkins auto-build workflows, the local SecretStore backend, and
+the loopback control secrets API. Phase 3 adds an offline build-page fixture
+and exact routes so the auto-build path can be exercised without live side
+effects. Phase 01 adds validated local persistence; Phase 02 exposes guarded
+presence-only `GET`, `PUT`, and `DELETE /api/secrets` operations. The report
+command remains report-only; auto-build is an explicit library boundary and is
+not inferred from URLs, selectors, CLI names, or environment.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -522,6 +512,18 @@ flowchart LR
   manages staging leases and aggregate recovery, and performs bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
+- `src/reporting/report-server-control.ts` validates the Host header for every
+  control request, dispatches API paths, and carries the optional
+  `ControlRouterContext.secretStore` dependency.
+- `src/reporting/report-server-control-api.ts` remains the config/run handler
+  facade and re-exports `handleSecretsApi`; the implementation lives in
+  `report-server-control-secrets-api.ts`.
+- `src/reporting/report-server-control-secrets-api.ts` implements the
+  presence-only `/api/secrets` GET/PUT/DELETE contract, bounded JSON parsing,
+  key/value validation, and SecretStore updates.
+- `src/reporting/report-server-control-security.ts` centralizes control
+  security headers plus Host, Origin, Fetch Metadata, timing-safe CSRF, and
+  mutation content-type gates.
 - `src/templates/template-report-fixture.ts` is the public template facade; it
   re-exports the supported loader, response, route, types, and size-boundary API.
 - `src/templates/template-fixture-types.ts` defines the fixture, response, route
@@ -606,7 +608,7 @@ rejected for either field. Their Jenkins search scopes (`#side-panel` and
 `#bottom-sticker`, respectively) remain runtime code rather than configurable
 CSS. Selector values do not change the configured `jobUrl` or branch identity.
 
-### Phase 01 implementation map
+### Credential and control-plane implementation map
 
 | Path | Responsibility |
 | --- | --- |
@@ -616,11 +618,16 @@ CSS. Selector values do not change the configured `jobUrl` or branch identity.
 | `src/config.ts` | Re-exports config types, loader, and selection helpers. |
 | `src/jenkins/runner-config.ts` | Carries required build selectors into Jenkins runner configuration. |
 | `config/projects.example.json` | Shows explicit enabled report and disabled auto-build project entries. |
-| `src/reporting/report-server-constants.ts` | Defines the fixed secret filename and 1 MiB secret-file boundary. |
+| `src/reporting/report-server-constants.ts` | Defines the fixed secret filename and 1 MiB secret-file/body boundaries. |
 | `src/reporting/report-server-secret-store.ts` | Canonical, atomic, locked local secret persistence and validated read/list/update/delete operations. |
-| `src/reporting/report-server-control.ts` | Carries the optional `SecretStore` dependency in `ControlRouterContext`; no secret endpoint is dispatched yet. |
+| `src/reporting/report-server-control-security.ts` | Applies control security headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
+| `src/reporting/report-server-control-secrets-api.ts` | Implements the modular presence-only secrets API handler. |
+| `src/reporting/report-server-control-api.ts` | Owns config/run handlers and re-exports the secrets handler as the API facade. |
+| `src/reporting/report-server-control.ts` | Validates Host, routes `/api/secrets`, and carries the optional `SecretStore` context dependency. |
 | `src/reporting/report-server.ts` | Creates the `SecretStore` in loopback control mode and exposes it on `ReportServerHandle`. |
-| `tests/unit/report-server-secret-store.spec.ts` | Exercises key/value validation, empty/malformed input, deterministic persistence, deletion, concurrency, redaction, and server wiring. |
+| `tests/unit/report-server-secret-store.spec.ts` | Exercises persistence and control-server wiring. |
+| `tests/unit/control-secrets-api.spec.ts` | Exercises endpoint presence, patch/delete semantics, filtering, and persistence. |
+| `tests/unit/control-secrets-security.spec.ts` | Exercises redaction, validation, method/content-type handling, and security gates. |
 
 ### Secret resolution
 
@@ -646,7 +653,8 @@ existing, non-symlinked directory and fixes the target to
 `config/secrets.local.json`; callers cannot choose a filename or path. A
 missing or empty file reads as an empty map. Existing content must be a JSON
 object no larger than `MAX_SECRET_FILE_BYTES` (1 MiB), with keys matching
-`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and string values.
+`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`, excluding `__proto__`, `prototype`, and
+`constructor`, and string values.
 
 `readSecrets()` and `listSecretNames()` return frozen snapshots. Mutations use
 `putSecret`, `putSecrets`, `deleteSecret`, or `deleteSecrets`; each validates
@@ -658,9 +666,31 @@ the previous target in place. Windows does not enforce POSIX mode bits as an
 ACL boundary, so directory ACLs remain the protection boundary there.
 
 Control mode initializes one store alongside `ConfigStore` and exposes it on
-the server handle and router context. Phase 01 does not expose secret values
-through an HTTP endpoint or inject them into execution environments; those
-operations belong to later control-plane phases.
+the server handle and router context. Phase 02 routes `/api/secrets` through
+the dedicated handler described below. Execution still resolves the
+environment passed by its caller; run-environment injection belongs to a
+later phase.
+
+### Control secrets API contract
+
+`handleControlRequest` rejects an invalid Host before dispatching an API route.
+`handleSecretsApi` returns a presence map and never serializes secret values:
+
+| Request | Input and gates | Result |
+| --- | --- | --- |
+| `GET /api/secrets` | Exact bound Host; optional `keys=NAME_A,NAME_B` filter | `200 { "secrets": { "NAME_A": true } }` for stored names |
+| `PUT /api/secrets` | Host, same-origin Origin, accepted Fetch Metadata, CSRF token, JSON content type, and ≤1 MiB JSON object | `200` full post-update presence map |
+| `DELETE /api/secrets?name=NAME` | Same mutation gates and valid query name | `200` full post-delete presence map |
+| `DELETE /api/secrets` | Same gates and `{ "name": "NAME" }` or `{ "names": ["NAME"] }` JSON body | `200` full post-delete presence map |
+
+PUT accepts a single `{ "name": "NAME", "value": "VALUE" }` object or a
+non-empty `{ "secrets": { "NAME": "VALUE" } }` patch. A null patch value or
+`action: "delete"` removes a key. Filtered GET responses include each valid
+requested key with `true` or `false`; unfiltered responses include sorted
+stored names with `true`. Invalid keys/values/bodies return `400`; invalid
+mutation security returns `403`; wrong content type returns `415`; an absent
+store returns `503`; unsupported methods return `405` with `Allow`. Every API
+response uses `Cache-Control: no-store`.
 
 ### Test configuration
 
@@ -827,18 +857,33 @@ GET/HEAD below the canonical root.
 
 ### Control Server (`npm run serve:control`)
 
-`npm run serve:control` builds and launches the interactive loopback control dashboard
-(`127.0.0.1:4173`). It exposes:
-- Safe config discovery (`GET /api/configs`) and atomic updates (`PUT /api/config`) with ETag and schema validation;
+`npm run serve:control` builds and launches the interactive loopback control
+dashboard (`127.0.0.1:4173`). It exposes:
+
+- Safe config discovery (`GET /api/configs`) and atomic updates
+  (`PUT /api/config`) with ETag and schema validation;
 - Single-mode execution (`POST /api/run`) for `report` or `auto-build` runs;
 - Run status and live logs (`GET /api/run`);
-- Local immutable report links (`GET /reports/...`).
-Control mode also initializes `SecretStore` against the configured `configRoot`.
-The Phase 01 backend is available to later API and run-executor phases, but
-the current router does not expose `/api/secrets` and no execution environment
-is merged from this file yet.
+- Local immutable report links (`GET /reports/...`); and
+- Presence-only credential status and guarded updates/deletes under
+  `GET`/`PUT`/`DELETE /api/secrets`.
 
-Control mode is restricted strictly to loopback (`127.0.0.1` / `localhost`) and refuses LAN binding. All mutations require strict Host and Origin validation and CSRF protection.
+Control mode initializes `SecretStore` against the configured `configRoot`.
+The secrets endpoint reads and writes only the fixed
+`secrets.local.json` target. It returns `{ "secrets": { "<name>": true } }`
+for stored names; `GET /api/secrets?keys=A,B` reports each requested valid
+name as `true` or `false`. PUT accepts a single name/value or a non-empty
+secrets object; null values and `action: "delete"` remove entries. DELETE
+accepts a `name` query or JSON `name`/`names` body.
+
+Control mode is restricted strictly to loopback (`127.0.0.1` / `localhost`) and
+refuses LAN binding. The router checks the exact Host before dispatch. Every
+mutation additionally requires an exact same-origin HTTP(S) Origin,
+accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode` values, the generated CSRF token,
+and `application/json` (except bodyless DELETE). Bodies are capped at the
+1 MiB control limit. All responses set `Cache-Control: no-store`; secret
+values never appear in success or error responses. Run-environment injection
+is a later phase.
 
 ## Test and release boundary
 
@@ -851,10 +896,16 @@ JSON and injected credentials and is never part of the deterministic suite.
 
 Phase 2 and Phase 3 focused unit coverage is in
 `tests/unit/jenkins-build-trigger.spec.ts`,
-`tests/unit/auto-build-runner.spec.ts`, `tests/unit/template-build-fixture.spec.ts`, and the report-selection assertions in
-`tests/unit/sequential-runner.spec.ts`. Control API and UI coverage is in `tests/unit/control-config-api.spec.ts`, `tests/unit/control-run-api.spec.ts`, and `tests/e2e/control-page.spec.ts`. These tests prove exact scoping,
-URL/form validation, one-POST semantics, redaction, cleanup, and report-mode
-exclusion without contacting a live Jenkins controller.
+`tests/unit/auto-build-runner.spec.ts`, `tests/unit/template-build-fixture.spec.ts`,
+and the report-selection assertions in `tests/unit/sequential-runner.spec.ts`.
+Control config/run/UI coverage is in `tests/unit/control-config-api.spec.ts`,
+`tests/unit/control-run-api.spec.ts`, and `tests/e2e/control-page.spec.ts`.
+Phase 02 secrets coverage is in `tests/unit/control-secrets-api.spec.ts` and
+`tests/unit/control-secrets-security.spec.ts`; it proves presence-only GET
+responses, filtering, single/batch PUT, deletion, persistence, redaction,
+Host/Origin/Fetch Metadata/CSRF gates, bounded JSON validation, content-type
+handling, and method/store-availability errors without contacting a live
+Jenkins controller.
 
 ================
 File: docs/code-standards.md
@@ -892,10 +943,13 @@ schema or security validation.
 | `src/workflow/` | Shared absolute deadlines, hard cleanup timeouts, and diagnostic helpers. |
 | `src/artifacts/` | Immutable report identity, staging/publication, manifest discovery, and bounded cleanup. |
 | `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
-| `src/reporting/` | Static report rendering, links, and read-only report serving. |
 | `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
+| `src/reporting/` | Static report rendering, links, read-only report serving, and control-plane routing. |
 | `src/reporting/report-server-secret-store.ts` | Local credential persistence only: canonical fixed filename, validation, atomic locked writes, and read/list/update/delete operations. |
-| `src/templates/` | Offline fixture types, safe file loading, HTML/Sonar/build validation, exact route installation, and the public facade only. |
+| `src/reporting/report-server-control-secrets-api.ts` | Presence-only `/api/secrets` handler; parse and validate endpoint inputs, invoke SecretStore, and never return values. |
+| `src/reporting/report-server-control-security.ts` | Shared control response headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
+| `src/reporting/report-server-control-api.ts` | Config/run handlers plus the re-export facade for the modular secrets handler. |
+| `src/reporting/report-server-control.ts` | Loopback control routing, Host preflight, and `ControlRouterContext` dependencies. |
 | `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
 | `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
 
@@ -993,10 +1047,10 @@ Compiler settings in `tsconfig.json` are the source of truth:
   fixed `secrets.local.json` filename below the canonical, existing config
   directory; never accept a path or filename from a caller.
 - Validate every key against
-  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and require string values. Reject
-  malformed JSON, arrays/null, non-regular or symlinked files, and files or
-  serialized payloads over `MAX_SECRET_FILE_BYTES` (1 MiB). A missing/empty file
-  is an empty map.
+  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`, reject `__proto__`, `prototype`, and
+  `constructor`, and require string values. Reject malformed JSON, arrays/null,
+  non-regular or symlinked files, and files or serialized payloads over
+  `MAX_SECRET_FILE_BYTES` (1 MiB). A missing/empty file is an empty map.
 - Return frozen snapshots from reads/listing. Validate complete bulk input
   before mutation. Serialize lexicographically sorted keys.
 - Serialize each read-modify-write under an in-memory mutex. Write to an
@@ -1006,6 +1060,22 @@ Compiler settings in `tsconfig.json` are the source of truth:
 - Do not include values in errors, logs, HTTP responses, test output, or
   diagnostics. POSIX mode bits are advisory on Windows; rely on config-directory
   ACLs for access control.
+
+### Control API security
+
+- Keep the secrets implementation in
+  `report-server-control-secrets-api.ts`; keep
+  `report-server-control-api.ts` as the config/run facade and re-export.
+- Route exact `/api/secrets` paths only. `handleControlRequest` must validate
+  Host before dispatch; do not bypass this preflight in a handler.
+- Use `validateMutationRequest` for every PUT/DELETE. It checks exact Host and
+  Origin, accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode`, timing-safe
+  `x-csrf-token`, and JSON content type (bodyless DELETE is the only exception).
+- Parse mutations through `readBoundedJsonBody`; preserve the 1 MiB body limit
+  and reject malformed/non-object JSON before touching SecretStore.
+- Build responses from names/presence booleans only. Never echo values, request
+  bodies, or raw errors. Set `Cache-Control: no-store` through the shared
+  control response helper.
 
 ## Deadlines, cleanup, and errors
 
@@ -1035,6 +1105,13 @@ Tests must defend observable behavior and fail on plausible regressions:
   reads, strict key/value validation, size and malformed-content rejection,
   sorted/frozen snapshots, atomic mutation/deletion, concurrent update
   preservation, redaction, and control-server wiring.
+- For the secrets API, cover unfiltered and filtered boolean presence maps,
+  single/batch patch and deletion forms, persistence, and the invariant that
+  plaintext never appears in responses.
+- For the security boundary, cover invalid Host/Origin/Fetch Metadata/CSRF,
+  non-JSON content types, invalid keys/values/bodies, unsupported methods, and
+  the unavailable-store response. Use the real loopback server plus a direct
+  handler test only for the missing dependency boundary.
 - For auto-build, assert structural scoping, exact action identity, form
   method/classes, one POST, response classification, unknown-after-POST, no
   retry, mode/enabled gates, secret redaction, and resource cleanup.
@@ -1069,8 +1146,8 @@ File: docs/codebase-summary.md
 
 This summary is derived from the repository compaction generated by Repomix
 (`repomix-output.xml`) and the checked-in source/configuration files. It records
-the current implementation boundary through Phase 3 and Phase 01 of the
-dynamic-credentials plan; it does not claim a live Jenkins run.
+the current implementation boundary through Phase 3 and dynamic-credentials
+Phase 02; it does not claim a live Jenkins run.
 
 ## Repository profile
 
@@ -1087,12 +1164,16 @@ dynamic-credentials plan; it does not claim a live Jenkins run.
   detail page and exact default-deny GET/POST routes for deterministic proof.
 - Phase 01 addition: a canonical, local `SecretStore` backend for validated
   credential persistence at `config/secrets.local.json`, wired into control
-  mode but not yet exposed through an HTTP secrets API or run-environment
-  injection.
-- Repomix inventory: 188 repository files were packed; binary/ignored files
-  remain outside the summary. The current XML compaction contains the Phase 01
+  mode.
+- Phase 02 addition: loopback `GET`/`PUT`/`DELETE /api/secrets` routes with
+  boolean-only presence maps, optional GET key filtering, bounded JSON patches,
+  and Host/Origin/Fetch Metadata/CSRF/content-type security gates. The secrets
+  implementation is isolated in a dedicated handler module; run-environment
+  injection remains a later phase.
+- Repomix inventory: 191 repository files were packed; binary/ignored files
+  remain outside the summary. The current XML compaction contains the Phase 02
   source, tests, fixtures, plans, and documentation.
-- Compaction metrics: 4,571,029 characters and 1,355,315 tokens.
+- Compaction metrics: 4,628,402 characters and 1,369,019 tokens.
 - Repomix's security scan excluded two unit-test files containing basic-auth
   test strings; those tests remain repository inputs and are not treated as
   runtime behavior.
@@ -1111,6 +1192,10 @@ dynamic-credentials plan; it does not claim a live Jenkins run.
 | `src/templates/template-fixture-loader.ts` | Loads and validates the complete offline fixture. |
 | `src/templates/template-fixture-routes.ts` | Installs exact default-deny browser routes. |
 | `src/reporting/report-server-secret-store.ts` | Validates and atomically persists local secrets; no network or execution injection. |
+| `src/reporting/report-server-control-secrets-api.ts` | Handles presence-only `/api/secrets` GET/PUT/DELETE requests and SecretStore updates. |
+| `src/reporting/report-server-control-security.ts` | Enforces control security headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
+| `src/reporting/report-server-control-api.ts` | Owns config/run handlers and re-exports the modular secrets handler. |
+| `src/reporting/report-server-control.ts` | Validates Host, dispatches control routes, and carries router context. |
 | `src/reporting/report-server.ts` | Creates the store in control mode and exposes it on the server handle. |
 
 Useful package scripts include `typecheck`, `build`, `test:unit`,
@@ -1220,12 +1305,13 @@ filename is accepted from callers. The file is covered by
 
 The store accepts only a JSON object of string values no larger than
 `MAX_SECRET_FILE_BYTES` (1 MiB). Keys must match
-`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`; missing or empty files return `{}`.
-Malformed JSON, arrays/null, non-string values, invalid keys, oversized files,
-non-regular files, and symlinks are rejected. `readSecrets()` returns a frozen
-map; `listSecretNames()` returns sorted frozen names. `putSecret`,
-`putSecrets`, `deleteSecret`, and `deleteSecrets` validate names and use a
-latest-file read-modify-write inside one in-memory lock.
+`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and exclude `__proto__`, `prototype`, and
+`constructor`; missing or empty files return `{}`. Malformed JSON, arrays/null,
+non-string values, invalid keys, oversized files, non-regular files, and
+symlinks are rejected. `readSecrets()` returns a frozen map;
+`listSecretNames()` returns sorted frozen names. `putSecret`, `putSecrets`,
+`deleteSecret`, and `deleteSecrets` validate names and use a latest-file
+read-modify-write inside one in-memory lock.
 
 Writes serialize lexicographically sorted keys to an exclusive sibling
 temporary file with mode `0o600`, sync and close it, then rename it over the
@@ -1235,9 +1321,29 @@ boundary; protect the config directory with user/CI ACLs.
 
 `src/reporting/report-server.ts` creates one store in control mode and returns
 it on `ReportServerHandle`; `src/reporting/report-server-control.ts` carries it
-on `ControlRouterContext`. The current router does not dispatch `/api/secrets`,
-and execution still uses caller-provided environment values. API exposure and
-run-environment merging are later phases.
+on `ControlRouterContext`. The router validates Host before dispatching
+`/api/secrets`, whose implementation is isolated in
+`report-server-control-secrets-api.ts`; `report-server-control-api.ts` keeps the
+config/run facade and re-export. Execution still uses caller-provided
+environment values; run-environment merging is a later phase.
+
+## Control secrets API
+
+`GET /api/secrets` returns `{ "secrets": { "<name>": true } }` for all stored
+names. `GET /api/secrets?keys=A,B` validates requested environment-style names
+and returns each as `true` (present) or `false` (absent). PUT requires the
+shared mutation gate and accepts `{ "name": "NAME", "value": "VALUE" }` or a
+non-empty `{ "secrets": { "NAME": "VALUE" } }` patch. Null patch values and
+`action: "delete"` remove entries. DELETE accepts `?name=NAME` or JSON
+`{ "name": "NAME" }`/`{ "names": ["NAME"] }`. PUT/DELETE return the full
+post-operation presence map; no endpoint response contains a secret value.
+
+Mutations use `validateMutationRequest`: exact Host and same-origin Origin,
+accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode`, timing-safe CSRF, JSON content type
+(bodyless DELETE excepted), and the 1 MiB bounded JSON body parser. Invalid
+input returns 400, failed gates 403, non-JSON mutations 415, an unavailable
+store 503, and unsupported methods 405 with `Allow`. Shared JSON responses
+set `Cache-Control: no-store`.
 
 ## Module map
 
@@ -1255,10 +1361,13 @@ run-environment merging are later phases.
 | `src/project/auto-build-runner.ts` | One-project auto-build lifecycle, redaction, and cleanup. |
 | `src/project/project-runner.ts` | Report run state, capture, failure artifacts, and report outcomes. |
 | `src/artifacts/` | Run identities, staging leases, publication, manifest discovery, cleanup, and aggregate recovery. |
-| `src/reporting/` | HTML rendering, report links, view models, static server, and CSP-aware file serving. |
+| `src/reporting/` | HTML rendering, report links, view models, static serving, and control API routing. |
 | `src/reporting/report-server-secret-store.ts` | Canonical fixed-file secret persistence, validation, frozen snapshots, atomic writes, in-memory locking, and deletion. |
-| `src/reporting/report-server-constants.ts` | Shared report/control limits plus `SECRETS_FILE_NAME` and `MAX_SECRET_FILE_BYTES`. |
-| `src/reporting/report-server-control.ts` | Control routing and `ControlRouterContext`, including the optional SecretStore dependency. |
+| `src/reporting/report-server-constants.ts` | Shared report/control limits plus `SECRETS_FILE_NAME`, `MAX_SECRET_FILE_BYTES`, and control body limits. |
+| `src/reporting/report-server-control-security.ts` | Security headers and Host/Origin/Fetch Metadata/timing-safe CSRF/content-type validation. |
+| `src/reporting/report-server-control-secrets-api.ts` | Modular `/api/secrets` GET/PUT/DELETE handler, presence-map construction, bounded input, and store operations. |
+| `src/reporting/report-server-control-api.ts` | Config/run handlers and re-export facade for the secrets handler. |
+| `src/reporting/report-server-control.ts` | Host preflight, control routing, report links, and `ControlRouterContext` dependencies. |
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
 | `src/security/` | Origin, base-path, relative URL, credential-like URL, traversal, and containment checks. |
 | `src/templates/template-fixture-types.ts` | Fixture, response, route recorder, file-identity, read-budget, artifact-link, and Sonar route contracts. |
@@ -1266,6 +1375,8 @@ run-environment merging are later phases.
 | `src/templates/template-fixture-html.ts` | HTML parsing, URL policy, canonical/form/link rewrites, artifact selection, and exact URL matching. |
 | `src/templates/template-fixture-sonarqube.ts` | Saved SonarQube identity checks and dashboard/issues rewrites. |
 | `src/templates/template-fixture-build-validation.ts` | Saved `#side-panel` build-link discovery and build-page DOM/action validation. |
+| `tests/unit/control-secrets-api.spec.ts` | HTTP endpoint operations: presence maps, filtering, single/batch patch, deletion, persistence, and no plaintext response. |
+| `tests/unit/control-secrets-security.spec.ts` | API redaction, Host/Origin/Fetch Metadata/CSRF/content-type gates, input validation, methods, and missing-store behavior. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
 | `tests/unit/report-server-secret-store.spec.ts` | Isolated SecretStore contract and control-mode wiring coverage. |
@@ -1314,14 +1425,18 @@ project; `runType` defaults to `report`, while the auto-build E2E passes
 ## Security and maintenance boundaries
 
 - Keep runtime credentials in the environment or a trusted CI secret store;
-  local Phase 01 values belong only in git-ignored
-  `config/secrets.local.json`. Never commit values, cookies, tokens, or
-  credential-bearing URLs.
-- Keep SecretStore keys environment-style and payloads bounded. Use frozen
-  snapshots, sorted deterministic JSON, latest-file read-modify-write locking,
-  exclusive temporary files, sync/close/rename, and rename-failure cleanup.
-  Write/sync errors close handles; POSIX `0o600` mode is advisory on Windows,
-  so config-directory ACLs are required.
+  local values belong only in git-ignored `config/secrets.local.json`. Never
+  commit values, cookies, tokens, or credential-bearing URLs.
+- Keep SecretStore keys environment-style, reject reserved prototype names, and
+  bound payloads. Use frozen snapshots, sorted deterministic JSON, latest-file
+  read-modify-write locking, exclusive temporary files, sync/close/rename, and
+  rename-failure cleanup. Write/sync errors close handles; POSIX `0o600` mode
+  is advisory on Windows, so config-directory ACLs are required.
+- Keep `/api/secrets` loopback-only and route exact paths through the modular
+  handler. Host-check every request; require Origin, accepted Fetch Metadata,
+  timing-safe CSRF, JSON content type, and bounded bodies for mutations.
+- Return only boolean presence maps from the API, set `Cache-Control: no-store`,
+  and keep secret values out of success/error responses and diagnostics.
 - Treat `jobUrl` as the sole Jenkins job/branch identity; do not add a second
   branch field or infer identity from selector data.
 - Keep mode selection explicit and project-scoped; never mass-enable auto-build
@@ -1502,7 +1617,7 @@ Set the referenced names in the shell or CI secret store before running. Do
 not put usernames, passwords, tokens, cookies, or credential-bearing URLs in
 the JSON, source tree, traces, screenshots, or reports.
 
-#### Local SecretStore (Phase 01)
+#### Local SecretStore and control API (Phases 01–02)
 
 Dynamic credential persistence is deliberately separate from the schema-v1
 document. In control mode, `createReportServer` initializes
@@ -1512,9 +1627,10 @@ directory, and not be a symlink. The filename is not configurable.
 
 `secrets.local.json` is covered by the repository's `config/*.local.json`
 ignore rule. Store content is a JSON object capped at 1 MiB. Keys must match
-`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and values must be strings. Missing or empty
-files read as an empty map; malformed JSON, arrays, non-string values, invalid
-names, oversized files, and non-regular/symlinked files fail closed.
+`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and must not be `__proto__`,
+`prototype`, or `constructor`; values must be strings. Missing or empty files
+read as an empty map; malformed JSON, arrays, non-string values, invalid names,
+oversized files, and non-regular/symlinked files fail closed.
 
 The backend exposes `readSecrets`, `listSecretNames`, `putSecret`,
 `putSecrets`, `deleteSecret`, and `deleteSecrets`. Reads return frozen
@@ -1525,10 +1641,25 @@ are never returned by a names-only listing or included in diagnostics. POSIX
 mode bits are not a Windows ACL boundary; protect the config directory with
 appropriate user/CI ACLs.
 
-Phase 01 only supplies this persistence backend to the control server. The
-current `/api` router has no secrets endpoint, and report/auto-build execution
-still resolves the environment passed by its caller. API exposure and
-run-environment merging are later phases.
+Control mode exposes the store through `ReportServerHandle` and
+`ControlRouterContext`; `/api/secrets` is the HTTP boundary:
+
+| Request | Contract |
+| --- | --- |
+| `GET /api/secrets` | Returns `200 { "secrets": { "NAME": true } }` for all stored names. |
+| `GET /api/secrets?keys=NAME_A,NAME_B` | Validates each requested key and returns a filtered map where each value is `true` (present) or `false` (absent). |
+| `PUT /api/secrets` | Accepts `{ "name": "NAME", "value": "VALUE" }` or a non-empty `{ "secrets": { "NAME": "VALUE" } }` patch; returns the full post-update presence map. |
+| `DELETE /api/secrets?name=NAME` | Deletes one valid key and returns the full post-delete presence map. |
+| `DELETE /api/secrets` | Accepts JSON `{ "name": "NAME" }` or `{ "names": ["NAME"] }`; returns the full post-delete presence map. |
+
+PUT also accepts null values in a secrets object or `action: "delete"` in
+the single-entry form to remove a key. The router checks the exact Host on
+every request. PUT/DELETE additionally require the exact same-origin
+HTTP(S) Origin, accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode`, the generated
+CSRF token, and `application/json` content type; bodies are bounded at 1 MiB.
+Responses contain presence booleans only and set `Cache-Control: no-store`.
+Run executors still resolve caller-provided environment values; SecretStore
+environment injection is a later phase.
 
 ## Source settings and validation
 
@@ -1699,9 +1830,9 @@ File: docs/project-overview-pdr.md
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build,
-Phase 3 offline build-page fixtures, and Phase 01 local SecretStore backend  
-**Current milestone:** Phase 3 — **DONE** (2026-09-02T16:57:40+07:00)  
-**Credential milestone:** Phase 01 SecretStore backend — **DONE** (2026-09-03)
+Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–02  
+**Current milestone:** Phase 02 Control Secrets API — **DONE** (2026-09-03)  
+**Prior completed milestone:** Phase 3 fixture flow — **DONE**
 
 ## Product summary
 
@@ -1714,12 +1845,14 @@ evidence or write report artifacts. Phase 3 adds a minimal checked-in build
 detail page and exact offline routes so both paths can be proven without live
 Jenkins or vendor services.
 
-Phase 01 adds a local `SecretStore` persistence seam for the future control
-plane. It stores validated environment-style key/value pairs in the
-git-ignored `config/secrets.local.json` using deterministic, atomic,
-write-locked updates. Control mode constructs the store and exposes it to
-trusted in-process callers; the current HTTP router and executors do not yet
-read or inject these values.
+Phase 01 adds a local `SecretStore` persistence seam for the control plane.
+It stores validated environment-style key/value pairs in the git-ignored
+`config/secrets.local.json` using deterministic, atomic, write-locked updates.
+Phase 02 exposes that store only through a loopback `/api/secrets` presence API:
+responses contain booleans, while PUT/DELETE mutations require Host, Origin,
+Fetch Metadata, CSRF, and bounded JSON gates. Control mode constructs the
+store and exposes it to the router; current executors still do not inject
+stored values into runs.
 
 The product treats Jenkins navigation and build submission as high-risk external
 operations. Configuration, target identity, selectors, credentials, deadlines,
@@ -1738,7 +1871,7 @@ and failure semantics are validated before side effects.
 7. Provide deterministic fixture and unit tests without live Jenkins/vendor
    dependencies.
 8. Keep future dynamic credential updates isolated from versioned project
-   configuration and process-global environment state.
+   configuration, process-global environment state, and plaintext API output.
 
 ## Non-goals
 
@@ -1749,9 +1882,11 @@ and failure semantics are validated before side effects.
 - Running auto-build from `npm run report` or from an environment-wide switch.
 - Capturing Snyk/SonarQube evidence during an auto-build run.
 - Claiming that checked-in fixtures or deterministic tests prove a live build.
-- Exposing dynamic credentials over HTTP or merging SecretStore values into
-  execution environments in Phase 01. Later control-plane phases must preserve
-  explicit selection and confirmation boundaries.
+- Returning dynamic credential values over HTTP or exposing them in diagnostics,
+  responses, or logs. Phase 02 exposes presence booleans only.
+- Merging SecretStore values into execution environments in Phase 02. Later
+  run-executor work must preserve explicit selection and confirmation
+  boundaries.
 
 ## Users and use cases
 
@@ -1761,7 +1896,7 @@ and failure semantics are validated before side effects.
 | Build integration | Submit one selected target-branch build | `selectAutoBuildProject` → `runAutoBuildProject` |
 | Maintainer | Prove behavior without external services | Unit tests and exact offline fixtures |
 | Reviewer | Inspect safe outputs and release gates | Static report root, manifests, and documented commands |
-| Control maintainer | Persist local credential values without changing project JSON | `SecretStore` in control mode (in-process only in Phase 01) |
+| Control maintainer | Inspect presence and manage local credential values without changing project JSON | `GET`/`PUT`/`DELETE /api/secrets` in loopback control mode |
 
 ## Functional requirements
 
@@ -1837,7 +1972,8 @@ and failure semantics are validated before side effects.
   non-directory roots; never accept a caller-selected path or filename.
 - Treat a missing/empty file as `{}`. Require a JSON object no larger than
   `MAX_SECRET_FILE_BYTES` (1 MiB), keys matching
-  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`, and string values.
+  `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` except `__proto__`, `prototype`, and
+  `constructor`, and string values.
 - Provide `readSecrets`, `listSecretNames`, `putSecret`, `putSecrets`,
   `deleteSecret`, and `deleteSecrets`. Return frozen snapshots and sorted names.
 - Serialize read-modify-write updates under an in-memory lock and replace the
@@ -1845,11 +1981,28 @@ and failure semantics are validated before side effects.
   sync, close, rename). Remove temporary files after failed writes.
 - Keep secret values out of errors and diagnostics. The `config/*.local.json`
   ignore rule prevents the local file from entering version control.
-- In control mode, expose the store to trusted in-process callers through
-  `ReportServerHandle`/`ControlRouterContext`; defer HTTP API exposure and
-  run-environment injection to later phases.
+- In control mode, expose the store through `ReportServerHandle` and
+  `ControlRouterContext`; Phase 02 also exposes guarded presence-only API
+  operations described in FR-8. Run-environment injection remains later work.
 
-### FR-8: Offline build-page fixture
+### FR-8: Control secrets API
+
+- Route exact `GET`, `PUT`, and `DELETE /api/secrets` paths from loopback
+  control mode through a dedicated modular handler.
+- Enforce Host validation for every request. For PUT/DELETE, require exact
+  same-origin HTTP(S) Origin, accepted Fetch Metadata, timing-safe CSRF, and
+  `application/json` (except bodyless DELETE).
+- Support full and filtered GET presence maps with boolean values only.
+- Accept single or batch PUT patches with valid environment-style names and
+  string values; support null/`action: "delete"` removal. Support query or
+  JSON body deletion forms.
+- Bound JSON bodies at 1 MiB and return `Cache-Control: no-store`; never
+  return plaintext values in success or error responses.
+- Return clear status boundaries: 400 for malformed input, 403 for rejected
+  security gates, 415 for mutation content type, 503 for missing store, and
+  405 with `Allow` for unsupported methods.
+
+### FR-9: Offline build-page fixture
 
 - Keep `templates/jenkins-template/template-build.html` minimal, inert, and
   free of credentials, scripts, external assets, production hosts, and report links.
@@ -1872,7 +2025,7 @@ and failure semantics are validated before side effects.
 | --- | --- |
 | Safety | Fail closed on invalid origins, actions, selectors, cardinality, forms, modes, or identities. |
 | Idempotency | No automatic retry after a matching build POST; preserve unknown state. |
-| Security | Credential-free URLs, environment references or local SecretStore values (never project JSON), bounded diagnostics, and no hidden-form inspection. |
+| Security | Credential-free URLs, environment references or local SecretStore values (never project JSON), boolean-only secret API responses, strict mutation gates, bounded diagnostics, and no hidden-form inspection. |
 | Persistence | Secret updates are bounded, sorted, serialized under an in-process lock, atomically renamed, and close their file handle on write/sync failure; rename failures clean up temporary files. |
 | Availability | Report projects continue after a project failure; cleanup is bounded. |
 | Determinism | Unit and fixture tests use injected dependencies or exact default-deny routes. |
@@ -1896,7 +2049,25 @@ and failure semantics are validated before side effects.
 - [x] Errors do not include secret values; Windows mode-bit limitations are
   documented as an ACL concern.
 - [x] Control mode creates the store and exposes it through the server handle
-  and router context without adding an HTTP secret endpoint or run injection.
+  and router context; Phase 02 adds the guarded presence-only HTTP API without
+  adding run-environment injection.
+
+## Dynamic-credentials Phase 02 acceptance criteria
+
+- [x] Exact `/api/secrets` GET/PUT/DELETE routes are dispatched through the
+  modular secrets handler in control mode.
+- [x] GET returns only boolean presence maps, supports validated `keys` filters,
+  and never returns stored values.
+- [x] PUT accepts single and batch patches, persists string values, supports
+  null/`action: "delete"` removal, and returns only post-update presence.
+- [x] DELETE accepts a query name or JSON name/names body and returns only
+  post-delete presence.
+- [x] Host is checked before dispatch; mutations require exact Origin,
+  accepted Fetch Metadata, timing-safe CSRF, JSON content type, and bounded
+  request bodies.
+- [x] Invalid keys/values/bodies, wrong content type, unsupported methods, and
+  missing store produce bounded status/error contracts; all responses use
+  `Cache-Control: no-store` and omit plaintext.
 
 ## Phase 2 acceptance criteria
 
@@ -1942,10 +2113,11 @@ The checked-in `config/projects.example.json` remains non-runnable with
 `.invalid` placeholders and a disabled auto-build example. Keep live project
 configuration and secret values outside the repository.
 
-For Phase 01, local values may be persisted only in
+For Phase 01/02, local values may be persisted only in
 `config/secrets.local.json`, which is ignored by `config/*.local.json`; keep
 that file and its directory protected by the operator/CI account's ACLs.
-Because execution injection is not part of this phase, current report and
+The Phase 02 API exposes only presence booleans and remains loopback-only.
+Because execution injection is not part of these phases, current report and
 auto-build runs still require the environment variables named by project
 configuration.
 
@@ -1958,6 +2130,8 @@ configuration.
 | Jenkins identity and trigger | `src/jenkins/url-identity.ts`, `src/jenkins/build-trigger*.ts` | [system architecture](./system-architecture.md) |
 | Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
 | Local secret persistence | `src/reporting/report-server-secret-store.ts`, `src/reporting/report-server-constants.ts` | [architecture](./architecture.md), [multi-project configuration](./multi-project-configuration.md), [code standards](./code-standards.md) |
+| Control secrets API and security gates | `src/reporting/report-server-control-secrets-api.ts`, `src/reporting/report-server-control-api.ts`, `src/reporting/report-server-control-security.ts`, `src/reporting/report-server-control.ts` | [system architecture](./system-architecture.md), [architecture](./architecture.md), [code standards](./code-standards.md) |
+| Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts` | [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
@@ -1967,35 +2141,38 @@ configuration.
 
 ## Open scope
 
-Phase 01 provides the persistence backend and control-mode wiring only. It does
-not expose a secret-management API or merge stored values into execution
-environments. The remaining dynamic-credentials phases must add those
-boundaries without weakening server-side configuration validation, loopback
-and CSRF protections, single-run/concurrency rules, explicit auto-build
-confirmation, or safe outcome mapping. The current report CLI still has no
-production auto-build command.
+Dynamic-credentials Phase 02 completes presence-only secret status and guarded
+mutation/deletion for loopback control mode. It does not merge stored values
+into execution environments; Phase 03 must add per-run injection without
+mutating `process.env`. Phase 04 still owns the control UI credential modal
+and state, and Phase 05 owns end-to-end verification. All future work must
+preserve server-side configuration validation, loopback and CSRF protections,
+single-run/concurrency rules, explicit auto-build confirmation, and safe
+outcome mapping. The current report CLI still has no production auto-build
+command.
 
 ================
 File: docs/project-roadmap.md
 ================
 # Project roadmap
 
-Last updated: 2026-09-03T14:40:00+07:00  
+Last updated: 2026-09-03T15:25:00+07:00  
 Plan: [Dynamic Credential Management and Persistence for Serve Control](../plans/260903-1251-serve-control-dynamic-credentials/plan.md)
 
 ## Overall status
 
 - Status: **In progress**
-- Progress: **25%** (1.5 of 6 weighted planned hours; 1 of 5 phases complete)
-- Current milestone: **Phase 01 — SecretStore Backend Module DONE**
+- Progress: **42%** (2.5 of 6 weighted planned hours; 2 of 5 phases complete)
+- Current milestone: **Phase 02 — Control secrets API and security gates DONE**
 - Phase 01 completed: **2026-09-03T14:40:00+07:00**
+- Phase 02 completed: **2026-09-03T15:25:00+07:00**
 
 ## Phase progress
 
 | Phase | Status | Progress | Effort | Evidence/detail |
 |---|---|---:|---:|---|
 | 1. SecretStore backend module | **DONE** | **100%** | 1.5h | [Phase 01](../plans/260903-1251-serve-control-dynamic-credentials/phase-01-backend-secret-store.md); [review](../plans/260903-1251-serve-control-dynamic-credentials/reports/code-review-260903-1422-secret-store-backend.md) |
-| 2. Control secrets API and security gates | Pending | 0% | 1.0h | [Phase 02](../plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md) |
+| 2. Control secrets API and security gates | **DONE** | **100%** | 1.0h | [Phase 02](../plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md); [API tests](../tests/unit/control-secrets-api.spec.ts); [security tests](../tests/unit/control-secrets-security.spec.ts); [review](../plans/reports/code-review-260903-1510-phase-02-control-secrets-api.md) |
 | 3. Run executor environment injection | Pending | 0% | 1.0h | [Phase 03](../plans/260903-1251-serve-control-dynamic-credentials/phase-03-run-executor-environment-injection.md) |
 | 4. Control UI credential modal and state | Pending | 0% | 1.5h | [Phase 04](../plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md) |
 | 5. Unit, API, and Playwright E2E verification | Pending | 0% | 1.0h | [Phase 05](../plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md) |
@@ -2013,16 +2190,33 @@ Validation evidence:
 
 - [Code review](../plans/260903-1251-serve-control-dynamic-credentials/reports/code-review-260903-1422-secret-store-backend.md): approved at 9.5/10 with no critical issues; typecheck, production build, 215 unit tests, and git-ignore verification passed.
 
+## Phase 02 milestone
+
+Delivered the guarded, redacted control-plane secrets API:
+
+- `GET /api/secrets` returns presence-only boolean maps with optional key filtering.
+- `PUT` and `DELETE /api/secrets` enforce Host, Origin, Fetch Metadata, and CSRF gates.
+- Strict bounded JSON and environment-key validation prevent malformed or unsafe mutations.
+- Responses use `Cache-Control: no-store`; plaintext secret values are never returned or logged.
+
+Validation evidence:
+
+- [API tests](../tests/unit/control-secrets-api.spec.ts) and [security tests](../tests/unit/control-secrets-security.spec.ts): 16 passed, 0 failed, 0 skipped.
+- [Code review](../plans/reports/code-review-260903-1510-phase-02-control-secrets-api.md): approved with warnings at 9.0/10; no critical issues.
+- `npm run typecheck` (`tsc --noEmit`): passed, 0 errors.
+
+
 ## Next milestones
 
-1. **Phase 02 — Control secrets API and security gates (0%)**: expose redacted secret status and guarded mutation/clear operations.
-2. **Phase 03 — Run executor environment injection (0%)**: apply stored secrets per execution without mutating `process.env`.
-3. **Phase 04 — Control UI credential modal and state (0%)**: provide discovery, masking, persistence status, and clear actions.
-4. **Phase 05 — Unit, API, and Playwright E2E verification (0%)**: complete end-to-end security and regression evidence.
-
+1. **Phase 03 — Run executor environment injection (0%)**: apply stored secrets per execution without mutating `process.env`.
+2. **Phase 04 — Control UI credential modal and state (0%)**: provide discovery, masking, persistence status, and clear actions.
+3. **Phase 05 — Unit, API, and Playwright E2E verification (0%)**: complete end-to-end security and regression evidence.
+ 
 ## Review follow-up
 
 - Non-blocking review recommendation: reject prototype keys (`__proto__`, `prototype`, `constructor`) in a follow-up hardening change before production release.
+- Non-blocking Phase 02 follow-up: body-less `DELETE /api/secrets?name=...` currently encounters the shared JSON content-type gate; align the UI/request contract or gate behavior.
+- Non-blocking Phase 02 follow-up: normalize the 415 error code to `UNSUPPORTED_MEDIA_TYPE` and add any remaining direct Host-header regression coverage.
 - Keep `report-server-secret-store.ts` focused; it is at the 200-line maintainability threshold.
 
 ## Changelog
@@ -2032,6 +2226,9 @@ Validation evidence:
 - Completed Phase 01 SecretStore backend module at 100%.
 - Added atomic, bounded, permission-conscious local secret persistence with redacted error handling.
 - Linked Phase 01 implementation and 9.5/10 review evidence.
+- Completed Phase 02 Control Secrets API and security gates at 100%.
+- Added presence-only GET, guarded PUT/DELETE, strict validation, and zero-leakage coverage.
+- Linked Phase 02 targeted test, typecheck, and 9.0/10 review evidence.
 
 ## Unresolved questions
 
@@ -2043,9 +2240,10 @@ File: docs/release-gates.md
 # Release gates
 
 This project has deterministic local gates for native browsers, offline report
-fixtures, the Phase 3 build-page fixture, and the Phase 01 SecretStore backend.
-The commands below are the current release contract; test counts are
-intentionally not hard-coded because they change with the test suite.
+fixtures, the Phase 3 build-page fixture, the Phase 01 SecretStore backend,
+and the Phase 02 control secrets API/security boundary. The commands below are
+the current release contract; test counts are intentionally not hard-coded
+because they change with the test suite.
 
 ## Gate order
 
@@ -2269,10 +2467,42 @@ The test uses isolated temporary config/report roots and verifies:
 - `createReportServer(..., { mode: 'control' })` wiring the store to the
   server handle and fixed `secrets.local.json` path.
 
-This gate performs local filesystem I/O only. It does not expose an HTTP secret
-endpoint, inject values into an execution environment, contact Jenkins, or
-prove Windows ACL enforcement. On Windows, review the config-directory ACL
-separately because POSIX `0o600` mode bits are advisory.
+This gate performs local filesystem I/O only. It does not inject values into an
+execution environment, contact Jenkins, or prove Windows ACL enforcement. On
+Windows, review the config-directory ACL separately because POSIX `0o600` mode
+bits are advisory.
+
+## Phase 02 control secrets API gate
+
+Run the focused HTTP contract:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-secrets-api.spec.ts \
+  tests/unit/control-secrets-security.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+These tests create isolated loopback control servers and verify:
+
+- `GET /api/secrets` returns an empty or sorted boolean presence map;
+- `GET /api/secrets?keys=...` validates requested names and reports missing
+  names as `false`;
+- `PUT /api/secrets` accepts single and batch patches, persists string values,
+  supports null/`action: "delete"` removal, and never echoes plaintext;
+- `DELETE /api/secrets` supports query and JSON name lists and returns the
+  resulting presence map;
+- Host validation runs before dispatch, while mutations require same-origin
+  Origin, accepted Fetch Metadata, the generated CSRF token, and JSON content
+  type;
+- invalid keys/values/bodies return `400`, invalid mutation gates return `403`,
+  non-JSON mutation bodies return `415`, unsupported methods return `405` with
+  `Allow`, and a missing store returns `503`; and
+- all API responses use `Cache-Control: no-store` and contain no secret value.
+
+The gate writes only isolated temporary SecretStore files and does not contact
+Jenkins or vendor services. It proves request-level API behavior, not Windows
+ACL enforcement or run-environment injection.
 
 ## Browser-fixture boundary
 
@@ -2349,9 +2579,10 @@ File: docs/system-architecture.md
 ================
 # System architecture
 
-This is the component-level view of `auto-jobs` after Phase 3 and Phase 01 of
-the dynamic-credentials plan. The repository has two intentionally separate
-execution paths plus a local persistence seam:
+This is the component-level view of `auto-jobs` after Phase 3, Phase 01, and
+Phase 02 of the dynamic-credentials plan. The repository has two intentionally
+separate execution paths plus a local persistence seam and a loopback control
+API:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
@@ -2360,14 +2591,16 @@ execution paths plus a local persistence seam:
   safe in-memory outcome and does not capture or publish reports.
 - **Offline fixture:** load the checked-in nine-file corpus and fulfill only
   exact synthetic URLs for deterministic report and auto-build tests.
-- **SecretStore backend:** persist validated local credential values outside
-  project JSON; Phase 01 wires the store into control mode without exposing a
-  secret API or injecting values into runs yet.
+- **SecretStore and secrets API:** persist validated local credential values
+  outside project JSON and expose only boolean presence through guarded
+  `/api/secrets` operations. Stored values are not returned or injected into
+  runs by this phase.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
-for JSON and credential details and [release gates](./release-gates.md) for
-validation commands.
+for JSON, credential, and secrets API details and [release gates](./release-gates.md)
+for validation commands.
+
 
 ## Context and boundaries
 
@@ -2375,7 +2608,9 @@ validation commands.
 flowchart TB
   Operator[Operator or future integration] --> ConfigFile[Schema-v1 project JSON]
   ConfigRoot[Existing config/ directory] --> SecretStore[SecretStore backend]
-  SecretStore -. control mode handle/context; no API or run injection yet .-> Control[Loopback control server]
+  SecretStore --> SecretsApi[Loopback /api/secrets]
+  Control[Loopback control server] --> SecretsApi
+  SecretsApi -. presence-only status; guarded PUT/DELETE .-> SecretStore
   Secrets[CI secret store / environment] --> Executor
   ConfigFile --> Loader[Validate and normalize]
   Loader --> Selector{Explicit mode and project selection}
@@ -2391,11 +2626,13 @@ The loader and selection helpers are pure configuration boundaries. Browser
 launch, credentials, and network I/O begin only after a caller has selected an
 executor. In control mode, `createReportServer` creates both `ConfigStore` and
 `SecretStore` from the configured `configRoot`; the latter fixes its target to
-`secrets.local.json` under that canonical directory. Current executors still
-resolve credentials from their supplied environment, so the Phase 01 store is
-not an execution override. The report server reads an existing canonical report
-root and is not a build or report-generation API. Control mode is loopback-only;
-its secret-management HTTP API and run-environment injection are later phases.
+`secrets.local.json` under that canonical directory. The loopback control
+router validates `Host` before dispatching every request, and the secrets API
+returns only boolean presence data. Mutations additionally require an accepted
+`Origin`, `Sec-Fetch-*` metadata, CSRF token, and JSON content type. Current
+executors still resolve credentials from their supplied environment, so the
+Phase 02 store is not an execution override. Run-environment injection remains
+a later phase.
 
 ## Mode dispatch
 
@@ -2572,8 +2809,9 @@ The store contract is:
 | `putSecrets(entries)` | Validates all entries before applying a bulk read-modify-write. |
 | `deleteSecret(name)` / `deleteSecrets(names)` | Validate names and remove existing keys; deleting absent keys is a no-op. |
 
-Keys must match `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`; values remain strings and
-are never coerced. The file and serialized payload are capped at
+Keys must match `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/` and must not be the
+prototype names `__proto__`, `prototype`, or `constructor`; values remain
+strings and are never coerced. The file and serialized payload are capped at
 `MAX_SECRET_FILE_BYTES` (1 MiB). Updates use one in-memory write mutex so
 concurrent callers preserve each other's changes. Serialization sorts keys
 lexicographically and writes a sibling temporary file with exclusive creation,
@@ -2584,10 +2822,34 @@ is best-effort. On Windows, mode bits are not an ACL boundary; protect the
 config directory with appropriate user/CI ACLs.
 
 `createReportServer` creates the store only in loopback control mode and
-exposes it through `ReportServerHandle` and `ControlRouterContext`. The current
-router has no `/api/secrets` dispatch, and current report/auto-build execution
-still consumes its supplied environment. Secret API and run-environment
-injection are separate follow-on phases.
+exposes it through `ReportServerHandle` and `ControlRouterContext`. The
+control router dispatches `/api/secrets` to the dedicated
+`report-server-control-secrets-api.ts` handler; report/auto-build execution
+still consumes its supplied environment. Run-environment injection remains a
+later phase.
+
+### Control secrets API and security gates
+
+The secrets handler is intentionally separate from
+`report-server-control-api.ts`, which keeps the config/run handlers and
+re-exports `handleSecretsApi` as the control API facade. `handleControlRequest`
+performs the Host check before any route dispatch. All JSON responses use
+`Cache-Control: no-store` and the control CSP/security header set.
+
+| Request | Gate and input | Response |
+| --- | --- | --- |
+| `GET /api/secrets` | Exact bound Host; optional comma-separated `keys` query, each validated | `200 { "secrets": { "<name>": true } }`; filtered names are `true` or `false` |
+| `PUT /api/secrets` | Host, Origin, Fetch Metadata, CSRF, JSON content type, and bounded JSON body | `200` full presence map after patch |
+| `DELETE /api/secrets?name=NAME` | Same mutation gates; valid name query | `200` full presence map after deletion |
+| `DELETE /api/secrets` | Same gates; JSON `{ "name": "NAME" }` or `{ "names": ["NAME"] }` | `200` full presence map after deletion |
+
+PUT accepts either `{ "name": "NAME", "value": "VALUE" }` or a non-empty
+`{ "secrets": { "NAME": "VALUE" } }` object. A null value in the object, or
+`action: "delete"` in the single-entry form, deletes instead of storing.
+Values never appear in success or error responses. Invalid names/values and
+malformed bodies return `400`; invalid mutation gates return `403`, a
+non-JSON mutation body returns `415`, an unavailable store returns `503`, and
+unsupported methods return `405` with `Allow: GET, PUT, DELETE`.
 
 ## Offline template fixture subsystem
 
@@ -2643,6 +2905,13 @@ that route authenticated.
 - `tests/unit/sequential-runner.spec.ts` preserves shared launch options,
   sequential report behavior, and exclusion of auto-build projects from
   `runFromConfig`.
+- `tests/unit/control-secrets-api.spec.ts` exercises empty/full/filtered
+  presence maps, single and batch PUT updates, null/action deletion, query and
+  body DELETE forms, and persistence without returning values.
+- `tests/unit/control-secrets-security.spec.ts` exercises plaintext redaction,
+  Host/Origin/Fetch Metadata/CSRF gates, key/value/body validation,
+  content-type rejection, unsupported methods, and the unavailable-store
+  response through the modular handler.
 - Template unit and E2E tests use exact default-deny routes and checked-in
   fixtures; `template-build-fixture.spec.ts` proves build-page drift and
   redirect contracts, while `template-auto-build.spec.ts` exercises the
@@ -2662,11 +2931,15 @@ that route authenticated.
    matching POST.
 6. Preserve one absolute deadline, bounded cleanup, secret redaction, and the
    existing canonical report-root/security policy.
-7. Keep local secrets outside project JSON, restrict names and payload size,
-   serialize sorted keys atomically, and never expose values in diagnostics or
-   HTTP responses.
-8. Treat Windows file-mode bits as advisory; rely on protected config-directory
-   ACLs and keep secret API/run-environment integration behind its own phase.
+7. Keep local secrets outside project JSON, reject reserved prototype keys,
+   restrict names and payload size, serialize sorted keys atomically, and
+   never expose values in diagnostics or HTTP responses.
+8. Keep control mutations behind exact Host/Origin, accepted Fetch Metadata,
+   timing-safe CSRF, and JSON-size/content-type gates; return presence booleans
+   rather than values.
+9. Treat Windows file-mode bits as advisory; rely on protected
+   config-directory ACLs, and keep run-environment injection behind its own
+   phase.
 
 ================
 File: package.json
@@ -2716,16 +2989,16 @@ File: plans/260903-1251-serve-control-dynamic-credentials/cmd-plan.md
 ## Overview
 - **Goal**: Allow operators to set, persist, and update credentials via the `serve:control` web UI without modifying version-controlled JSON files.
 - **Target File**: `config/secrets.local.json` (git-ignored)
-- **Branch**: main | **Status**: pending | **Total Effort**: 6h
+- **Branch**: main | **Status**: in-progress | **Total Effort**: 6h
 
 ## Phase Index
 
-- [ ] **Phase 01: SecretStore Backend Module** (1.5h)
+- [x] **Phase 01: SecretStore Backend Module** (1.5h) — DONE 2026-09-03
   - Path: [`phase-01-backend-secret-store.md`](./phase-01-backend-secret-store.md)
   - Core: Atomic write-lock persistence, mode 0o600, safe path assertion.
-- [ ] **Phase 02: Control Secrets API & Security Gates** (1.0h)
+- [x] **Phase 02: Control Secrets API & Security Gates** (1.0h) — DONE 2026-09-03
   - Path: [`phase-02-control-secrets-api.md`](./phase-02-control-secrets-api.md)
-  - Core: `GET /api/secrets` (redacted), `PUT /api/secrets` (CSRF/Host validated).
+  - Core: `GET /api/secrets` (redacted), guarded `PUT`/`DELETE /api/secrets` mutations.
 - [ ] **Phase 03: Run Executor Environment Injection** (1.0h)
   - Path: [`phase-03-run-executor-environment-injection.md`](./phase-03-run-executor-environment-injection.md)
   - Core: Merge stored secrets into `runEnv` in `executeControlRun`; redact logs.
@@ -2848,17 +3121,19 @@ File: plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secre
 
 ## Overview
 - **Date**: 2026-09-03
-- **Description**: Add `GET /api/secrets` and `PUT /api/secrets` to the control server, applying CSRF, Host, and Fetch Metadata gates while ensuring zero credential leakage in responses.
+- **Description**: Add `GET /api/secrets`, `PUT /api/secrets`, and `DELETE /api/secrets` to the control server, applying CSRF, Host, and Fetch Metadata gates while ensuring zero credential leakage in responses.
 - **Priority**: P1
-- **Implementation Status**: pending
-- **Review Status**: pending
+- **Implementation Status**: **DONE**
+- **Review Status**: **DONE** (approved with non-blocking warnings)
+- **Completed At**: 2026-09-03T15:25:00+07:00
 - **Estimated Effort**: 1.0h
 
 ## Key Insights
 - `GET /api/secrets` must strictly return boolean presence flags (e.g. `{ "secrets": { "JENKINS_USERNAME": true } }`), never the actual secret values.
 - `PUT /api/secrets` must be protected by the existing `validateMutationRequest` helper (Host, Origin, Fetch Metadata, CSRF token).
 - Request payloads should accept `{ "secrets": { "NAME": "VALUE" } }` or `{ "name": "...", "value": "..." }`.
-- Response to PUT should only confirm presence without echoing the secret value.
+- Response to PUT/DELETE should only confirm presence without echoing the secret value.
+- Explicit `null`/delete actions clear entries through the same guarded mutation path.
 
 ## Requirements
 - Route `/api/secrets` in `handleApiRequest` in `src/reporting/report-server-control.ts`.
@@ -2872,6 +3147,10 @@ File: plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secre
   - Validate keys with `/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`.
   - Update store via `secretStore.putSecrets(secrets)`.
   - Return `200 OK` with updated presence map.
+- `DELETE /api/secrets`:
+  - Run the same `validateMutationRequest` security gate.
+  - Accept a validated `name` query parameter or JSON `name`/`names` body.
+  - Remove entries and return the redacted presence map.
 
 ## Architecture
 ```
@@ -2899,6 +3178,9 @@ handleApiRequest ('/api/secrets')
 - Modify: `src/reporting/report-server-control-api.ts` (add `handleSecretsApi`)
 - Modify: `src/reporting/report-server-control.ts` (dispatch to `handleSecretsApi`)
 - Modify: `src/reporting/report-server.ts` (wire `secretStore` into `ControlRouterContext`)
+- Add: `src/reporting/report-server-control-secrets-api.ts` (secrets handler)
+- Test: `tests/unit/control-secrets-api.spec.ts`
+- Test: `tests/unit/control-secrets-security.spec.ts`
 
 ## Implementation Steps
 1. Add `secretStore: SecretStore` to `ControlRouterContext`.
@@ -2909,17 +3191,20 @@ handleApiRequest ('/api/secrets')
 4. Route `/api/secrets` in `handleApiRequest`.
 
 ## Todo List
-- [ ] Add `secretStore` property to `ControlRouterContext` interface.
-- [ ] Implement `handleSecretsApi` in `src/reporting/report-server-control-api.ts`.
-- [ ] Wire `/api/secrets` route in `src/reporting/report-server-control.ts`.
-- [ ] Test CSRF rejection and Host validation on `/api/secrets`.
-- [ ] Confirm no secret values are returned in responses or error logs.
+- [x] Add `secretStore` property to `ControlRouterContext` interface.
+- [x] Implement `handleSecretsApi` in `src/reporting/report-server-control-api.ts`.
+- [x] Wire `/api/secrets` route in `src/reporting/report-server-control.ts`.
+- [x] Test CSRF rejection and Host validation on `/api/secrets`. (Note: Host validation test gap noted in review)
+- [x] Confirm no secret values are returned in responses or error logs.
+- [x] Complete review and targeted validation.
 
 ## Success Criteria
 - `GET /api/secrets` returns `{ "secrets": { ... } }` with boolean values only.
 - `PUT /api/secrets` without valid CSRF token or wrong Origin returns 403 Forbidden.
 - `PUT /api/secrets` with valid credentials updates `config/secrets.local.json` and returns presence status.
 - Non-string or invalid variable names return 400 Bad Request.
+- Valid DELETE/explicit clear removes keys without returning plaintext.
+- Targeted API and security tests pass with no secret leakage.
 
 ## Risk Assessment
 - **Risk**: API accidentally returns plaintext secret values in JSON response.
@@ -2928,7 +3213,14 @@ handleApiRequest ('/api/secrets')
 ## Security Considerations
 - Set `Cache-Control: no-store` on all responses.
 - Enforce strict JSON body size limit (1 MiB).
-- Validate all variable names before writing.
+- Validate all variable names before writing or deleting.
+- Reuse Host, Origin, Fetch Metadata, and CSRF gates; never log request bodies or secret values.
+
+## Validation
+- Targeted tests: `node scripts/run-playwright.mjs playwright test tests/unit/control-secrets-api.spec.ts tests/unit/control-secrets-security.spec.ts --config=playwright.unit.config.ts --reporter=line` — **16 passed, 0 failed, 0 skipped**.
+- Typecheck: `npm run typecheck` (`tsc --noEmit`) — **passed, 0 errors**.
+- Review: [code review report](../reports/code-review-260903-1510-phase-02-control-secrets-api.md) — **APPROVED WITH WARNINGS, 9.0/10**, no critical issues.
+- Remaining warnings are non-blocking and carried into follow-up hardening/UI contract work.
 
 ## Next Steps
 Proceed to Phase 03: Run Executor Environment Injection.
@@ -3258,7 +3550,7 @@ The `serve:control` dashboard currently reads project configurations that specif
 
 This plan implements a clean, secure, and persistent credential management mechanism within `serve:control`:
 1. **Local Secret Store**: Stores credentials in `config/secrets.local.json` (strictly ignored by `.gitignore`, file mode `0o600`, atomic write-lock persistence).
-2. **Control Plane API**: Adds `GET /api/secrets` (redacted status only) and `PUT /api/secrets` (CSRF/Host-guarded mutation).
+2. **Control Plane API**: Adds `GET /api/secrets` (redacted status only), guarded `PUT /api/secrets` mutation, and explicit clear/delete operations.
 3. **Execution Injection**: Automatically merges stored secrets into `runEnv` in `report-server-run-executor.ts` before Playwright runs.
 4. **Dashboard UI**: Adds a dedicated "Credentials" modal with password masking, variable discovery, and persistence status chips.
 5. **Quality Gates**: Full unit, API, and Playwright E2E test coverage with zero secret leakage.
@@ -3275,12 +3567,13 @@ This plan implements a clean, secure, and persistent credential management mecha
 | # | Phase | Status | Effort | File |
 |---|-------|--------|--------|------|
 | 01 | SecretStore Backend Module | **DONE** | 1.5h | [phase-01-backend-secret-store.md](./phase-01-backend-secret-store.md) |
-| 02 | Control Secrets API & Security Gates | pending | 1.0h | [phase-02-control-secrets-api.md](./phase-02-control-secrets-api.md) |
+| 02 | Control Secrets API & Security Gates | **DONE** | 1.0h | [phase-02-control-secrets-api.md](./phase-02-control-secrets-api.md) |
 | 03 | Run Executor Environment Injection | pending | 1.0h | [phase-03-run-executor-environment-injection.md](./phase-03-run-executor-environment-injection.md) |
 | 04 | Control UI Credential Modal & State | pending | 1.5h | [phase-04-control-ui-credential-management.md](./phase-04-control-ui-credential-management.md) |
 | 05 | Unit, API & Playwright E2E Verification | pending | 1.0h | [phase-05-test-suite-and-e2e-verification.md](./phase-05-test-suite-and-e2e-verification.md) |
 
 Phase 01 completion: **DONE** — 2026-09-03T14:40:00+07:00
+Phase 02 completion: **DONE** — 2026-09-03T15:25:00+07:00
 
 ## Dependencies
 
@@ -3301,9 +3594,16 @@ Phase 01 completion: **DONE** — 2026-09-03T14:40:00+07:00
 4. **CLI Parity**: Standalone CLI runs (`npm run report` / `src/cli.ts`) also load `config/secrets.local.json` when present, ensuring consistent behavior across CLI and Web UI.
 
 ### Action Items
-- [ ] Ensure `SecretStore` supports `deleteSecret(name: string): Promise<void>`.
-- [ ] Ensure `DELETE /api/secrets` or `PUT /api/secrets` with clear action removes keys.
+- [x] Ensure `SecretStore` supports `deleteSecret(name: string): Promise<void>`.
+- [x] Ensure `DELETE /api/secrets` or `PUT /api/secrets` with clear action removes keys.
 - [ ] Add optional local secret loading helper to `src/cli.ts` / `scripts/run-report.mjs` when `config/secrets.local.json` exists.
+
+### Phase 02 Delivery Evidence
+- **Status**: **DONE** — 2026-09-03T15:25:00+07:00.
+- **Targeted validation**: `control-secrets-api.spec.ts` and `control-secrets-security.spec.ts` — **16 passed, 0 failed, 0 skipped**.
+- **Typecheck**: `npm run typecheck` (`tsc --noEmit`) — **passed, 0 errors**.
+- **Review**: [Phase 02 code review](../reports/code-review-260903-1510-phase-02-control-secrets-api.md) — **APPROVED WITH WARNINGS, 9.0/10**, no critical issues.
+- **Security scope delivered**: presence-only GET responses; guarded PUT/DELETE mutations; strict key/value validation; no-store responses; zero plaintext leakage.
 
 ================
 File: plans/260903-1251-serve-control-dynamic-credentials/research/researcher-01-backend-secret-store.md
@@ -11895,6 +12195,8 @@ import { validateMutationRequest } from './report-server-control-security.js';
 import { sendError, sendJson, readBoundedJsonBody } from './report-server-json.js';
 import type { ControlRouterContext } from './report-server-control.js';
 
+export { handleSecretsApi } from './report-server-control-secrets-api.js';
+
 export async function handleConfigApi(
   context: ControlRouterContext,
   searchParams: URLSearchParams,
@@ -11921,7 +12223,8 @@ export async function handleConfigApi(
   if (method === 'PUT') {
     const gate = validateMutationRequest(request, context.host, context.port, context.csrfToken);
     if (!gate.valid) {
-      sendError(response, gate.status, 'FORBIDDEN', gate.message);
+      const code = gate.status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : 'FORBIDDEN';
+      sendError(response, gate.status, code, gate.message);
       return;
     }
     const ifMatch = request.headers['if-match'];
@@ -11950,6 +12253,7 @@ export async function handleConfigApi(
     return;
   }
 
+  response.setHeader('allow', 'GET, PUT');
   sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/config');
 }
 
@@ -11963,7 +12267,8 @@ export async function handleRunApi(
   if (method === 'POST') {
     const gate = validateMutationRequest(request, context.host, context.port, context.csrfToken);
     if (!gate.valid) {
-      sendError(response, gate.status, 'FORBIDDEN', gate.message);
+      const code = gate.status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : 'FORBIDDEN';
+      sendError(response, gate.status, code, gate.message);
       return;
     }
     const bodyResult = await readBoundedJsonBody(request);
@@ -12021,6 +12326,7 @@ export async function handleRunApi(
     return;
   }
 
+  response.setHeader('allow', 'GET, POST');
   sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/run');
 }
 
@@ -12073,6 +12379,189 @@ export async function getControlCss(): Promise<string> {
 export async function getControlJs(): Promise<string> {
   const { js } = await loadControlAssets();
   return js;
+}
+
+================
+File: src/reporting/report-server-control-secrets-api.ts
+================
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { validateMutationRequest } from './report-server-control-security.js';
+import { sendError, sendJson, readBoundedJsonBody } from './report-server-json.js';
+import type { ControlRouterContext } from './report-server-control.js';
+import { isValidSecretKey } from './report-server-secret-store.js';
+
+function buildPresenceMap(secrets: Readonly<Record<string, string>>): Record<string, boolean> {
+  const presence: Record<string, boolean> = {};
+  for (const key of Object.keys(secrets).sort()) {
+    presence[key] = true;
+  }
+  return presence;
+}
+
+export async function handleSecretsApi(
+  context: ControlRouterContext,
+  searchParams: URLSearchParams,
+  method: string,
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> {
+  if (!context.secretStore) {
+    sendError(response, 503, 'SERVICE_UNAVAILABLE', 'secret store is not configured');
+    return;
+  }
+
+  if (method === 'GET') {
+    try {
+      const secrets = await context.secretStore.readSecrets();
+      const keysParam = searchParams.get('keys');
+      if (keysParam !== null) {
+        const presence: Record<string, boolean> = {};
+        const requested = keysParam.split(',').map((k) => k.trim()).filter((k) => k.length > 0);
+        for (const key of requested) {
+          if (!isValidSecretKey(key)) {
+            sendError(response, 400, 'INVALID_KEY', `invalid secret key name: '${key}'`);
+            return;
+          }
+          presence[key] = Object.prototype.hasOwnProperty.call(secrets, key);
+        }
+        sendJson(response, 200, { secrets: presence });
+        return;
+      }
+      sendJson(response, 200, { secrets: buildPresenceMap(secrets) });
+    } catch (err) {
+      sendError(response, 500, 'SECRET_READ_ERROR', err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
+
+  if (method === 'PUT') {
+    const gate = validateMutationRequest(request, context.host, context.port, context.csrfToken);
+    if (!gate.valid) {
+      const code = gate.status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : 'FORBIDDEN';
+      sendError(response, gate.status, code, gate.message);
+      return;
+    }
+    const bodyResult = await readBoundedJsonBody(request);
+    if (!bodyResult.ok) {
+      sendError(response, bodyResult.status, 'INVALID_BODY', bodyResult.message);
+      return;
+    }
+    const data = bodyResult.data;
+    const toPut: Record<string, string> = {};
+    const toDelete: string[] = [];
+
+    if ('secrets' in data) {
+      if (typeof data['secrets'] !== 'object' || data['secrets'] === null || Array.isArray(data['secrets'])) {
+        sendError(response, 400, 'MALFORMED_REQUEST', '"secrets" must be an object');
+        return;
+      }
+      const entries = Object.entries(data['secrets'] as Record<string, unknown>);
+      if (entries.length === 0) {
+        sendError(response, 400, 'MALFORMED_REQUEST', '"secrets" object cannot be empty');
+        return;
+      }
+      for (const [key, val] of entries) {
+        if (!isValidSecretKey(key)) {
+          sendError(response, 400, 'INVALID_KEY', `invalid secret key name: '${key}'`);
+          return;
+        }
+        if (val === null) {
+          toDelete.push(key);
+        } else if (typeof val === 'string') {
+          toPut[key] = val;
+        } else {
+          sendError(response, 400, 'INVALID_SECRET_VALUE', `secret value for key '${key}' must be a string or null`);
+          return;
+        }
+      }
+    } else if ('name' in data) {
+      if (typeof data['name'] !== 'string' || !isValidSecretKey(data['name'])) {
+        sendError(response, 400, 'INVALID_KEY', `invalid secret key name: '${String(data['name'])}'`);
+        return;
+      }
+      if (data['value'] === null || data['action'] === 'delete') {
+        toDelete.push(data['name']);
+      } else if (typeof data['value'] === 'string') {
+        toPut[data['name']] = data['value'];
+      } else {
+        sendError(response, 400, 'INVALID_SECRET_VALUE', `secret value for key '${data['name']}' must be a string`);
+        return;
+      }
+    } else {
+      sendError(response, 400, 'MALFORMED_REQUEST', 'request body must contain "secrets" object or "name" string');
+      return;
+    }
+
+    try {
+      if (toDelete.length > 0) await context.secretStore.deleteSecrets(toDelete);
+      if (Object.keys(toPut).length > 0) await context.secretStore.putSecrets(toPut);
+      const secrets = await context.secretStore.readSecrets();
+      sendJson(response, 200, { secrets: buildPresenceMap(secrets) });
+    } catch (err) {
+      sendError(response, 500, 'SECRET_WRITE_ERROR', err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
+
+  if (method === 'DELETE') {
+    const gate = validateMutationRequest(request, context.host, context.port, context.csrfToken);
+    if (!gate.valid) {
+      const code = gate.status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : 'FORBIDDEN';
+      sendError(response, gate.status, code, gate.message);
+      return;
+    }
+    const nameParam = searchParams.get('name');
+    const toDelete: string[] = [];
+    if (nameParam !== null) {
+      if (!isValidSecretKey(nameParam)) {
+        sendError(response, 400, 'INVALID_KEY', `invalid secret key name: '${nameParam}'`);
+        return;
+      }
+      toDelete.push(nameParam);
+    } else {
+      const bodyResult = await readBoundedJsonBody(request);
+      if (!bodyResult.ok) {
+        sendError(response, bodyResult.status, 'INVALID_BODY', bodyResult.message);
+        return;
+      }
+      const data = bodyResult.data;
+      if (typeof data['name'] === 'string') {
+        if (!isValidSecretKey(data['name'])) {
+          sendError(response, 400, 'INVALID_KEY', `invalid secret key name: '${data['name']}'`);
+          return;
+        }
+        toDelete.push(data['name']);
+      } else if (Array.isArray(data['names'])) {
+        if (data['names'].length === 0) {
+          sendError(response, 400, 'MALFORMED_REQUEST', '"names" array cannot be empty');
+          return;
+        }
+        for (const name of data['names']) {
+          if (typeof name !== 'string' || !isValidSecretKey(name)) {
+            sendError(response, 400, 'INVALID_KEY', `invalid secret key name: '${String(name)}'`);
+            return;
+          }
+          toDelete.push(name);
+        }
+      } else {
+        sendError(response, 400, 'MALFORMED_REQUEST', 'DELETE requires name parameter or JSON body with name or names');
+        return;
+      }
+    }
+
+    try {
+      await context.secretStore.deleteSecrets(toDelete);
+      const secrets = await context.secretStore.readSecrets();
+      sendJson(response, 200, { secrets: buildPresenceMap(secrets) });
+    } catch (err) {
+      sendError(response, 500, 'SECRET_WRITE_ERROR', err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
+
+  response.setHeader('allow', 'GET, PUT, DELETE');
+  sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/secrets');
 }
 
 ================
@@ -12180,7 +12669,10 @@ export function validateMutationRequest(
     return { valid: false, status: 403, message: 'invalid or missing CSRF token' };
   }
   const contentType = parseHeader(request, 'content-type');
-  if (contentType === undefined || !contentType.toLowerCase().startsWith('application/json')) {
+  const isBodylessDelete = request.method === 'DELETE' &&
+    (request.headers['content-length'] === undefined || request.headers['content-length'] === '0') &&
+    contentType === undefined;
+  if (!isBodylessDelete && (contentType === undefined || !contentType.toLowerCase().startsWith('application/json'))) {
     return { valid: false, status: 415, message: 'Content-Type must be application/json' };
   }
   return { valid: true };
@@ -12203,7 +12695,7 @@ import type { ConfigStore } from './report-server-config-store.js';
 import type { SecretStore } from './report-server-secret-store.js';
 import type { RunManager } from './report-server-run-manager.js';
 import { getControlCss, getControlJs, renderControlPageHtml } from './report-server-control-page.js';
-import { handleConfigApi, handleRunApi } from './report-server-control-api.js';
+import { handleConfigApi, handleRunApi, handleSecretsApi } from './report-server-control-api.js';
 
 export interface ControlRouterContext {
   readonly configStore: ConfigStore;
@@ -12328,6 +12820,11 @@ async function handleApiRequest(
 
   if (pathname === '/api/run') {
     await handleRunApi(context, searchParams, method, request, response);
+    return;
+  }
+
+  if (pathname === '/api/secrets') {
+    await handleSecretsApi(context, searchParams, method, request, response);
     return;
   }
 
@@ -13052,21 +13549,15 @@ export interface SecretStore {
   deleteSecret(name: string): Promise<void>;
   deleteSecrets(names: readonly string[]): Promise<void>;
 }
-
 export function isValidSecretKey(name: string): boolean {
-  return typeof name === 'string' && SAFE_SECRET_KEY.test(name);
+  return typeof name === 'string' && SAFE_SECRET_KEY.test(name) && name !== '__proto__' && name !== 'prototype' && name !== 'constructor';
 }
-
 export function assertValidSecretKey(name: string): void {
-  if (!isValidSecretKey(name)) {
-    throw new Error(`invalid secret key name: '${typeof name === 'string' ? name.slice(0, 64) : String(name)}'`);
-  }
+  if (!isValidSecretKey(name)) throw new Error(`invalid secret key name: '${typeof name === 'string' ? name.slice(0, 64) : String(name)}'`);
 }
 
 export function assertValidSecretValue(name: string, value: unknown): asserts value is string {
-  if (typeof value !== 'string') {
-    throw new Error(`secret value for key '${name}' must be a string`);
-  }
+  if (typeof value !== 'string') throw new Error(`secret value for key '${name}' must be a string`);
 }
 
 async function assertDirectoryIsSafe(dirPath: string): Promise<string> {
@@ -13160,14 +13651,13 @@ export async function createSecretStore(configDirectory: string): Promise<Secret
     const tempFilePath = path.join(canonicalRoot, tempFileName);
     let fileHandle: fsp.FileHandle | undefined;
     try {
-      fileHandle = await fsp.open(tempFilePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
-      await fileHandle.writeFile(serialized, 'utf8');
-      await fileHandle.sync();
-    } finally {
-      if (fileHandle !== undefined) await fileHandle.close().catch(() => undefined);
-    }
-
-    try {
+      try {
+        fileHandle = await fsp.open(tempFilePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+        await fileHandle.writeFile(serialized, 'utf8');
+        await fileHandle.sync();
+      } finally {
+        if (fileHandle !== undefined) await fileHandle.close().catch(() => undefined);
+      }
       await fsp.rename(tempFilePath, targetPath);
     } catch (err) {
       await fsp.unlink(tempFilePath).catch(() => undefined);
@@ -13193,6 +13683,7 @@ export async function createSecretStore(configDirectory: string): Promise<Secret
       if (entries === null || typeof entries !== 'object' || Array.isArray(entries)) {
         throw new Error('secret entries must be a non-null object');
       }
+      if (Object.keys(entries).length === 0) return;
       for (const [key, value] of Object.entries(entries)) {
         assertValidSecretKey(key);
         assertValidSecretValue(key, value);
@@ -110012,6 +110503,359 @@ test.describe('Control Run API', () => {
 });
 
 ================
+File: tests/unit/control-secrets-api.spec.ts
+================
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { expect, test } from '@playwright/test';
+
+import { createReportServer, type ReportServerHandle } from '../../src/reporting/report-server.js';
+import { SECRETS_FILE_NAME } from '../../src/reporting/report-server-constants.js';
+
+test.describe('Control Secrets API - Operations', () => {
+  let configRoot: string;
+  let reportRoot: string;
+  let serverUrl: string;
+  let csrfToken: string;
+  let serverHandle: ReportServerHandle;
+
+  test.beforeEach(async () => {
+    configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-secrets-test-'));
+    reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-report-test-'));
+
+    serverHandle = await createReportServer(reportRoot, {
+      mode: 'control',
+      configRoot,
+      host: '127.0.0.1',
+      port: 0,
+    });
+    serverUrl = serverHandle.url;
+    csrfToken = serverHandle.csrfToken!;
+  });
+
+  test.afterEach(async () => {
+    if (serverHandle) await serverHandle.close();
+    fs.rmSync(configRoot, { recursive: true, force: true });
+    fs.rmSync(reportRoot, { recursive: true, force: true });
+  });
+
+  test('GET /api/secrets returns empty presence map when no secrets exist', async ({ request }) => {
+    const res = await request.get(`${serverUrl}api/secrets`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()['cache-control']).toBe('no-store');
+    const body = await res.json();
+    expect(body).toEqual({ secrets: {} });
+  });
+
+  test('GET /api/secrets returns boolean presence map for stored secrets', async ({ request }) => {
+    await serverHandle.secretStore!.putSecret('KEY_1', 'val-1');
+    await serverHandle.secretStore!.putSecret('KEY_2', 'val-2');
+
+    const res = await request.get(`${serverUrl}api/secrets`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      secrets: {
+        KEY_1: true,
+        KEY_2: true,
+      },
+    });
+  });
+
+  test('GET /api/secrets?keys= filters by requested keys and flags missing ones as false', async ({ request }) => {
+    await serverHandle.secretStore!.putSecret('EXISTS', 'val');
+
+    const res = await request.get(`${serverUrl}api/secrets?keys=EXISTS,NOT_EXISTS`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      secrets: {
+        EXISTS: true,
+        NOT_EXISTS: false,
+      },
+    });
+  });
+
+  test('PUT /api/secrets updates single secret and writes to disk', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'sec-fetch-site': 'same-origin',
+        'content-type': 'application/json',
+      },
+      data: { name: 'JENKINS_PASSWORD', value: 'secret-pass-789' },
+    });
+
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual({ secrets: { JENKINS_PASSWORD: true } });
+
+    const rawDisk = JSON.parse(fs.readFileSync(path.join(configRoot, SECRETS_FILE_NAME), 'utf8'));
+    expect(rawDisk['JENKINS_PASSWORD']).toBe('secret-pass-789');
+  });
+
+  test('PUT /api/secrets updates batch secrets with secrets object', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'sec-fetch-site': 'same-origin',
+        'content-type': 'application/json',
+      },
+      data: {
+        secrets: {
+          KEY_A: 'val_a',
+          KEY_B: 'val_b',
+        },
+      },
+    });
+
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual({ secrets: { KEY_A: true, KEY_B: true } });
+
+    const stored = await serverHandle.secretStore!.readSecrets();
+    expect(stored['KEY_A']).toBe('val_a');
+    expect(stored['KEY_B']).toBe('val_b');
+  });
+
+  test('PUT /api/secrets deletes secret when value is null or action is delete', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    await serverHandle.secretStore!.putSecrets({ KEEP: 'k', DEL_1: 'd1', DEL_2: 'd2' });
+
+    const res1 = await request.put(`${serverUrl}api/secrets`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'sec-fetch-site': 'same-origin' },
+      data: { secrets: { DEL_1: null } },
+    });
+    expect(res1.status()).toBe(200);
+    expect((await res1.json()).secrets).toEqual({ KEEP: true, DEL_2: true });
+
+    const res2 = await request.put(`${serverUrl}api/secrets`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'sec-fetch-site': 'same-origin' },
+      data: { name: 'DEL_2', action: 'delete' },
+    });
+    expect(res2.status()).toBe(200);
+    expect((await res2.json()).secrets).toEqual({ KEEP: true });
+  });
+
+  test('DELETE /api/secrets removes variable by query parameter', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    await serverHandle.secretStore!.putSecrets({ FOO: 'bar', BAZ: 'qux' });
+
+    const res = await request.delete(`${serverUrl}api/secrets?name=FOO`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'sec-fetch-site': 'same-origin' },
+    });
+
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual({ secrets: { BAZ: true } });
+
+    const stored = await serverHandle.secretStore!.readSecrets();
+    expect(stored['FOO']).toBeUndefined();
+    expect(stored['BAZ']).toBe('qux');
+  });
+
+  test('DELETE /api/secrets removes variables by JSON body', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    await serverHandle.secretStore!.putSecrets({ VAR_1: '1', VAR_2: '2', VAR_3: '3' });
+
+    const res = await request.delete(`${serverUrl}api/secrets`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+      data: { names: ['VAR_1', 'VAR_2'] },
+    });
+
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual({ secrets: { VAR_3: true } });
+  });
+});
+
+================
+File: tests/unit/control-secrets-security.spec.ts
+================
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { expect, test } from '@playwright/test';
+
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createReportServer, type ReportServerHandle } from '../../src/reporting/report-server.js';
+import { handleSecretsApi } from '../../src/reporting/report-server-control-secrets-api.js';
+import type { ControlRouterContext } from '../../src/reporting/report-server-control.js';
+
+test.describe('Control Secrets API - Security & Validation', () => {
+  let configRoot: string;
+  let reportRoot: string;
+  let serverUrl: string;
+  let csrfToken: string;
+  let serverHandle: ReportServerHandle;
+
+  test.beforeEach(async () => {
+    configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-secrets-sec-test-'));
+    reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-report-sec-test-'));
+
+    serverHandle = await createReportServer(reportRoot, {
+      mode: 'control',
+      configRoot,
+      host: '127.0.0.1',
+      port: 0,
+    });
+    serverUrl = serverHandle.url;
+    csrfToken = serverHandle.csrfToken!;
+  });
+
+  test.afterEach(async () => {
+    if (serverHandle) await serverHandle.close();
+    fs.rmSync(configRoot, { recursive: true, force: true });
+    fs.rmSync(reportRoot, { recursive: true, force: true });
+  });
+
+  test('Zero leakage: GET and PUT never echo plaintext secret values', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const secretValue = 'strictly-confidential-token-12345';
+
+    const putRes = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'sec-fetch-site': 'same-origin',
+        'content-type': 'application/json',
+      },
+      data: { name: 'TOP_SECRET', value: secretValue },
+    });
+    expect(putRes.status()).toBe(200);
+    const putText = await putRes.text();
+    expect(putText).not.toContain(secretValue);
+
+    const getRes = await request.get(`${serverUrl}api/secrets`);
+    expect(getRes.status()).toBe(200);
+    const getText = await getRes.text();
+    expect(getText).not.toContain(secretValue);
+  });
+
+  test('PUT /api/secrets rejects missing or invalid CSRF token with 403', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+
+    const res1 = await request.put(`${serverUrl}api/secrets`, {
+      headers: { origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+      data: { name: 'VAR', value: 'val' },
+    });
+    expect(res1.status()).toBe(403);
+    expect((await res1.json()).error.code).toBe('FORBIDDEN');
+
+    const res2 = await request.put(`${serverUrl}api/secrets`, {
+      headers: { 'x-csrf-token': 'wrong-token', origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+      data: { name: 'VAR', value: 'val' },
+    });
+    expect(res2.status()).toBe(403);
+  });
+
+  test('PUT /api/secrets rejects cross-origin request with 403', async ({ request }) => {
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin: 'https://attacker-site.com',
+        'sec-fetch-site': 'cross-site',
+        'content-type': 'application/json',
+      },
+      data: { name: 'VAR', value: 'val' },
+    });
+    expect(res.status()).toBe(403);
+  });
+
+  test('PUT /api/secrets rejects invalid key names with 400', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const invalidKeys = ['123_NUMERIC', 'DASHED-KEY', 'DOT.KEY', '__proto__', ''];
+
+    for (const key of invalidKeys) {
+      const res = await request.put(`${serverUrl}api/secrets`, {
+        headers: { 'x-csrf-token': csrfToken, origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+        data: { name: key, value: 'val' },
+      });
+      expect(res.status()).toBe(400);
+      expect((await res.json()).error.code).toBe('INVALID_KEY');
+    }
+  });
+
+  test('PUT /api/secrets rejects non-string values with 400', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+      data: { name: 'VALID_KEY', value: 99999 },
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error.code).toBe('INVALID_SECRET_VALUE');
+  });
+
+  test('PUT /api/secrets rejects malformed or empty request body with 400', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+      data: {},
+    });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error.code).toBe('MALFORMED_REQUEST');
+  });
+
+  test('DELETE /api/secrets rejects without CSRF or Origin with 403', async ({ request }) => {
+    const res = await request.delete(`${serverUrl}api/secrets?name=FOO`);
+    expect(res.status()).toBe(403);
+  });
+
+  test('Unsupported HTTP methods return 405 with Allow header', async ({ request }) => {
+    const res = await request.patch(`${serverUrl}api/secrets`);
+    expect(res.status()).toBe(405);
+    expect(res.headers()['allow']).toBe('GET, PUT, DELETE');
+    expect((await res.json()).error.code).toBe('METHOD_NOT_ALLOWED');
+  });
+
+  test('GET /api/secrets rejects invalid Host header with 403', async ({ request }) => {
+    const res = await request.get(`${serverUrl}api/secrets`, {
+      headers: { host: 'evil-host.com:9999' },
+    });
+    expect(res.status()).toBe(403);
+  });
+
+  test('PUT /api/secrets with non-JSON Content-Type returns 415 with UNSUPPORTED_MEDIA_TYPE', async ({ request }) => {
+    const origin = serverUrl.replace(/\/$/, '');
+    const res = await request.put(`${serverUrl}api/secrets`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'sec-fetch-site': 'same-origin',
+        'content-type': 'text/plain',
+      },
+      data: 'plain text body',
+    });
+    expect(res.status()).toBe(415);
+    const body = await res.json();
+    expect(body.error.code).toBe('UNSUPPORTED_MEDIA_TYPE');
+  });
+
+  test('GET /api/secrets returns 503 SERVICE_UNAVAILABLE when secretStore is undefined', async () => {
+    let statusCode = 0;
+    let responseBody = '';
+    const mockResponse = {
+      writeHead(status: number) { statusCode = status; return this; },
+      setHeader() { return this; },
+      end(data: string) { responseBody = data; },
+      headersSent: false,
+    } as unknown as ServerResponse;
+    const mockContext = {
+      host: '127.0.0.1',
+      port: 4173,
+      csrfToken: 'token',
+      reportRoot: '',
+      configStore: undefined as unknown as ControlRouterContext['configStore'],
+      runManager: undefined as unknown as ControlRouterContext['runManager'],
+    } satisfies Partial<ControlRouterContext> as unknown as ControlRouterContext;
+    await handleSecretsApi(mockContext, new URLSearchParams(), 'GET', {} as unknown as IncomingMessage, mockResponse);
+    expect(statusCode).toBe(503);
+    expect(JSON.parse(responseBody).error.code).toBe('SERVICE_UNAVAILABLE');
+  });
+});
+
+================
 File: tests/unit/diagnostics.spec.ts
 ================
 import { expect, test } from '@playwright/test';
@@ -111426,6 +112270,9 @@ test.describe('SecretStore Backend Module', () => {
     expect(isValidSecretKey('kebab-case-key')).toBe(false);
     expect(isValidSecretKey('key.with.dots')).toBe(false);
     expect(isValidSecretKey('../traversal')).toBe(false);
+    expect(isValidSecretKey('__proto__')).toBe(false);
+    expect(isValidSecretKey('prototype')).toBe(false);
+    expect(isValidSecretKey('constructor')).toBe(false);
     expect(isValidSecretKey('')).toBe(false);
   });
 

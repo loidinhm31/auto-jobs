@@ -5,16 +5,16 @@
 ## Overview
 - **Goal**: Allow operators to set, persist, and update credentials via the `serve:control` web UI without modifying version-controlled JSON files.
 - **Target File**: `config/secrets.local.json` (git-ignored)
-- **Branch**: main | **Status**: pending | **Total Effort**: 6h
+- **Branch**: main | **Status**: in-progress | **Total Effort**: 6h
 
 ## Phase Index
 
-- [ ] **Phase 01: SecretStore Backend Module** (1.5h)
+- [x] **Phase 01: SecretStore Backend Module** (1.5h) — DONE 2026-09-03
   - Path: [`phase-01-backend-secret-store.md`](./phase-01-backend-secret-store.md)
   - Core: Atomic write-lock persistence, mode 0o600, safe path assertion.
-- [ ] **Phase 02: Control Secrets API & Security Gates** (1.0h)
+- [x] **Phase 02: Control Secrets API & Security Gates** (1.0h) — DONE 2026-09-03
   - Path: [`phase-02-control-secrets-api.md`](./phase-02-control-secrets-api.md)
-  - Core: `GET /api/secrets` (redacted), `PUT /api/secrets` (CSRF/Host validated).
+  - Core: `GET /api/secrets` (redacted), guarded `PUT`/`DELETE /api/secrets` mutations.
 - [ ] **Phase 03: Run Executor Environment Injection** (1.0h)
   - Path: [`phase-03-run-executor-environment-injection.md`](./phase-03-run-executor-environment-injection.md)
   - Core: Merge stored secrets into `runEnv` in `executeControlRun`; redact logs.
