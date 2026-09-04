@@ -16,8 +16,9 @@
 - Date: 2026-09-04
 - Description: Construct accessible UI primitives and compound components complying with Atomic Design principles, Tailwind CSS classes, and exact DOM ID / CSS class / data-attribute / ARIA requirements expected by Playwright E2E tests.
 - Priority: P1
-- Implementation Status: Pending
-- Review Status: Pending
+- Implementation Status: Complete
+- Review Status: Approved
+- Completed At: 2026-09-04
 
 ## Key Insights
 1. **Plain `<textarea>` for JSON editing** — NOT CodeMirror/Monaco. The E2E test interacts with `#raw-json-textarea` as a standard `<textarea>` element via Playwright's `.fill()` and `.textContent`. CodeMirror replaces the textarea with a complex DOM structure that breaks these interactions. Using a plain textarea preserves 100% test compatibility with zero test modifications.
@@ -206,17 +207,17 @@
 11. **Verify**: Cross-check every DOM ID and CSS class against the contract table above.
 
 ## Todo List
-- [ ] Create `globals.css` with Tailwind + legacy CSS variable mapping
-- [ ] Implement `Badge.tsx` with all variant classes (`badge-idle`, `badge-queued`, `badge-running`, `badge-succeeded`, `badge-failed`, `badge-unknown`, `badge-configured`, `badge-missing`)
-- [ ] Implement `Button.tsx` with variant classes
-- [ ] Implement `Input.tsx` with accessible labels and forwardRef
-- [ ] Implement `Select.tsx` as native select wrapper
-- [ ] Implement `StatusBanner.tsx` with `role="status"`, `aria-live="polite"`
-- [ ] Implement `LoadingIndicator.tsx` with `aria-live="polite"`
-- [ ] Implement `CredentialRow.tsx` with `data-key`, dynamic `#secret-input-*` IDs, `.credential-row` class
-- [ ] Implement `BrowserSettingRow.tsx` with setting-specific badge and button IDs
-- [ ] Implement `ConfigSelectorBar.tsx`, `LogViewer.tsx`, `RunResultBox.tsx`
-- [ ] Cross-check ALL selectors against DOM contract table
+- [x] Create `globals.css` with Tailwind + legacy CSS variable mapping
+- [x] Implement `Badge.tsx` with all variant classes (`badge-idle`, `badge-queued`, `badge-running`, `badge-succeeded`, `badge-failed`, `badge-unknown`, `badge-configured`, `badge-missing`)
+- [x] Implement `Button.tsx` with variant classes
+- [x] Implement `Input.tsx` with accessible labels and forwardRef
+- [x] Implement `Select.tsx` as native select wrapper
+- [x] Implement `StatusBanner.tsx` with `role="status"`, `aria-live="polite"`
+- [x] Implement `LoadingIndicator.tsx` with `aria-live="polite"`
+- [x] Implement `CredentialRow.tsx` with `data-key`, dynamic `#secret-input-*` IDs, `.credential-row` class
+- [x] Implement `BrowserSettingRow.tsx` with setting-specific badge and button IDs
+- [x] Implement `ConfigSelectorBar.tsx`, `LogViewer.tsx`, `RunResultBox.tsx`
+- [x] Cross-check ALL selectors against DOM contract table
 
 ## Success Criteria
 - Components compile cleanly with TypeScript.
@@ -241,4 +242,4 @@
 - `<input type="password">` for all secret fields.
 
 ## Next Steps
-- Proceed to Phase 04: Organisms, Modals & Dashboard Assembly.
+- Proceed to [Phase 04: Organisms, Modals & Dashboard Assembly](phase-04-organisms-and-page-assembly.md).

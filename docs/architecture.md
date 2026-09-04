@@ -125,11 +125,25 @@ flowchart LR
 - `src/reporting/control-page/` contains the Control Dashboard frontend sources:
   server data contracts (`types/index.ts`), shared UI component prop interfaces
   (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
+  Tailwind class merge utility ([`utils/cn.ts`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4)),
   headless React hooks (`hooks/useControlApi.ts`, `hooks/useConfigManager.ts`,
   `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`, `hooks/useRunPoller.ts`),
-  and application markup (`index.html`, `main.tsx`, `styles/globals.css`), bundled by
-  `vite.control.config.ts` into `.runner-build/reporting/control-page/` with single-bundle JS/CSS
-  and no inline scripts/styles for strict CSP compliance.
+  atomic design UI primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/):
+  [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31),
+  [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5),
+  [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5),
+  [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5),
+  [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5),
+  [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5)),
+  compound molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/):
+  [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8),
+  [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28),
+  [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7),
+  [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23),
+  [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5)),
+  and application markup (`index.html`, `main.tsx`, [`styles/globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css)),
+  bundled by `vite.control.config.ts` into `.runner-build/reporting/control-page/` with
+  single-bundle JS/CSS and no inline scripts/styles for strict CSP compliance.
 - `src/reporting/report-server-control-page.ts` reads Vite-built assets from
   `.runner-build/reporting/control-page/`, injects the instance CSRF token into
   `index.html`, and provides cached CSS and JS.
@@ -542,6 +556,35 @@ mutating `process.env`. It passes that `runtimeEnvironment` to both report and
 auto-build executors. Control logs, warnings, errors, and auto-build result
 URLs are redacted with all non-empty stored values before persistence.
 
+### Control Dashboard Atomic Design Components and Contract Fidelity
+
+The Control Dashboard frontend refactor implements Atomic Design principles, cleanly separating presentational UI components from stateful hooks while ensuring 100% contract fidelity with existing Playwright E2E tests:
+
+1. **Styling and class resolution**:
+   - [`globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css) binds Tailwind base, components, and utility layers with theme custom properties mapped from legacy control CSS (`--bg-color`, `--card-bg`, `--text-main`, `--text-muted`, `--border-color`, `--primary`, `--secondary`, `--danger`, `--focus-ring`, `--mono-font`). It declares high-contrast `:focus-visible` outlines, accessible skip links (`.skip-link`), hidden utilities (`.visually-hidden`, `.hidden`), and reduced motion overrides (`@media (prefers-reduced-motion: reduce)`).
+   - [`cn`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4) (`utils/cn.ts`) integrates `clsx` and `twMerge` to eliminate Tailwind class conflicts while allowing legacy class selectors to pass through unimpeded.
+
+2. **Atomic UI Primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/))**:
+   - [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): Renders `<span className="badge badge-{variant}">`. Supports run lifecycle variants (`idle`, `queued`, `running`, `succeeded`, `failed`, `unknown`, `submission-unknown`), credential states (`configured` -> `badge-configured`, `missing` -> `badge-missing`), and browser setting states (`not-set` -> `badge-missing` class with `"Not Set"` label). Supports `forwardRef` and custom children.
+   - [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): Renders accessible button elements (`type="button"`) with variant classes (`btn-primary`, `btn-secondary`, `btn-danger`, `btn-outline`), compact sizing (`btn-sm`), disabled/loading state handling with accessible spinner, and arbitrary `data-*` attribute pass-through.
+   - [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): Form input wrapper supporting `text` and `password` types, `htmlFor` label linkage, `role="alert"` error announcements with `aria-invalid="true"`, and secure defaults (`autoComplete="off"`, `spellCheck={false}`).
+   - [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): Native `<select>` wrapper supporting options arrays or child nodes, optional field labels, and `aria-label`.
+   - [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): Displays top-level notification alerts (`<div id="status-banner" role="status" aria-live="polite">`) with `info`, `success`, and `error` styling, hidden via `.hidden` when inactive.
+   - [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): Renders polite status updates (`aria-live="polite"`) with `.credentials-loading` styling and visibility toggling.
+
+3. **Molecular Compound Components ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))**:
+   - [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): Renders credential configuration rows matching the exact legacy DOM hierarchy: `.credential-row` wrapper, `.credential-field` label with dynamic `for="secret-input-${key}"` and `Badge`, and `.credential-input-group` containing password `<input id="secret-input-${key}" class="credential-input" autocomplete="off">`. When configured, exposes `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
+   - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls adhering to exact test IDs for headless selection (`#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless`) and executable path input (`#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path`).
+   - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Controls active configuration selection (`<select id="config-select">`), reload action (`#btn-reload`), save action (`#btn-save`, disabled unless `isDirty`), and modal open triggers (`#btn-credentials`, `#btn-browser-settings`).
+   - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Streaming run log output `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, formatting string logs or `RunLogEntry[]` timestamped records and auto-scrolling to the latest log output.
+   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Execution outcome box `<div id="run-result-box" class="run-result-box">`, displaying validated report links matching `/reports/`, Jenkins build links, and error diagnostics (`.run-error-msg`).
+
+4. **Contract Fidelity Guarantees**:
+   - **DOM ID and Class Compatibility**: Every element ID, class token, and `data-*` attribute targeted by Playwright test locators is preserved without modification.
+   - **Raw JSON Editor Preservation**: The configuration editor retains a standard `<textarea id="raw-json-textarea">` to ensure native Playwright `.fill()` and `.textContent` operations succeed without complex DOM interceptors.
+   - **Accessibility**: Includes explicit ARIA roles (`role="status"`, `role="log"`, `role="alert"`), `aria-live="polite"` live regions, and `label[for]` associations.
+   - **Zero Leakage**: Credential inputs enforce `type="password"`, `autoComplete="off"`, and input value clearing on submission, clear, and dialog closure.
+
 ## Test and release boundary
 
 The deterministic order is `npm ci`, `npm run install:browsers`,
@@ -569,6 +612,12 @@ Phase 02 control hooks and interface contracts coverage in
 `tests/unit/control-hooks-and-types.spec.ts` verifies credential variable discovery,
 CSRF auto-injection, run poller exponential backoff and terminal state transitions,
 and end-to-end hook integration with loopback config, secrets, and run APIs.
+Phase 03 atomic design components coverage in
+`tests/unit/control-atomic-components.spec.ts` verifies 21 unit checks across
+all atom primitives (`Badge`, `Button`, `Input`, `Select`, `StatusBanner`, `LoadingIndicator`)
+and compound molecules (`CredentialRow`, `BrowserSettingRow`, `ConfigSelectorBar`,
+`LogViewer`, `RunResultBox`), verifying DOM ID and CSS class fidelity, accessibility
+roles/live regions, disabled/loading states, and data attribute bindings.
 Phase 03 run-environment coverage is in
 `tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
 `tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection
@@ -590,8 +639,8 @@ Phase 05 SecretStore/API unit additions are
 lifecycle checks; the second has ten operation checks. The security suite
 continues to cover plaintext redaction, Host/Origin/Fetch Metadata/CSRF gates,
 bounded JSON validation, content-type handling, unsupported methods, and
-store-availability errors. Deterministic unit suites include 254 passed
-checks, 6/6 control E2E checks, zero secret leakage, and zero TypeScript
-errors. None of these deterministic checks contacts a live Jenkins controller
-or vendor service.
+store-availability errors. Deterministic unit suites include 275 passed
+checks (including 21 atomic component tests), 6/6 control E2E checks, zero
+secret leakage, and zero TypeScript errors. None of these deterministic
+checks contacts a live Jenkins controller or vendor service.
 

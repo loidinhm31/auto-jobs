@@ -35,6 +35,13 @@ credentials; it does not claim a live Jenkins run.
 - Phase 05 addition: focused SecretStore lifecycle coverage, expanded secrets
   API operation coverage, and Chromium/WebKit Control UI E2E verification for
   dynamic credential persistence, injected execution, and zero leakage.
+- Phase 03 addition (React migration): accessible Atomic Design UI primitives
+  ([atoms](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/) and
+  [molecules](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))
+  and styling infrastructure in
+  [`src/reporting/control-page/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/),
+  guaranteeing strict DOM ID, CSS class, data-attribute, and ARIA contract
+  fidelity for 100% Playwright test compatibility.
 - Repomix inventory: 194 repository files were packed; binary/ignored files
   remain outside the summary. The current XML compaction contains the Phase 05
   source, tests, fixtures, plans, and documentation.
@@ -217,6 +224,34 @@ state, injected-credential execution, input wiping, and absence of test
 secrets from page HTML and run logs. The control configuration uses Chromium
 and WebKit projects, so the three browser scenarios produce six E2E checks.
 
+### Control UI atomic design components and contract fidelity (Phase 03 React refactor)
+
+The Control Dashboard UI uses Atomic Design principles to isolate visual primitives and compound molecules while guaranteeing 100% contract fidelity with existing Playwright E2E locators:
+
+1. **Styling and utility infrastructure**:
+   - [`globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css): Declares Tailwind directives (`@tailwind base; @tailwind components; @tailwind utilities;`), maps CSS variable design tokens (`--bg-color`, `--card-bg`, `--text-main`, `--text-muted`, `--border-color`, `--primary`, `--secondary`, `--danger`, `--focus-ring`, `--mono-font`), sets `:focus-visible` outline rings, and defines critical accessibility utilities (`.skip-link`, `.visually-hidden`, `.hidden`, `@media (prefers-reduced-motion: reduce)`).
+   - [`cn`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4) (`utils/cn.ts`): Wraps `clsx` and `twMerge` to reconcile Tailwind utility classes with legacy class tokens without style precedence collisions.
+
+2. **Atomic primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/))**:
+   - [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): Renders `<span className="badge badge-{variant}">`. Maps status variants (`idle`, `queued`, `running`, `succeeded`, `failed`, `unknown`, `submission-unknown`), credential states (`configured` -> `badge-configured`, `missing` -> `badge-missing`), and browser setting unconfigured state (`not-set` -> class `badge-missing` with text `'Not Set'`). Supports `forwardRef`.
+   - [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): Renders `<button type="button" className="btn btn-{variant} ...">`. Supports variants (`primary`, `secondary`, `danger`, `outline`), size `sm` (`btn-sm`), disabled state, loading spinner, and arbitrary `data-*` attributes (`data-key`). Supports `forwardRef`.
+   - [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): Accessible input wrapper with `id`, default `type="text"`, optional label via `htmlFor`, error message with `role="alert"` and `aria-invalid="true"`, default `autoComplete="off"` and `spellCheck=false`. Supports `forwardRef`.
+   - [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): Native `<select>` wrapper supporting options or custom children, associated label or `aria-label`, and `forwardRef`.
+   - [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): Notification banner rendering `<div id="status-banner" role="status" aria-live="polite" className="status-banner {variant} ...">`. Toggles `.hidden` when not visible.
+   - [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): Status indicator with `aria-live="polite"`, class `credentials-loading`, and `.hidden` toggle when not visible.
+
+3. **Compound molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))**:
+   - [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): Renders `.credential-row` containing `.credential-field` (`label[for="secret-input-${key}"]` and `Badge`), and `.credential-input-group` (`<input id="secret-input-${key}" type="password" class="credential-input" autocomplete="off" />`). When `isConfigured` is true, renders `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
+   - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls with contract-specified IDs: badges (`#badge-browser-headless`, `#badge-browser-executable-path`), controls (`#browser-headless-select`, `#browser-executable-path-input`), and clear buttons (`#btn-clear-browser-headless`, `#btn-clear-browser-executable-path`).
+   - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Renders configuration selector (`<select id="config-select" aria-label="Select Configuration">`) and toolbar buttons (`#btn-reload`, `#btn-save`, `#btn-credentials`, `#btn-browser-settings`). Enforces `#btn-save` disabled when `!isDirty || isSaving || isLoading`.
+   - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`. Formats strings or `RunLogEntry[]` timestamps (`[${timestamp}] ${message}`), defaults to `"No active run."`, and auto-scrolls on log updates.
+   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Renders outcome panel `<div id="run-result-box" class="run-result-box">`. Displays report links containing `/reports/`, Jenkins build links, and error messages (`.run-error-msg`), or hides with `.hidden` when null.
+
+4. **Fidelity guarantees**:
+   - Strict DOM element IDs, CSS classes, and `data-key` attributes match legacy test expectations without requiring test alterations.
+   - ARIA compliance: explicit `role="status"`, `role="log"`, `role="alert"`, `aria-live="polite"`, and `label[htmlFor]` relations.
+   - Verified by 21 unit checks in `tests/unit/control-atomic-components.spec.ts`.
+
 ## Local SecretStore backend
 
 `src/reporting/report-server-secret-store.ts` is a persistence-only module.
@@ -296,8 +331,11 @@ set `Cache-Control: no-store`.
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
 | `src/reporting/control-page/` | Control Dashboard frontend sources (`index.html`, `main.tsx`, `styles/globals.css`, plus legacy assets during migration) bundled into `.runner-build/reporting/control-page/`. |
 | `src/reporting/control-page/types/` | Data contracts (`index.ts`) and shared UI component prop interfaces (`component-contracts.ts`). |
+| `src/reporting/control-page/utils/cn.ts` | Merges Tailwind CSS and conditional classes using `clsx` and `twMerge`. |
 | `src/reporting/control-page/utils/discoverCredentialKeys.ts` | Discovers required project credential variables with defaults and fallback resolution. |
 | `src/reporting/control-page/hooks/` | Headless React hooks: `useControlApi`, `useConfigManager`, `useCredentialsManager`, `useBrowserSettings`, and `useRunPoller`. |
+| `src/reporting/control-page/components/atoms/` | Atomic UI primitives: `Badge`, `Button`, `Input`, `Select`, `StatusBanner`, and `LoadingIndicator` with forwardRef support and variant contracts. |
+| `src/reporting/control-page/components/molecules/` | Compound molecules: `CredentialRow`, `BrowserSettingRow`, `ConfigSelectorBar`, `LogViewer`, and `RunResultBox` preserving exact DOM IDs and classes. |
 | `vite.control.config.ts` | Vite configuration for Control Dashboard: React plugin, Tailwind CSS, single-bundle outputs, and CSP-compliant asset emission. |
 | `scripts/copy-report-assets.mjs` | Asset copy script: stages `src/reporting/report.css` into `.runner-build/reporting/`. |
 | `src/reporting/report-server-run-manager.ts` | Single-active control-run lifecycle and optional SecretStore dependency. |
@@ -314,6 +352,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, and manager integration coverage. |
 | `tests/unit/control-assets-routing.spec.ts` | Built control asset loading, CSRF injection and escaping, non-empty CSS/JS, and server HTTP security headers. |
 | `tests/unit/control-hooks-and-types.spec.ts` | Unit and browser-context verification of Phase 02 hooks, CSRF headers, polling backoff, and loopback API lifecycles. |
+| `tests/unit/control-atomic-components.spec.ts` | Unit verification of Phase 03 atomic and molecular components, variant classes, DOM IDs, accessibility roles, and data attributes (21 checks). |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
 | `tests/unit/report-server-secret-store.spec.ts` | Phase 01 backend contract and control-mode wiring coverage. |
@@ -337,12 +376,15 @@ checked-in files with default-deny routes and do not contact Jenkins or vendor
 services. `template-build-fixture.spec.ts` validates the ninth file and
 `template-auto-build.spec.ts` proves one build POST without Snyk/Sonar capture.
 The Phase 03 unit gate separately proves control-run SecretStore injection and
-redaction with injected executors. The Phase 04 control-page E2E gate proves
+redaction with injected executors. The Phase 03 atomic design components gate
+proves DOM ID contracts, CSS variant mappings, ARIA accessibility attributes,
+and compound molecule rendering across 21 unit checks in
+`tests/unit/control-atomic-components.spec.ts`. The Phase 04 control-page E2E gate proves
 credential-modal accessibility and presence-state transitions. The Phase 05
 unit/API and control-page E2E gates extend that evidence to SecretStore
 lifecycle requirements, API persistence semantics, injected-credential
 execution, and zero leakage from inputs, page HTML, and run logs; the recorded
-snapshot is 248 unit plus 6 control E2E checks, 254 total.
+snapshot is 269 unit plus 6 control E2E checks, 275 total.
 
 ## Offline template fixture flow
 

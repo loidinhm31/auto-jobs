@@ -240,6 +240,29 @@ The `control-hooks-and-types.spec.ts` suite verifies:
 - `useRunPoller` executes exponential backoff on transient errors up to 5 retries, terminates on fatal 4xx errors or terminal states (`succeeded`, `failed`, `submission-unknown`), and cleans up timers and `AbortController` handles;
 - Full lifecycle end-to-end against live loopback control endpoints: config manager list/load/ETag-conflict/save, credential manager presence/patch/delete, browser settings presence/update/clear, and run poller `202 Accepted` execution lifecycle.
 
+### Phase 03 control atomic components gate
+
+Run the focused atomic and molecular component contract suite:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-atomic-components.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The [`control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/control-atomic-components.spec.ts) suite verifies 21 unit checks:
+- [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): strictly renders required variant classes (`badge-idle`, `badge-queued`, `badge-running`, `badge-succeeded`, `badge-failed`, `badge-unknown` for `unknown` and `submission-unknown`), credential states (`badge-configured`, `badge-missing`), and browser unconfigured state (`badge-missing` class with `"Not Set"` text);
+- [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): renders variant classes (`btn-primary`, `btn-secondary`, `btn-danger`, `btn-outline`), default `type="button"`, compact `btn-sm` sizing, disabled state, and loading spinner;
+- [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): associates label via `htmlFor`, displays error with `role="alert"` and `aria-invalid="true"`, and defaults `type="password"` with `autoComplete="off"`;
+- [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): renders native `<select>` with options array, value binding, and `aria-label`;
+- [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): renders `role="status"` and `aria-live="polite"`, variant classes (`info`, `success`, `error`), and toggles `.hidden` on visibility changes;
+- [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): renders `aria-live="polite"`, `.credentials-loading` class, and `.hidden` toggle;
+- [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): verifies exact DOM structure (`.credential-row`, `label[for="secret-input-${key}"]`, `Badge`, password `<input id="secret-input-${key}" class="credential-input" autocomplete="off">`, and `.btn-clear-credential[data-key="${key}"]` rendered only when configured);
+- [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): verifies exact element IDs for headless selection (`#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless`) and binary path input (`#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path`);
+- [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): verifies element IDs (`#config-select`, `#btn-reload`, `#btn-save`, `#btn-credentials`, `#btn-browser-settings`) and ensures `#btn-save` is disabled when not dirty;
+- [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, handles string logs and timestamped `RunLogEntry[]` entries, and defaults to `"No active run."`;
+- [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): renders outcome box `#run-result-box`, reports link matching `/reports/`, Jenkins build link, error messages, and `.hidden` toggle when null.
+
 ### Phase 04 credential dialog gate
 
 `npm run test:control` also exercises the browser-facing credential workflow
@@ -359,6 +382,9 @@ The 2026-09-03 Phase 05 verification snapshot recorded:
 | `npm run test:control` (Chromium + WebKit) | 6/6 passed |
 | Combined unit and control E2E checks | 254/254 passed |
 | Secret leakage checks | Zero observed |
+
+Phase 03 React refactor addition:
+- [`tests/unit/control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/control-atomic-components.spec.ts): 21/21 passed (bringing unit checks to 269/269, combined unit and control E2E checks to 275/275).
 
 These checks prove local persistence, API/UI contracts, and no-leakage
 invariants; they do not prove a live Jenkins build or vendor-service run.

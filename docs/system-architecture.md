@@ -496,6 +496,59 @@ Provides strongly-typed prop interfaces for Phase 03 component implementers (ato
   - `LogViewerProps`: receives `RunLogEntry[]` and `isLoading` flag.
   - `RunResultBoxProps`: receives `RunResult | null` containing report URLs, build links, or failure diagnostics.
 
+#### Atomic Design Implementation and Contract Fidelity (Phase 03)
+
+Phase 03 implements accessible atomic design UI primitives and compound molecules conforming strictly to `types/component-contracts.ts` and legacy DOM contracts:
+
+```mermaid
+graph TD
+  subgraph Styling ["Styling Layer"]
+    GC["globals.css (CSS Vars + Tailwind Directives)"]
+    CN["utils/cn.ts (clsx + twMerge)"]
+  end
+
+  subgraph Atoms ["UI Primitives (components/atoms/)"]
+    Badge["Badge (badge badge-{variant})"]
+    Button["Button (btn btn-{variant} btn-sm)"]
+    Input["Input (accessible label + alert)"]
+    Select["Select (native select wrapper)"]
+    StatusBanner["StatusBanner (#status-banner role=status)"]
+    LoadingIndicator["LoadingIndicator (.credentials-loading aria-live)"]
+  end
+
+  subgraph Molecules ["Compound Components (components/molecules/)"]
+    CredRow["CredentialRow (.credential-row)"]
+    BrowserRow["BrowserSettingRow (explicit badge/button IDs)"]
+    ConfigBar["ConfigSelectorBar (#config-select, #btn-save)"]
+    LogView["LogViewer (#run-logs role=log)"]
+    ResultBox["RunResultBox (#run-result-box)"]
+  end
+
+  Styling --> Atoms
+  Atoms --> Molecules
+```
+
+1. **Atomic UI Primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/))**:
+   - [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): Renders `<span className="badge badge-{variant}">`. Maps status variants (`idle`, `queued`, `running`, `succeeded`, `failed`, `unknown`, `submission-unknown`), credential states (`configured`, `missing`), and browser setting states (`not-set` -> `badge-missing` class with `"Not Set"` text).
+   - [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): Renders accessible button elements with variant classes (`btn-primary`, `btn-secondary`, `btn-danger`, `btn-outline`), size modifier (`btn-sm`), disabled/loading spinner states, and `data-*` attribute forwarding.
+   - [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): Accessible form input with `htmlFor` label linkage, `role="alert"` / `aria-invalid="true"` error announcements, and secure defaults (`autoComplete="off"`, `spellCheck={false}`).
+   - [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): Native `<select>` wrapper supporting options arrays or child elements, field labels, and `aria-label`.
+   - [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): Notification alert `<div id="status-banner" role="status" aria-live="polite">` with `info`, `success`, and `error` styling, hidden via `.hidden` when inactive.
+   - [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): Accessible status indicator (`aria-live="polite"`) with `.credentials-loading` styling and visibility toggling.
+
+2. **Compound Molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))**:
+   - [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): Renders credential configuration rows: `.credential-row` container, `.credential-field` label with dynamic `for="secret-input-${key}"` and `Badge`, and `.credential-input-group` containing password `<input id="secret-input-${key}" class="credential-input" autocomplete="off">`. When configured, exposes clear button `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
+   - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls with contract-specified element IDs: `#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless` for headless mode; `#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path` for browser binary path.
+   - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Renders configuration selector (`<select id="config-select">`), reload action (`#btn-reload`), save action (`#btn-save`, disabled unless `isDirty`), and dialog open buttons (`#btn-credentials`, `#btn-browser-settings`).
+   - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Streaming run log viewer `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, formatting string logs or timestamped `RunLogEntry[]` entries and auto-scrolling to newest output.
+   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Execution result panel `<div id="run-result-box" class="run-result-box">`, displaying report links matching `/reports/`, Jenkins build links, and error diagnostics (`.run-error-msg`).
+
+3. **Contract Fidelity Guarantees**:
+   - Exact DOM ID and CSS class preservation satisfies Playwright E2E locators (`tests/e2e/control-page.spec.ts`) without requiring test changes.
+   - Preserves `<textarea id="raw-json-textarea">` as a native textarea for Playwright `.fill()` and `.textContent` operations.
+   - Enforces zero plaintext credential leakage: password masking, `autoComplete="off"`, and input value clearing on save, clear, or dialog close.
+   - Verified by 21 unit tests in `tests/unit/control-atomic-components.spec.ts`.
+
 ### Control-run redaction boundary
 
 SecretStore values are never sent in the `/api/run` request or returned by the

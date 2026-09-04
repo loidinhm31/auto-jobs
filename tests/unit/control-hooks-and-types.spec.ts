@@ -360,8 +360,8 @@ test.describe('Control Page Phase 02: Types, Utility & Hook Contracts', () => {
     test.afterEach(async () => {
       const fs = await import('node:fs');
       if (serverHandle) await serverHandle.close();
-      fs.rmSync(configRoot, { recursive: true, force: true });
-      fs.rmSync(reportRoot, { recursive: true, force: true });
+      if (configRoot) fs.rmSync(configRoot, { recursive: true, force: true });
+      if (reportRoot) fs.rmSync(reportRoot, { recursive: true, force: true });
     });
 
     test('config manager lifecycle: lists, loads, detects conflict on stale ETag, and saves with valid ETag', async ({
