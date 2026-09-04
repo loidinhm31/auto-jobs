@@ -42,6 +42,9 @@ credentials; it does not claim a live Jenkins run.
   [`src/reporting/control-page/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/),
   guaranteeing strict DOM ID, CSS class, data-attribute, and ARIA contract
   fidelity for 100% Playwright test compatibility.
+- Phase 06 addition: removal of legacy imperative assets (`control-page.js`,
+  `control-page.html`, `control-page.css`); control dashboard frontend is now
+  100% React application compiled via Vite with zero legacy assets.
 - Repomix inventory: 194 repository files were packed; binary/ignored files
   remain outside the summary. The current XML compaction contains the Phase 05
   source, tests, fixtures, plans, and documentation.
@@ -222,7 +225,7 @@ contract in `tests/e2e/control-page.spec.ts` covers modal accessibility,
 dynamic key discovery, Missing/Configured transitions, save/clear/reopen
 state, injected-credential execution, input wiping, and absence of test
 secrets from page HTML and run logs. The control configuration uses Chromium
-and WebKit projects, so the three browser scenarios produce six E2E checks.
+and WebKit projects, so the four browser scenarios produce eight E2E checks.
 
 ### Control UI atomic design components and contract fidelity (Phase 03 React refactor)
 
@@ -247,10 +250,11 @@ The Control Dashboard UI uses Atomic Design principles to isolate visual primiti
    - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`. Formats strings or `RunLogEntry[]` timestamps (`[${timestamp}] ${message}`), defaults to `"No active run."`, and auto-scrolls on log updates.
    - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Renders outcome panel `<div id="run-result-box" class="run-result-box">`. Displays report links containing `/reports/`, Jenkins build links, and error messages (`.run-error-msg`), or hides with `.hidden` when null.
 
-4. **Fidelity guarantees**:
-   - Strict DOM element IDs, CSS classes, and `data-key` attributes match legacy test expectations without requiring test alterations.
-   - ARIA compliance: explicit `role="status"`, `role="log"`, `role="alert"`, `aria-live="polite"`, and `label[htmlFor]` relations.
-   - Verified by 21 unit checks in `tests/unit/control-atomic-components.spec.ts`.
+4. **Organism Assembly and Phase 06 Legacy Cleanup**:
+   - Compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/)): `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, `BrowserSettingsDialog`, and `BuildConfirmDialog` assembled via `DashboardLayout`, `DashboardPage`, `ErrorBoundary`, and `App.tsx`.
+   - Phase 06 cleanup removed all legacy imperative assets (`control-page.js`, `control-page.html`, `control-page.css`). The application is 100% React compiled into `.runner-build/reporting/control-page/` by Vite.
+   - Strict DOM element IDs, CSS classes, and `data-key` attributes match test expectations without requiring test alterations.
+   - Verified by 21 unit checks in `tests/unit/control-atomic-components.spec.ts` and 8/8 E2E checks in `tests/e2e/control-page.spec.ts`.
 
 ## Local SecretStore backend
 
@@ -329,7 +333,7 @@ set `Cache-Control: no-store`.
 | `src/reporting/report-server-control.ts` | Host preflight, control and built-asset routing, and `ControlRouterContext` dependencies. |
 | `src/reporting/report-server-control-page.ts` | Asset loader: reads built HTML, CSS, and JS from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches buffers. |
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
-| `src/reporting/control-page/` | Control Dashboard frontend sources (`index.html`, `main.tsx`, `styles/globals.css`, plus legacy assets during migration) bundled into `.runner-build/reporting/control-page/`. |
+| `src/reporting/control-page/` | Control Dashboard frontend sources (`index.html`, `main.tsx`, `styles/globals.css`, React components and hooks) bundled into `.runner-build/reporting/control-page/`. |
 | `src/reporting/control-page/types/` | Data contracts (`index.ts`) and shared UI component prop interfaces (`component-contracts.ts`). |
 | `src/reporting/control-page/utils/cn.ts` | Merges Tailwind CSS and conditional classes using `clsx` and `twMerge`. |
 | `src/reporting/control-page/utils/discoverCredentialKeys.ts` | Discovers required project credential variables with defaults and fallback resolution. |

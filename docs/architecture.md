@@ -141,9 +141,23 @@ flowchart LR
   [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7),
   [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23),
   [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5)),
-  and application markup (`index.html`, `main.tsx`, [`styles/globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css)),
+  compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/):
+  [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx),
+  [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx),
+  [`ProjectCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectCard.tsx),
+  [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx),
+  [`RunStatusCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RunStatusCard.tsx),
+  [`RawJsonSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RawJsonSection.tsx),
+  [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx),
+  [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx),
+  [`BuildConfirmDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx)),
+  layout templates ([`components/templates/DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)),
+  pages ([`pages/DashboardPage.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx)),
+  error boundary ([`components/ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)),
+  and application markup (`index.html`, [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), `main.tsx`, [`styles/globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css)),
   bundled by `vite.control.config.ts` into `.runner-build/reporting/control-page/` with
-  single-bundle JS/CSS and no inline scripts/styles for strict CSP compliance.
+  single-bundle JS/CSS and no inline scripts/styles for strict CSP compliance. Legacy imperative
+  assets (`control-page.js`, `control-page.html`, `control-page.css`) have been removed (Phase 06).
 - `src/reporting/report-server-control-page.ts` reads Vite-built assets from
   `.runner-build/reporting/control-page/`, injects the instance CSRF token into
   `index.html`, and provides cached CSS and JS.
@@ -585,6 +599,16 @@ The Control Dashboard frontend refactor implements Atomic Design principles, cle
    - **Accessibility**: Includes explicit ARIA roles (`role="status"`, `role="log"`, `role="alert"`), `aria-live="polite"` live regions, and `label[for]` associations.
    - **Zero Leakage**: Credential inputs enforce `type="password"`, `autoComplete="off"`, and input value clearing on submission, clear, and dialog closure.
 
+5. **Compound Organisms and Page Assembly (Phase 04)**:
+   - Integrates atomic primitives and molecules into feature-complete panels: [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx), [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx), [`ProjectCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectCard.tsx), [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx), [`RunStatusCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RunStatusCard.tsx), [`RawJsonSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RawJsonSection.tsx), [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx), [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx), and [`BuildConfirmDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx).
+   - Layout template ([`DashboardLayout`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)) provides structure with skip links and alert regions.
+   - Page view ([`DashboardPage`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx)) and Root ([`App`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), [`ErrorBoundary`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)) integrate hooks for unified state management.
+
+6. **Phase 06 Legacy Cleanup**:
+   - Completely removed legacy imperative files: `src/reporting/control-page/control-page.js`, `control-page.html`, and `control-page.css`.
+   - The loopback dashboard frontend is 100% React, compiled via Vite into `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, `assets/control-page.js`).
+   - `scripts/copy-report-assets.mjs` stages only `report.css`.
+
 ## Test and release boundary
 
 The deterministic order is `npm ci`, `npm run install:browsers`,
@@ -629,9 +653,9 @@ Phase 04 control-page coverage and Phase 05 browser verification use
 `tests/e2e/control-page.spec.ts`. The control suite proves config/run/UI
 behavior, accessible credential management, dynamic key discovery,
 Missing/Configured transitions, guarded save/clear operations, persistence
-after reload, injected-credential execution, and zero leakage from cleared
-inputs, page HTML, and run logs. Its three scenarios run in Chromium and
-WebKit, producing six E2E checks.
+after reload, injected-credential execution, browser settings management,
+and zero leakage from cleared inputs, page HTML, and run logs. Its four scenarios
+run in Chromium and WebKit, producing eight E2E checks.
 
 Phase 05 SecretStore/API unit additions are
 `tests/unit/control-secret-store.spec.ts` and
@@ -639,8 +663,11 @@ Phase 05 SecretStore/API unit additions are
 lifecycle checks; the second has ten operation checks. The security suite
 continues to cover plaintext redaction, Host/Origin/Fetch Metadata/CSRF gates,
 bounded JSON validation, content-type handling, unsupported methods, and
-store-availability errors. Deterministic unit suites include 275 passed
-checks (including 21 atomic component tests), 6/6 control E2E checks, zero
-secret leakage, and zero TypeScript errors. None of these deterministic
+store-availability errors.
+
+Phase 06 legacy cleanup removed all legacy control page files (`control-page.js`,
+`control-page.html`, `control-page.css`). Deterministic unit suites include 292
+passed checks (including 21 atomic component tests), 8/8 control E2E checks,
+zero secret leakage, and zero TypeScript errors. None of these deterministic
 checks contacts a live Jenkins controller or vendor service.
 

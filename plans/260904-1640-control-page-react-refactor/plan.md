@@ -1,7 +1,7 @@
 ---
 title: "Control Page React Refactor with Atomic Design"
 description: "Refactor legacy DOM-scripting control page into a modern, robust React application using Atomic Design, Tailwind CSS, and Radix UI primitives"
-status: in_progress
+status: complete
 priority: P1
 effort: 22h
 branch: main
@@ -62,13 +62,14 @@ graph TD
 | 03 | Atomic Design Components (Atoms & Molecules) | **DONE** | 2026-09-04 | [phase-03-atoms-and-molecules.md](phase-03-atoms-and-molecules.md) |
 | 04 | Organisms, Modals & Dashboard Assembly | **DONE** | 2026-09-04 | [phase-04-organisms-and-page-assembly.md](phase-04-organisms-and-page-assembly.md) |
 | 05 | Verification, Playwright E2E & Accessibility Audit | **DONE** | 2026-09-04 | [phase-05-verification-and-release-audit.md](phase-05-verification-and-release-audit.md) |
-| 06 | Legacy Cleanup & Documentation | Pending | — | [phase-06-legacy-cleanup.md](phase-06-legacy-cleanup.md) |
+| 06 | Legacy Cleanup & Documentation | **DONE** | 2026-09-05 | [phase-06-legacy-cleanup.md](phase-06-legacy-cleanup.md) |
 
 Phase 01 completion: **DONE** — 2026-09-04
 Phase 02 completion: **DONE** — 2026-09-04
 Phase 03 completion: **DONE** — 2026-09-04
 Phase 04 completion: **DONE** — 2026-09-04
 Phase 05 completion: **DONE** — 2026-09-04 (Verified: typecheck, build, 292 unit tests, 8 control e2e tests across Chromium & WebKit with 0 Axe violations, report tests, release webkit tests)
+Phase 06 completion: **DONE** — 2026-09-05 (Verified: legacy files deleted, build, typecheck, 8 control e2e tests across Chromium & WebKit, release tests, documentation updated)
 
 ## Next Steps
-- Proceed to [Phase 06: Legacy Cleanup & Documentation](phase-06-legacy-cleanup.md).
+- Refactor complete. Ready for final review, commit, and merge.

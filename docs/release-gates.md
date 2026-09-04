@@ -362,13 +362,13 @@ npm run test:control
 ```
 
 `npm run test:control` runs `tests/e2e/control-page.spec.ts` in both Chromium
-and WebKit. The browser contract verifies an accessible credential dialog,
-dynamic credential-name discovery, Missing/Configured presence transitions,
-CSRF-protected save and clear flows, persistence after close/reopen and page
-reload, and a run that fails without credentials then succeeds after
-SecretStore-injected credentials. It also asserts that submitted values are
-absent from cleared inputs, page HTML, and run logs. The E2E server uses
-temporary roots and injected executors; it does not contact Jenkins or vendor
+and WebKit across four test scenarios (8 checks total). The browser contract verifies
+an accessible credential dialog, dynamic credential-name discovery, Missing/Configured
+presence transitions, CSRF-protected save and clear flows, persistence after close/reopen
+and page reload, browser settings configuration and clearing, and a run that fails without
+credentials then succeeds after SecretStore-injected credentials. It also asserts that
+submitted values are absent from cleared inputs, page HTML, and run logs. The E2E server
+uses temporary roots and injected executors; it does not contact Jenkins or vendor
 services.
 
 The 2026-09-03 Phase 05 verification snapshot recorded:
@@ -385,6 +385,29 @@ The 2026-09-03 Phase 05 verification snapshot recorded:
 
 Phase 03 React refactor addition:
 - [`tests/unit/control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/control-atomic-components.spec.ts): 21/21 passed (bringing unit checks to 269/269, combined unit and control E2E checks to 275/275).
+
+### Phase 06 legacy cleanup and release verification gate
+
+Phase 06 eliminated all legacy imperative control page files, ensuring only modern React assets compiled by Vite exist in the build output and runtime:
+
+- **Deleted legacy files**:
+  - `src/reporting/control-page/control-page.js` (imperative DOM scripting replaced by React components and hooks)
+  - `src/reporting/control-page/control-page.html` (legacy template replaced by `src/reporting/control-page/index.html`)
+  - `src/reporting/control-page/control-page.css` (legacy CSS replaced by Tailwind CSS and `styles/globals.css`)
+- **Staging & build verification**:
+  - `scripts/copy-report-assets.mjs` stages exclusively `report.css` to `.runner-build/reporting/report.css` and no longer copies any legacy control files.
+  - `vite build --config vite.control.config.ts` bundles all React components into `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, `assets/control-page.js`).
+  - `report-server-control-page.ts` loads exclusively from `.runner-build/reporting/control-page/`.
+- **Post-cleanup verification baseline**:
+
+| Command/scope | Result |
+| --- | --- |
+| `npm run typecheck` | 0 TypeScript errors |
+| `npm run build` | Clean Vite bundle + asset staging |
+| `npm run test:unit` | 292/292 passed |
+| `npm run test:control` (Chromium + WebKit) | 8/8 passed (4 scenarios × 2 browsers) |
+| Combined unit and control E2E checks | 300/300 passed |
+| Secret leakage checks | Zero observed |
 
 These checks prove local persistence, API/UI contracts, and no-leakage
 invariants; they do not prove a live Jenkins build or vendor-service run.

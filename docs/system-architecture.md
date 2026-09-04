@@ -338,7 +338,9 @@ The loopback control dashboard at `/` is built using Vite (`vite.control.config.
 compiling React components and Tailwind CSS into `.runner-build/reporting/control-page/`
 as `index.html`, `assets/control-page.css`, and `assets/control-page.js`. Rollup output
 configures single-bundle JS/CSS and disables CSS code-splitting to adhere strictly to
-`CONTROL_CSP` (`default-src 'none'`, `script-src 'self'`, `style-src 'self'`).
+`CONTROL_CSP` (`default-src 'none'`, `script-src 'self'`, `style-src 'self'`). Legacy
+imperative files (`control-page.js`, `control-page.html`, `control-page.css`) have been
+completely deleted, leaving only modern React assets produced by Vite.
 
 `report-server-control-page.ts` reads the Vite-built assets from
 `.runner-build/reporting/control-page/`, dynamically substituting the server's per-instance
@@ -412,8 +414,8 @@ The browser-facing contract is covered by
 `tests/e2e/control-page.spec.ts`: it checks modal accessibility, dynamic key
 discovery, Missing/Configured transitions, save/clear/reopen state, injected
 credential execution, input wiping, and absence of test secrets in page HTML
-and run logs. The isolated E2E fixture runs the three scenarios in both
-Chromium and WebKit, for six checks total, and does not contact Jenkins.
+and run logs. The isolated E2E fixture runs the four scenarios in both
+Chromium and WebKit, for eight checks total, and does not contact Jenkins.
 
 ### Control UI headless hook architecture and component contracts (Phase 02)
 
@@ -548,6 +550,19 @@ graph TD
    - Preserves `<textarea id="raw-json-textarea">` as a native textarea for Playwright `.fill()` and `.textContent` operations.
    - Enforces zero plaintext credential leakage: password masking, `autoComplete="off"`, and input value clearing on save, clear, or dialog close.
    - Verified by 21 unit tests in `tests/unit/control-atomic-components.spec.ts`.
+
+#### React Application Assembly and Legacy Cleanup (Phases 04 - 06)
+
+1. **Compound Organisms and Page Assembly ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/))**:
+   - Assembles atomic and molecular components into interactive dashboard subsystems: [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx), [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx), [`ProjectCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectCard.tsx), [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx), [`RunStatusCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RunStatusCard.tsx), [`RawJsonSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RawJsonSection.tsx), [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx), [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx), and [`BuildConfirmDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx).
+   - Layout template ([`DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)) encapsulates accessible skip links (`.skip-link`), status notifications, and container constraints.
+   - Page and Application Root ([`DashboardPage.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx), [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), [`ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)) wire headless hooks (`useControlApi`, `useConfigManager`, `useCredentialsManager`, `useBrowserSettings`, `useRunPoller`) into a unified unidirectional data flow.
+
+2. **Phase 06 Legacy Cleanup**:
+   - Removed legacy imperative DOM scripting and styling files: `src/reporting/control-page/control-page.js`, `control-page.html`, and `control-page.css`.
+   - The loopback dashboard is now 100% powered by the modern React application bundled by Vite (`vite.control.config.ts`) into `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, and `assets/control-page.js`).
+   - `scripts/copy-report-assets.mjs` exclusively stages `report.css`; no legacy control files are copied.
+   - Complete build, typecheck, unit, and E2E suites operate strictly against Vite-compiled React assets with 100% test contract preservation.
 
 ### Control-run redaction boundary
 
