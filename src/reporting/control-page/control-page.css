@@ -61,6 +61,10 @@ body {
   border: 0;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .app-header {
   background: var(--card-bg);
   border-bottom: 1px solid var(--border-color);
@@ -265,9 +269,17 @@ body {
   margin-top: 1rem;
 }
 
-.credentials-dialog {
+.credentials-dialog,
+.browser-dialog {
   max-width: 580px;
   width: 90vw;
+}
+
+.browser-form-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  margin: 1rem 0;
 }
 
 .credentials-notice {

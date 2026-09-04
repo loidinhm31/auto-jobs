@@ -86,6 +86,33 @@ test('supports explicit LAN binding and project-local defaults', async () => {
   });
 });
 
+test('supports CLI flags for --env, --headless, and --executable-path', async () => {
+  const options = parseReportServerArgs([
+    '--control',
+    '--env', 'CUSTOM_VAR=custom_val',
+    '--headless=false',
+    '--executable-path', 'C:\\browsers\\chrome.exe',
+  ]);
+  expect(options.mode).toBe('control');
+  expect(options.envOverrides).toEqual({
+    CUSTOM_VAR: 'custom_val',
+    PLAYWRIGHT_HEADLESS: 'false',
+    PLAYWRIGHT_EXECUTABLE_PATH: 'C:\\browsers\\chrome.exe',
+  });
+
+  const headlessTrue = parseReportServerArgs(['--headless']);
+  expect(headlessTrue.envOverrides).toEqual({
+    PLAYWRIGHT_HEADLESS: 'true',
+  });
+});
+
+test('validates --env and --headless CLI arguments', async () => {
+  expect(() => parseReportServerArgs(['--env', 'bad'])).toThrow(/--env requires NAME=VALUE/iu);
+  expect(() => parseReportServerArgs(['--env', '123_INVALID=val'])).toThrow(/--env name is invalid/iu);
+  expect(() => parseReportServerArgs(['--headless=invalid_bool'])).toThrow(/--headless must be true or false/iu);
+  expect(() => parseReportServerArgs(['--executable-path'])).toThrow(/--executable-path requires a value/iu);
+});
+
 test('rejects a symlinked report root', async () => {
   const realRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'report-server-real-'));
   const parentRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'report-server-link-'));

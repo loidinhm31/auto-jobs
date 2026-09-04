@@ -349,4 +349,127 @@ test.describe('Control Page Dashboard E2E', () => {
     await page.locator('#btn-cancel-credentials').click();
     await expect(credDialog).not.toBeVisible();
   });
+
+  test('manages browser settings in browser dialog with full a11y, saving, clearing, and execution injection', async ({ page }) => {
+    let capturedHeadlessEnv: string | undefined;
+    let capturedExecPathEnv: string | undefined;
+
+    // Restart server with an executor that records process.env
+    if (closeServer) await closeServer();
+    const server = await createReportServer(reportRoot, {
+      mode: 'control',
+      configRoot,
+      host: '127.0.0.1',
+      port: 0,
+      runManagerOptions: {
+        reportExecutor: async (
+          projects: readonly NormalizedProjectConfig[],
+          context?: { runtimeEnvironment?: NodeJS.ProcessEnv },
+        ) => {
+          const env = context?.runtimeEnvironment ?? process.env;
+          capturedHeadlessEnv = env['PLAYWRIGHT_HEADLESS'];
+          capturedExecPathEnv = env['PLAYWRIGHT_EXECUTABLE_PATH'];
+          return {
+            reportRoot,
+            outcomes: projects.map((p) => ({
+              projectId: p.id,
+              name: p.name,
+              state: 'success' as const,
+              runId: 'mock-run',
+              warnings: [],
+            })),
+            aggregate: {
+              schemaVersion: 3,
+              generatedAt: new Date().toISOString(),
+              projects: projects.map((p) => ({
+                projectId: p.id,
+                name: p.name,
+                state: 'success' as const,
+                runId: 'mock-run',
+                reportPath: `${p.id}/mock-run/index.html`,
+                runs: [],
+                warnings: [],
+              })),
+              warnings: [],
+            },
+            manifests: [],
+            warnings: [],
+            exitCode: 0,
+          };
+        },
+      },
+    });
+    serverUrl = server.url;
+    closeServer = server.close;
+
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    const browserBtn = page.locator('#btn-browser-settings');
+    await expect(browserBtn).toBeVisible();
+    await browserBtn.click();
+
+    const browserDialog = page.locator('#browser-dialog');
+    await expect(browserDialog).toBeVisible();
+
+    // Verify Axe accessibility while browser settings modal is open
+    const modalA11y = await new AxeBuilder({ page }).analyze();
+    expect(modalA11y.violations).toEqual([]);
+
+    // Check initial badges
+    const headlessBadge = page.locator('#badge-browser-headless');
+    const execPathBadge = page.locator('#badge-browser-executable-path');
+    await expect(headlessBadge).toHaveText('Not Set');
+    await expect(execPathBadge).toHaveText('Not Set');
+
+    // Fill browser settings
+    const headlessSelect = page.locator('#browser-headless-select');
+    const execPathInput = page.locator('#browser-executable-path-input');
+    await headlessSelect.selectOption('false');
+    await execPathInput.fill('C:\\browsers\\chrome-custom.exe');
+
+    // Save browser settings
+    await page.locator('#btn-save-browser').click();
+    await expect(page.locator('#browser-message')).toHaveText(/Browser settings saved successfully/i);
+
+    // Badges updated
+    await expect(headlessBadge).toHaveText('Configured');
+    await expect(execPathBadge).toHaveText('Configured');
+
+    // Close dialog
+    await page.locator('#btn-cancel-browser').click();
+    await expect(browserDialog).not.toBeVisible();
+
+    // Run report and verify injected browser variables
+    const runReportsBtn = page.locator('#btn-run-reports');
+    await runReportsBtn.click();
+    await expect(page.locator('#run-status-badge')).toHaveText('succeeded', { timeout: 10_000 });
+
+    expect(capturedHeadlessEnv).toBe('false');
+    expect(capturedExecPathEnv).toBe('C:\\browsers\\chrome-custom.exe');
+
+    // Reopen dialog and test clear
+    await browserBtn.click();
+    await expect(browserDialog).toBeVisible();
+    await expect(headlessBadge).toHaveText('Configured');
+    await expect(execPathBadge).toHaveText('Configured');
+
+    const clearHeadlessBtn = page.locator('#btn-clear-browser-headless');
+    const clearExecPathBtn = page.locator('#btn-clear-browser-executable-path');
+    await expect(clearHeadlessBtn).toBeVisible();
+    await expect(clearExecPathBtn).toBeVisible();
+
+    await clearHeadlessBtn.click();
+    await expect(page.locator('#browser-message')).toHaveText(/PLAYWRIGHT_HEADLESS cleared/i);
+    await expect(headlessBadge).toHaveText('Not Set');
+    await expect(clearHeadlessBtn).not.toBeVisible();
+
+    await clearExecPathBtn.click();
+    await expect(page.locator('#browser-message')).toHaveText(/PLAYWRIGHT_EXECUTABLE_PATH cleared/i);
+    await expect(execPathBadge).toHaveText('Not Set');
+    await expect(clearExecPathBtn).not.toBeVisible();
+
+    await page.locator('#btn-cancel-browser').click();
+    await expect(browserDialog).not.toBeVisible();
+  });
 });

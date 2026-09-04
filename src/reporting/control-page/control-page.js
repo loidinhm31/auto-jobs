@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   'use strict';
 
   let currentConfigName = '';
@@ -40,6 +40,19 @@
   const btnCredentials = document.getElementById('btn-credentials');
   const btnCancelCredentials = document.getElementById('btn-cancel-credentials');
   const btnSaveCredentials = document.getElementById('btn-save-credentials');
+
+  const browserDialog = document.getElementById('browser-dialog');
+  const browserMessage = document.getElementById('browser-message');
+  const browserLoading = document.getElementById('browser-loading');
+  const btnBrowserSettings = document.getElementById('btn-browser-settings');
+  const btnCancelBrowser = document.getElementById('btn-cancel-browser');
+  const btnSaveBrowser = document.getElementById('btn-save-browser');
+  const browserHeadlessSelect = document.getElementById('browser-headless-select');
+  const browserExecutablePathInput = document.getElementById('browser-executable-path-input');
+  const badgeBrowserHeadless = document.getElementById('badge-browser-headless');
+  const badgeBrowserExecutablePath = document.getElementById('badge-browser-executable-path');
+  const btnClearBrowserHeadless = document.getElementById('btn-clear-browser-headless');
+  const btnClearBrowserExecutablePath = document.getElementById('btn-clear-browser-executable-path');
 
   function showBanner(type, message) {
     statusBanner.className = 'status-banner ' + type;
@@ -610,5 +623,158 @@
       btnSaveCredentials.disabled = false;
     }
   });
+
+  function showBrowserMessage(type, message) {
+    browserMessage.className = 'status-banner ' + type;
+    browserMessage.textContent = message;
+    browserMessage.classList.remove('hidden');
+  }
+
+  function hideBrowserMessage() {
+    browserMessage.className = 'status-banner hidden';
+    browserMessage.textContent = '';
+  }
+
+  function updateBrowserUi(secrets) {
+    const headlessSet = Boolean(secrets['PLAYWRIGHT_HEADLESS']);
+    const execPathSet = Boolean(secrets['PLAYWRIGHT_EXECUTABLE_PATH']);
+
+    badgeBrowserHeadless.className = 'badge ' + (headlessSet ? 'badge-configured' : 'badge-missing');
+    badgeBrowserHeadless.textContent = headlessSet ? 'Configured' : 'Not Set';
+    if (headlessSet) {
+      btnClearBrowserHeadless.classList.remove('hidden');
+    } else {
+      btnClearBrowserHeadless.classList.add('hidden');
+      browserHeadlessSelect.value = '';
+    }
+
+    badgeBrowserExecutablePath.className = 'badge ' + (execPathSet ? 'badge-configured' : 'badge-missing');
+    badgeBrowserExecutablePath.textContent = execPathSet ? 'Configured' : 'Not Set';
+    if (execPathSet) {
+      btnClearBrowserExecutablePath.classList.remove('hidden');
+    } else {
+      btnClearBrowserExecutablePath.classList.add('hidden');
+      browserExecutablePathInput.value = '';
+    }
+  }
+
+  async function openBrowserDialog() {
+    hideBrowserMessage();
+    browserDialog.showModal();
+    browserLoading.classList.remove('hidden');
+    try {
+      const resp = await apiFetch('/api/secrets?keys=PLAYWRIGHT_HEADLESS,PLAYWRIGHT_EXECUTABLE_PATH');
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error?.message || 'HTTP ' + resp.status);
+      }
+      const data = await resp.json();
+      updateBrowserUi(data.secrets || {});
+    } catch (err) {
+      showBrowserMessage('error', 'Failed to load browser settings: ' + err.message);
+    } finally {
+      browserLoading.classList.add('hidden');
+    }
+  }
+
+  if (btnBrowserSettings) {
+    btnBrowserSettings.addEventListener('click', () => {
+      openBrowserDialog();
+    });
+  }
+
+  if (btnCancelBrowser) {
+    btnCancelBrowser.addEventListener('click', () => {
+      browserDialog.close();
+    });
+  }
+
+  if (browserDialog) {
+    browserDialog.addEventListener('close', () => {
+      browserExecutablePathInput.value = '';
+      hideBrowserMessage();
+    });
+  }
+
+  if (btnClearBrowserHeadless) {
+    btnClearBrowserHeadless.addEventListener('click', async () => {
+      hideBrowserMessage();
+      btnClearBrowserHeadless.disabled = true;
+      try {
+        const resp = await apiFetch('/api/secrets?name=PLAYWRIGHT_HEADLESS', { method: 'DELETE' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error?.message || 'HTTP ' + resp.status);
+        }
+        const data = await resp.json();
+        updateBrowserUi(data.secrets || {});
+        showBrowserMessage('success', 'PLAYWRIGHT_HEADLESS cleared.');
+      } catch (err) {
+        showBrowserMessage('error', 'Failed to clear PLAYWRIGHT_HEADLESS: ' + err.message);
+      } finally {
+        btnClearBrowserHeadless.disabled = false;
+      }
+    });
+  }
+
+  if (btnClearBrowserExecutablePath) {
+    btnClearBrowserExecutablePath.addEventListener('click', async () => {
+      hideBrowserMessage();
+      btnClearBrowserExecutablePath.disabled = true;
+      try {
+        const resp = await apiFetch('/api/secrets?name=PLAYWRIGHT_EXECUTABLE_PATH', { method: 'DELETE' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error?.message || 'HTTP ' + resp.status);
+        }
+        const data = await resp.json();
+        updateBrowserUi(data.secrets || {});
+        showBrowserMessage('success', 'PLAYWRIGHT_EXECUTABLE_PATH cleared.');
+      } catch (err) {
+        showBrowserMessage('error', 'Failed to clear PLAYWRIGHT_EXECUTABLE_PATH: ' + err.message);
+      } finally {
+        btnClearBrowserExecutablePath.disabled = false;
+      }
+    });
+  }
+
+  if (btnSaveBrowser) {
+    btnSaveBrowser.addEventListener('click', async () => {
+      hideBrowserMessage();
+      const headlessVal = browserHeadlessSelect.value.trim();
+      const execPathVal = browserExecutablePathInput.value.trim();
+      const secrets = {};
+      if (headlessVal.length > 0) secrets['PLAYWRIGHT_HEADLESS'] = headlessVal;
+      if (execPathVal.length > 0) secrets['PLAYWRIGHT_EXECUTABLE_PATH'] = execPathVal;
+
+      if (Object.keys(secrets).length === 0) {
+        showBrowserMessage('info', 'No changes entered.');
+        return;
+      }
+
+      btnSaveBrowser.disabled = true;
+      try {
+        const resp = await apiFetch('/api/secrets', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ secrets }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error?.message || 'HTTP ' + resp.status);
+        }
+        const data = await resp.json();
+        updateBrowserUi(data.secrets || {});
+        browserExecutablePathInput.value = '';
+        showBanner('success', 'Browser settings saved successfully.');
+        showBrowserMessage('success', 'Browser settings saved successfully.');
+      } catch (err) {
+        showBrowserMessage('error', 'Failed to save browser settings: ' + err.message);
+      } finally {
+        btnSaveBrowser.disabled = false;
+      }
+    });
+  }
+
   loadConfigList();
 })();

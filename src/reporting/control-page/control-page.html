@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -19,6 +19,7 @@
         <button id="btn-reload" type="button" class="btn btn-secondary">Reload</button>
         <button id="btn-save" type="button" class="btn btn-primary" disabled>Save Config</button>
         <button id="btn-credentials" type="button" class="btn btn-secondary">Credentials</button>
+        <button id="btn-browser-settings" type="button" class="btn btn-secondary">Browser Settings</button>
       </div>
     </div>
   </header>
@@ -97,6 +98,49 @@
       <div class="dialog-actions">
         <button type="button" id="btn-cancel-credentials" class="btn btn-secondary">Cancel</button>
         <button type="button" id="btn-save-credentials" class="btn btn-primary">Save Credentials</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="browser-dialog" class="confirm-dialog browser-dialog" aria-labelledby="browser-dialog-title">
+    <form method="dialog" class="dialog-content" id="browser-form">
+      <h2 id="browser-dialog-title">Browser Settings</h2>
+      <p class="credentials-notice">Stored locally in <code>config/secrets.local.json</code> (git-ignored).</p>
+      <div id="browser-message" class="status-banner hidden" role="status" aria-live="polite"></div>
+      <div id="browser-loading" class="credentials-loading hidden" aria-live="polite">Loading browser settings...</div>
+      <div class="browser-form-rows">
+        <div class="credential-row">
+          <div class="credential-field">
+            <label for="browser-headless-select">PLAYWRIGHT_HEADLESS</label>
+            <div class="credential-badges">
+              <span id="badge-browser-headless" class="badge badge-missing">Not Set</span>
+            </div>
+          </div>
+          <div class="credential-input-group">
+            <select id="browser-headless-select" name="PLAYWRIGHT_HEADLESS" class="credential-input">
+              <option value="">(Inherit / Unset)</option>
+              <option value="true">Headless (true)</option>
+              <option value="false">Headed (false)</option>
+            </select>
+            <button type="button" id="btn-clear-browser-headless" class="btn btn-secondary btn-sm btn-clear-credential hidden">Clear</button>
+          </div>
+        </div>
+        <div class="credential-row">
+          <div class="credential-field">
+            <label for="browser-executable-path-input">PLAYWRIGHT_EXECUTABLE_PATH</label>
+            <div class="credential-badges">
+              <span id="badge-browser-executable-path" class="badge badge-missing">Not Set</span>
+            </div>
+          </div>
+          <div class="credential-input-group">
+            <input type="text" id="browser-executable-path-input" name="PLAYWRIGHT_EXECUTABLE_PATH" class="credential-input" placeholder="e.g. C:\Program Files\Google\Chrome\Application\chrome.exe" spellcheck="false">
+            <button type="button" id="btn-clear-browser-executable-path" class="btn btn-secondary btn-sm btn-clear-credential hidden">Clear</button>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="btn-cancel-browser" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="btn-save-browser" class="btn btn-primary">Save Settings</button>
       </div>
     </form>
   </dialog>

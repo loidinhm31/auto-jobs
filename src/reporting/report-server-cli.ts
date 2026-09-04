@@ -17,6 +17,7 @@ export interface ReportServerConfig {
   readonly allowLan: boolean;
   readonly mode: 'report' | 'control';
   readonly help: boolean;
+  readonly envOverrides?: Readonly<Record<string, string>>;
 }
 
 function nonEmpty(value: string | undefined, fallback: string): string {
@@ -45,16 +46,76 @@ export function parseReportServerArgs(argv: readonly string[] = [], env: NodeJS.
   let allowLan = env['REPORT_ALLOW_LAN'] === '1';
   let mode: 'report' | 'control' = 'report';
   let help = false;
+  const envOverrides: Record<string, string> = {};
 
-  for (let index = 0; index < argv.length; index += 1) {
+  let index = 0;
+  while (index < argv.length) {
     const argument = argv[index];
-    if (argument === '--help' || argument === '-h') { help = true; continue; }
-    if (argument === '--root') { root = nextArgument(argv, index, argument); index += 1; continue; }
-    if (argument === '--config-root') { configRoot = nextArgument(argv, index, argument); index += 1; continue; }
-    if (argument === '--host') { host = nextArgument(argv, index, argument); index += 1; continue; }
-    if (argument === '--port') { port = parsePort(nextArgument(argv, index, argument), argument); index += 1; continue; }
-    if (argument === '--allow-lan') { allowLan = true; continue; }
-    if (argument === '--control') { mode = 'control'; continue; }
+    if (argument === undefined) break;
+    if (argument === '--help' || argument === '-h') { help = true; index += 1; continue; }
+    if (argument === '--root') { root = nextArgument(argv, index, argument); index += 2; continue; }
+    if (argument === '--config-root') { configRoot = nextArgument(argv, index, argument); index += 2; continue; }
+    if (argument === '--host') { host = nextArgument(argv, index, argument); index += 2; continue; }
+    if (argument === '--port') { port = parsePort(nextArgument(argv, index, argument), argument); index += 2; continue; }
+    if (argument === '--allow-lan') { allowLan = true; index += 1; continue; }
+    if (argument === '--control') { mode = 'control'; index += 1; continue; }
+    if (argument === '--env') {
+      const assignment = nextArgument(argv, index, argument);
+      index += 2;
+      const separator = assignment.indexOf('=');
+      if (separator <= 0) {
+        throw new Error('--env requires NAME=VALUE');
+      }
+      const name = assignment.slice(0, separator);
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) throw new Error('--env name is invalid');
+      envOverrides[name] = assignment.slice(separator + 1);
+      continue;
+    }
+    if (argument.startsWith('--env=')) {
+      const assignment = argument.slice('--env='.length);
+      const separator = assignment.indexOf('=');
+      if (separator <= 0) {
+        throw new Error('--env requires NAME=VALUE');
+      }
+      const name = assignment.slice(0, separator);
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) throw new Error('--env name is invalid');
+      envOverrides[name] = assignment.slice(separator + 1);
+      index += 1;
+      continue;
+    }
+    if (argument === '--headless') {
+      const next = argv[index + 1];
+      if (next !== undefined && !next.startsWith('--') && ['true', 'false', '1', '0', 'yes', 'no'].includes(next.toLowerCase())) {
+        envOverrides['PLAYWRIGHT_HEADLESS'] = next;
+        index += 2;
+      } else {
+        envOverrides['PLAYWRIGHT_HEADLESS'] = 'true';
+        index += 1;
+      }
+      continue;
+    }
+    if (argument.startsWith('--headless=')) {
+      const val = argument.slice('--headless='.length).trim();
+      if (!['true', 'false', '1', '0', 'yes', 'no'].includes(val.toLowerCase())) {
+        throw new Error('--headless must be true or false');
+      }
+      envOverrides['PLAYWRIGHT_HEADLESS'] = val;
+      index += 1;
+      continue;
+    }
+    if (argument === '--executable-path') {
+      const execPath = nextArgument(argv, index, argument);
+      index += 2;
+      envOverrides['PLAYWRIGHT_EXECUTABLE_PATH'] = execPath;
+      continue;
+    }
+    if (argument.startsWith('--executable-path=')) {
+      const execPath = argument.slice('--executable-path='.length).trim();
+      if (execPath.length === 0) throw new Error('--executable-path requires a value');
+      envOverrides['PLAYWRIGHT_EXECUTABLE_PATH'] = execPath;
+      index += 1;
+      continue;
+    }
     throw new Error(`unknown report server option: ${argument}`);
   }
 
@@ -62,7 +123,16 @@ export function parseReportServerArgs(argv: readonly string[] = [], env: NodeJS.
     throw new Error('Control mode cannot be combined with --allow-lan');
   }
 
-  return { root: path.resolve(root), configRoot: path.resolve(configRoot), host, port, allowLan, mode, help };
+  return {
+    root: path.resolve(root),
+    configRoot: path.resolve(configRoot),
+    host,
+    port,
+    allowLan,
+    mode,
+    help,
+    ...(Object.keys(envOverrides).length > 0 ? { envOverrides } : {}),
+  };
 }
 
 function lanUrls(host: string, port: number): string[] {
@@ -74,13 +144,18 @@ function lanUrls(host: string, port: number): string[] {
 }
 
 function usage(): void {
-  console.log('Usage: npm run serve:report -- [--root reports] [--host 127.0.0.1] [--port 4173] [--allow-lan]');
-  console.log('       npm run serve:control -- [--root reports] [--config-root config] [--host 127.0.0.1] [--port 4173]');
+  console.log('Usage: npm run serve:report -- [--root reports] [--host 127.0.0.1] [--port 4173] [--allow-lan] [--env NAME=VALUE] [--headless[=true|false]] [--executable-path <path>]');
+  console.log('       npm run serve:control -- [--root reports] [--config-root config] [--host 127.0.0.1] [--port 4173] [--env NAME=VALUE] [--headless[=true|false]] [--executable-path <path>]');
 }
 
 export async function main(argv: readonly string[] = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const config = parseReportServerArgs(argv, env);
   if (config.help) { usage(); return; }
+  if (config.envOverrides) {
+    for (const [key, value] of Object.entries(config.envOverrides)) {
+      process.env[key] = value;
+    }
+  }
   const handle = await createReportServer(config.root, {
     host: config.host,
     port: config.port,
