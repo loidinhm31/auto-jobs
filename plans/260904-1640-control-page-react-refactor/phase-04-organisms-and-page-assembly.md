@@ -16,8 +16,9 @@
 - Date: 2026-09-04
 - Description: Build complex organism widgets, modal dialogs using Radix UI primitives, template layouts, error boundary, and assemble the full dashboard page mounting into `index.html` via Vite entry.
 - Priority: P1
-- Implementation Status: Pending
-- Review Status: Pending
+- Implementation Status: Complete
+- Review Status: Approved
+- Completed At: 2026-09-04
 
 ## Key Insights
 1. **Radix Dialog vs native `<dialog>`**: Legacy uses HTML `<dialog>` with `.showModal()` / `.close()` and `method="dialog"` forms. Radix Dialog provides equivalent accessibility (ESC key, focus trap, backdrop) but uses a different DOM structure. The Radix dialog **does not** use `<form method="dialog">` — form submission behavior must be handled via React `onClick` handlers on save/cancel buttons.
@@ -217,6 +218,207 @@
   }
   ```
 
+## Implemented Components & Architecture Documentation
+
+### 1. ErrorBoundary (`src/reporting/control-page/components/ErrorBoundary.tsx`)
+- **Type**: React Class Component (`Component<ErrorBoundaryProps, ErrorBoundaryState>`).
+- **Role**: Top-level exception barrier that captures unhandled runtime rendering errors in any child component tree.
+- **Key Mechanics**:
+  - `getDerivedStateFromError(error)` updates state `{ hasError: true, error }`.
+  - `componentDidCatch(error, errorInfo)` logs diagnostic error details to `console.error`.
+  - Fallback UI: Renders an accessible alert card (`role="alert"`) with error message in `<pre>` block and a "Reload Page" button (`btn btn-primary`) invoking `window.location.reload()`.
+  - Custom fallback support via optional `fallback?: ReactNode` prop.
+
+### 2. BuildConfirmDialog (`src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx`)
+- **Type**: Radix UI Dialog Organism.
+- **Role**: Accessible confirmation modal for triggering Jenkins auto-builds on specific projects.
+- **Key Mechanics**:
+  - Built on `@radix-ui/react-dialog` primitives (`Dialog.Root`, `Dialog.Portal`, `Dialog.Overlay`, `Dialog.Content`, `Dialog.Title`, `Dialog.Description`).
+  - DOM IDs: Content `#build-confirm-dialog`, title `#dialog-title`.
+  - Data details list (`<dl className="dialog-details">`):
+    - Project ID: `<dd id="confirm-project-id">`
+    - Project Name: `<dd id="confirm-project-name">`
+    - Target Job URL: `<dd id="confirm-job-url">`
+  - Actions:
+    - Cancel button: `<Button id="btn-cancel-build" variant="secondary">` invoking `onCancel()`.
+    - Confirm button: `<Button id="btn-confirm-build" variant="danger">` invoking `onConfirm(projectId)`.
+  - Full WAI-ARIA compliance: Focus trap, ESC key dismiss, overlay click dismiss, focus restore.
+
+### 3. CredentialsDialog (`src/reporting/control-page/components/organisms/CredentialsDialog.tsx`)
+- **Type**: Radix UI Dialog Organism.
+- **Role**: Secure modal for local credential management stored in `config/secrets.local.json` (git-ignored).
+- **Key Mechanics**:
+  - Built on `@radix-ui/react-dialog` primitives with content ID `#credentials-dialog`.
+  - Container `#credentials-form` with title `#credentials-dialog-title`.
+  - Live feedback banner: `<div id="credentials-message" role="status" aria-live="polite">` displaying status messages (e.g. "No changes entered", "Credentials saved successfully", "{KEY} cleared").
+  - Loading indicator: `<div id="credentials-loading" aria-live="polite">` toggled when fetching secret status.
+  - Rows container: `<div id="credentials-form-rows" className="credentials-form-rows">` rendering dynamic `CredentialRow` molecules mapped from `credentialRows`.
+  - Empty state fallback: Displays guidance if no credential variables are required by the active config.
+  - Actions: `#btn-cancel-credentials` and `#btn-save-credentials` (with loading spinner during save).
+  - Security & State: Maintains local `inputValues` dictionary; completely wiped on dialog open/close and following successful saves or clears to ensure plaintext credentials never persist in DOM or state.
+
+### 4. BrowserSettingsDialog (`src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx`)
+- **Type**: Radix UI Dialog Organism.
+- **Role**: Modal for managing local Playwright browser execution settings (`PLAYWRIGHT_HEADLESS` and `PLAYWRIGHT_EXECUTABLE_PATH`).
+- **Key Mechanics**:
+  - Built on `@radix-ui/react-dialog` with content ID `#browser-dialog`, form `#browser-form`, title `#browser-dialog-title`.
+  - Feedback elements: Banner `#browser-message` and loading indicator `#browser-loading`.
+  - Form rows: Renders `BrowserSettingRow` components for:
+    - `PLAYWRIGHT_HEADLESS`: `<select id="browser-headless-select">` with options `""` (Inherit/Unset), `"true"` (Headless), `"false"` (Headed).
+    - `PLAYWRIGHT_EXECUTABLE_PATH`: `<input id="browser-executable-path-input" type="text" spellcheck="false">`.
+  - Status badges: `#badge-browser-headless` and `#badge-browser-executable-path` displaying text `'Configured'` or `'Not Set'`.
+  - Clear buttons: `#btn-clear-browser-headless` and `#btn-clear-browser-executable-path`, conditionally displayed when the setting is configured.
+  - Actions: `#btn-cancel-browser` and `#btn-save-browser`.
+  - State lifecycle: Form inputs are cleared on close; clear actions immediately update badges and hide clear buttons.
+
+### 5. HeaderBar (`src/reporting/control-page/components/organisms/HeaderBar.tsx`)
+- **Type**: Composite Header Organism.
+- **Role**: Semantic top application bar for the dashboard.
+- **Key Mechanics**:
+  - Renders `<header className="app-header">` with heading `<h1>Jenkins Control Dashboard</h1>`.
+  - Integrates the `ConfigSelectorBar` molecule:
+    - `<select id="config-select">` for switching configuration files.
+    - `<button id="btn-reload">` to reload configuration from disk.
+    - `<button id="btn-save">` to persist configuration changes (disabled when clean).
+    - `<button id="btn-credentials">` to open `CredentialsDialog`.
+    - `<button id="btn-browser-settings">` to open `BrowserSettingsDialog`.
+
+### 6. ProjectCard (`src/reporting/control-page/components/organisms/ProjectCard.tsx`)
+- **Type**: Card Organism.
+- **Role**: Individual project configuration card displaying settings and controls.
+- **Key Mechanics**:
+  - Container has exact class `className="project-card"`.
+  - Enabled toggle: `<input type="checkbox" id="checkbox-enabled-{projectId}">` bound to `onToggleEnabled`.
+  - Run Type selector: `<Select id="select-runtype-{projectId}">` toggling between `'report'` and `'auto-build'`.
+  - Job URL: `<a href={project.jobUrl} target="_blank">` displaying Jenkins job link.
+  - Auto-build button: When `runType === 'auto-build'`, renders `<Button className="btn-auto-build" variant="danger" size="sm">` ("Trigger Auto-Build").
+  - Disabling rules: Button is strictly disabled if `!isEnabled || isDirty`.
+
+### 7. ProjectsGrid (`src/reporting/control-page/components/organisms/ProjectsGrid.tsx`)
+- **Type**: Grid Organism.
+- **Role**: Responsive container displaying the collection of project cards.
+- **Key Mechanics**:
+  - Renders `<div id="projects-list" className="projects-grid">`.
+  - Responsive multi-column layout (`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4`).
+  - Maps `projects` data into `ProjectCard` components, passing down event handlers.
+  - Empty state fallback message when no projects are present in configuration.
+
+### 8. RawJsonSection (`src/reporting/control-page/components/organisms/RawJsonSection.tsx`)
+- **Type**: Accordion Organism.
+- **Role**: Advanced raw JSON configuration editor.
+- **Key Mechanics**:
+  - Renders `<details id="json-editor-details">` wrapping `<summary id="section-editor-title">`.
+  - JSON Textarea: Standard `<textarea id="raw-json-textarea" aria-label="Raw JSON configuration editor" spellcheck="false">`.
+  - **Preserves Test Contract**: Plain `<textarea>` element is used intentionally instead of CodeMirror/Monaco to ensure 100% compatibility with Playwright `.fill()` and `.textContent` operations.
+  - Ref synchronization: Synchronizes `textareaRef.current.value` without losing cursor position during user typing.
+  - Actions & Feedback:
+    - `<Button id="btn-apply-json" variant="secondary">`: Parses and validates JSON, updating visual cards.
+    - `<span id="json-validation-msg" aria-live="polite">`: Displays JSON validation error or success status.
+
+### 9. ExecutionSection (`src/reporting/control-page/components/organisms/ExecutionSection.tsx`)
+- **Type**: Action Bar Organism.
+- **Role**: Global report generation trigger controls.
+- **Key Mechanics**:
+  - Container `.actions-bar`.
+  - Primary button: `<Button id="btn-run-reports" variant="primary">` ("Generate Reports (All Enabled)").
+  - Disabling rules: Disabled when configuration `isDirty` or execution `isLoading`.
+
+### 10. RunStatusCard (`src/reporting/control-page/components/organisms/RunStatusCard.tsx`)
+- **Type**: Execution Monitoring Organism.
+- **Role**: Displays execution lifecycle status, output logs, and generated report links.
+- **Key Mechanics**:
+  - Container `<div id="run-status-card" className="run-card">`.
+  - Header displays:
+    - Status badge: `<Badge id="run-status-badge" variant={status}>` (`idle`, `queued`, `running`, `succeeded`, `failed`, `submission-unknown`).
+    - Run ID: `<span id="run-id-display">`.
+  - Embeds `RunResultBox` (`#run-result-box`) rendering clickable link to generated HTML report.
+  - Embeds `LogViewer` (`#run-logs`) rendering streaming execution logs inside an auto-scrolling `<pre>` block.
+
+### 11. DashboardLayout (`src/reporting/control-page/components/templates/DashboardLayout.tsx`)
+- **Type**: Page Template.
+- **Role**: Master structural template for the control dashboard.
+- **Key Mechanics**:
+  - Skip navigation link: `<a href="#main-content" className="skip-link">Skip to main content</a>`.
+  - Header slot mounting `HeaderBar`.
+  - Main container `<main id="main-content" className="main-container">` containing:
+    - Status banner slot (`#status-banner`).
+    - `<section aria-labelledby="section-projects-title">` containing Projects section.
+    - `<section aria-labelledby="section-editor-title">` containing Raw JSON editor section.
+    - `<section aria-labelledby="section-actions-title">` containing Actions section.
+    - `<section aria-labelledby="section-run-title">` containing Run status section.
+  - Dialogs slot for Radix Dialog portals.
+
+### 12. DashboardPage (`src/reporting/control-page/pages/DashboardPage.tsx`)
+- **Type**: Top-level Page Component.
+- **Role**: Orchestrates all hooks, state management, and user interaction flows.
+- **Key Mechanics**:
+  - Connects custom hooks:
+    - `useConfigManager`: Handles config lists, active config loading, reload, save, dirty checking, raw JSON syncing, and project card updates.
+    - `useCredentialsManager`: Discovers required secrets, polls presence status, handles saving and clearing credentials.
+    - `useBrowserSettings`: Manages Playwright headless and executable path settings.
+    - `useRunPoller`: Handles run triggering (`POST /api/run`), HTTP 202 status handling, and 1s interval polling.
+  - Wires modal dialogs (`BuildConfirmDialog`, `CredentialsDialog`, `BrowserSettingsDialog`) to state.
+  - Controls confirmation workflow when user clicks `.btn-auto-build` on any `ProjectCard`.
+  - Synchronizes status banners across config saves, credentials updates, and browser setting changes.
+
+### 13. App (`src/reporting/control-page/App.tsx`)
+- **Type**: Application Root Component.
+- **Role**: Wraps the entire dashboard page in the `ErrorBoundary`.
+- **Key Mechanics**:
+  ```tsx
+  export default function App() {
+    return (
+      <ErrorBoundary>
+        <DashboardPage />
+      </ErrorBoundary>
+    );
+  }
+  ```
+
+### 14. Main Entry (`src/reporting/control-page/main.tsx`)
+- **Type**: Vite Application Entry Point.
+- **Role**: Mounts React 19 application to DOM.
+- **Key Mechanics**:
+  - Imports `React`, `StrictMode`, `ReactDOM.createRoot`.
+  - Imports `App` component and `styles/globals.css`.
+  - Targets `#root` element in `index.html`.
+  - Mounts application within `StrictMode` to identify potential lifecycle issues.
+
+---
+
+## Changed Files Summary
+
+### Newly Created Files
+
+| File Path | Component / Role | Description |
+|---|---|---|
+| `src/reporting/control-page/components/ErrorBoundary.tsx` | `ErrorBoundary` | React class component error boundary with alert fallback and reload action |
+| `src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx` | `BuildConfirmDialog` | Radix Dialog modal for confirming auto-build trigger with project metadata |
+| `src/reporting/control-page/components/organisms/CredentialsDialog.tsx` | `CredentialsDialog` | Radix Dialog modal for managing dynamic local credentials in `secrets.local.json` |
+| `src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx` | `BrowserSettingsDialog` | Radix Dialog modal for configuring `PLAYWRIGHT_HEADLESS` and executable path |
+| `src/reporting/control-page/components/organisms/HeaderBar.tsx` | `HeaderBar` | Header bar organism integrating title and `ConfigSelectorBar` |
+| `src/reporting/control-page/components/organisms/ProjectCard.tsx` | `ProjectCard` | Card organism with `.project-card`, checkbox, run type select, `.btn-auto-build` |
+| `src/reporting/control-page/components/organisms/ProjectsGrid.tsx` | `ProjectsGrid` | Grid organism with `#projects-list` rendering responsive list of cards |
+| `src/reporting/control-page/components/organisms/RawJsonSection.tsx` | `RawJsonSection` | Accordion organism with `<details>` and plain `<textarea>` for JSON editing |
+| `src/reporting/control-page/components/organisms/ExecutionSection.tsx` | `ExecutionSection` | Execution bar organism containing `#btn-run-reports` trigger button |
+| `src/reporting/control-page/components/organisms/RunStatusCard.tsx` | `RunStatusCard` | Card organism with `#run-status-card`, badge, log viewer, and result link |
+| `src/reporting/control-page/components/organisms/index.ts` | Barrel Export | Export barrel for all organism components |
+| `src/reporting/control-page/components/templates/DashboardLayout.tsx` | `DashboardLayout` | Master template with skip-link, semantic `<main>`, sections, and dialog mount |
+| `src/reporting/control-page/pages/DashboardPage.tsx` | `DashboardPage` | Full dashboard page controller integrating all hooks and dialog states |
+| `src/reporting/control-page/App.tsx` | `App` | Root component wrapping `DashboardPage` in `ErrorBoundary` |
+
+### Modified Files
+
+| File Path | Description of Changes |
+|---|---|
+| `src/reporting/control-page/main.tsx` | Mounted `App` component into `#root` with `StrictMode` and loaded `globals.css` |
+| `src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx` | Adjusted button disable logic (`btn-save` disabled on `!isDirty \|\| isSaving`) |
+| `src/reporting/control-page/styles/globals.css` | Added styling for dialogs (`.confirm-dialog`, `.credentials-dialog`, `.browser-dialog`, `.dialog-details`, `.dialog-actions`, `.credentials-form-rows`), and `<details>` display fix |
+| `plans/260904-1640-control-page-react-refactor/plan.md` | Updated Phase 04 status to **DONE** (2026-09-04) |
+| `plans/260904-1640-control-page-react-refactor/phase-04-organisms-and-page-assembly.md` | Documented all 14 components, marked all tasks complete, and recorded changed files list |
+
+---
+
 ## Related Code Files
 - `src/reporting/control-page/index.html` (created in Phase 01)
 - `src/reporting/control-page/main.tsx`
@@ -241,19 +443,19 @@
 9. Run `npm run build` and verify complete compilation and asset emission.
 
 ## Todo List
-- [ ] Implement `ErrorBoundary.tsx`
-- [ ] Implement `BuildConfirmDialog.tsx` with all dialog IDs
-- [ ] Implement `CredentialsDialog.tsx` with form rows, message banner, loading indicator, dynamic credential rows
-- [ ] Implement `BrowserSettingsDialog.tsx` with `'Not Set'` badges, clear buttons, headless select, exec path input
-- [ ] Implement `HeaderBar.tsx`
-- [ ] Implement `ProjectCard.tsx` with `.project-card`, checkbox, `.btn-auto-build`
-- [ ] Implement `ProjectsGrid.tsx` with `#projects-list`
-- [ ] Implement `RawJsonSection.tsx` with `<details>` and `<textarea>`
-- [ ] Implement `ExecutionSection.tsx` and `RunStatusCard.tsx`
-- [ ] Implement `DashboardLayout.tsx` with semantic sections and skip link
-- [ ] Implement `DashboardPage.tsx` wiring all hooks
-- [ ] Implement `main.tsx` with StrictMode and `App.tsx` with ErrorBoundary
-- [ ] Run `npm run build` and verify asset emission
+- [x] Implement `ErrorBoundary.tsx`
+- [x] Implement `BuildConfirmDialog.tsx` with all dialog IDs
+- [x] Implement `CredentialsDialog.tsx` with form rows, message banner, loading indicator, dynamic credential rows
+- [x] Implement `BrowserSettingsDialog.tsx` with `'Not Set'` badges, clear buttons, headless select, exec path input
+- [x] Implement `HeaderBar.tsx`
+- [x] Implement `ProjectCard.tsx` with `.project-card`, checkbox, `.btn-auto-build`
+- [x] Implement `ProjectsGrid.tsx` with `#projects-list`
+- [x] Implement `RawJsonSection.tsx` with `<details>` and `<textarea>`
+- [x] Implement `ExecutionSection.tsx` and `RunStatusCard.tsx`
+- [x] Implement `DashboardLayout.tsx` with semantic sections and skip link
+- [x] Implement `DashboardPage.tsx` wiring all hooks
+- [x] Implement `main.tsx` with StrictMode and `App.tsx` with ErrorBoundary
+- [x] Run `npm run build` and verify asset emission
 
 ## Success Criteria
 - Vite bundle builds cleanly into `.runner-build/reporting/control-page`.
@@ -267,7 +469,7 @@
 - This phase focuses entirely on assembling the React organism components, pages, and Vite entry. It does not touch server logic or test runner files.
 
 ## Risk Assessment
-- **Risk**: Radix Dialog portal rendering breaks Playwright visibility assertions.
+- **Risk**: Radix Dialog portal rendering breaks Playwright locators.
 - **Mitigation**: Ensure dialog content element has the expected `id` attribute. Test with `toBeVisible()` — Radix portals append to `<body>`, which Playwright can locate.
 - **Risk**: Modals failing accessibility focus expectations.
 - **Mitigation**: Radix UI Dialog primitive provides WAI-ARIA compliant dialog behavior (focus trap, ESC dismiss, backdrop) out-of-the-box.
@@ -280,4 +482,4 @@
 - Never render secret values in the DOM.
 
 ## Next Steps
-- Proceed to Phase 05: Verification, Playwright E2E & Accessibility Audit.
+- Proceed to [Phase 05: Verification, Playwright E2E & Accessibility Audit](phase-05-verification-and-release-audit.md).
