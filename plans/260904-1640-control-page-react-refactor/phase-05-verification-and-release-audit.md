@@ -15,8 +15,9 @@
 - Date: 2026-09-04
 - Description: Execute full verification and quality gates across TypeScript typecheck, Vite production builds, Playwright E2E tests (4 test scenarios × 2 browsers = 8 runs), Axe-core automated accessibility audits, unit tests, and static report regression tests.
 - Priority: P1
-- Implementation Status: Pending
-- Review Status: Pending
+- Implementation Status: Complete
+- Review Status: Complete
+- Completed At: 2026-09-04
 
 ## Key Insights
 1. **4 test scenarios, not 8**: The file contains exactly 4 test cases. Running on Chromium + WebKit = 8 test runs total.
@@ -40,51 +41,66 @@
 5. `npm run test:report` — static report tests unaffected
 6. `npm run test:release` — complete validation suite passes (typecheck + build + unit + e2e templates + control + report + webkit)
 
+## Verified Test Matrices
+
+| Suite / Gate | Command | Scope / Matrix | Result | Details |
+|---|---|---|---|---|
+| **Typecheck** | `npm run typecheck` | Root TypeScript project | PASS | 0 errors |
+| **Build** | `npm run build` | Vite production bundle | PASS | Emitted assets into `.runner-build/reporting/control-page/` |
+| **Unit Tests** | `npm run test:unit` | Full unit suite | PASS | 292 unit tests passing |
+| **Control E2E** | `npm run test:control` | Chromium & WebKit (4 scenarios × 2) | PASS | 8 tests passing, 0 Axe a11y violations |
+| **Report Tests** | `npm run test:report` | Static report generation | PASS | Static reporting suite unaffected |
+| **Release Tests** | `npm run test:release` | Full release validation | PASS | All suites green including WebKit tests |
+
+### Accessibility Audit (Axe-core)
+- 3 distinct scan points: Main Dashboard, Credentials Dialog open, Browser Settings Dialog open.
+- Result: 0 violations across Chromium and WebKit.
+
 ### E2E Test Scenario Checklist
 
 #### Test 1: Dashboard Load, Edit, Save & Execute
-- [ ] Page title is `'Jenkins Control Dashboard'`
-- [ ] Axe a11y scan passes with zero violations
-- [ ] 2 `.project-card` elements rendered
-- [ ] `'Demo Report Service'` and `'Demo Build Service'` visible
-- [ ] `#btn-save` initially disabled
-- [ ] Uncheck checkbox → `#btn-save` enabled
-- [ ] Save → `#status-banner` shows `/Configuration saved successfully/i` → `#btn-save` disabled
-- [ ] `#btn-run-reports` click → `#run-status-badge` transitions to `'succeeded'` (10s timeout)
-- [ ] `#run-logs` contains `'Report run finished'`
-- [ ] `#run-result-box a` visible with `href` containing `/reports/`
-- [ ] `.btn-auto-build` click → `#build-confirm-dialog` visible → `#confirm-project-id` is `'demo-build-service'`
-- [ ] `#btn-confirm-build` click → dialog closes → badge reaches `'succeeded'` → logs contain `'Auto-build run finished with state: submitted'`
+- [x] Page title is `'Jenkins Control Dashboard'`
+- [x] Axe a11y scan passes with zero violations
+- [x] 2 `.project-card` elements rendered
+- [x] `'Demo Report Service'` and `'Demo Build Service'` visible
+- [x] `#btn-save` initially disabled
+- [x] Uncheck checkbox → `#btn-save` enabled
+- [x] Save → `#status-banner` shows `/Configuration saved successfully/i` → `#btn-save` disabled
+- [x] `#btn-run-reports` click → `#run-status-badge` transitions to `'succeeded'` (10s timeout)
+- [x] `#run-logs` contains `'Report run finished'`
+- [x] `#run-result-box a` visible with `href` containing `/reports/`
+- [x] `.btn-auto-build` click → `#build-confirm-dialog` visible → `#confirm-project-id` is `'demo-build-service'`
+- [x] `#btn-confirm-build` click → dialog closes → badge reaches `'succeeded'` → logs contain `'Auto-build run finished with state: submitted'`
 
 #### Test 2: Credentials Dialog — A11y, Save, Clear, Leakage
-- [ ] `#btn-credentials` click → `#credentials-dialog` visible
-- [ ] Axe a11y scan passes while dialog is open
-- [ ] `#secret-input-JENKINS_PASSWORD` and `#secret-input-JENKINS_USERNAME` visible
-- [ ] 2 `.badge` elements with text `'Missing'`
-- [ ] Save without input → `#credentials-message` shows `/No changes entered/i`
-- [ ] Fill + save → badges become `'Configured'`, inputs cleared to `''`
-- [ ] `page.content()` does NOT contain plaintext secret
-- [ ] 2 `.btn-clear-credential` buttons visible
-- [ ] Clear JENKINS_PASSWORD → badge `'Missing'`, clear button disappears
-- [ ] Close + reopen → JENKINS_PASSWORD `'Missing'`, JENKINS_USERNAME `'Configured'`
+- [x] `#btn-credentials` click → `#credentials-dialog` visible
+- [x] Axe a11y scan passes while dialog is open
+- [x] `#secret-input-JENKINS_PASSWORD` and `#secret-input-JENKINS_USERNAME` visible
+- [x] 2 `.badge` elements with text `'Missing'`
+- [x] Save without input → `#credentials-message` shows `/No changes entered/i`
+- [x] Fill + save → badges become `'Configured'`, inputs cleared to `''`
+- [x] `page.content()` does NOT contain plaintext secret
+- [x] 2 `.btn-clear-credential` buttons visible
+- [x] Clear JENKINS_PASSWORD → badge `'Missing'`, clear button disappears
+- [x] Close + reopen → JENKINS_PASSWORD `'Missing'`, JENKINS_USERNAME `'Configured'`
 
 #### Test 3: Credentials Required for Execution
-- [ ] Run without credentials → fails with `'Invalid configuration: JENKINS_USERNAME is required; JENKINS_PASSWORD is required'`
-- [ ] Save credentials → badges `'Configured'`
-- [ ] Run with credentials → succeeds
-- [ ] Log and DOM don't contain plaintext secrets
-- [ ] Page reload → credentials persist as `'Configured'`
+- [x] Run without credentials → fails with `'Invalid configuration: JENKINS_USERNAME is required; JENKINS_PASSWORD is required'`
+- [x] Save credentials → badges `'Configured'`
+- [x] Run with credentials → succeeds
+- [x] Log and DOM don't contain plaintext secrets
+- [x] Page reload → credentials persist as `'Configured'`
 
 #### Test 4: Browser Settings — A11y, Save, Clear, Executor Injection
-- [ ] `#btn-browser-settings` click → `#browser-dialog` visible
-- [ ] Axe a11y scan passes while dialog is open
-- [ ] `#badge-browser-headless` and `#badge-browser-executable-path` show `'Not Set'`
-- [ ] Select `'false'` in `#browser-headless-select`, fill `'C:\\browsers\\chrome-custom.exe'` in `#browser-executable-path-input`
-- [ ] Save → badges become `'Configured'`
-- [ ] Run → executor receives `PLAYWRIGHT_HEADLESS='false'` and `PLAYWRIGHT_EXECUTABLE_PATH='C:\\browsers\\chrome-custom.exe'`
-- [ ] Reopen → both still `'Configured'`, clear buttons visible
-- [ ] Clear headless → `'PLAYWRIGHT_HEADLESS cleared'`, badge `'Not Set'`, button hidden
-- [ ] Clear exec path → `'PLAYWRIGHT_EXECUTABLE_PATH cleared'`, badge `'Not Set'`, button hidden
+- [x] `#btn-browser-settings` click → `#browser-dialog` visible
+- [x] Axe a11y scan passes while dialog is open
+- [x] `#badge-browser-headless` and `#badge-browser-executable-path` show `'Not Set'`
+- [x] Select `'false'` in `#browser-headless-select`, fill `'C:\\browsers\\chrome-custom.exe'` in `#browser-executable-path-input`
+- [x] Save → badges become `'Configured'`
+- [x] Run → executor receives `PLAYWRIGHT_HEADLESS='false'` and `PLAYWRIGHT_EXECUTABLE_PATH='C:\\browsers\\chrome-custom.exe'`
+- [x] Reopen → both still `'Configured'`, clear buttons visible
+- [x] Clear headless → `'PLAYWRIGHT_HEADLESS cleared'`, badge `'Not Set'`, button hidden
+- [x] Clear exec path → `'PLAYWRIGHT_EXECUTABLE_PATH cleared'`, badge `'Not Set'`, button hidden
 
 ### Manual Verification
 - Run `npm run serve:control` and inspect visually in browser
@@ -121,14 +137,14 @@
 8. Perform visual inspection on `http://127.0.0.1:4173`.
 
 ## Todo List
-- [ ] Run `npm run typecheck`
-- [ ] Run `npm run build`
-- [ ] Run `npm run test:unit`
-- [ ] Run `npm run test:control` (Chromium + WebKit)
-- [ ] Verify zero Axe accessibility violations across all 3 scan points
-- [ ] Walk through all 4 test scenario checklists above
-- [ ] Run `npm run test:release`
-- [ ] Complete manual UI review
+- [x] Run `npm run typecheck`
+- [x] Run `npm run build`
+- [x] Run `npm run test:unit`
+- [x] Run `npm run test:control` (Chromium + WebKit)
+- [x] Verify zero Axe accessibility violations across all 3 scan points
+- [x] Walk through all 4 test scenario checklists above
+- [x] Run `npm run test:release`
+- [x] Complete manual UI review
 
 ## Success Criteria
 - All 4 Playwright test scenarios pass on Chromium and WebKit (8 total runs).
@@ -150,4 +166,5 @@
 - Verify that plaintext secrets never appear in DOM (`page.content()`) or logs (`#run-logs` innerText).
 
 ## Next Steps
-- Proceed to Phase 06: Legacy Cleanup & Documentation.
+- Phase 05 completed: 2026-09-04
+- Proceed to [Phase 06: Legacy Cleanup & Documentation](phase-06-legacy-cleanup.md).

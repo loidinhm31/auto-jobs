@@ -61,13 +61,14 @@ graph TD
 | 02 | Core Types, Hooks & Interface Contracts | **DONE** | 2026-09-04 | [phase-02-types-and-custom-hooks.md](phase-02-types-and-custom-hooks.md) |
 | 03 | Atomic Design Components (Atoms & Molecules) | **DONE** | 2026-09-04 | [phase-03-atoms-and-molecules.md](phase-03-atoms-and-molecules.md) |
 | 04 | Organisms, Modals & Dashboard Assembly | **DONE** | 2026-09-04 | [phase-04-organisms-and-page-assembly.md](phase-04-organisms-and-page-assembly.md) |
-| 05 | Verification, Playwright E2E & Accessibility Audit | Pending | — | [phase-05-verification-and-release-audit.md](phase-05-verification-and-release-audit.md) |
+| 05 | Verification, Playwright E2E & Accessibility Audit | **DONE** | 2026-09-04 | [phase-05-verification-and-release-audit.md](phase-05-verification-and-release-audit.md) |
 | 06 | Legacy Cleanup & Documentation | Pending | — | [phase-06-legacy-cleanup.md](phase-06-legacy-cleanup.md) |
 
 Phase 01 completion: **DONE** — 2026-09-04
 Phase 02 completion: **DONE** — 2026-09-04
 Phase 03 completion: **DONE** — 2026-09-04
 Phase 04 completion: **DONE** — 2026-09-04
+Phase 05 completion: **DONE** — 2026-09-04 (Verified: typecheck, build, 292 unit tests, 8 control e2e tests across Chromium & WebKit with 0 Axe violations, report tests, release webkit tests)
 
 ## Next Steps
-- Proceed to [Phase 05: Verification, Playwright E2E & Accessibility Audit](phase-05-verification-and-release-audit.md).
+- Proceed to [Phase 06: Legacy Cleanup & Documentation](phase-06-legacy-cleanup.md).
