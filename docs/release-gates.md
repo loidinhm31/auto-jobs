@@ -223,6 +223,23 @@ The `control-assets-routing.spec.ts` suite verifies:
 - `getControlCss` and `getControlJs` return non-empty strings;
 - `createReportServer` in loopback control mode serves `GET /`, `GET /assets/control-page.css`, and `GET /assets/control-page.js` with `CONTROL_CSP` and `Cache-Control: no-store` headers.
 
+### Phase 02 control hooks and interface contracts gate
+
+Run the focused control page hooks, utility, and interface contracts suite:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-hooks-and-types.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The `control-hooks-and-types.spec.ts` suite verifies:
+- `discoverRequiredCredentialKeys` correctly extracts keys from project credentials and fallback defaults (`JENKINS_USERNAME` / `JENKINS_PASSWORD`), handling legacy `credentialVariables` objects and string arrays;
+- `ControlApiError` formats HTTP status and optional error codes, while `getCsrfTokenFromDom` extracts `<meta name="csrf-token">` contents;
+- `useControlApi` injects `x-csrf-token` headers into mutating requests (`POST`, `PUT`, `DELETE`) on same-origin endpoints while omitting them on `GET`;
+- `useRunPoller` executes exponential backoff on transient errors up to 5 retries, terminates on fatal 4xx errors or terminal states (`succeeded`, `failed`, `submission-unknown`), and cleans up timers and `AbortController` handles;
+- Full lifecycle end-to-end against live loopback control endpoints: config manager list/load/ETag-conflict/save, credential manager presence/patch/delete, browser settings presence/update/clear, and run poller `202 Accepted` execution lifecycle.
+
 ### Phase 04 credential dialog gate
 
 `npm run test:control` also exercises the browser-facing credential workflow

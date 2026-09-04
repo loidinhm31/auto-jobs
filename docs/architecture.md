@@ -122,10 +122,14 @@ flowchart LR
   control request, dispatches API paths, routes built control assets
   (`/`, `/assets/control-page.css`, `/assets/control-page.js`), and carries the optional
   `ControlRouterContext.secretStore` dependency.
-- `src/reporting/control-page/` contains the Control Dashboard frontend sources
-  (`index.html`, `main.tsx`, `styles/globals.css`), bundled by `vite.control.config.ts`
-  into `.runner-build/reporting/control-page/` with single-bundle JS/CSS and no
-  inline scripts/styles for strict CSP compliance.
+- `src/reporting/control-page/` contains the Control Dashboard frontend sources:
+  server data contracts (`types/index.ts`), shared UI component prop interfaces
+  (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
+  headless React hooks (`hooks/useControlApi.ts`, `hooks/useConfigManager.ts`,
+  `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`, `hooks/useRunPoller.ts`),
+  and application markup (`index.html`, `main.tsx`, `styles/globals.css`), bundled by
+  `vite.control.config.ts` into `.runner-build/reporting/control-page/` with single-bundle JS/CSS
+  and no inline scripts/styles for strict CSP compliance.
 - `src/reporting/report-server-control-page.ts` reads Vite-built assets from
   `.runner-build/reporting/control-page/`, injects the instance CSRF token into
   `index.html`, and provides cached CSS and JS.
@@ -561,6 +565,10 @@ assertions in `tests/unit/sequential-runner.spec.ts`. Phase 01 control asset
 routing coverage in `tests/unit/control-assets-routing.spec.ts` verifies built
 asset loading from `.runner-build/reporting/control-page/`, CSRF replacement and
 escaping, non-empty CSS/JS assets, and loopback HTTP security headers.
+Phase 02 control hooks and interface contracts coverage in
+`tests/unit/control-hooks-and-types.spec.ts` verifies credential variable discovery,
+CSRF auto-injection, run poller exponential backoff and terminal state transitions,
+and end-to-end hook integration with loopback config, secrets, and run APIs.
 Phase 03 run-environment coverage is in
 `tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
 `tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection

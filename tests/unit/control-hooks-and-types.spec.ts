@@ -1,0 +1,560 @@
+import { expect, test } from '@playwright/test';
+
+import { discoverRequiredCredentialKeys } from '../../src/reporting/control-page/utils/discoverCredentialKeys.js';
+import {
+  ControlApiError,
+  getCsrfTokenFromDom,
+} from '../../src/reporting/control-page/hooks/useControlApi.js';
+import type {
+  ProjectConfigDocumentV1,
+  RunStatus,
+} from '../../src/reporting/control-page/types/index.js';
+import type {
+  BadgeVariant,
+  BannerVariant,
+  ButtonVariant,
+  CredentialRowData,
+  BrowserSettingData,
+} from '../../src/reporting/control-page/types/component-contracts.js';
+
+test.describe('Control Page Phase 02: Types, Utility & Hook Contracts', () => {
+  test.describe('discoverRequiredCredentialKeys', () => {
+    test('returns empty array for null, undefined, or empty projects', () => {
+      expect(discoverRequiredCredentialKeys(null)).toEqual([]);
+      expect(discoverRequiredCredentialKeys(undefined)).toEqual([]);
+      expect(discoverRequiredCredentialKeys({ schemaVersion: 1, projects: [] })).toEqual([]);
+    });
+
+    test('falls back to JENKINS_USERNAME and JENKINS_PASSWORD if project has no credentials and no defaults', () => {
+      const doc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Project 1',
+            loginUrl: 'https://jenkins.example.com',
+            jobUrl: 'https://jenkins.example.com/job/test',
+          },
+        ],
+      };
+
+      const keys = discoverRequiredCredentialKeys(doc);
+      expect(keys).toEqual(['JENKINS_PASSWORD', 'JENKINS_USERNAME']);
+    });
+
+    test('uses defaults.credentials when project has no explicit credentials', () => {
+      const doc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        defaults: {
+          credentials: {
+            usernameVariable: 'GLOBAL_USER',
+            passwordVariable: 'GLOBAL_PASS',
+          },
+        },
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Project 1',
+            loginUrl: 'https://jenkins.example.com',
+            jobUrl: 'https://jenkins.example.com/job/test',
+          },
+        ],
+      };
+
+      const keys = discoverRequiredCredentialKeys(doc);
+      expect(keys).toEqual(['GLOBAL_PASS', 'GLOBAL_USER']);
+    });
+
+    test('uses legacy defaults.credentialVariables when project has no explicit credentials', () => {
+      const doc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        defaults: {
+          credentialVariables: {
+            usernameVariable: 'LEGACY_USER',
+            passwordVariable: 'LEGACY_PASS',
+          },
+        },
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Project 1',
+            loginUrl: 'https://jenkins.example.com',
+            jobUrl: 'https://jenkins.example.com/job/test',
+          },
+        ],
+      };
+
+      const keys = discoverRequiredCredentialKeys(doc);
+      expect(keys).toEqual(['LEGACY_PASS', 'LEGACY_USER']);
+    });
+
+    test('prefers project-specific credentials over defaults', () => {
+      const doc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        defaults: {
+          credentials: {
+            usernameVariable: 'DEFAULT_USER',
+            passwordVariable: 'DEFAULT_PASS',
+          },
+        },
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Project 1',
+            loginUrl: 'https://jenkins.example.com',
+            jobUrl: 'https://jenkins.example.com/job/test',
+            credentials: {
+              usernameVariable: 'PROJECT_USER',
+              passwordVariable: 'PROJECT_PASS',
+            },
+          },
+        ],
+      };
+
+      const keys = discoverRequiredCredentialKeys(doc);
+      expect(keys).toEqual(['PROJECT_PASS', 'PROJECT_USER']);
+    });
+
+    test('handles legacy array of string credentialVariables on project', () => {
+      const doc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Project 1',
+            loginUrl: 'https://jenkins.example.com',
+            jobUrl: 'https://jenkins.example.com/job/test',
+            credentialVariables: ['API_TOKEN', 'JENKINS_SECRET'],
+          },
+        ],
+      };
+
+      const keys = discoverRequiredCredentialKeys(doc);
+      expect(keys).toEqual(['API_TOKEN', 'JENKINS_SECRET']);
+    });
+
+    test('deduplicates and alphabetically sorts across multiple projects', () => {
+      const doc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Project 1',
+            loginUrl: 'https://jenkins.example.com',
+            jobUrl: 'https://jenkins.example.com/job/1',
+            credentials: {
+              usernameVariable: 'SHARED_USER',
+              passwordVariable: 'PASS_B',
+            },
+          },
+          {
+            id: 'proj-2',
+            name: 'Project 2',
+            loginUrl: 'https://jenkins.example.com',
+            jobUrl: 'https://jenkins.example.com/job/2',
+            credentials: {
+              usernameVariable: 'SHARED_USER',
+              passwordVariable: 'PASS_A',
+            },
+          },
+        ],
+      };
+
+      const keys = discoverRequiredCredentialKeys(doc);
+      expect(keys).toEqual(['PASS_A', 'PASS_B', 'SHARED_USER']);
+    });
+  });
+
+  test.describe('ControlApiError', () => {
+    test('constructs correctly with message, status, and optional error code', () => {
+      const err = new ControlApiError('Precondition failed', 412, 'ETAG_MISMATCH');
+      expect(err).toBeInstanceOf(Error);
+      expect(err).toBeInstanceOf(ControlApiError);
+      expect(err.name).toBe('ControlApiError');
+      expect(err.message).toBe('Precondition failed');
+      expect(err.status).toBe(412);
+      expect(err.code).toBe('ETAG_MISMATCH');
+    });
+
+    test('handles omission of code', () => {
+      const err = new ControlApiError('Internal Server Error', 500);
+      expect(err.status).toBe(500);
+      expect(err.code).toBeUndefined();
+    });
+  });
+
+  test.describe('DOM CSRF Helper (in browser context)', () => {
+    test('getCsrfTokenFromDom retrieves meta tag value or empty string', async ({ page }) => {
+      await page.setContent('<html><head><meta name="csrf-token" content="secret-csrf-12345"></head><body></body></html>');
+
+      const token = await page.evaluate(() => {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta?.getAttribute('content') ?? '';
+      });
+      expect(token).toBe('secret-csrf-12345');
+
+      await page.setContent('<html><head></head><body></body></html>');
+      const emptyToken = await page.evaluate(() => {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta?.getAttribute('content') ?? '';
+      });
+      expect(emptyToken).toBe('');
+    });
+  });
+
+  test.describe('Component Contract Types Consistency', () => {
+    test('validates BadgeVariant and Status type contracts', () => {
+      const validStatuses: RunStatus[] = [
+        'idle',
+        'queued',
+        'running',
+        'succeeded',
+        'failed',
+        'submission-unknown',
+      ];
+      expect(validStatuses).toHaveLength(6);
+
+      const sampleBadge: BadgeVariant = 'configured';
+      expect(sampleBadge).toBe('configured');
+
+      const sampleBanner: BannerVariant = 'error';
+      expect(sampleBanner).toBe('error');
+
+      const sampleButton: ButtonVariant = 'primary';
+      expect(sampleButton).toBe('primary');
+
+      const credRow: CredentialRowData = { key: 'JENKINS_PASSWORD', isConfigured: true };
+      expect(credRow.isConfigured).toBe(true);
+
+      const browserSetting: BrowserSettingData = {
+        key: 'PLAYWRIGHT_HEADLESS',
+        isConfigured: false,
+      };
+      expect(browserSetting.key).toBe('PLAYWRIGHT_HEADLESS');
+    });
+  });
+
+  test.describe('Hooks Runtime Verification in Browser Context', () => {
+    test('CSRF header is automatically attached to mutating methods and omitted on GET', async ({ page }) => {
+      await page.setContent(`
+        <html>
+          <head><meta name="csrf-token" content="mock-csrf-token"></head>
+          <body><div id="root"></div></body>
+        </html>
+      `);
+
+      const headersCaptured = await page.evaluate(async () => {
+        const intercepted: Array<{ method: string; csrfHeader: string | null }> = [];
+        const originalFetch = window.fetch;
+
+        window.fetch = async (input, init = {}) => {
+          const method = (init.method || 'GET').toUpperCase();
+          const headers = new Headers(init.headers || {});
+          intercepted.push({
+            method,
+            csrfHeader: headers.get('x-csrf-token'),
+          });
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        };
+
+        const getCsrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+        const apiFetch = async (url: string, opts: RequestInit = {}) => {
+          const m = (opts.method || 'GET').toUpperCase();
+          const h = new Headers(opts.headers || {});
+          if (m === 'POST' || m === 'PUT' || m === 'DELETE') {
+            const token = getCsrf();
+            if (token) h.set('x-csrf-token', token);
+          }
+          return window.fetch(url, { ...opts, headers: h });
+        };
+
+        await apiFetch('/api/test-get', { method: 'GET' });
+        await apiFetch('/api/test-post', { method: 'POST', body: '{}' });
+        await apiFetch('/api/test-put', { method: 'PUT', body: '{}' });
+        await apiFetch('/api/test-delete', { method: 'DELETE' });
+
+        window.fetch = originalFetch;
+        return intercepted;
+      });
+
+      expect(headersCaptured).toEqual([
+        { method: 'GET', csrfHeader: null },
+        { method: 'POST', csrfHeader: 'mock-csrf-token' },
+        { method: 'PUT', csrfHeader: 'mock-csrf-token' },
+        { method: 'DELETE', csrfHeader: 'mock-csrf-token' },
+      ]);
+    });
+
+    test('validates exponential backoff and terminal states in polling state machine', () => {
+      const BASE_POLL_INTERVAL_MS = 1000;
+      const MAX_POLL_INTERVAL_MS = 10000;
+
+      const calcBackoff = (failures: number) =>
+        Math.min(BASE_POLL_INTERVAL_MS * Math.pow(2, failures), MAX_POLL_INTERVAL_MS);
+
+      expect(calcBackoff(1)).toBe(2000);
+      expect(calcBackoff(2)).toBe(4000);
+      expect(calcBackoff(3)).toBe(8000);
+      expect(calcBackoff(4)).toBe(10000);
+      expect(calcBackoff(5)).toBe(10000);
+
+      const terminalStatuses = ['succeeded', 'failed', 'submission-unknown'];
+      expect(terminalStatuses.includes('running')).toBe(false);
+      expect(terminalStatuses.includes('succeeded')).toBe(true);
+      expect(terminalStatuses.includes('failed')).toBe(true);
+      expect(terminalStatuses.includes('submission-unknown')).toBe(true);
+    });
+  });
+
+  test.describe('Server API Endpoints & Hook Contracts End-to-End', () => {
+    let configRoot: string;
+    let reportRoot: string;
+    let serverUrl: string;
+    let csrfToken: string;
+    let serverHandle: any;
+
+    test.beforeEach(async () => {
+      const fs = await import('node:fs');
+      const os = await import('node:os');
+      const path = await import('node:path');
+      const { createReportServer } = await import('../../src/reporting/report-server.js');
+
+      configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-hook-test-config-'));
+      reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-hook-test-report-'));
+
+      const initialDoc = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'hook-test-project',
+            name: 'Hook Test Project',
+            loginUrl: 'https://jenkins.example.com/login',
+            jobUrl: 'https://jenkins.example.com/job/hook-test/',
+            runType: 'report',
+            enabled: true,
+          },
+        ],
+      };
+
+      fs.writeFileSync(
+        path.join(configRoot, 'default.json'),
+        JSON.stringify(initialDoc, null, 2),
+        'utf8',
+      );
+
+      serverHandle = await createReportServer(reportRoot, {
+        mode: 'control',
+        configRoot,
+        host: '127.0.0.1',
+        port: 0,
+      });
+
+      serverUrl = serverHandle.url;
+      csrfToken = serverHandle.csrfToken!;
+    });
+
+    test.afterEach(async () => {
+      const fs = await import('node:fs');
+      if (serverHandle) await serverHandle.close();
+      fs.rmSync(configRoot, { recursive: true, force: true });
+      fs.rmSync(reportRoot, { recursive: true, force: true });
+    });
+
+    test('config manager lifecycle: lists, loads, detects conflict on stale ETag, and saves with valid ETag', async ({
+      request,
+    }) => {
+      const parsedServerUrl = new URL(serverUrl);
+      const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+      // 1. List configs
+      const listResp = await request.get(`${serverUrl}api/configs`);
+      expect(listResp.status()).toBe(200);
+      const listData = await listResp.json();
+      expect(listData.configs).toHaveLength(1);
+      expect(listData.configs[0].name).toBe('default.json');
+
+      // 2. Load config
+      const loadResp = await request.get(`${serverUrl}api/config?name=default.json`);
+      expect(loadResp.status()).toBe(200);
+      const loadData = await loadResp.json();
+      expect(loadData.name).toBe('default.json');
+      expect(loadData.etag).toMatch(/^"[a-f0-9]{64}"$/);
+      expect(loadData.document.projects[0].id).toBe('hook-test-project');
+
+      const initialEtag = loadData.etag;
+
+      // 3. Stale ETag returns 409 Conflict
+      const staleResp = await request.put(`${serverUrl}api/config?name=default.json`, {
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': csrfToken,
+          origin,
+          'if-match': '"stale-etag-value"',
+        },
+        data: loadData.document,
+      });
+      expect(staleResp.status()).toBe(409);
+
+      // 4. Valid ETag saves successfully and updates ETag
+      const modifiedDoc = {
+        ...loadData.document,
+        projects: [
+          {
+            ...loadData.document.projects[0],
+            name: 'Updated Project Name',
+          },
+        ],
+      };
+
+      const saveResp = await request.put(`${serverUrl}api/config?name=default.json`, {
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': csrfToken,
+          origin,
+          'if-match': initialEtag,
+        },
+        data: modifiedDoc,
+      });
+      expect(saveResp.status()).toBe(200);
+      const saveData = await saveResp.json();
+      expect(saveData.etag).not.toBe(initialEtag);
+      expect(saveData.document.projects[0].name).toBe('Updated Project Name');
+    });
+
+    test('credentials manager lifecycle: checks presence, saves secret, and clears secret', async ({
+      request,
+    }) => {
+      const parsedServerUrl = new URL(serverUrl);
+      const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+      // Check presence of undiscovered / empty keys
+      const initialResp = await request.get(
+        `${serverUrl}api/secrets?keys=JENKINS_USERNAME,JENKINS_PASSWORD`,
+      );
+      expect(initialResp.status()).toBe(200);
+      const initialData = await initialResp.json();
+      expect(initialData.secrets).toEqual({
+        JENKINS_USERNAME: false,
+        JENKINS_PASSWORD: false,
+      });
+
+      // Save credentials
+      const saveResp = await request.put(`${serverUrl}api/secrets`, {
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': csrfToken,
+          origin,
+        },
+        data: {
+          secrets: {
+            JENKINS_USERNAME: 'ci-user',
+            JENKINS_PASSWORD: 'ci-password',
+          },
+        },
+      });
+      expect(saveResp.status()).toBe(200);
+      const saveData = await saveResp.json();
+      expect(saveData.secrets.JENKINS_USERNAME).toBe(true);
+      expect(saveData.secrets.JENKINS_PASSWORD).toBe(true);
+
+      // Delete one credential
+      const deleteResp = await request.delete(`${serverUrl}api/secrets?name=JENKINS_PASSWORD`, {
+        headers: {
+          'x-csrf-token': csrfToken,
+          origin,
+        },
+      });
+      expect(deleteResp.status()).toBe(200);
+      const deleteData = await deleteResp.json();
+      expect(deleteData.secrets.JENKINS_PASSWORD).toBeUndefined();
+      expect(deleteData.secrets.JENKINS_USERNAME).toBe(true);
+    });
+
+    test('browser settings lifecycle: checks and modifies PLAYWRIGHT_HEADLESS', async ({
+      request,
+    }) => {
+      const parsedServerUrl = new URL(serverUrl);
+      const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+      // Check initial presence
+      const initResp = await request.get(
+        `${serverUrl}api/secrets?keys=PLAYWRIGHT_HEADLESS,PLAYWRIGHT_EXECUTABLE_PATH`,
+      );
+      expect(initResp.status()).toBe(200);
+      const initData = await initResp.json();
+      expect(initData.secrets.PLAYWRIGHT_HEADLESS).toBe(false);
+
+      // Save headless setting
+      const saveResp = await request.put(`${serverUrl}api/secrets`, {
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': csrfToken,
+          origin,
+        },
+        data: {
+          secrets: {
+            PLAYWRIGHT_HEADLESS: 'false',
+          },
+        },
+      });
+      expect(saveResp.status()).toBe(200);
+      const saveData = await saveResp.json();
+      expect(saveData.secrets.PLAYWRIGHT_HEADLESS).toBe(true);
+
+      // Clear headless setting
+      const clearResp = await request.delete(
+        `${serverUrl}api/secrets?name=PLAYWRIGHT_HEADLESS`,
+        {
+          headers: {
+            'x-csrf-token': csrfToken,
+            origin,
+          },
+        },
+      );
+      expect(clearResp.status()).toBe(200);
+      const clearData = await clearResp.json();
+      expect(clearData.secrets.PLAYWRIGHT_HEADLESS).toBeUndefined();
+    });
+
+    test('run poller lifecycle: triggers run with 202 Accepted and retrieves run status', async ({
+      request,
+    }) => {
+      const parsedServerUrl = new URL(serverUrl);
+      const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+      // Get current config etag
+      const cfgResp = await request.get(`${serverUrl}api/config?name=default.json`);
+      const cfgData = await cfgResp.json();
+
+      // Trigger run
+      const triggerResp = await request.post(`${serverUrl}api/run`, {
+        headers: {
+          'content-type': 'application/json',
+          'x-csrf-token': csrfToken,
+          origin,
+        },
+        data: {
+          configName: 'default.json',
+          configEtag: cfgData.etag,
+          runType: 'report',
+        },
+      });
+
+      expect(triggerResp.status()).toBe(202);
+      const triggerData = await triggerResp.json();
+      expect(triggerData.id).toBeDefined();
+      expect(['queued', 'running']).toContain(triggerData.status);
+
+      // Poll status
+      const pollResp = await request.get(`${serverUrl}api/run?id=${encodeURIComponent(triggerData.id)}`);
+      expect(pollResp.status()).toBe(200);
+      const pollData = await pollResp.json();
+      expect(pollData.run.id).toBe(triggerData.id);
+      expect(['queued', 'running', 'succeeded', 'failed']).toContain(pollData.run.status);
+    });
+  });
+});

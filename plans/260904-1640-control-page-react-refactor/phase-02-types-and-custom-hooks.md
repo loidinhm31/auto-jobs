@@ -15,8 +15,9 @@
 - Date: 2026-09-04
 - Description: Establish strict TypeScript contracts for dashboard state and UI component props, develop headless React hooks encapsulating CSRF tokens, REST communication, config caching with ETag headers, dirty state, credential management, browser settings, and run polling.
 - Priority: P1
-- Implementation Status: Pending
-- Review Status: Pending
+- Implementation Status: Complete
+- Review Status: Approved
+- Completed At: 2026-09-04
 
 ## Key Insights
 1. **`useControlApi`**: CSRF token provided via `<meta name="csrf-token" content="...">`. All mutating HTTP requests (`POST`, `PUT`, `DELETE`) must send header `x-csrf-token`. The legacy `apiFetch()` wrapper auto-attaches this.
@@ -228,14 +229,14 @@ function discoverRequiredCredentialKeys(doc: ProjectConfigDocumentV1): string[] 
 8. Implement `useRunPoller` with `202` response handling, `queued`→`running`→terminal state machine, cleanup on unmount, 1s interval polling, and exponential backoff on transient errors.
 
 ## Todo List
-- [ ] Define server data types in `types/index.ts`
-- [ ] Define component prop contracts in `types/component-contracts.ts`
-- [ ] Implement `utils/discoverCredentialKeys.ts`
-- [ ] Implement `hooks/useControlApi.ts`
-- [ ] Implement `hooks/useConfigManager.ts`
-- [ ] Implement `hooks/useCredentialsManager.ts`
-- [ ] Implement `hooks/useBrowserSettings.ts`
-- [ ] Implement `hooks/useRunPoller.ts`
+- [x] Define server data types in `types/index.ts`
+- [x] Define component prop contracts in `types/component-contracts.ts`
+- [x] Implement `utils/discoverCredentialKeys.ts`
+- [x] Implement `hooks/useControlApi.ts`
+- [x] Implement `hooks/useConfigManager.ts`
+- [x] Implement `hooks/useCredentialsManager.ts`
+- [x] Implement `hooks/useBrowserSettings.ts`
+- [x] Implement `hooks/useRunPoller.ts`
 
 ## Success Criteria
 - Type checks pass with `npm run typecheck`.
@@ -259,5 +260,4 @@ function discoverRequiredCredentialKeys(doc: ProjectConfigDocumentV1): string[] 
 - Never log or render secret values in the DOM (tests assert `page.content()` does not contain plaintext secrets).
 
 ## Next Steps
-- Proceed to Phase 03: Atomic Design Components (Atoms & Molecules).
-- Phase 03 can begin in parallel using `types/component-contracts.ts` as the shared interface.
+- Proceed to [Phase 03: Atomic Design Components (Atoms & Molecules)](phase-03-atoms-and-molecules.md).

@@ -415,6 +415,87 @@ credential execution, input wiping, and absence of test secrets in page HTML
 and run logs. The isolated E2E fixture runs the three scenarios in both
 Chromium and WebKit, for six checks total, and does not contact Jenkins.
 
+### Control UI headless hook architecture and component contracts (Phase 02)
+
+The Control Dashboard frontend in `src/reporting/control-page/` is structured around headless React hooks and strict component contracts, isolating business logic, API communication, and state lifecycles from presentational UI rendering.
+
+```mermaid
+graph TD
+  subgraph Hooks ["Headless Hook Layer"]
+    CA[useControlApi] --> CM[useConfigManager]
+    CA --> CR[useCredentialsManager]
+    CA --> BS[useBrowserSettings]
+    CA --> RP[useRunPoller]
+  end
+
+  subgraph Utils ["Utility Functions"]
+    DK[discoverRequiredCredentialKeys] --> CR
+  end
+
+  subgraph Contracts ["Component Prop Contracts (component-contracts.ts)"]
+    direction TB
+    P1["BadgeProps / BadgeVariant"]
+    P2["ButtonProps / ButtonVariant"]
+    P3["StatusBannerProps / BannerVariant"]
+    P4["CredentialRowProps / CredentialRowData"]
+    P5["BrowserSettingRowProps / BrowserSettingData"]
+    P6["LogViewerProps / RunLogEntry"]
+    P7["RunResultBoxProps / RunResult"]
+  end
+
+  subgraph Consumers ["Downstream Components (Phases 03 & 04)"]
+    Atoms["Phase 03: Atoms & Molecules"]
+    Organisms["Phase 04: Organisms & DashboardPage"]
+  end
+
+  Contracts -.-> Atoms
+  Hooks -.-> Organisms
+  Atoms -.-> Organisms
+```
+
+#### Headless Hook Layer (`src/reporting/control-page/hooks/`)
+
+1. **`useControlApi` (`useControlApi.ts`)**:
+   - Reads the CSRF token from `<meta name="csrf-token">` once at mount using `getCsrfTokenFromDom()`.
+   - Exposes `apiFetch(url, options)`: automatically appends `x-csrf-token` headers to state-mutating requests (`POST`, `PUT`, `DELETE`) directed to same-origin or relative endpoints while omitting them on `GET`.
+   - Exposes `requestJson<T>(url, options)`: typed JSON wrapper that parses structured `ApiErrorResponse` payloads and throws `ControlApiError` containing the HTTP status code and optional error code.
+
+2. **`useConfigManager` (`useConfigManager.ts`)**:
+   - Manages configuration file listing, retrieval, active document selection, and in-memory project updates.
+   - Enforces HTTP concurrency guards: captures the `ETag` header from `GET /api/config?name=...` and attaches `If-Match: <etag>` during `PUT /api/config`. Detects `409 Conflict` and `412 Precondition Failed` to prevent lost updates.
+   - Synchronizes structured document edits with the raw JSON textarea view, tracking validation state (`jsonValidationMsg`) and `isDirty` flags to gate execution actions.
+
+3. **`useCredentialsManager` (`useCredentialsManager.ts`)**:
+   - Discovers required credential variable names dynamically from the active configuration using `discoverRequiredCredentialKeys(doc)`.
+   - Queries secret presence via `GET /api/secrets?keys=...` to populate `credentialRows: CredentialRowData[]` without exposing secret values.
+   - Saves modified values via `PUT /api/secrets` with safe key sanitation (`/^[A-Za-z_][A-Za-z0-9_]{0,127}$/`), and removes individual keys via `DELETE /api/secrets?name=...`.
+
+4. **`useBrowserSettings` (`useBrowserSettings.ts`)**:
+   - Manages global browser execution overrides: `PLAYWRIGHT_HEADLESS` and `PLAYWRIGHT_EXECUTABLE_PATH`.
+   - Operates independently from project credentials, checking presence via `GET /api/secrets?keys=PLAYWRIGHT_HEADLESS,PLAYWRIGHT_EXECUTABLE_PATH` and tracking boolean states `headlessConfigured` and `execPathConfigured`.
+   - Clears values via `DELETE /api/secrets?name=...`.
+
+5. **`useRunPoller` (`useRunPoller.ts`)**:
+   - Controls report generation and auto-build execution lifecycles.
+   - Initiates runs via `POST /api/run` expecting `202 Accepted` (or `200 OK`) and parses the returned run identifier.
+   - Polls `GET /api/run?id=<runId>` at 1,000ms intervals with exponential backoff on transient network errors (up to 5 consecutive errors).
+   - Fast-fails on fatal 4xx errors (excluding 408/429) and ceases polling when reaching terminal statuses (`succeeded`, `failed`, `submission-unknown`).
+   - Handles leak-free unmount and cancellation via `AbortController` and timer resets.
+
+#### Component Prop Contracts (`src/reporting/control-page/types/component-contracts.ts`)
+
+Provides strongly-typed prop interfaces for Phase 03 component implementers (atoms and molecules) and Phase 04 page assembly:
+- **UI Primitives**:
+  - `BadgeProps`: consumes `BadgeVariant` (`'idle' | 'queued' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'configured' | 'missing' | 'not-set'`).
+  - `ButtonProps`: consumes `ButtonVariant` (`'primary' | 'secondary' | 'danger' | 'outline'`) and `ButtonSize` (`'sm' | 'md' | 'lg'`).
+  - `StatusBannerProps`: consumes `BannerVariant` (`'info' | 'success' | 'error'`) and display message.
+- **Row & Item Presenters**:
+  - `CredentialRowProps`: takes `CredentialRowData` (`{ key: string, isConfigured: boolean }`) with an optional `onClear` callback.
+  - `BrowserSettingRowProps`: takes `BrowserSettingData` (`{ key: BrowserSettingKey, isConfigured: boolean, currentValue?: string }`) with an optional `onClear` callback.
+- **Execution & Diagnostics**:
+  - `LogViewerProps`: receives `RunLogEntry[]` and `isLoading` flag.
+  - `RunResultBoxProps`: receives `RunResult | null` containing report URLs, build links, or failure diagnostics.
+
 ### Control-run redaction boundary
 
 SecretStore values are never sent in the `/api/run` request or returned by the
