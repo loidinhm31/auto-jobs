@@ -7,6 +7,6 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["tests", "test-results", "playwright-report", ".runner-build"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["tests", "test-results", "playwright-report", ".runner-build", "src/reporting/control-page"]
 }

@@ -25,7 +25,7 @@ npm run test:release:webkit
 ```
 
 `npm ci` does not download browsers. `npm run install:browsers` provisions
-both Chromium and WebKit before the native gates. The `test:release` script is the deterministic shorthand for typecheck, build, unit, Chromium template, control UI, generated-report, and WebKit template gates; it does not install dependencies or browsers:
+both Chromium and WebKit before the native gates. `npm run build` compiles TypeScript CLI/server files (`tsc -p tsconfig.build.json`), bundles the Vite Control Dashboard (`vite build --config vite.control.config.ts`) into `.runner-build/reporting/control-page/`, and stages static report assets (`node scripts/copy-report-assets.mjs`). The `test:release` script is the deterministic shorthand for typecheck, build, unit, Chromium template, control UI, generated-report, and WebKit template gates; it does not install dependencies or browsers:
 
 ```sh
 npm run test:release
@@ -206,6 +206,22 @@ Deterministic testing of the Control API and UI is executed via:
 npm run test:control
 ```
 which exercises config reading/atomic saving, validation errors, report execution, auto-build confirmation dialogs, and WCAG A/AA accessibility scanning in Chromium and WebKit.
+
+### Phase 01 control asset routing gate
+
+Run the focused control asset pipeline and routing contract:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-assets-routing.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The `control-assets-routing.spec.ts` suite verifies:
+- `loadControlAssets` successfully reads Vite-compiled assets from `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, and `assets/control-page.js`);
+- `renderControlPageHtml` injects the CSRF token into `<meta name="csrf-token">` and safely escapes HTML characters and regex replacement patterns (`$$`, `$&`);
+- `getControlCss` and `getControlJs` return non-empty strings;
+- `createReportServer` in loopback control mode serves `GET /`, `GET /assets/control-page.css`, and `GET /assets/control-page.js` with `CONTROL_CSP` and `Cache-Control: no-store` headers.
 
 ### Phase 04 credential dialog gate
 

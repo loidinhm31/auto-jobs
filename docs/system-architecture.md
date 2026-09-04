@@ -332,14 +332,23 @@ malformed bodies return `400`; invalid mutation gates return `403`, a
 non-JSON mutation body returns `415`, an unavailable store returns `503`, and
 unsupported methods return `405` with `Allow: GET, PUT, DELETE`.
 
-### Control UI credential dialog (Phases 04–05)
+### Control UI, Vite build pipeline, and credential dialog
 
-The loopback page at `/` includes a `Credentials` action and a native
-`<dialog>` backed by `control-page.html`, `control-page.css`, and
-`control-page.js`. Control-page rendering replaces the HTML CSRF placeholder
-with the server's per-instance token. The UI reads that token from the
-`meta[name="csrf-token"]` element; `apiFetch` adds it as `x-csrf-token` to
-every `POST`, `PUT`, and `DELETE`.
+The loopback control dashboard at `/` is built using Vite (`vite.control.config.ts`),
+compiling React components and Tailwind CSS into `.runner-build/reporting/control-page/`
+as `index.html`, `assets/control-page.css`, and `assets/control-page.js`. Rollup output
+configures single-bundle JS/CSS and disables CSS code-splitting to adhere strictly to
+`CONTROL_CSP` (`default-src 'none'`, `script-src 'self'`, `style-src 'self'`).
+
+`report-server-control-page.ts` reads the Vite-built assets from
+`.runner-build/reporting/control-page/`, dynamically substituting the server's per-instance
+CSRF token into the `__CSRF_TOKEN_PLACEHOLDER__` in `index.html`. Assets are served by
+`report-server-control.ts` at `/assets/control-page.css` and `/assets/control-page.js` with
+strict security headers and `Cache-Control: no-store`.
+
+The dashboard UI includes a `Credentials` action and modal dialog. The UI reads the
+instance token from the `meta[name="csrf-token"]` element; `apiFetch` adds it as
+`x-csrf-token` to every state-mutating `POST`, `PUT`, and `DELETE`.
 
 Opening the dialog derives the required environment-variable names from the
 currently loaded configuration. Project credential references take precedence

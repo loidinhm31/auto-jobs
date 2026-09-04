@@ -17,11 +17,13 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "types": ["node", "@playwright/test"],
+    "jsx": "react-jsx",
     "noEmit": true
   },
   "include": [
     "playwright.config.ts",
     "src/**/*.ts",
+    "src/**/*.tsx",
     "tests/**/*.ts"
   ],
   "exclude": ["test-results", "playwright-report"]

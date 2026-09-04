@@ -10,7 +10,7 @@
   "packageManager": "npm@11.13.0",
   "scripts": {
     "install:browsers": "playwright install chromium webkit",
-    "build": "tsc -p tsconfig.build.json && node scripts/copy-report-assets.mjs",
+    "build": "tsc -p tsconfig.build.json && vite build --config vite.control.config.ts && node scripts/copy-report-assets.mjs",
     "report": "node scripts/run-report.mjs",
     "report:template": "node scripts/run-template-report.mjs",
     "serve:control": "npm run build && node .runner-build/reporting/report-server-cli.js --control",
@@ -29,6 +29,24 @@
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "1.62.1",
     "@types/node": "26.2.0",
-    "typescript": "7.0.2"
+    "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.19",
+    "typescript": "7.0.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@radix-ui/react-select": "^2.3.7",
+    "@radix-ui/react-slot": "^1.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.41.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwind-merge": "^3.6.0"
   }
 }

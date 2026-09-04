@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-color: #f8fafc;
+  --card-bg: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --border-color: #cbd5e1;
+  --primary: #0369a1;
+  --primary-hover: #075985;
+  --primary-text: #ffffff;
+  --secondary: #e2e8f0;
+  --secondary-hover: #cbd5e1;
+  --secondary-text: #0f172a;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-text: #ffffff;
+  --status-success: #16a34a;
+  --status-warning: #d97706;
+  --status-error: #dc2626;
+  --focus-ring: #0284c7;
+  --mono-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}

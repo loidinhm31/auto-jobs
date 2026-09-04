@@ -1,4 +1,4 @@
-﻿import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,10 +14,3 @@ await copyFile(
   resolve(reportingOutput, 'report.css'),
 );
 
-const controlAssets = ['control-page.html', 'control-page.css', 'control-page.js'];
-for (const asset of controlAssets) {
-  await copyFile(
-    resolve(projectRoot, 'src', 'reporting', 'control-page', asset),
-    resolve(controlOutput, asset),
-  );
-}

@@ -119,11 +119,18 @@ flowchart LR
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
 - `src/reporting/report-server-control.ts` validates the Host header for every
-  control request, dispatches API paths, and carries the optional
+  control request, dispatches API paths, routes built control assets
+  (`/`, `/assets/control-page.css`, `/assets/control-page.js`), and carries the optional
   `ControlRouterContext.secretStore` dependency.
-- `src/reporting/control-page/control-page.html`, `.css`, and `.js` implement
-  the Credentials dialog, dynamic presence state, guarded save/clear actions,
-  and input cleanup without rendering secret values.
+- `src/reporting/control-page/` contains the Control Dashboard frontend sources
+  (`index.html`, `main.tsx`, `styles/globals.css`), bundled by `vite.control.config.ts`
+  into `.runner-build/reporting/control-page/` with single-bundle JS/CSS and no
+  inline scripts/styles for strict CSP compliance.
+- `src/reporting/report-server-control-page.ts` reads Vite-built assets from
+  `.runner-build/reporting/control-page/`, injects the instance CSRF token into
+  `index.html`, and provides cached CSS and JS.
+- `scripts/copy-report-assets.mjs` stages `report.css` to
+  `.runner-build/reporting/report.css` without overwriting Vite outputs.
 - `src/reporting/report-server-control-api.ts` remains the config/run handler
   facade and re-exports `handleSecretsApi`; the implementation lives in
   `report-server-control-secrets-api.ts`.
@@ -536,7 +543,10 @@ URLs are redacted with all non-empty stored values before persistence.
 The deterministic order is `npm ci`, `npm run install:browsers`,
 `npm run typecheck`, `npm run build`, `npm run test:unit`,
 `npm run test:e2e:templates`, `npm run test:control`, `npm run test:report`,
-and `npm run test:release:webkit`. `npm run test:release` is the shorthand
+and `npm run test:release:webkit`. `npm run build` compiles TypeScript
+CLI/server code to `.runner-build/`, bundles the Vite Control Dashboard into
+`.runner-build/reporting/control-page/`, and copies `report.css` via
+`scripts/copy-report-assets.mjs`. `npm run test:release` is the shorthand
 for typecheck, build, unit, template, control, generated-report, and WebKit
 gates. Template tests use exact-URL test-only routes and checked-in fixtures;
 they do not claim live Jenkins or vendor execution. Runtime smoke validation
@@ -547,12 +557,16 @@ Phase 2, Phase 3, and Phase 03 focused unit coverage is in
 `tests/unit/jenkins-build-trigger.spec.ts`,
 `tests/unit/auto-build-runner.spec.ts`,
 `tests/unit/template-build-fixture.spec.ts`, and the report-selection
-assertions in `tests/unit/sequential-runner.spec.ts`. Phase 03 run-environment
-coverage is in `tests/unit/control-run-executor-secrets.spec.ts`; its fixture
-helpers are in `tests/unit/control-run-executor-fixture.ts`. It proves
-SecretStore injection for report and auto-build runs, stored-over-base
-environment precedence, non-mutation of the base environment, and redaction
-of logs, warnings, errors, and manager-level run output.
+assertions in `tests/unit/sequential-runner.spec.ts`. Phase 01 control asset
+routing coverage in `tests/unit/control-assets-routing.spec.ts` verifies built
+asset loading from `.runner-build/reporting/control-page/`, CSRF replacement and
+escaping, non-empty CSS/JS assets, and loopback HTTP security headers.
+Phase 03 run-environment coverage is in
+`tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
+`tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection
+for report and auto-build runs, stored-over-base environment precedence,
+non-mutation of the base environment, and redaction of logs, warnings, errors,
+and manager-level run output.
 
 Phase 04 control-page coverage and Phase 05 browser verification use
 `tests/e2e/control-page.spec.ts`. The control suite proves config/run/UI
@@ -568,8 +582,8 @@ Phase 05 SecretStore/API unit additions are
 lifecycle checks; the second has ten operation checks. The security suite
 continues to cover plaintext redaction, Host/Origin/Fetch Metadata/CSRF gates,
 bounded JSON validation, content-type handling, unsupported methods, and
-store-availability errors. The Phase 05 verification snapshot recorded
-248/248 unit checks, 6/6 control E2E checks, 254/254 combined passes, zero
-secret leakage, and zero TypeScript errors. None of these deterministic
-checks contacts a live Jenkins controller or vendor service.
+store-availability errors. Deterministic unit suites include 254 passed
+checks, 6/6 control E2E checks, zero secret leakage, and zero TypeScript
+errors. None of these deterministic checks contacts a live Jenkins controller
+or vendor service.
 

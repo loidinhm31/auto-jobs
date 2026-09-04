@@ -63,10 +63,12 @@ credentials; it does not claim a live Jenkins run.
 | `src/reporting/report-server-control-security.ts` | Enforces control security headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
 | `src/reporting/report-server-control-api.ts` | Owns config/run handlers and re-exports the modular secrets handler. |
 | `src/reporting/report-server-control.ts` | Validates Host, dispatches control routes, and carries router context. |
+| `src/reporting/report-server-control-page.ts` | Loads Vite-built HTML, CSS, and JS assets from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches assets. |
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
-| `src/reporting/control-page/control-page.html` / `.css` / `.js` | Control Dashboard markup, styling, CSRF-aware credential modal, presence state, save/clear actions, and DOM wiping. |
+| `src/reporting/control-page/` | Control Dashboard frontend sources (`index.html`, `main.tsx`, styles, and components) bundled via Vite into `.runner-build/reporting/control-page/`. |
+| `vite.control.config.ts` | Vite configuration for Control Dashboard: React plugin, Tailwind CSS, single-bundle outputs, and CSP-compliant asset emission. |
 
-Useful package scripts include `typecheck`, `build`, `test:unit`,
+Useful package scripts include `typecheck`, `build` (compiles TypeScript, bundles the Vite control dashboard into `.runner-build/reporting/control-page/`, and stages report assets), `test:unit`,
 `test:e2e:templates`, `test:control`, `test:report`, `test:release:webkit`,
 `test:release`, `report`, `report:template`, `serve:control`, and
 `serve:report`. There is no production auto-build CLI command in this phase.
@@ -289,9 +291,12 @@ set `Cache-Control: no-store`.
 | `src/reporting/report-server-control-security.ts` | Security headers and Host/Origin/Fetch Metadata/timing-safe CSRF/content-type validation. |
 | `src/reporting/report-server-control-secrets-api.ts` | Modular `/api/secrets` GET/PUT/DELETE handler, presence-map construction, bounded input, and store operations. |
 | `src/reporting/report-server-control-api.ts` | Config/run handlers and re-export facade for the secrets handler. |
-| `src/reporting/report-server-control.ts` | Host preflight, control routing, report links, and `ControlRouterContext` dependencies. |
+| `src/reporting/report-server-control.ts` | Host preflight, control and built-asset routing, and `ControlRouterContext` dependencies. |
+| `src/reporting/report-server-control-page.ts` | Asset loader: reads built HTML, CSS, and JS from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches buffers. |
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
-| `src/reporting/control-page/control-page.html` / `.css` / `.js` | Control Dashboard assets: credential modal structure, responsive styling, CSRF-aware presence/save/clear state, and DOM secret wiping. |
+| `src/reporting/control-page/` | Control Dashboard frontend sources (`index.html`, `main.tsx`, `styles/globals.css`, plus legacy assets during migration) bundled into `.runner-build/reporting/control-page/`. |
+| `vite.control.config.ts` | Vite configuration for Control Dashboard: React plugin, Tailwind CSS, single-bundle outputs, and CSP-compliant asset emission. |
+| `scripts/copy-report-assets.mjs` | Asset copy script: stages `src/reporting/report.css` into `.runner-build/reporting/`. |
 | `src/reporting/report-server-run-manager.ts` | Single-active control-run lifecycle and optional SecretStore dependency. |
 | `src/reporting/report-server-run-executor.ts` | Per-run SecretStore snapshot, environment merge, mode dispatch, and redaction. |
 | `src/security/` | Origin, base-path, relative URL, credential-like URL, traversal, and containment checks. |
@@ -304,6 +309,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/control-secrets-security.spec.ts` | API redaction, Host/Origin/Fetch Metadata/CSRF/content-type gates, input validation, methods, and missing-store behavior. |
 | `tests/unit/control-run-executor-fixture.ts` | Shared isolated config, record, result, and completion helpers for run-executor tests. |
 | `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, and manager integration coverage. |
+| `tests/unit/control-assets-routing.spec.ts` | Built control asset loading, CSRF injection and escaping, non-empty CSS/JS, and server HTTP security headers. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
 | `tests/unit/report-server-secret-store.spec.ts` | Phase 01 backend contract and control-mode wiring coverage. |

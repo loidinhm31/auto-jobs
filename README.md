@@ -167,6 +167,7 @@ Open `http://127.0.0.1:4173/` in your browser.
 - **Config management**: Edit `enabled`, `runType` (`report` vs `auto-build`), and raw JSON configuration safely with ETag concurrency control.
 - **Mutual exclusion**: Report generation and auto-build runs are mutually exclusive and executed one at a time.
 - **Security**: The control dashboard is strictly restricted to loopback (`127.0.0.1`) and rejects non-loopback bindings and cross-origin state-modifying requests.
+- **Build pipeline**: Bundled via Vite (`vite.control.config.ts`) into `.runner-build/reporting/control-page/` as single-bundle CSS and JS, ensuring strict Content Security Policy (`script-src 'self'`, `style-src 'self'`) compliance without inline styles or eval.
 
 ## Report server (read-only aggregate preview)
 
@@ -270,7 +271,7 @@ then uses a bounded fallback and records a warning if both attempts fail.
 | `npm run test:unit` | run unit tests |
 | `npm run test:release` | run full deterministic release gate suite |
 | `npm run typecheck` | TypeScript check without emitting files |
-| `npm run build` | compile the CLI/report server to `.runner-build/` |
+| `npm run build` | compile TypeScript, bundle Vite control dashboard, and copy report assets to `.runner-build/` |
 
 ## Security notes
 
