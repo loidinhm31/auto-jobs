@@ -9,6 +9,11 @@ import {
   installTemplateReportRoutes,
   templateResponse,
 } from './template-fixture-routes.js';
+import {
+  createTemplateServer,
+  type TemplateServerHandle,
+  type TemplateServerOptions,
+} from './template-server.js';
 import type {
   TemplateReportFixture,
   TemplateResponse,
@@ -19,6 +24,7 @@ import type {
 export {
   MAX_TEMPLATE_TOTAL_BYTES,
   TEMPLATE_REPORT_ORIGIN,
+  createTemplateServer,
   installTemplateReportRoutes,
   loadTemplateReportFixture,
   templateResponse,
@@ -28,6 +34,8 @@ export type {
   TemplateResponse,
   TemplateRouteMiss,
   TemplateRouteRecorder,
+  TemplateServerHandle,
+  TemplateServerOptions,
 };
 
 export function templateProjectDocument(

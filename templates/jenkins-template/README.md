@@ -71,3 +71,22 @@ public network. For narrower exposure, use `--host <this-machine-LAN-IP>`
 with `--allow-lan`. The server is read-only and has no authentication. Use
 `--root <directory>` or `REPORT_ROOT=<directory>` only for an intentionally
 different, canonical report root.
+
+## Template Mock Server (`createTemplateServer`)
+
+For browser preview and real HTTP runner integration (such as the Control Page runner), templates can be hosted via a standalone HTTP mock server (`src/templates/template-server.ts`).
+
+### Options & Defaults
+- `host` (default `127.0.0.1`): Host interface to bind. Non-loopback binding requires `allowLan: true`.
+- `port` (default `4174`): TCP port to listen on. Use `0` for an ephemeral port in tests.
+- `allowLan` (default `false`): Explicit flag required for non-loopback bindings.
+- `env` (default `process.env`): Process environment variables for fixture overrides.
+
+### Features & Routing
+- **GET/HEAD Fixtures**: Serves Jenkins login/job/build HTML, Snyk report/summary, and SonarQube pages directly from in-memory rewritten templates.
+- **POST Redirects**:
+  - `POST /j_spring_security_check` or `fixture.loginActionUrl` → 302 to `fixture.jobUrl`
+  - `POST /sessions/new` or `fixture.sonarqubeLoginActionUrl` → sets authenticated state, 302 to `fixture.sonarqubeHomeUrl`
+  - `POST {buildActionUrl}` → 302 to `fixture.jobUrl`
+- **SonarQube Auth Gate**: Unauthenticated GET requests to `fixture.sonarqubeHomeUrl` serve `fixture.sonarqubeLoginHtml`. Following authentication, the home dashboard is served.
+- **Graceful Shutdown**: `server.close()` coordinates with socket tracking to ensure clean teardown.
