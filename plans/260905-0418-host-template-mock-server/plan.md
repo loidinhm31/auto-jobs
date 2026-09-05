@@ -25,12 +25,13 @@ Reuses `loadTemplateReportFixture(env, "http://127.0.0.1:{port}")` and `template
 | # | Phase | File | Status |
 |---|-------|------|--------|
 | 1 | Core template HTTP server | [phase-01-core-server.md](phase-01-core-server.md) | **DONE** (2026-09-05) |
-| 2 | CLI entrypoint + npm script | [phase-02-cli-entrypoint.md](phase-02-cli-entrypoint.md) | ⬜ pending |
+| 2 | CLI entrypoint + npm script | [phase-02-cli-entrypoint.md](phase-02-cli-entrypoint.md) | **DONE** (2026-09-05) |
 | 3 | Template project config | [phase-03-template-config.md](phase-03-template-config.md) | ⬜ pending |
 | 4 | Developer Hub index page | [phase-04-dev-hub.md](phase-04-dev-hub.md) | ⬜ pending |
 | 5 | Validation & testing | [phase-05-validation.md](phase-05-validation.md) | ⬜ pending |
 
 Phase 01 completion: **DONE** — 2026-09-05
+Phase 02 completion: **DONE** — 2026-09-05
 
 ## Final Artifacts
 - `src/templates/template-server.ts` — Core HTTP server

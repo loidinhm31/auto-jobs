@@ -200,6 +200,31 @@ IPv4 interfaces; use a firewall and a trusted network. The server is
 unauthenticated, read-only, and limited to safe files under the canonical
 report root. Do not expose it to the public internet.
 
+## Template mock server
+
+`npm run serve:templates` builds the project and launches a standalone HTTP server on loopback serving offline template fixtures (Jenkins job, Snyk evidence, SonarQube dashboard/issues, parameterized build):
+
+```sh
+npm run serve:templates
+```
+
+Open `http://127.0.0.1:4174/` in your browser.
+
+CLI flags and environment equivalents:
+
+| Purpose | Flag | Environment | Default |
+| --- | --- | --- | --- |
+| bind host | `--host <host>` | `TEMPLATE_HOST` | `127.0.0.1` |
+| TCP port | `--port <port>` | `TEMPLATE_PORT` | `4174` |
+| help | `--help`, `-h` | | |
+
+For a custom port or host:
+
+```sh
+npm run serve:templates -- --port 5000
+npm run serve:templates -- --host 127.0.0.1 --port 4174
+```
+
 ## Report paths and layout
 
 ```text
@@ -264,6 +289,7 @@ then uses a bounded fallback and records a warning if both attempts fail.
 | `npm run report -- --config <config.json>` | generate a Jenkins report from an explicit schema-v1 file |
 | `npm run serve:control` | build and start interactive Control Dashboard on loopback |
 | `npm run serve:report` | build and serve `reports/` on loopback (read-only aggregate) |
+| `npm run serve:templates` | build and start standalone template fixture mock server on loopback |
 | `npm run test:e2e:templates` | run offline template fixture checks in Chromium |
 | `npm run test:control` | run Control Page API & UI E2E tests in Chromium & WebKit |
 | `npm run test:release:webkit` | run the native WebKit template gate |

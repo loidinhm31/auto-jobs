@@ -5,8 +5,9 @@
 ## Overview
 - **Date**: 2026-09-05
 - **Priority**: P1
-- **Implementation status**: ⬜ pending
-- **Review status**: ⬜ pending
+- **Implementation status**: complete
+- **Review status**: approved
+- **Completed At**: 2026-09-05
 
 ## Key Insights
 - Follow the exact pattern of `report-server-cli.ts`: parse args, validate, call `createTemplateServer()`, handle SIGINT/SIGTERM
@@ -32,26 +33,26 @@
 
 ## Implementation Steps
 
-- [ ] Create `src/templates/template-server-cli.ts`
-- [ ] Implement `parseTemplateServerArgs(argv, env)` returning `{ host, port, help }`
+- [x] Create `src/templates/template-server-cli.ts`
+- [x] Implement `parseTemplateServerArgs(argv, env)` returning `{ host, port, help }`
   - `--port` / `TEMPLATE_PORT` env (default 4174)
   - `--host` / `TEMPLATE_HOST` env (default 127.0.0.1)
   - `--help` / `-h` flag
-- [ ] Implement `main()` async function:
+- [x] Implement `main()` async function:
   - Parse args, show usage if `--help`
   - Call `createTemplateServer({ host, port })`
   - Print `Template server: http://{host}:{port}/`
   - Wire SIGINT/SIGTERM → `handle.close()`
-- [ ] Add self-execute guard: `if (path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))`
-- [ ] Add to `package.json`:
+- [x] Add self-execute guard: `if (path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))`
+- [x] Add to `package.json`:
   ```json
   "serve:templates": "npm run build && node .runner-build/templates/template-server-cli.js"
   ```
 
 ## Todo List
-- [ ] CLI implementation
-- [ ] npm script addition
-- [ ] Verify `tsconfig.build.json` includes the new file in output
+- [x] CLI implementation
+- [x] npm script addition
+- [x] Verify `tsconfig.build.json` includes the new file in output
 
 ## Success Criteria
 - `npm run serve:templates` builds and starts the server

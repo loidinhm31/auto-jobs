@@ -570,6 +570,12 @@ mutating `process.env`. It passes that `runtimeEnvironment` to both report and
 auto-build executors. Control logs, warnings, errors, and auto-build result
 URLs are redacted with all non-empty stored values before persistence.
 
+### Template Server (`npm run serve:templates`)
+
+`npm run serve:templates` builds the project and launches the standalone template mock HTTP server on loopback (`127.0.0.1:4174` by default). It serves offline template fixtures (Jenkins job pages, parameterized build, Snyk evidence, and SonarQube dashboards/issues) dynamically in memory for interactive browser preview and offline test runs.
+
+The server operates on its own origin/port (`4174`) completely separated from the Control Server (`4173`) to maintain strict Same-Origin Policy isolation. Configurable via `--host` (`TEMPLATE_HOST`, default `127.0.0.1`) and `--port` (`TEMPLATE_PORT`, default `4174`). Graceful shutdown is wired to SIGINT and SIGTERM.
+
 ### Control Dashboard Atomic Design Components and Contract Fidelity
 
 The Control Dashboard frontend refactor implements Atomic Design principles, cleanly separating presentational UI components from stateful hooks while ensuring 100% contract fidelity with existing Playwright E2E tests:

@@ -190,6 +190,24 @@ GET/HEAD requests below a canonical root containing the generated aggregate
 `index.html`. Use a firewall and a trusted network; this is not public
 hosting.
 
+## Template mock server gate
+
+`npm run serve:templates` first builds the server and starts the standalone template mock HTTP server on loopback.
+
+Flags and defaults:
+- Host: `127.0.0.1` (or `--host <host>`, env: `TEMPLATE_HOST`)
+- Port: `4174` (or `--port <port>`, env: `TEMPLATE_PORT`)
+- Help: `--help`, `-h`
+
+Run focused unit tests for the template server and CLI:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/template-server-cli.spec.ts \
+  tests/unit/template-server.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
 ## Control server gate
 
 `npm run serve:control` first builds the server and starts the interactive Control Dashboard on loopback.

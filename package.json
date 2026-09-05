@@ -15,6 +15,7 @@
     "report:template": "node scripts/run-template-report.mjs",
     "serve:control": "npm run build && node .runner-build/reporting/report-server-cli.js --control",
     "serve:report": " npm run build &&  node .runner-build/reporting/report-server-cli.js",
+    "serve:templates": "npm run build && node .runner-build/templates/template-server-cli.js",
     "typecheck": " tsc --noEmit",
     "test:unit": " node scripts/run-playwright.mjs playwright test tests/unit --config=playwright.unit.config.ts --pass-with-no-tests",
     "test:control": "node scripts/run-playwright.mjs playwright test tests/e2e/control-page.spec.ts --config=playwright.control.config.ts",

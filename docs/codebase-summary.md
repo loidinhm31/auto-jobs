@@ -65,6 +65,7 @@ credentials; it does not claim a live Jenkins run.
 | `src/jenkins/build-trigger.ts` | Exact build-page/form validation and one guarded POST. |
 | `src/templates/template-report-fixture.ts` | Public fixture facade, HTTP server exports, and template project document builder. |
 | `src/templates/template-server.ts` | Standalone native Node.js HTTP server serving offline template fixtures on port 4174. |
+| `src/templates/template-server-cli.ts` | CLI entrypoint and argument parser (`--host`, `--port`) for the standalone template mock HTTP server. |
 | `src/templates/template-fixture-loader.ts` | Loads and validates the complete offline fixture. |
 | `src/templates/template-fixture-routes.ts` | Installs exact default-deny browser routes. |
 | `src/reporting/report-server-secret-store.ts` | Validates and atomically persists local secrets; persistence only. |
@@ -81,8 +82,8 @@ credentials; it does not claim a live Jenkins run.
 
 Useful package scripts include `typecheck`, `build` (compiles TypeScript, bundles the Vite control dashboard into `.runner-build/reporting/control-page/`, and stages report assets), `test:unit`,
 `test:e2e:templates`, `test:control`, `test:report`, `test:release:webkit`,
-`test:release`, `report`, `report:template`, `serve:control`, and
-`serve:report`. There is no production auto-build CLI command in this phase.
+`test:release`, `report`, `report:template`, `serve:control`,
+`serve:report`, and `serve:templates`. There is no production auto-build CLI command in this phase.
 
 ## Configuration and run contracts
 
@@ -367,6 +368,7 @@ set `Cache-Control: no-store`.
 | `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus, including the build detail page. |
 | `tests/unit/template-build-fixture.spec.ts` and `tests/e2e/template-auto-build.spec.ts` | Build fixture drift, exact redirect, route, budget, and production auto-build coverage. |
 | `tests/unit/template-server.spec.ts` | Loopback binding, GET/HEAD fixture routing, POST redirects, SonarQube auth guard, 404/405/400 errors, and graceful shutdown coverage. |
+| `tests/unit/template-server-cli.spec.ts` | CLI argument parsing, environment variable overrides, port validation, help flags, signal cleanup, and process execution tests. |
 
 ## Artifacts and test boundaries
 
