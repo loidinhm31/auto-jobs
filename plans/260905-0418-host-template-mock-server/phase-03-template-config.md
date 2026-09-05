@@ -5,15 +5,16 @@
 ## Overview
 - **Date**: 2026-09-05
 - **Priority**: P2
-- **Implementation status**: ⬜ pending
-- **Review status**: ⬜ pending
+- **Implementation status**: complete
+- **Review status**: approved
+- **Completed At**: 2026-09-05
 
 ## Key Insights
 - `loginUrl` must end with `/login` to pass `LOGIN_ENDPOINTS` validation in `config-values.ts`
 - `loginUrl` and `jobUrl` must share the same origin to pass `deriveJenkinsBaseUrl()` — since both use `http://127.0.0.1:4174`, the base context is `/` which is valid
 - `release%252Fsit` preserves the branch slash through double URL-encoding layers
 - All three source origins (jenkins, snyk, sonarqube) must be set to `http://127.0.0.1:4174` since the mock server hosts all services on one port
-- `sonarqube.projectId` must match the ID embedded in the template HTML: `package-id:service-id`
+- `sonarqube.projectId` must match the ID embedded in the template HTML: `com.example-domain.example-package:com.example-domain.example-package.service`
 
 ## Requirements
 - Config passes schema validation with zero errors
@@ -31,7 +32,7 @@
 
 ## Implementation Steps
 
-- [ ] Create `config/projects.template.json` with exact content:
+- [x] Create `config/projects.template.json` with exact content:
 ```json
 {
   "schemaVersion": 1,
@@ -57,12 +58,8 @@
         "snyk": ["http://127.0.0.1:4174"],
         "sonarqube": ["http://127.0.0.1:4174"]
       },
-      "snyk": {
-        "allowedOrigins": ["http://127.0.0.1:4174"]
-      },
       "sonarqube": {
-        "allowedOrigins": ["http://127.0.0.1:4174"],
-        "projectId": "package-id:service-id"
+        "projectId": "com.example-domain.example-package:com.example-domain.example-package.service"
       }
     }
   ]
@@ -70,8 +67,8 @@
 ```
 
 ## Todo List
-- [ ] Create config file
-- [ ] Verify it passes validation by loading in Control Page
+- [x] Create config file
+- [x] Verify it passes validation by loading in Control Page
 
 ## Success Criteria
 - `normalizeProjectConfigDocument()` accepts this config without errors

@@ -128,6 +128,14 @@ The checked-in example uses `.invalid` placeholder hosts and is not a runnable
 Jenkins configuration. Replace its Jenkins/vendor URLs with authorized values
 before using it for a live collection.
 
+The checked-in [projects.template.json](../config/projects.template.json) provides
+a fully configured, runnable schema-v1 project targeting the local template mock
+server (`http://127.0.0.1:4174`). It configures `template-fixture-service` with
+mock Jenkins, Snyk, and SonarQube origins, references credential environment
+variables `TEMPLATE_FIXTURE_USERNAME` and `TEMPLATE_FIXTURE_PASSWORD`, and sets
+the SonarQube `projectId` matching offline fixtures. It is loaded automatically by
+the Control Page configuration store and supports offline testing and preview.
+
 ### Credentials
 
 Use `credentials` with `usernameVariable` and `passwordVariable` to name the
@@ -413,6 +421,11 @@ needed. These fixtures are test inputs, not report CLI source modes.
 
 The checked-in template Snyk page and summary describe six findings (critical
 2, high 4). These are fixture data, not live service observations.
+
+For standalone HTTP serving and Control Page execution, `npm run serve:templates`
+hosts these fixtures at `http://127.0.0.1:4174`. The companion configuration
+[config/projects.template.json](../config/projects.template.json) executes against
+this server without requiring Playwright route interception.
 
 ## Artifact and trace distinction
 

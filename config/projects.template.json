@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "credentials": {
+      "usernameVariable": "TEMPLATE_FIXTURE_USERNAME",
+      "passwordVariable": "TEMPLATE_FIXTURE_PASSWORD"
+    },
+    "timeoutMs": 300000,
+    "browser": "chromium",
+    "artifactDir": "reports"
+  },
+  "projects": [
+    {
+      "id": "template-fixture-service",
+      "name": "Template Fixture Service",
+      "enabled": true,
+      "runType": "report",
+      "loginUrl": "http://127.0.0.1:4174/login",
+      "jobUrl": "http://127.0.0.1:4174/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/",
+      "sourceOrigins": {
+        "jenkins": ["http://127.0.0.1:4174"],
+        "snyk": ["http://127.0.0.1:4174"],
+        "sonarqube": ["http://127.0.0.1:4174"]
+      },
+      "sonarqube": {
+        "projectId": "com.example-domain.example-package:com.example-domain.example-package.service"
+      }
+    }
+  ]
+}

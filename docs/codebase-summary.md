@@ -119,7 +119,9 @@ names from their supplied environment. In control mode, Phase 03 overlays one
 SecretStore snapshot on a fresh per-run environment and passes it through
 `runtimeEnvironment`; stored values win on collisions, and `process.env` is
 unchanged. `config/projects.example.json` demonstrates an enabled report
-project and a disabled auto-build project using `.invalid` placeholders.
+project and a disabled auto-build project using `.invalid` placeholders;
+`config/projects.template.json` provides a pre-configured runnable document for
+the local template fixture mock server (`http://127.0.0.1:4174`).
 
 ## Runtime pipelines
 

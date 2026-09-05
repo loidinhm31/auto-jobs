@@ -271,6 +271,7 @@ CSS. Selector values do not change the configured `jobUrl` or branch identity.
 | `src/config.ts` | Re-exports config types, loader, and selection helpers. |
 | `src/jenkins/runner-config.ts` | Carries required build selectors into Jenkins runner configuration. |
 | `config/projects.example.json` | Shows explicit enabled report and disabled auto-build project entries. |
+| `config/projects.template.json` | Pre-configured runnable schema-v1 document for local template fixture mock server testing. |
 | `src/reporting/report-server-constants.ts` | Defines the fixed secret filename and 1 MiB secret-file/body boundaries. |
 | `src/reporting/report-server-secret-store.ts` | Canonical, atomic, locked local secret persistence and validated read/list/update/delete operations. |
 | `src/reporting/report-server-control-security.ts` | Applies control security headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |

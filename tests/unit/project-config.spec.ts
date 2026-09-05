@@ -101,6 +101,42 @@ test('loads the committed two-project example with runtime-only secret values', 
   expect(projects[0]?.sources.snyk).not.toHaveProperty('reportPath');
 });
 
+test('loads the committed template mock server config with runtime-only secret values', () => {
+  const secretsEnv = {
+    TEMPLATE_FIXTURE_USERNAME: 'mock-user',
+    TEMPLATE_FIXTURE_PASSWORD: 'mock-password',
+  };
+  const projects = loadProjectConfig(path.resolve('config/projects.template.json'), secretsEnv, true);
+  expect(projects.map((project) => project.id)).toEqual(['template-fixture-service']);
+  expect(projects.every((project) => Object.isFrozen(project))).toBe(true);
+  const project = projects[0] as NormalizedProjectConfig;
+  expect(project.loginUrl).toBe('http://127.0.0.1:4174/login');
+  expect(project.jobUrl).toBe(
+    'http://127.0.0.1:4174/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/',
+  );
+  expect(project.sourceOrigins.jenkins).toBe('http://127.0.0.1:4174');
+  expect(project.sourceOrigins.snyk).toEqual(['http://127.0.0.1:4174']);
+  expect(project.sourceOrigins.sonarqube).toEqual(['http://127.0.0.1:4174']);
+  expect(project.sources.sonarqube.projectId).toBe(
+    'com.example-domain.example-package:com.example-domain.example-package.service',
+  );
+  expect(project.sources.snyk.projectId).toBeUndefined();
+  expect(resolveProjectSecrets(project, secretsEnv)).toEqual({
+    username: 'mock-user',
+    password: 'mock-password',
+  });
+  expect(() => loadProjectConfig(path.resolve('config/projects.template.json'), {}, true)).toThrow(
+    /TEMPLATE_FIXTURE_USERNAME/u,
+  );
+  expect(() =>
+    loadProjectConfig(
+      path.resolve('config/projects.template.json'),
+      { TEMPLATE_FIXTURE_USERNAME: 'mock-user' },
+      true,
+    )
+  ).toThrow(/TEMPLATE_FIXTURE_PASSWORD/u);
+});
+
 test('uses per-project credential variable overrides and keeps values ephemeral', () => {
   const filePath = writeConfig(validDocument());
   try {

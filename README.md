@@ -225,6 +225,18 @@ npm run serve:templates -- --port 5000
 npm run serve:templates -- --host 127.0.0.1 --port 4174
 ```
 
+### Template project configuration
+
+[config/projects.template.json](./config/projects.template.json) is pre-configured to execute against the template mock server on `http://127.0.0.1:4174`:
+
+```sh
+export TEMPLATE_FIXTURE_USERNAME=mock-user
+export TEMPLATE_FIXTURE_PASSWORD=mock-password
+npm run report -- --config config/projects.template.json
+```
+
+Or start the Control Dashboard (`npm run serve:control` at `http://127.0.0.1:4173/`) and select `projects.template.json` from the configuration selector for offline browser preview and test runs.
+
 ## Report paths and layout
 
 ```text
