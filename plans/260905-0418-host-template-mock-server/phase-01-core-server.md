@@ -5,8 +5,9 @@
 ## Overview
 - **Date**: 2026-09-05
 - **Priority**: P1 (blocking all other phases)
-- **Implementation status**: ✅ complete (2026-09-05)
-- **Review status**: ✅ approved (2026-09-05)
+- **Implementation status**: complete
+- **Review status**: approved
+- **Completed At**: 2026-09-05
 
 ## Key Insights
 - `loadTemplateReportFixture(env, origin)` already handles all origin remapping and HTML link/form rewriting — the server just needs to call it once at startup with `"http://127.0.0.1:{port}"` as origin

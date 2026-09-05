@@ -590,7 +590,8 @@ types -> file-io/html -> sonarqube/build-validation -> loader/routes -> facade
 | `template-fixture-build-validation.ts` | Unique `#side-panel` build-link discovery plus canonical, form/action, sticker, and button validation. |
 | `template-fixture-loader.ts` | Reads nine files, derives build/report/Sonar destinations, rewrites selected links/actions, and assembles `TemplateReportFixture`. |
 | `template-fixture-routes.ts` | Installs the catch-all Playwright route handler, fulfills exact responses, handles exact POST exceptions, and records sanitized misses. |
-| `template-report-fixture.ts` | Public facade exporting the supported loader, route installer, response helper, types, origin, and total-size boundary. |
+| `template-server.ts` | Standalone native HTTP server serving fixture endpoints, POST redirects, SonarQube auth guard, and graceful shutdown on port 4174. |
+| `template-report-fixture.ts` | Public facade exporting the supported loader, route installer, HTTP server creator, response helper, types, origin, and total-size boundary. |
 | `templates/jenkins-template/template-build.html` | Minimal saved-origin build detail page: one canonical URL, one `POST` form, one `#bottom-sticker`, and one classed `Build` button. |
 
 The loader derives the build identity from the unique saved job-page

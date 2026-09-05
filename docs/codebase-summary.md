@@ -63,7 +63,8 @@ credentials; it does not claim a live Jenkins run.
 | `src/runner.ts` | Sequential multi-project report execution and aggregate publication. |
 | `src/project/auto-build-runner.ts` | Explicit one-project auto-build API; not a CLI entry point. |
 | `src/jenkins/build-trigger.ts` | Exact build-page/form validation and one guarded POST. |
-| `src/templates/template-report-fixture.ts` | Public fixture facade and template project document builder. |
+| `src/templates/template-report-fixture.ts` | Public fixture facade, HTTP server exports, and template project document builder. |
+| `src/templates/template-server.ts` | Standalone native Node.js HTTP server serving offline template fixtures on port 4174. |
 | `src/templates/template-fixture-loader.ts` | Loads and validates the complete offline fixture. |
 | `src/templates/template-fixture-routes.ts` | Installs exact default-deny browser routes. |
 | `src/reporting/report-server-secret-store.ts` | Validates and atomically persists local secrets; persistence only. |
@@ -365,6 +366,7 @@ set `Cache-Control: no-store`.
 | `templates/jenkins-template/template-build.html` | Minimal saved-origin build page with canonical URL, `POST` form, `#bottom-sticker`, and classed `Build` button. |
 | `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus, including the build detail page. |
 | `tests/unit/template-build-fixture.spec.ts` and `tests/e2e/template-auto-build.spec.ts` | Build fixture drift, exact redirect, route, budget, and production auto-build coverage. |
+| `tests/unit/template-server.spec.ts` | Loopback binding, GET/HEAD fixture routing, POST redirects, SonarQube auth guard, 404/405/400 errors, and graceful shutdown coverage. |
 
 ## Artifacts and test boundaries
 
