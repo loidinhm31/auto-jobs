@@ -210,6 +210,25 @@ npm run serve:templates
 
 Open `http://127.0.0.1:4174/` in your browser.
 
+### Developer Hub index page
+
+Visiting `http://127.0.0.1:4174/` or `http://127.0.0.1:4174/index.html` serves the Developer Hub—a dark-themed web dashboard indexing all 9 mock fixture endpoints categorized with service badges, descriptions, and dynamic origin links:
+
+- **Jenkins**:
+  - `Jenkins Login` — Authentication test page (`/login`)
+  - `Jenkins Job Page` — Main project page linking reports and builds (`/job/template-fixture-job/`)
+  - `Jenkins Build (Parameterized)` — Build parameter form with trigger action (`/job/template-fixture-job/build?delay=0sec`)
+- **Snyk**:
+  - `Snyk Report` — SCA vulnerability scan HTML report artifact (`/snyk-report.html`)
+  - `Snyk Summary (JSON)` — Raw JSON findings and severity counts (`/snyk-summary.json`)
+- **SonarQube**:
+  - `SonarQube Login` — Authentication entrypoint (`/sessions/new`)
+  - `SonarQube Home` — Project dashboard (`/dashboard?id=template-fixture-project`), guarded until authenticated
+  - `SonarQube Overall` — Overall code quality metrics (`/project/overview?id=template-fixture-project`)
+  - `SonarQube Issues` — Issue list with severity facets (`/project/issues?id=template-fixture-project&resolved=false`)
+
+The Developer Hub enforces strict security: HTML-escaped URLs with safe scheme validation (`http:`, `https:`, root-relative), restrictive Content Security Policy (`default-src 'none'; style-src 'unsafe-inline'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store, must-revalidate`, and full support for both `GET` and `HEAD` requests.
+
 CLI flags and environment equivalents:
 
 | Purpose | Flag | Environment | Default |

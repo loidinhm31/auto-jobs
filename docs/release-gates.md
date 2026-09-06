@@ -192,7 +192,7 @@ hosting.
 
 ## Template mock server gate
 
-`npm run serve:templates` first builds the server and starts the standalone template mock HTTP server on loopback.
+`npm run serve:templates` first builds the server and starts the standalone template mock HTTP server on loopback. Navigating to `http://127.0.0.1:4174/` or `http://127.0.0.1:4174/index.html` serves the Developer Hub index page, detailing all 9 mock endpoints across Jenkins, Snyk, and SonarQube with links and descriptions.
 
 Flags and defaults:
 - Host: `127.0.0.1` (or `--host <host>`, env: `TEMPLATE_HOST`)

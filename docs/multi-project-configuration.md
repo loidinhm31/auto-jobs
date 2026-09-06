@@ -425,7 +425,9 @@ The checked-in template Snyk page and summary describe six findings (critical
 For standalone HTTP serving and Control Page execution, `npm run serve:templates`
 hosts these fixtures at `http://127.0.0.1:4174`. The companion configuration
 [config/projects.template.json](../config/projects.template.json) executes against
-this server without requiring Playwright route interception.
+this server without requiring Playwright route interception. Opening `http://127.0.0.1:4174/`
+or `http://127.0.0.1:4174/index.html` serves the Developer Hub index page, detailing all 9
+mock endpoints across Jenkins, Snyk, and SonarQube with links and descriptions.
 
 ## Artifact and trace distinction
 

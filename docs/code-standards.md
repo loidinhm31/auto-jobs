@@ -65,6 +65,8 @@ types -> file-io/html -> sonarqube/build-validation -> loader/routes -> facade
 | `template-fixture-loader.ts` | Read nine fixture files, validate identities before route installation, and assemble synthetic URLs/HTML. |
 | `template-fixture-routes.ts` | Fulfill exact `GET`/`HEAD` fixture URLs, exact Jenkins login actions, the same-origin SonarQube `/sessions/new` authentication path, and the exact build `POST`; default-deny everything else. |
 | `template-report-fixture.ts` | Be the only supported import surface for fixture loading/routes/types and build `templateProjectDocument` with explicit run type. |
+| [`template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server.ts) | Serve Developer Hub index page (`/`, `/index.html`) with 9 mock endpoints, enforce strict CSP and safe URL validation, handle POST redirects, SonarQube auth guard, and graceful shutdown. |
+| [`template-server-cli.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server-cli.ts) | Parse CLI arguments (`--host`, `--port`), validate bounds, handle OS signals, and manage template server process lifecycle. |
 
 The checked-in `templates/jenkins-template/template-build.html` must remain
 minimal and inert: one saved-origin canonical URL, one `POST` form with the

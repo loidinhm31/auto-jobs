@@ -590,7 +590,7 @@ types -> file-io/html -> sonarqube/build-validation -> loader/routes -> facade
 | `template-fixture-build-validation.ts` | Unique `#side-panel` build-link discovery plus canonical, form/action, sticker, and button validation. |
 | `template-fixture-loader.ts` | Reads nine files, derives build/report/Sonar destinations, rewrites selected links/actions, and assembles `TemplateReportFixture`. |
 | `template-fixture-routes.ts` | Installs the catch-all Playwright route handler, fulfills exact responses, handles exact POST exceptions, and records sanitized misses. |
-| `template-server.ts` | Standalone native HTTP server serving fixture endpoints, POST redirects, SonarQube auth guard, and graceful shutdown on port 4174. |
+| `template-server.ts` | Standalone native HTTP server serving Developer Hub index page (`/`, `/index.html`), 9 fixture endpoints, POST redirects, SonarQube auth guard, and graceful shutdown on port 4174. |
 | `template-server-cli.ts` | CLI entrypoint, argument parsing (`--host`, `--port`), and signal handling for the standalone template mock HTTP server. |
 | `template-report-fixture.ts` | Public facade exporting the supported loader, route installer, HTTP server creator, response helper, types, origin, and total-size boundary. |
 | `templates/jenkins-template/template-build.html` | Minimal saved-origin build detail page: one canonical URL, one `POST` form, one `#bottom-sticker`, and one classed `Build` button. |
@@ -610,6 +610,8 @@ data; the browser then requests the exact job page. Any other method or URL is
 aborted and recorded with bounded method, origin, and pathname fields only.
 SonarQube home serves the login page until the context-local login `POST` marks
 that route authenticated.
+
+On [`template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server.ts), requests to `GET /` or `GET /index.html` (and `HEAD`) serve the Developer Hub index page rendered by [`buildDeveloperHubHtml`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server.ts#L78). The Developer Hub provides a dark-themed UI listing all 9 mock endpoints with service category badges (`Jenkins`, `Snyk`, `SonarQube`) and descriptions, enforcing strict security headers (`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`) and URL scheme validation.
 
 ## Test architecture
 

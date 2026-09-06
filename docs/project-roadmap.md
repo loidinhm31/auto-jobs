@@ -80,6 +80,13 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 
 ## Changelog
 
+### 0.1.0 (development) — 2026-09-06
+
+- Completed Phase 04 (Developer Hub index page) of the Host Template Mock Server plan ([`plans/260905-0418-host-template-mock-server/phase-04-dev-hub.md`](file:///G:/ws/sharing/auto-jobs/plans/260905-0418-host-template-mock-server/phase-04-dev-hub.md)).
+- Implemented Developer Hub endpoint on `GET /` and `GET /index.html` (with `HEAD` support) on the standalone template server (`http://127.0.0.1:4174/`), indexing all 9 mock fixture endpoints categorized across Jenkins, Snyk, and SonarQube with category badges and monospace URL previews.
+- Enforced strict security headers (`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store, must-revalidate`) and safe URL scheme validation against XSS.
+- Added comprehensive unit tests in [`tests/unit/template-server.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/template-server.spec.ts) covering Developer Hub rendering, link verification, HEAD requests, security headers, and scheme safety.
+
 ### 0.1.0 (development) — 2026-09-05
 
 - Completed Control Page React Refactor with Atomic Design at 100% (Phases 01–06).

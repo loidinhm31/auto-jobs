@@ -2,7 +2,12 @@ import * as http from 'node:http';
 
 import { expect, test } from '@playwright/test';
 
-import { createTemplateServer } from '../../src/templates/template-server.js';
+import { escapeHtml } from '../../src/templates/template-fixture-html.js';
+import {
+  buildDeveloperHubHtml,
+  createTemplateServer,
+  type DeveloperHubEndpoints,
+} from '../../src/templates/template-server.js';
 
 test.describe('template-server', () => {
   test('starts on loopback with ephemeral port and serves all GET endpoints with correct content types', async () => {
@@ -235,5 +240,93 @@ test.describe('template-server', () => {
         req.end();
       }),
     ).rejects.toThrow();
+  });
+
+  test('serves Developer Hub on GET / and /index.html with links to all mock endpoints and handles HEAD /', async () => {
+    const server = await createTemplateServer({ host: '127.0.0.1', port: 0 });
+    try {
+      // 1. GET /
+      const response = await fetch(server.url);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+      expect(response.headers.get('cache-control')).toContain('no-store');
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'");
+      expect(response.headers.get('x-frame-options')).toBe('DENY');
+
+      const body = await response.text();
+      expect(body).toContain('<!doctype html>');
+      expect(body).toContain('Template Mock Server');
+      expect(body).toContain('Developer Hub');
+
+      // Check all 9 required endpoints & labels
+      const expectedLinks: ReadonlyArray<{ label: string; url: string }> = [
+        { label: 'Jenkins Login', url: server.fixture.loginUrl },
+        { label: 'Jenkins Job Page', url: server.fixture.jobUrl },
+        { label: 'Jenkins Build (Parameterized)', url: server.fixture.buildPageUrl },
+        { label: 'Snyk Report', url: server.fixture.snykReportUrl },
+        { label: 'Snyk Summary (JSON)', url: server.fixture.snykSummaryUrl },
+        { label: 'SonarQube Login', url: server.fixture.sonarqubeLoginUrl },
+        { label: 'SonarQube Home', url: server.fixture.sonarqubeHomeUrl },
+        { label: 'SonarQube Overall', url: server.fixture.sonarqubeOverallUrl },
+        { label: 'SonarQube Issues', url: server.fixture.sonarqubeIssuesUrl },
+      ];
+
+      for (const item of expectedLinks) {
+        expect(body).toContain(item.label);
+        expect(body).toContain(`href="${escapeHtml(item.url)}"`);
+      }
+
+      // Verify /index.html alias returns identical HTML
+      const aliasResponse = await fetch(`${server.url}index.html`);
+      expect(aliasResponse.status).toBe(200);
+      expect(aliasResponse.headers.get('content-type')).toBe('text/html; charset=utf-8');
+      expect(await aliasResponse.text()).toBe(body);
+
+      // 2. HEAD /
+      const headResponse = await fetch(server.url, { method: 'HEAD' });
+      expect(headResponse.status).toBe(200);
+      expect(headResponse.headers.get('content-type')).toBe('text/html; charset=utf-8');
+      expect(headResponse.headers.get('content-length')).toBe(String(Buffer.byteLength(body, 'utf-8')));
+      expect(headResponse.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'");
+      expect(headResponse.headers.get('x-frame-options')).toBe('DENY');
+      expect(await headResponse.text()).toBe('');
+
+      // 3. Verify each link destination can be loaded from the running server
+      for (const item of expectedLinks) {
+        const targetRes = await fetch(item.url);
+        // Note: SonarQube home without auth serves login HTML with status 200, others 200
+        expect(targetRes.status).toBe(200);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('buildDeveloperHubHtml produces valid HTML, accepts DeveloperHubEndpoints, and rejects unsafe schemes', () => {
+    const mockFixture: DeveloperHubEndpoints = {
+      loginUrl: 'http://127.0.0.1:4174/login?param="<xss>&test=1',
+      jobUrl: 'http://127.0.0.1:4174/job/test',
+      buildPageUrl: 'http://127.0.0.1:4174/job/test/build',
+      snykReportUrl: 'http://127.0.0.1:4174/snyk',
+      snykSummaryUrl: 'http://127.0.0.1:4174/snyk/summary.json',
+      sonarqubeLoginUrl: 'http://127.0.0.1:4174/sonar/login',
+      sonarqubeHomeUrl: 'http://127.0.0.1:4174/sonar/home',
+      sonarqubeOverallUrl: 'http://127.0.0.1:4174/sonar/overall',
+      sonarqubeIssuesUrl: 'http://127.0.0.1:4174/sonar/issues',
+    };
+
+    const html = buildDeveloperHubHtml(mockFixture);
+    expect(html).toContain('<!doctype html>');
+    expect(html).toContain('http://127.0.0.1:4174/login?param=&quot;&lt;xss&gt;&amp;test=1');
+    expect(html).not.toContain('<xss>');
+
+    // Defense-in-depth: Rejects unsafe schemes like javascript:
+    expect(() =>
+      buildDeveloperHubHtml({
+        ...mockFixture,
+        loginUrl: 'javascript:alert(1)',
+      }),
+    ).toThrow('Unsafe URL scheme detected');
   });
 });
