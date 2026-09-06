@@ -651,8 +651,11 @@ On [`template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template
   response through the modular handler.
 - Template unit and E2E tests use exact default-deny routes and checked-in
   fixtures; `template-build-fixture.spec.ts` proves build-page drift and
-  redirect contracts, while `template-auto-build.spec.ts` exercises the
-  production auto-build workflow with one build `POST`. They do not claim live
+  redirect contracts, `template-auto-build.spec.ts` exercises the production
+  auto-build workflow with one build `POST`, and `template-server-integration.spec.ts`
+  verifies standalone HTTP mock server Developer Hub flows, URL-encoding
+  preservation, session auth guarding, concurrent Control Server execution,
+  schema-v1 report collection, and auto-build submission. They do not claim live
   Jenkins or vendor execution.
 
 ## Invariants for extensions

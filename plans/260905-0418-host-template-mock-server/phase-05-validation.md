@@ -5,8 +5,9 @@
 ## Overview
 - **Date**: 2026-09-05
 - **Priority**: P1
-- **Implementation status**: ⬜ pending
-- **Review status**: ⬜ pending
+- **Implementation status**: complete
+- **Review status**: approved
+- **Completed At**: 2026-09-06
 
 ## Key Insights
 - Primary validation is integration: does the real HTTP server produce the same fixture responses that Playwright route interception previously mocked?
@@ -25,35 +26,36 @@
 - All files from Phases 01-04
 - [control-page.spec.ts](../../tests/e2e/control-page.spec.ts)
 - [vendor-template-capture.spec.ts](../../tests/e2e/vendor-template-capture.spec.ts)
+- [template-server-integration.spec.ts](../../tests/e2e/template-server-integration.spec.ts)
 
 ## Implementation Steps
 
 ### Manual Smoke Test
-- [ ] Run `npm run serve:templates` — verify server starts on port 4174
-- [ ] Open `http://127.0.0.1:4174/` in browser — verify Dev Hub renders
-- [ ] Click each Dev Hub link — verify fixture pages render correctly
-- [ ] Test POST login flow: submit form at `/login`, verify redirect to job page
-- [ ] Test SonarQube auth: visit home (should redirect to login), submit, verify access
-- [ ] Test build submission: visit build page, submit form, verify redirect
+- [x] Run `npm run serve:templates` — verify server starts on port 4174
+- [x] Open `http://127.0.0.1:4174/` in browser — verify Dev Hub renders
+- [x] Click each Dev Hub link — verify fixture pages render correctly
+- [x] Test POST login flow: submit form at `/login`, verify redirect to job page
+- [x] Test SonarQube auth: visit home (should redirect to login), submit, verify access
+- [x] Test build submission: visit build page, submit form, verify redirect
 
 ### Control Page Integration Test
-- [ ] Run `npm run serve:control` concurrently
-- [ ] Open Control Page, load `projects.template.json`
-- [ ] Set template credentials via Secrets Manager (any values accepted)
-- [ ] Click "Run Reports" — verify Playwright captures evidence and generates report
-- [ ] Check generated `reports/template-fixture-service/{run-id}/index.html` exists
-- [ ] Click "Auto Build" — verify submission state
+- [x] Run `npm run serve:control` concurrently
+- [x] Open Control Page, load `projects.template.json`
+- [x] Set template credentials via Secrets Manager (any values accepted)
+- [x] Click "Run Reports" — verify Playwright captures evidence and generates report
+- [x] Check generated `reports/template-fixture-service/{run-id}/index.html` exists
+- [x] Click "Auto Build" — verify submission state
 
 ### Regression Check
-- [ ] Run `npm run test:e2e:templates` — verify existing template tests pass unchanged
-- [ ] Run `npm run test:control` — verify control page tests pass
-- [ ] Run `npm run typecheck` — verify no type errors from new files
+- [x] Run `npm run test:e2e:templates` — verify existing template tests pass unchanged
+- [x] Run `npm run test:control` — verify control page tests pass
+- [x] Run `npm run typecheck` — verify no type errors from new files
 
 ## Todo List
-- [ ] Smoke test all endpoints
-- [ ] Control Page integration test
-- [ ] Regression test suite
-- [ ] Verify no cross-origin errors in browser console
+- [x] Smoke test all endpoints
+- [x] Control Page integration test
+- [x] Regression test suite
+- [x] Verify no cross-origin errors in browser console
 
 ## Success Criteria
 - All manual smoke tests pass

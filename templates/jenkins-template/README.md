@@ -201,5 +201,26 @@ try {
 } finally {
   // Gracefully stop the server
   await server.close();
+}
+```
+
+### Testing and validation
+
+The mock server and its integration with the runner, configuration loader, and Control Dashboard are validated via:
+
+```sh
+# Run standalone unit tests
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/template-server.spec.ts \
+  tests/unit/template-server-cli.spec.ts \
+  --config=playwright.unit.config.ts
+
+# Run end-to-end integration tests
+node scripts/run-playwright.mjs playwright test \
+  tests/e2e/template-server-integration.spec.ts \
+  --config=playwright.template.config.ts
+
+# Run all template test suites (navigation, auto-build, integration)
+npm run test:e2e:templates
 ```
 

@@ -43,8 +43,9 @@ npm run test:e2e:templates
 ```
 
 This runs the production direct workflow against the saved Jenkins, Snyk, and
-SonarQube snapshots (including authentication flow) through the exact
-default-deny route map. It is not a live-vendor or live-Jenkins check.
+SonarQube snapshots through the exact default-deny route map, the offline auto-build
+workflow, and the template mock server integration suite (`tests/e2e/template-server-integration.spec.ts`).
+It is not a live-vendor or live-Jenkins check.
 
 The native WebKit template gate uses the browser installed on the host:
 
@@ -207,6 +208,35 @@ node scripts/run-playwright.mjs playwright test \
   tests/unit/template-server.spec.ts \
   --config=playwright.unit.config.ts
 ```
+
+### Phase 05 template server validation and integration gate
+
+The integration suite tests the standalone HTTP mock server end-to-end against real browser sessions, production report generation, auto-build execution, and concurrent Control Server operations:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/e2e/template-server-integration.spec.ts \
+  --config=playwright.template.config.ts
+```
+
+Or as part of the full template suite:
+
+```sh
+npm run test:e2e:templates
+```
+
+The `template-server-integration.spec.ts` suite covers 11 deterministic checks:
+- **Developer Hub index page**: Serves `/` and `/index.html` with security headers (`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store, must-revalidate`), category badges, dynamic links to all 9 mock endpoints, and zero browser console errors.
+- **Fixture endpoint navigation**: Navigates to all 9 Developer Hub links in Chromium and asserts valid rendered HTML / JSON content.
+- **Jenkins form POST login flow**: Submits credentials on `/login` form and follows 302 redirect to the configured job page.
+- **SonarQube session authentication**: Guards `/dashboard` until `/sessions/new` form POST succeeds, then renders the authenticated project dashboard.
+- **Parameterized build form submission**: Submits build parameters on `#bottom-sticker` form and verifies 302 redirect back to the job page.
+- **Double-encoded slash preservation**: Requests job URL containing `%252F` and confirms no double-decoding or malformed path errors.
+- **Concurrent server isolation**: Spawns Control Server (`127.0.0.1:4173`) and Template Server (`127.0.0.1:4174`) concurrently without port conflicts and validates distinct HTML responses.
+- **Schema-v1 config validation**: Parses and validates `config/projects.template.json` via `loadProjectConfig`, ensuring origin normalization and credential variable mapping.
+- **Production report execution**: Executes `runConfiguredProjects` against the live HTTP template server, generating verified report artifacts (`data.json`, `index.html`) with 6 Snyk findings and SonarQube facet counts.
+- **Production auto-build execution**: Executes `runAutoBuildProject` against the live HTTP template server, verifying `submitted` state with 302 response.
+- **Control Page UI integration**: Loads `projects.template.json` in the Control Dashboard UI, asserting project card rendering and zero cross-origin or CSP errors in the browser console.
 
 ## Control server gate
 

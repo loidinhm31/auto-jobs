@@ -1,6 +1,6 @@
 # Project roadmap
 
-Last updated: 2026-09-05  
+Last updated: 2026-09-06  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 
 ## Overall status
@@ -82,6 +82,10 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 
 ### 0.1.0 (development) — 2026-09-06
 
+- Completed Phase 05 (Validation & Testing) of the Host Template Mock Server plan ([`plans/260905-0418-host-template-mock-server/phase-05-validation.md`](file:///G:/ws/sharing/auto-jobs/plans/260905-0418-host-template-mock-server/phase-05-validation.md)); entire plan marked **completed** (5 of 5 phases DONE).
+- Validated real HTTP mock server on port 4174 with comprehensive E2E automation in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts): Developer Hub link navigation, Jenkins form POST 302 redirects, SonarQube auth session guarding, double-encoded slash (`%252F`) round-trip handling, and port coexistence with Control Server.
+- Verified end-to-end report generation with Snyk & SonarQube artifact capture and auto-build submission flows against live HTTP mock server.
+- Verified zero regressions across entire test suite: 13/13 template E2E tests, 8/8 control page E2E tests, and strict TypeScript check.
 - Completed Phase 04 (Developer Hub index page) of the Host Template Mock Server plan ([`plans/260905-0418-host-template-mock-server/phase-04-dev-hub.md`](file:///G:/ws/sharing/auto-jobs/plans/260905-0418-host-template-mock-server/phase-04-dev-hub.md)).
 - Implemented Developer Hub endpoint on `GET /` and `GET /index.html` (with `HEAD` support) on the standalone template server (`http://127.0.0.1:4174/`), indexing all 9 mock fixture endpoints categorized across Jenkins, Snyk, and SonarQube with category badges and monospace URL previews.
 - Enforced strict security headers (`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store, must-revalidate`) and safe URL scheme validation against XSS.

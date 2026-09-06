@@ -598,6 +598,20 @@ Security and delivery specifications:
 - Strict security headers: `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Cache-Control: no-store, must-revalidate`.
 - Defends against XSS via HTML escaping and safe URL validation (`validateSafeHubUrl`), rejecting non-HTTP/HTTPS schemes such as `javascript:` or `data:`.
 
+#### Template Server Validation & Integration (Phase 05)
+
+The standalone template mock server and its accompanying configuration are validated via [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts), executed through [`playwright.template.config.ts`](file:///G:/ws/sharing/auto-jobs/playwright.template.config.ts).
+
+The test harness exercises the following architectural boundaries:
+- **Smoke test automation**: Browser navigation across the Developer Hub and all 9 mock fixture endpoints, verifying HTTP 200/302 status codes, expected HTML/JSON contents, and absence of browser console errors.
+- **Session authentication guarding**: Simulates SonarQube's authentication lifecycle where unauthenticated visits to `/dashboard` serve the login page until a form POST on `/sessions/new` marks the session authenticated.
+- **URL path encoding preservation**: Ensures double-encoded slash sequences (`%252F`) in Jenkins job paths round-trip accurately through Node.js HTTP request parsing without double-decoding defects.
+- **Server process isolation**: Confirms Control Server (`4173`) and Template Server (`4174`) bind and run concurrently on loopback without port collisions or cross-origin interference.
+- **Schema-v1 config validation**: Validates [`config/projects.template.json`](file:///G:/ws/sharing/auto-jobs/config/projects.template.json) parsing and normalization through `loadProjectConfig`, confirming proper mapping of `TEMPLATE_FIXTURE_USERNAME` and `TEMPLATE_FIXTURE_PASSWORD`.
+- **End-to-end report collection**: Dispatches `runConfiguredProjects` against the live HTTP template server, confirming creation of compliant `reports/template-fixture-service/{run-id}/` report artifacts (`index.html`, `data.json`) containing parsed Snyk and SonarQube evidence.
+- **Auto-build execution**: Dispatches `runAutoBuildProject` against the live HTTP template server, validating form submission and 302 redirect.
+- **Control Page UI integration**: Mounts `projects.template.json` within the Control Dashboard UI, asserting clean project card rendering with zero cross-origin or CSP security violation console errors.
+
 ### Control Dashboard Atomic Design Components and Contract Fidelity
 
 The Control Dashboard frontend refactor implements Atomic Design principles, cleanly separating presentational UI components from stateful hooks while ensuring 100% contract fidelity with existing Playwright E2E tests:

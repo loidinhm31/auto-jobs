@@ -35,13 +35,14 @@ WebKit template gate is `npm run test:release:webkit`.
 
 The checked-in templates are test fixtures, not a report CLI source mode. The
 template gate executes the production direct workflow through an exact,
-default-deny route map:
+default-deny route map, as well as offline auto-build and template mock server
+integration tests:
 
 ```sh
 npm run test:e2e:templates
 ```
 
-The same workflow is run natively by the WebKit release gate. Neither gate
+The offline workflow is also run natively by the WebKit release gate. Neither gate
 contacts a live controller or vendor service. Use the explicit configuration
 command below for a Jenkins report.
 
@@ -256,6 +257,25 @@ npm run report -- --config config/projects.template.json
 
 Or start the Control Dashboard (`npm run serve:control` at `http://127.0.0.1:4173/`) and select `projects.template.json` from the configuration selector for offline browser preview and test runs.
 
+### Validation and testing
+
+Template mock server functionality, Developer Hub navigation, and runner integration are validated comprehensively by:
+
+```sh
+npm run test:e2e:templates
+```
+
+This runs `tests/e2e/template-server-integration.spec.ts` alongside navigation and auto-build suites, asserting:
+- Developer Hub index rendering across `/` and `/index.html` with security headers and all 9 endpoints.
+- End-to-end browser navigation across all fixture endpoints and form POST 302 redirects.
+- SonarQube authentication session guarding (login gate before dashboard access).
+- URL-encoding preservation for double-encoded `%252F` paths.
+- Concurrent execution of Control Server (`4173`) and Template Server (`4174`) without port collisions.
+- Validation and normalization of `config/projects.template.json` schema-v1 document.
+- Production report generation against the live HTTP mock server producing verified evidence artifacts (`data.json`, `index.html`, 6 Snyk findings, SonarQube facets).
+- Production auto-build workflow execution against the mock server.
+- Control Dashboard UI loading `projects.template.json` with zero cross-origin or CSP violations.
+
 ## Report paths and layout
 
 ```text
@@ -321,7 +341,7 @@ then uses a bounded fallback and records a warning if both attempts fail.
 | `npm run serve:control` | build and start interactive Control Dashboard on loopback |
 | `npm run serve:report` | build and serve `reports/` on loopback (read-only aggregate) |
 | `npm run serve:templates` | build and start standalone template fixture mock server on loopback |
-| `npm run test:e2e:templates` | run offline template fixture checks in Chromium |
+| `npm run test:e2e:templates` | run offline template fixture checks & mock server integration tests in Chromium |
 | `npm run test:control` | run Control Page API & UI E2E tests in Chromium & WebKit |
 | `npm run test:release:webkit` | run the native WebKit template gate |
 | `npm run test:report` | run generated-report browser checks |

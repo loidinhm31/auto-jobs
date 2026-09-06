@@ -429,6 +429,15 @@ this server without requiring Playwright route interception. Opening `http://127
 or `http://127.0.0.1:4174/index.html` serves the Developer Hub index page, detailing all 9
 mock endpoints across Jenkins, Snyk, and SonarQube with links and descriptions.
 
+Phase 05 validates this integration end-to-end in
+[`tests/e2e/template-server-integration.spec.ts`](../tests/e2e/template-server-integration.spec.ts):
+- Verifies manual smoke test automation: Developer Hub rendering with security headers (`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`), browser navigation to all 9 endpoints, Jenkins form POST login redirects, SonarQube auth session guard, parameterized build form submission, and `%252F` double-encoded slash path preservation.
+- Verifies concurrent execution of the Control Server (`127.0.0.1:4173`) and Template Server (`127.0.0.1:4174`) on distinct loopback ports without collision.
+- Verifies schema-v1 loading and normalization of `config/projects.template.json`.
+- Executes production report collection against the live template server, generating verified report artifacts (`data.json`, `index.html`) with exact Snyk (6 findings) and SonarQube facet evidence.
+- Executes production auto-build workflow against the live template server, verifying `submitted` state with 302 redirect.
+- Verifies Control Page UI renders the template project card from `projects.template.json` without cross-origin or CSP violations.
+
 ## Artifact and trace distinction
 
 

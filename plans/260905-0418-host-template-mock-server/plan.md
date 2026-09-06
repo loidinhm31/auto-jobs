@@ -1,7 +1,7 @@
 ---
 title: Host Template Mock Server
 description: Dedicated standalone HTTP server on port 4174 to serve templates/ fixtures for browser preview and Control Page execution
-status: in_progress
+status: completed
 priority: P2
 effort: 6h
 branch: main
@@ -28,12 +28,13 @@ Reuses `loadTemplateReportFixture(env, "http://127.0.0.1:{port}")` and `template
 | 2 | CLI entrypoint + npm script | [phase-02-cli-entrypoint.md](phase-02-cli-entrypoint.md) | **DONE** (2026-09-05) |
 | 3 | Template project config | [phase-03-template-config.md](phase-03-template-config.md) | **DONE** (2026-09-05) |
 | 4 | Developer Hub index page | [phase-04-dev-hub.md](phase-04-dev-hub.md) | **DONE** (2026-09-06) |
-| 5 | Validation & testing | [phase-05-validation.md](phase-05-validation.md) | ⬜ pending |
+| 5 | Validation & testing | [phase-05-validation.md](phase-05-validation.md) | **DONE** (2026-09-06) |
 
 Phase 01 completion: **DONE** — 2026-09-05
 Phase 02 completion: **DONE** — 2026-09-05
 Phase 03 completion: **DONE** — 2026-09-05
 Phase 04 completion: **DONE** — 2026-09-06
+Phase 05 completion: **DONE** — 2026-09-06
 
 ## Final Artifacts
 - `src/templates/template-server.ts` — Core HTTP server

@@ -14,7 +14,11 @@ const slowMo = slowMoRaw !== undefined && slowMoRaw !== '' && Number.isFinite(Nu
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['**/e2e/template-navigation.spec.ts', '**/e2e/template-auto-build.spec.ts'],
+  testMatch: [
+    '**/e2e/template-navigation.spec.ts',
+    '**/e2e/template-auto-build.spec.ts',
+    '**/e2e/template-server-integration.spec.ts',
+  ],
   fullyParallel: true,
   forbidOnly: Boolean(environment['CI']),
   retries: environment['CI'] ? 1 : 0,

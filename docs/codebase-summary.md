@@ -35,6 +35,13 @@ credentials; it does not claim a live Jenkins run.
 - Phase 05 addition: focused SecretStore lifecycle coverage, expanded secrets
   API operation coverage, and Chromium/WebKit Control UI E2E verification for
   dynamic credential persistence, injected execution, and zero leakage.
+- Phase 05 addition (Host Template Mock Server): comprehensive validation and
+  testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
+  covering Developer Hub smoke tests, double-encoded URL path preservation,
+  SonarQube auth session guard, concurrent execution with Control Server,
+  `config/projects.template.json` schema-v1 validation, end-to-end production
+  report capture with Snyk/Sonar evidence, auto-build submission, and Control UI
+  project card rendering with zero cross-origin errors.
 - Phase 03 addition (React migration): accessible Atomic Design UI primitives
   ([atoms](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/) and
   [molecules](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))
@@ -371,6 +378,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/template-build-fixture.spec.ts` and `tests/e2e/template-auto-build.spec.ts` | Build fixture drift, exact redirect, route, budget, and production auto-build coverage. |
 | [`tests/unit/template-server.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/template-server.spec.ts) | Loopback binding, Developer Hub index page (`/`, `/index.html`, 9 mock endpoints, HEAD, security headers, XSS prevention), GET/HEAD fixture routing, POST redirects, SonarQube auth guard, 404/405/400 errors, and graceful shutdown coverage. |
 | `tests/unit/template-server-cli.spec.ts` | CLI argument parsing, environment variable overrides, port validation, help flags, signal cleanup, and process execution tests. |
+| [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts) | End-to-end integration and validation tests for the standalone template mock HTTP server, Developer Hub smoke flows, concurrent Control Server execution, `projects.template.json`, production report capture, and auto-build submission. |
 
 ## Artifacts and test boundaries
 
@@ -385,6 +393,11 @@ The deterministic release sequence is documented in
 checked-in files with default-deny routes and do not contact Jenkins or vendor
 services. `template-build-fixture.spec.ts` validates the ninth file and
 `template-auto-build.spec.ts` proves one build POST without Snyk/Sonar capture.
+The Phase 05 template server validation gate in
+[`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
+extends template test coverage with 11 integration checks, bringing the unified
+template test gate (`npm run test:e2e:templates`) to 13 passing checks across
+navigation, auto-build, and real HTTP mock server execution.
 The Phase 03 unit gate separately proves control-run SecretStore injection and
 redaction with injected executors. The Phase 03 atomic design components gate
 proves DOM ID contracts, CSS variant mappings, ARIA accessibility attributes,
