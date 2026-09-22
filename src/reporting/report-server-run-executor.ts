@@ -47,9 +47,14 @@ export async function executeControlRun(
       }
       const result = await reportExecutor(reportProjects, { runtimeEnvironment: runEnv });
 
-      const relReport = result.aggregate.projects[0]?.reportPath;
+      const reportProject = result.aggregate.projects.find((p) => p.reportPath !== undefined);
+      const relReport = reportProject?.reportPath ?? result.aggregate.projects[0]?.reportPath;
       const safeRelative = localReportHref(relReport);
-      const reportUrl = safeRelative ? `/reports/${safeRelative}` : '/reports/index.html';
+      const reportUrl = safeRelative
+        ? `/reports/${safeRelative}`
+        : result.exitCode === 0
+          ? '/reports/index.html'
+          : undefined;
 
       record.status = result.exitCode === 0 ? 'succeeded' : 'failed';
       record.result = {

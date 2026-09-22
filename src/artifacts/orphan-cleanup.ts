@@ -10,8 +10,8 @@ export const CLEANUP_MAX_REMOVALS = 256;
 
 const PUBLICATION_DIRECTORY = /^(?:\.run-publication-|\.run-backup-)/u;
 const TEMP_ENTRY = /^(?:\.tmp-|\.bak-aggregate-|\.aggregate-publication-|\.report-root-lock-recovery-)/u;
-const STAGING_LEASE_TEMP = /^\.[a-z0-9][a-z0-9-]{0,80}\.lease\.[a-f\d]{16}\.tmp$/u;
-const STAGING_LEASE_FILE = /^([a-z0-9][a-z0-9-]{0,80})\.lease$/u;
+const STAGING_LEASE_TEMP = /^\.[a-z0-9][a-z0-9-_]{0,80}\.lease\.[a-f\d]{16}\.tmp$/u;
+const STAGING_LEASE_FILE = /^([a-z0-9][a-z0-9-_]{0,80})\.lease$/u;
 const MAX_WARNINGS = 32;
 const REPORT_INTERNAL_DIRECTORIES = new Set(['assets', '.report-root-lock']);
 export interface OrphanCleanupOptions {

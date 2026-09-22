@@ -131,16 +131,33 @@ async function releaseStagingLeaseBestEffort(
   }
 }
 
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+export function formatRunTimestamp(now: Date): string {
+  const year = now.getFullYear();
+  const month = pad2(now.getMonth() + 1);
+  const day = pad2(now.getDate());
+  const hours = pad2(now.getHours());
+  const minutes = pad2(now.getMinutes());
+  const seconds = pad2(now.getSeconds());
+  return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+}
+
 export function createRunId(
   now: Date = new Date(),
-  suffix: string = crypto.randomBytes(8).toString('hex'),
+  suffix?: string,
 ): string {
-  const timestamp = now.toISOString().toLowerCase().replace(/[^0-9a-z]/gu, '');
-  const normalizedSuffix = suffix.toLowerCase();
-  if (!/^[0-9a-f]{8,64}$/u.test(normalizedSuffix)) {
-    throw new Error('Run ID suffix must be collision-resistant hexadecimal');
+  const timestamp = formatRunTimestamp(now);
+  if (suffix !== undefined && suffix.length > 0) {
+    const normalizedSuffix = suffix.toLowerCase();
+    if (!/^[0-9a-f]{8,64}$/u.test(normalizedSuffix)) {
+      throw new Error('Run ID suffix must be collision-resistant hexadecimal');
+    }
+    return `${timestamp}-${normalizedSuffix}`;
   }
-  return `${timestamp}-${normalizedSuffix}`;
+  return timestamp;
 }
 
 export class ArtifactPaths {

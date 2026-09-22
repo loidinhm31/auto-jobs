@@ -31,10 +31,14 @@ async function firstVisibleFacetHeader(
   container: Locator | Page,
   label: 'Type' | 'Severity',
 ): Promise<Locator | undefined> {
+  const labelPattern = new RegExp(`^${label}$`, 'iu');
   const candidates = [
     container.getByRole('button', { name: label, exact: true }),
+    container.getByRole('button', { name: labelPattern }),
     container.getByRole('heading', { name: label, exact: true }),
+    container.getByRole('heading', { name: labelPattern }),
     container.getByText(label, { exact: true }),
+    container.getByText(labelPattern),
   ];
   for (const candidate of candidates) {
     const match = await firstVisibleLocator(candidate);
@@ -128,6 +132,13 @@ export async function facetCandidatesWithStatus(
         timeout: Math.min(deadline.requireRemaining(), MAX_LOCATOR_WAIT_MS),
         intervals: [50, 100, 250, 500],
       }).toBeGreaterThan(0);
+      await expect.poll(async () => {
+        const stats = await controls.locator('.stat').allTextContents().catch(() => []);
+        return stats.some((s) => s.trim().length > 0 && s.trim() !== '0');
+      }, {
+        timeout: Math.min(deadline.requireRemaining(), 2_000),
+        intervals: [100, 250, 500],
+      }).toBe(true).catch(() => undefined);
     } catch {
       return { values: [], truncated: false };
     }

@@ -19,6 +19,7 @@ import {
   navigation,
   pageCaptureMetadata,
   screenshotFacetRange,
+  screenshotRegion,
   SONAR_SCREENSHOTS,
 } from './sonarqube-capture-support.js';
 import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
@@ -69,6 +70,14 @@ export async function assertRenderedProjectIdentity(
 
 export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIssuesStepResult> {
   await dismissSonarqubeModals(input.page);
+  let expectedBranch: string | undefined;
+  let expectedPullRequest: string | undefined;
+  try {
+    const currentUrl = new URL(input.page.url());
+    expectedBranch = exactQueryValue(currentUrl, 'branch');
+    expectedPullRequest = exactQueryValue(currentUrl, 'pullRequest');
+  } catch {}
+
   const control = await firstAvailable(
     () => issuesControlCandidates(input.page, input.expectedKey, input.allowArchivedSnapshot),
     input.deadline,
@@ -85,6 +94,50 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
     }
   }, { timeout: input.deadline.requireRemaining(), waitUntil: 'domcontentloaded' });
   await dismissSonarqubeModals(input.page);
+  await input.page.waitForLoadState('networkidle', {
+    timeout: Math.min(input.deadline.requireRemaining(), 5_000),
+  }).catch(() => undefined);
+
+  if (!input.allowArchivedSnapshot) {
+    try {
+      const newCodeToggle = input.page.locator('button[data-facet="overall"][aria-checked="true"], button[aria-label*="new code" i][aria-checked="true"]').first();
+      if (await newCodeToggle.isVisible().catch(() => false)) {
+        await newCodeToggle.click({ timeout: 2_000 }).catch(() => undefined);
+      }
+      const allRadio = input.page.getByRole('radio', { name: /^all$/iu });
+      if (await allRadio.isVisible().catch(() => false)) {
+        if ((await allRadio.getAttribute('aria-checked').catch(() => null)) === 'false') {
+          await allRadio.click({ timeout: 2_000 }).catch(() => undefined);
+        }
+      }
+    } catch {}
+  }
+  await dismissSonarqubeModals(input.page);
+  await input.page.waitForLoadState('networkidle', {
+    timeout: Math.min(input.deadline.requireRemaining(), 5_000),
+  }).catch(() => undefined);
+
+  if (!input.allowArchivedSnapshot) {
+    try {
+      const issuesUrl = new URL(input.page.url());
+      let reNavigate = false;
+      if (expectedBranch !== undefined && exactQueryValue(issuesUrl, 'branch') !== expectedBranch) {
+        issuesUrl.searchParams.set('branch', expectedBranch);
+        reNavigate = true;
+      }
+      if (expectedPullRequest !== undefined && exactQueryValue(issuesUrl, 'pullRequest') !== expectedPullRequest) {
+        issuesUrl.searchParams.set('pullRequest', expectedPullRequest);
+        reNavigate = true;
+      }
+      if (reNavigate) {
+        await input.page.goto(issuesUrl.toString(), {
+          timeout: input.deadline.requireRemaining(),
+          waitUntil: 'domcontentloaded',
+        });
+        await dismissSonarqubeModals(input.page);
+      }
+    } catch {}
+  }
   const url = assertAllowedUrl(
     input.page.url(),
     deriveJenkinsBaseUrl(input.project.loginUrl, input.project.jobUrl),
@@ -151,7 +204,10 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
 
   let screenshot: string | undefined;
   let screenshotMetadata: Awaited<ReturnType<typeof screenshotFacetRange>> | undefined;
-  if (typeFacet !== undefined && severityFacet !== undefined) {
+  const isAllZero = normalized.facets.types.every((t) => t.count === 0) &&
+    normalized.facets.severities.every((s) => s.count === 0);
+
+  if (typeFacet !== undefined && severityFacet !== undefined && !isAllZero) {
     try {
       await visible(typeFacet.container, input, 'SonarQube Type facet region was not visible');
       await visible(severityFacet.container, input, 'SonarQube Severity facet region was not visible');
@@ -168,9 +224,34 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
       warnings.push(`SonarQube Issues screenshot capture failed: ${captureFailureMessage(error)}`);
     }
   } else {
-    warnings.push('SonarQube Issues screenshot skipped because a Type/Severity facet was unavailable');
+    try {
+      const mainPanel = input.page.locator('main, #issues-page, [data-component="issues-page"], .it__layout-page-main-inner, body').first();
+      await visible(mainPanel, input, 'SonarQube main content region was not visible');
+      screenshotMetadata = await screenshotRegion(
+        input.page,
+        mainPanel,
+        input.outputDirectory,
+        SONAR_SCREENSHOTS.issues,
+        input.deadline,
+      );
+      screenshot = SONAR_SCREENSHOTS.issues;
+    } catch {
+      if (typeFacet !== undefined && severityFacet !== undefined) {
+        screenshotMetadata = await screenshotFacetRange(
+          input.page,
+          typeFacet.container,
+          severityFacet.container,
+          input.outputDirectory,
+          SONAR_SCREENSHOTS.issues,
+          input.deadline,
+        ).catch(() => undefined);
+        if (screenshotMetadata !== undefined) screenshot = SONAR_SCREENSHOTS.issues;
+      }
+      if (screenshot === undefined) {
+        warnings.push('SonarQube Issues screenshot skipped because a Type/Severity facet was unavailable');
+      }
+    }
   }
-
   return {
     capture: {
       ...capture,

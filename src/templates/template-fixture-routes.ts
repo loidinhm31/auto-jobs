@@ -79,7 +79,11 @@ export function templateResponse(
   if (isExactFixtureUrl(url, fixture.sonarqubeHomeUrl)) {
     return { body: fixture.sonarqubeHomeHtml, contentType: 'text/html; charset=utf-8' };
   }
-  if (isExactFixtureUrl(url, fixture.sonarqubeIssuesUrl)) {
+  if (
+    isExactFixtureUrl(url, fixture.sonarqubeIssuesUrl) ||
+    url.pathname === '/component_measures' ||
+    url.pathname === '/component_measures/'
+  ) {
     return { body: fixture.sonarqubeIssuesHtml, contentType: 'text/html; charset=utf-8' };
   }
   return undefined;

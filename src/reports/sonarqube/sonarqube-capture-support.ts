@@ -196,7 +196,7 @@ export function createRouteHandler(
       await settleRouteAction(() => route.abort('blockedbyclient'), deadline);
       return;
     }
-    if (['font', 'image', 'media', 'worker', 'websocket'].includes(route.request().resourceType())) {
+    if (['font', 'media', 'websocket'].includes(route.request().resourceType())) {
       await settleRouteAction(() => route.abort(), deadline);
       return;
     }

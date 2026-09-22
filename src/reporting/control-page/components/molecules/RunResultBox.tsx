@@ -30,7 +30,7 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
         React.createElement(
           'p',
           { key: 'report-link', className: 'm-0' },
-          'Report generated successfully. ',
+          hasError ? 'Report completed with errors. ' : 'Report generated successfully. ',
           React.createElement(
             'a',
             {
