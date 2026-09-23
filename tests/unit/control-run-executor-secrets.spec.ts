@@ -302,4 +302,95 @@ test.describe('Run Executor Environment Injection & Secret Redaction', () => {
     // In-flight run used the matched read entry with reportWorkers: 4
     expect(executedWorkerCount).toBe(4);
   });
+
+  test('sets reportUrl to aggregate index when multiple report projects run, and to single project report when only one runs', async () => {
+    const configStore = await createConfigStore(configRoot);
+
+    // 1. Single report project: reportUrl points to that project's report
+    const singleConfig = createValidConfig(reportRoot);
+    fs.writeFileSync(path.join(configRoot, 'default.json'), JSON.stringify(singleConfig), 'utf8');
+    const entrySingle = await configStore.readConfig('default.json');
+    const optionsSingle: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async () => ({
+        ...createMockReportResult(reportRoot),
+        aggregate: {
+          schemaVersion: 3,
+          generatedAt: new Date().toISOString(),
+          projects: [
+            {
+              projectId: 'report-proj',
+              name: 'Report Project',
+              state: 'success',
+              runId: 'mock-run',
+              reportPath: 'report-proj/mock-run/index.html',
+              runs: [],
+              warnings: [],
+            },
+          ],
+          warnings: [],
+        },
+      }),
+    };
+
+    const recordSingle = createMockRecord('run-single', entrySingle.etag, 'report');
+    await executeControlRun(recordSingle, optionsSingle, () => {});
+    expect(recordSingle.result?.reportUrl).toBe('/reports/report-proj/mock-run/index.html');
+
+    // 2. Multiple report projects: reportUrl points to aggregate index /reports/index.html
+    const baseProject = createValidConfig(reportRoot).projects[0]!;
+    const multiConfig = {
+      ...createValidConfig(reportRoot),
+      projects: [
+        baseProject,
+        {
+          ...baseProject,
+          id: 'report-proj-2',
+          name: 'Report Project 2',
+          jobUrl: 'https://jenkins.example.com/job/report-proj-2/',
+        },
+      ],
+    };
+    fs.writeFileSync(path.join(configRoot, 'default.json'), JSON.stringify(multiConfig), 'utf8');
+    const entryMulti = await configStore.readConfig('default.json');
+    const optionsMulti: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async () => ({
+        ...createMockReportResult(reportRoot),
+        aggregate: {
+          schemaVersion: 3,
+          generatedAt: new Date().toISOString(),
+          projects: [
+            {
+              projectId: 'report-proj',
+              name: 'Report Project',
+              state: 'success',
+              runId: 'mock-run',
+              reportPath: 'report-proj/mock-run/index.html',
+              runs: [],
+              warnings: [],
+            },
+            {
+              projectId: 'report-proj-2',
+              name: 'Report Project 2',
+              state: 'success',
+              runId: 'mock-run',
+              reportPath: 'report-proj-2/mock-run/index.html',
+              runs: [],
+              warnings: [],
+            },
+          ],
+          warnings: [],
+        },
+      }),
+    };
+
+    const recordMulti = createMockRecord('run-multi', entryMulti.etag, 'report');
+    await executeControlRun(recordMulti, optionsMulti, () => {});
+    expect(recordMulti.result?.reportUrl).toBe('/reports/index.html');
+  });
 });

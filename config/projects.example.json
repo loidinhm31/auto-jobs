@@ -58,7 +58,8 @@
       "loginUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
       "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
       "runType": "report",
-      "enabled": false
+      "enabled": true
     }
-  ]
+  ],
+  "reportWorkers": 2
 }

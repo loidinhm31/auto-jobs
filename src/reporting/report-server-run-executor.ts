@@ -48,14 +48,21 @@ export async function executeControlRun(
       const workerCount = configEntry.document.reportWorkers ?? 1;
       const result = await reportExecutor(reportProjects, { runtimeEnvironment: runEnv, workerCount });
 
-      const reportProject = result.aggregate.projects.find((p) => p.reportPath !== undefined);
-      const relReport = reportProject?.reportPath ?? result.aggregate.projects[0]?.reportPath;
-      const safeRelative = localReportHref(relReport);
-      const reportUrl = safeRelative
-        ? `/reports/${safeRelative}`
-        : result.exitCode === 0
-          ? '/reports/index.html'
-          : undefined;
+      const isMultiProject = reportProjects.length > 1;
+      let reportUrl: string | undefined;
+
+      if (isMultiProject) {
+        reportUrl = '/reports/index.html';
+      } else {
+        const reportProject = result.aggregate.projects.find((p) => p.reportPath !== undefined);
+        const relReport = reportProject?.reportPath ?? result.aggregate.projects[0]?.reportPath;
+        const safeRelative = localReportHref(relReport);
+        reportUrl = safeRelative
+          ? `/reports/${safeRelative}`
+          : result.exitCode === 0
+            ? '/reports/index.html'
+            : undefined;
+      }
 
       record.status = result.exitCode === 0 ? 'succeeded' : 'failed';
       record.result = {
