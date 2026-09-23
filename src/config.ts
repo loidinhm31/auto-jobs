@@ -14,13 +14,20 @@ export {
 
 export {
   loadProjectConfig,
+  loadProjectConfigWithDocument,
   normalizeProjectConfigDocument,
   resolveProjectSecrets,
 } from './config/project-config-loader.js';
+export type { LoadedProjectConfigDocument } from './config/project-config-loader.js';
 export {
   selectAutoBuildProject,
   selectReportProjects,
 } from './config/project-run-selection.js';
+export {
+  DEFAULT_REPORT_WORKERS,
+  MAX_REPORT_WORKERS,
+  normalizeReportWorkerCount,
+} from './config/report-worker-count.js';
 
 export type {
   NormalizedProjectConfig,

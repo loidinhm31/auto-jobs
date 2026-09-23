@@ -1,0 +1,68 @@
+# Phase 03 — dashboard and integration verification (NOT IMPLEMENTED)
+
+## Context links
+- [Master contract](./plan.md) · [Hard brief](./cmd-plan.md) · [Phase 01 schema/CLI/runner](./phase-01-bounded-report-execution.md) · [Phase 02 API](./phase-02-control-run-contract.md) · [Control/UI research](./research/researcher-02-control-ui-and-contract.md) · [Runner/artifact research](./research/researcher-01-runner-and-artifacts.md). Browser-local/per-request recommendations in control/UI research are **rejected by user's saved-document decision**.
+- Current UI: `src/reporting/control-page/pages/DashboardPage.tsx:19-43,112-123,195-201`, `src/reporting/control-page/hooks/useConfigDocumentEditor.ts:19-34,47-75,132-151`, `src/reporting/control-page/hooks/useConfigManager.ts:113-187`, `src/reporting/control-page/components/organisms/ExecutionSection.tsx:5-31`, `src/reporting/control-page/components/atoms/Select.tsx`, `src/reporting/control-page/hooks/useRunPoller.ts:169-194`. [Codebase summary](../../docs/codebase-summary.md) confirms React dashboard, not legacy imperative assets.
+
+## Overview
+**Pending; P2; 3h; depends on phases 01 and 02.** Show one accessible **Report workers** 1–4 selector beside Generate Reports in `ExecutionSection`, bound to the current schema-v1 document rather than each project. Changing it updates the shared editor's document/raw JSON and dirty state; operator must Save with existing ETag flow before Generate Reports is enabled. Run POST remains unchanged and server reads the saved count. Verify browser, direct API and CLI use the same persisted document; no browser preference. This is planned, not implemented today.
+
+## Key insights
+- `useConfigDocumentEditor.setDocument(updated, true)` already validates, synchronizes raw JSON and marks dirty; `useConfigManager.saveConfig` uses `If-Match: etag`, reads the saved document/new ETag, then clears dirty via `setDocument`. Add a **document-level** update action to this shared editor rather than local Dashboard state or a new save channel.
+- `ExecutionSection` already renders Generate Reports and disables it when dirty or triggering. It can display the selector alongside the button using the existing accessible `Select` atom without expanding the already >200-line `ConfigFormBuilder`; keep that form unchanged. `DashboardPage` report handler already submits only `configName`, `configEtag`, `runType` through `useRunPoller`.
+- `localStorage` in `config-selection.ts` stores **active config name only**; do not create or reuse a worker-count key. Switching current config should load the next document and display its own saved field or default 1. The editor's raw JSON apply path validates document via phase-01 schema.
+
+## Requirements
+- Accessible labeled `Report workers` select with exact options 1, 2, 3, 4 and omitted document value displayed as 1. Place beside Generate Reports in `ExecutionSection`, not under defaults or any project; disable selection when no config document is loaded. Preserve existing button ID, responsive/keyboard/focus behavior. It is an editor control despite placement: selection updates `currentDoc.reportWorkers`, raw JSON and `isDirty`, never triggers a run or save automatically. Canonical explicit 1 is acceptable after selecting 1; old files may omit the field until edited.
+- Generate Reports stays disabled while config is dirty; Save sends full document through existing guarded config PUT/If-Match and updates ETag. A save conflict leaves unsaved worker value dirty and prevents a run; reload/other-config switch reflects persisted document, not an unsaved/stale choice. Applying raw JSON with a valid field updates selector and dirty state. Invalid raw JSON is rejected on Apply and cannot be saved as the new document; it does not change the existing saved configuration.
+- Report POST retains current `RunTriggerRequest` fields (`configName`, `configEtag`, `runType`, optional auto-build `projectId`); do not extend `useRunPoller` signature/request type or send `workerCount`. Auto-build POST remains unchanged and an auto-build project in a document with `reportWorkers` still submits exactly once. Direct `npm run report -- --config <file>` must use the same saved count as UI, independent of local browser state.
+- No new `localStorage` worker preference, separate selector state, per-project/default field, schema version, user example config edit, manager record or SecretStore entry. Server remains authoritative for document validation and API rejection of supplied request override.
+
+## Architecture
+- Add `updateReportWorkers(count: number)` to the existing `useConfigDocumentEditor` public contract; copy the document with new top-level field and call `setDocument(next, true)`. Reuse shared phase-01 bound policy at document boundary; `ExecutionSection` offers only four valid choices. `useConfigManager` already exposes editor actions after omitting private `setDocument`/`validateCurrentDocument`.
+- `DashboardPage` passes `currentDoc?.reportWorkers ?? 1`, document availability and editor update callback to `ExecutionSection`; it renders the existing accessible `Select` beside Generate Reports with layout that wraps on narrow screens. No local count state; `ConfigFormBuilder` and `useRunPoller` stay unchanged.
+- Journey: load selected config -> execution section shows saved count/default 1 -> select 2 -> shared document/raw JSON/dirty update -> Generate Reports disabled -> Save `PUT /api/config` with If-Match -> new ETag and clean document -> Generate Reports sends existing POST with new ETag -> executor reads ETag-matched document count -> report runner executes bounded projects -> status polled as before. CLI reading same file obtains 2. Auto-build project remains unaffected.
+
+## Related code files
+| Action | Exact path | Work |
+| --- | --- | --- |
+| Modify | `src/reporting/control-page/hooks/useConfigDocumentEditor.ts` | Add document-level update transition for top-level count, using `setDocument(..., true)`. |
+| Modify | `src/reporting/control-page/components/organisms/ExecutionSection.tsx` | Accessible 1–4 document-bound selector beside Generate Reports; preserve dirty/loading button disable. |
+| Modify | `src/reporting/control-page/pages/DashboardPage.tsx` | Pass editor value, document availability and update callback to execution section; keep report/build handlers and Run request unchanged. |
+| Modify | `tests/e2e/control-page.spec.ts` | Browser Save/ETag/dirty/raw JSON, config switches, observed POST, auto-build and accessibility with isolated fixtures. |
+| Modify if material | `tests/unit/control-atomic-components.spec.ts`, `tests/unit/control-hooks-and-types.spec.ts` | Observable editor/execution-section transitions or existing contract breaks; not source-text/default-only tests. |
+| Reuse | `tests/unit/project-config.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/bounded-report-workers.spec.ts`, `tests/unit/control-run-api.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts` | Phase 01/02 schema, CLI, runner, API and saved-count proof. |
+| Modify after implementation | `docs/architecture.md`, `docs/system-architecture.md`, `docs/codebase-summary.md`, `docs/project-overview-pdr.md`, `docs/code-standards.md`, `docs/multi-project-configuration.md`, `docs/release-gates.md`, `README.md` | Audit sequential/schema/API/UI/CLI claims; describe **shipped** document count and Save/ETag behavior, not planned behavior as current. |
+| Leave unchanged | `src/reporting/control-page/hooks/useRunPoller.ts`, `src/reporting/control-page/types/index.ts`, `src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx`, `src/reporting/control-page/utils/config-selection.ts`, `config/projects.example.json` | Existing POST, form, active-config storage and user-modified example. |
+
+## Implementation steps
+1. Add document-level editor update action and `ExecutionSection` props for count, document availability and callback. Render existing `Select` with label/id beside Generate Reports, options 1–4, value `currentDoc?.reportWorkers ?? 1` and numeric conversion after a known option. Keep responsive flex layout, existing button/dirty/loading behavior, no localStorage. Preserve raw JSON via `setDocument` and validate with `assertProjectConfigDocument`.
+2. Wire `DashboardPage` through `useConfigManager` to `ExecutionSection`; leave `ConfigFormBuilder` and report/build `triggerRun` calls unchanged. Verify dirty state disables Generate Reports until successful Save; Save sends full JSON with top-level field and If-Match, gets new ETag and clears dirty; conflict keeps run blocked until reload/resolution.
+3. In isolated Chromium/WebKit control-page E2E, start with a schema-v1 config lacking the field: select displays 1. Choose 4; assert raw JSON top-level value, dirty badge, disabled Generate Reports and **no report POST** until Save; inspect config PUT/If-Match and resulting ETag, then report POST with new ETag and **no `workerCount`**. Reload: value 4. Switch between two different saved configs (4 vs absent/2): each shows own count; no cross-config/browser preference. Apply raw JSON 2 and verify selector/dirty; reject invalid JSON field. Test stale Save conflict and unchanged Run disabling; run axe/keyboard checks for selector.
+4. Test a document containing a selected auto-build project and `reportWorkers: 4`: build request retains only existing fields, one build submission and no report artifact/count propagation. Direct crafted report and auto-build POST with any own `workerCount` still get 422/no run. Confirm Host/Origin/CSRF guard, active-run 409, report-only selection and secret redaction from phase 02.
+5. Cross-check one saved temporary JSON fixture through `runFromConfig` with deterministic offline browser injection and the dashboard control executor: both use saved count and default 1 for a missing field. Confirm `src/cli.ts` still invokes `runFromConfig` for `npm run report -- --config <file>`; exercise that actual command with an isolated offline fixture when verifying CLI entrypoint so the named command is covered, not merely a request wrapper. Use barrier-based overlap and ordered manifest proof, no live Jenkins/vendor calls. After code integration, update doc inventory to match **observed shipped behavior**; keep the separate proposed architecture note explicitly NOT IMPLEMENTED until then. Run targeted checks and one release gate only during implementation.
+
+## Todo list
+- [ ] Document-level accessible selector/editor action; Save/ETag/JSON integration.
+- [ ] Browser reload/config-switch/conflict/raw JSON and no-override request evidence.
+- [ ] CLI/UI saved-count parity and auto-build/report safety evidence.
+- [ ] Implementation docs synchronization and final release gate after all phases.
+
+## Success criteria
+- Selector reflects current document/default 1 and survives reload **only after Save**; switching configs loads their own persisted values. Editing marks dirty, raw JSON matches, and Generate Reports cannot run until saved ETag is current. Invalid document field is rejected by validation; existing saved configuration is not altered by rejected raw JSON.
+- Report POST has no `workerCount` while ETag-matched saved 1–4 reaches report executor/runner; direct CLI reading same file uses same bound. Auto-build POST omits count, runs one selected build, and accepts documents with valid field without using it. Any crafted request override gets 422.
+- Runner/API evidence includes deterministic bounded overlap/order, failed-worker continuation, isolated immutable manifests, aggregate/root lock finalization, stale ETag, single-active-run 409 and credential redaction.
+- **Implementation-stage targeted commands, not run by planner:** `node scripts/run-playwright.mjs playwright test tests/e2e/control-page.spec.ts --config=playwright.control.config.ts` and `node scripts/run-playwright.mjs playwright test tests/unit/project-config.spec.ts tests/unit/control-config-api.spec.ts tests/unit/bounded-report-workers.spec.ts tests/unit/sequential-runner.spec.ts tests/unit/control-run-api.spec.ts tests/unit/control-run-executor-secrets.spec.ts --config=playwright.unit.config.ts`. Then `npm run test:release` **once** after all phases; record actual results, never claim live external runs.
+
+## Risk assessment
+- A config edit now participates in ETag conflicts and Run disable by design; do not bypass Save with browser state or stale ETag. If a document loads without field, present default 1 without making it dirty until user changes it. Bound and normalize only at shared schema/runner boundaries, not through coercion in UI.
+- High count can stress memory/provider quotas; cap 4/default 1. Don't conflate active-config-name localStorage with worker setting. Save and raw JSON must converge on one document, not independent state.
+
+## Security considerations
+- Keep credentials out of document worker selector, URLs and diagnostics. Preserve CSRF-aware `apiFetch`, Host/Origin/Fetch Metadata checks, SecretStore isolation, report-root validation and auto-build one-POST guarantee. Selector offers only valid choices but persisted schema validation and server reject path are authoritative.
+
+## Next steps
+- After implementation, reconcile proposed architecture note and linked docs with actual code; run full release gate once and release only with verified artifact/UI/API/CLI evidence. This plan-writing assignment changes no production code or validation gates.
+
+## Unresolved questions
+- None. A saved-document count shared by UI and CLI is the confirmed contract; browser-local preference is not in scope.

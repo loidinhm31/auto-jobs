@@ -4,24 +4,22 @@ import { ArtifactPaths } from './artifacts/artifact-paths.js';
 import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
 import { writeAggregateData } from './artifacts/result-writer.js';
 import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
+import { ensureStylesheet } from './reporting/report-output.js';
 import { sanitizePersistedWarnings } from './artifacts/result-validation.js';
 import { selectReportProjects } from './config/project-run-selection.js';
 import { defaultLaunch, launchOptions, type BrowserLauncher } from './browser-launcher.js';
 
 export { launchOptions };
-import { loadProjectConfig } from './config/project-config-loader.js';
+import { loadProjectConfigWithDocument } from './config/project-config-loader.js';
+import { normalizeReportWorkerCount } from './config/report-worker-count.js';
 import { jenkinsJobPathSegments } from './jenkins/url-identity.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
 import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from './result-types.js';
-import { runProject, type ProjectRunnerDependencies } from './project/project-runner.js';
+import { type ProjectRunnerDependencies } from './project/project-runner.js';
+import { executeProjectWorkerPool, type ProjectExecutor } from './project/report-worker-pool.js';
 import type { ProjectOutcome, RunnerExecutionResult } from './project/project-types.js';
 import type { BrowserName } from './types.js';
 import { CLEANUP_SETTLE_TIMEOUT_MS, withHardTimeout } from './workflow/workflow-deadline.js';
-
-type ProjectExecutor = (
-  project: NormalizedProjectConfig,
-  dependencies: ProjectRunnerDependencies,
-) => Promise<ProjectOutcome>;
 
 export interface RunnerDependencies {
   readonly runtimeEnvironment?: NodeJS.ProcessEnv;
@@ -30,6 +28,7 @@ export interface RunnerDependencies {
   readonly launchBrowser?: BrowserLauncher;
   readonly executeProject?: ProjectExecutor;
   readonly configureContext?: (context: BrowserContext) => Promise<void>;
+  readonly workerCount?: number;
 }
 
 function enabledConfiguration(projects: readonly NormalizedProjectConfig[]): {
@@ -92,6 +91,14 @@ export async function runConfiguredProjects(
   dependencies: RunnerDependencies = {},
   initialWarnings: readonly string[] = [],
 ): Promise<RunnerExecutionResult> {
+  const workerCount = normalizeReportWorkerCount(dependencies.workerCount, 'workerCount');
+  const seenIds = new Set<string>();
+  for (const project of projects) {
+    if (seenIds.has(project.id)) {
+      throw new Error(`Duplicate project id: ${project.id}`);
+    }
+    seenIds.add(project.id);
+  }
   const config = enabledConfiguration(projects);
   const artifacts = new ArtifactPaths(config.reportRoot);
   await artifacts.initialize();
@@ -100,32 +107,23 @@ export async function runConfiguredProjects(
   const runtimeWarnings: string[] = [];
   try {
     await recoverAggregatePublication(config.reportRoot);
+    await ensureStylesheet(config.reportRoot);
     const initialCleanup = await artifacts.cleanupOrphans();
     runtimeWarnings.push(...initialCleanup.warnings);
     const browser = await (dependencies.launchBrowser ?? defaultLaunch)(config.browserName, dependencies.runtimeEnvironment);
     try {
-      for (const project of config.projects) {
-        try {
-          const outcome = await (dependencies.executeProject ?? runProject)(project, {
-            browser,
-            artifacts,
-            ...(dependencies.runtimeEnvironment === undefined ? {} : { ['env']: dependencies.runtimeEnvironment }),
-            ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
-            ...(dependencies.runIdSuffix === undefined ? {} : { runIdSuffix: dependencies.runIdSuffix }),
-            ...(dependencies.configureContext === undefined ? {} : { configureContext: dependencies.configureContext }),
-          });
-          outcomes.push(outcome);
-        } catch {
-          outcomes.push({
-            projectId: project.id,
-            name: project.name,
-            state: 'failed',
-            runId: 'unallocated',
-            warnings: [],
-            error: 'project execution failed before a run artifact was allocated',
-          });
-        }
-      }
+      const poolOutcomes = await executeProjectWorkerPool({
+        projects: config.projects,
+        workerCount,
+        browser,
+        artifacts,
+        runtimeEnvironment: dependencies.runtimeEnvironment,
+        now: dependencies.now,
+        runIdSuffix: dependencies.runIdSuffix,
+        configureContext: dependencies.configureContext,
+        executeProject: dependencies.executeProject,
+      });
+      outcomes.push(...poolOutcomes);
     } finally {
       try {
         await withHardTimeout(
@@ -187,9 +185,14 @@ export async function runConfiguredProjects(
 export async function runFromConfig(
   filePath: string,
   env: NodeJS.ProcessEnv = process.env,
-  dependencies: Omit<RunnerDependencies, 'runtimeEnvironment'> = {},
+  dependencies: Omit<RunnerDependencies, 'runtimeEnvironment' | 'workerCount'> = {},
 ): Promise<RunnerExecutionResult> {
-  const allProjects = loadProjectConfig(filePath, env);
-  const reportProjects = selectReportProjects(allProjects);
-  return runConfiguredProjects(reportProjects, { ...dependencies, runtimeEnvironment: env });
+  const { document, projects } = loadProjectConfigWithDocument(filePath, env);
+  const reportProjects = selectReportProjects(projects);
+  const { workerCount: _ignoredWorkerCount, ...restDependencies } = dependencies as RunnerDependencies;
+  return runConfiguredProjects(reportProjects, {
+    ...restDependencies,
+    runtimeEnvironment: env,
+    workerCount: document.reportWorkers ?? 1,
+  });
 }

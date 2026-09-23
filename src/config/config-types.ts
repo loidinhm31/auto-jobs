@@ -54,6 +54,7 @@ export interface ProjectConfigDefaults {
 
 export interface ProjectConfigDocumentV1 {
   schemaVersion: 1;
+  reportWorkers?: number;
   projects: readonly ProjectConfigInput[];
   defaults?: ProjectConfigDefaults;
 }

@@ -53,11 +53,12 @@ report-discovery boundary. Snyk report and summary links and the SonarQube home
 link are discovered from that page; SonarQube Overall and Issues links are
 followed from the validated home page.
 
-The report CLI runs one browser process for selected report projects. Projects
-execute in configuration order, each in a fresh Playwright context, with one
-absolute capture deadline. A project failure is captured as an outcome so later
-projects can continue. The auto-build runner owns its own one-project browser
-and context.
+The report CLI reads one validated config document, selects enabled report
+projects, and runs them through one browser process. A fixed worker pool uses
+one to four loops (default one), each with a fresh Playwright context and
+absolute capture deadline. Outcomes remain in configuration order even when
+completion order differs; a project failure does not stop its siblings.
+Auto-build owns its own one-project browser and context.
 
 ```mermaid
 flowchart LR
@@ -65,7 +66,7 @@ flowchart LR
   Normalize --> Dispatch{Explicit caller selection}
   Dispatch -- report --> ReportRunner[Report runner]
   ReportRunner --> Browser[One Playwright browser]
-  Browser --> Login[Exact Jenkins login]
+  Browser --> WorkerPool[At most four report workers] --> Login[Exact Jenkins login]
   Login --> Job[Exact Jenkins job page]
   Job --> Discover[Discover Snyk and SonarQube links]
   Discover --> Capture[Capture and normalize evidence]
@@ -97,9 +98,9 @@ flowchart LR
 - `src/browser-launcher.ts` centralizes browser choice and environment-driven
   launch options (`PLAYWRIGHT_EXECUTABLE_PATH`, headless flags, and action
   delay) shared by report and auto-build callers.
-- `src/runner.ts` enforces one browser for sequential report projects, one
-  report root, report-root locking, cleanup, manifest discovery, and aggregate
-  publication. `runFromConfig` filters out auto-build projects.
+- `src/project/report-worker-pool.ts` owns bounded index-claim loops and
+  indexed outcomes. `src/runner.ts` owns one browser/report root and holds the
+  root lock through settlement and publication; `runFromConfig` uses saved count.
 - `src/project/project-workflow.ts` contains the direct report workflow and
   the separate login/job/trigger auto-build workflow.
 - `src/project/auto-build-runner.ts` owns one-project auto-build execution,
@@ -206,11 +207,12 @@ flowchart LR
 
 ### Schema-v1 file mode
 
-The root object has `schemaVersion: 1`, `projects`, and optional `defaults`.
+The root object has `schemaVersion: 1`, `projects`, optional `defaults`, and
+optional top-level `reportWorkers` (integer 1–4; omission defaults to 1). It
+sets concurrency for one report batch only; nested placements are rejected.
 There must be one to 50 projects and at least one enabled entry. Each project
-requires a unique safe ID, display name, exact Jenkins `loginUrl`, and exact
-Jenkins `jobUrl`; it may also set project-only `runType`.
-Login and job URLs must share one canonical Jenkins origin and base context.
+requires a unique safe ID, display name, exact Jenkins `loginUrl` and `jobUrl`
+on the same canonical Jenkins origin and base context.
 
 The runtime command receives the JSON path explicitly:
 
@@ -574,6 +576,34 @@ SecretStore snapshot and merges it over the supplied base environment without
 mutating `process.env`. It passes that `runtimeEnvironment` to both report and
 auto-build executors. Control logs, warnings, errors, and auto-build result
 URLs are redacted with all non-empty stored values before persistence.
+
+### Bounded report execution (Phase 01)
+
+The optional top-level `reportWorkers` in `ProjectConfigDocumentV1` accepts an
+integer from 1 through 4; omission defaults to 1. `ConfigStore` validates and
+saves it with the document through the existing read/write and ETag flow. The
+setting applies to a report batch, not per project.
+
+`loadProjectConfigWithDocument` reads the JSON once and returns the validated
+document with normalized projects; `loadProjectConfig` retains its existing
+normalized-array contract. `runFromConfig` selects report projects and forwards
+the saved count. Direct `runConfiguredProjects` callers may set `workerCount`,
+which is validated before artifact initialization or browser launch.
+
+The runner starts `min(workerCount, selected projects)` fixed in-process loops
+against one browser. Every project gets a fresh context and its own absolute
+workflow deadline. Indexed outcomes preserve configuration order; a rejected
+project becomes failed/unallocated while its worker continues with queued work.
+All loops settle before browser close. The root lock remains held through
+workers, close, cleanup, manifest discovery, and aggregate publication.
+Duplicate direct-call project IDs fail before artifact or browser side effects.
+Auto-build behavior is unchanged.
+
+The Control Server still permits one active run. Forwarding the saved count to
+control report execution belongs to Phase 02; Phase 01 does not create parallel
+control runs or promise a throughput gain. See the
+[implementation plan](../plans/260923-1402-parallel-report-workers/plan.md).
+
 
 ### Template Server (`npm run serve:templates`)
 

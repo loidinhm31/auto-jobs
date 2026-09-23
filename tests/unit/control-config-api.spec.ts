@@ -164,4 +164,68 @@ test.describe('Control Config API', () => {
 
     expect(putRes.status()).toBe(403);
   });
+
+  test('PUT /api/config?name= persists reportWorkers and round-trips through GET with updated ETag', async ({ request }) => {
+    const getRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const initial = await getRes.json();
+
+    const updatedDoc = {
+      ...initial.document,
+      reportWorkers: 3,
+    };
+
+    const parsedServerUrl = new URL(serverUrl);
+    const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+    const putRes = await request.put(`${serverUrl}api/config?name=default.json`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'if-match': initial.etag,
+        'content-type': 'application/json',
+      },
+      data: updatedDoc,
+    });
+
+    expect(putRes.status()).toBe(200);
+    const putBody = await putRes.json();
+    expect(putBody.document.reportWorkers).toBe(3);
+    expect(putBody.etag).not.toBe(initial.etag);
+
+    // Verify GET round-trip
+    const secondGet = await request.get(`${serverUrl}api/config?name=default.json`);
+    const secondBody = await secondGet.json();
+    expect(secondBody.document.reportWorkers).toBe(3);
+    expect(secondBody.etag).toBe(putBody.etag);
+
+    // Verify on disk
+    const onDisk = JSON.parse(fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8'));
+    expect(onDisk.reportWorkers).toBe(3);
+  });
+
+  test('PUT /api/config?name= rejects invalid reportWorkers with 422 SCHEMA_ERROR', async ({ request }) => {
+    const getRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const initial = await getRes.json();
+
+    const parsedServerUrl = new URL(serverUrl);
+    const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+    const putRes = await request.put(`${serverUrl}api/config?name=default.json`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'if-match': initial.etag,
+        'content-type': 'application/json',
+      },
+      data: {
+        ...initial.document,
+        reportWorkers: 5,
+      },
+    });
+
+    expect(putRes.status()).toBe(422);
+    const body = await putRes.json();
+    expect(body.error.code).toBe('SCHEMA_ERROR');
+    expect(body.error.message).toContain('reportWorkers');
+  });
 });

@@ -11,7 +11,7 @@ import type { CaptureResult } from '../../src/project/project-runner.js';
 import { runProject } from '../../src/project/project-runner.js';
 import type { ProjectWorkflow } from '../../src/project/project-workflow.js';
 import { WorkflowDeadline, withWorkflowDeadlineAndLateResource } from '../../src/workflow/workflow-deadline.js';
-import { launchOptions, runConfiguredProjects, runFromConfig } from '../../src/runner.js';
+import { launchOptions, runConfiguredProjects, runFromConfig, type RunnerDependencies } from '../../src/runner.js';
 
 function projectFile(root: string): string {
   const filePath = path.join(root, 'projects.json');
@@ -326,6 +326,62 @@ test('runFromConfig executes report projects only and excludes auto-build projec
 
     expect(executedProjectIds).toEqual(['report-proj']);
     expect(result.outcomes.map((o) => o.projectId)).toEqual(['report-proj']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runFromConfig forwards saved reportWorkers and ignores caller-supplied workerCount override', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-jobs-report-workers-'));
+  const environment = {
+    A_USER: 'user-a',
+    A_PASSWORD: 'secret-password-a',
+    B_USER: 'user-b',
+    B_PASSWORD: 'secret-password-b',
+  };
+  try {
+    const filePath = path.join(root, 'projects.json');
+    fs.writeFileSync(filePath, JSON.stringify({
+      schemaVersion: 1,
+      reportWorkers: 2,
+      defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
+      projects: [
+        { id: 'proj-a', name: 'Proj A', runType: 'report', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/proj-a/', credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
+        { id: 'proj-b', name: 'Proj B', runType: 'report', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/proj-b/', credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
+      ],
+    }), { mode: 0o600 });
+
+    let activeWorkers = 0;
+    let maxActiveWorkers = 0;
+    let resolveA: () => void = () => undefined;
+    const promiseA = new Promise<void>((resolve) => { resolveA = resolve; });
+
+    const options: RunnerDependencies = {
+      workerCount: 1, // Caller tries to override with 1, but saved document has 2
+      launchBrowser: async () => fakeBrowser(),
+      executeProject: async (project) => {
+        activeWorkers += 1;
+        if (activeWorkers > maxActiveWorkers) maxActiveWorkers = activeWorkers;
+        if (project.id === 'proj-a') {
+          await promiseA;
+        } else if (project.id === 'proj-b') {
+          resolveA(); // Release A when B starts concurrently
+        }
+        activeWorkers -= 1;
+        return {
+          projectId: project.id,
+          name: project.name,
+          state: 'success',
+          runId: `run-${project.id}`,
+          warnings: [],
+        };
+      },
+    };
+
+    const result = await runFromConfig(filePath, environment, options);
+
+    expect(maxActiveWorkers).toBe(2);
+    expect(result.outcomes.map((o) => o.projectId)).toEqual(['proj-a', 'proj-b']);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

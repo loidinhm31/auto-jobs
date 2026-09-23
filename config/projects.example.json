@@ -18,9 +18,15 @@
       "loginUrl": "https://jenkins.example.invalid/jenkins/login",
       "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
       "sourceOrigins": {
-        "jenkins": ["https://jenkins.example.invalid"],
-        "snyk": ["https://snyk.example.invalid"],
-        "sonarqube": ["https://sonarqube.example.invalid"]
+        "jenkins": [
+          "https://jenkins.example.invalid"
+        ],
+        "snyk": [
+          "https://snyk.example.invalid"
+        ],
+        "sonarqube": [
+          "https://sonarqube.example.invalid"
+        ]
       }
     },
     {
@@ -35,10 +41,24 @@
         "passwordVariable": "SERVICE_B_JENKINS_PASSWORD"
       },
       "sourceOrigins": {
-        "jenkins": ["https://jenkins.example.invalid"],
-        "snyk": ["https://snyk.example.invalid"],
-        "sonarqube": ["https://sonarqube.example.invalid"]
+        "jenkins": [
+          "https://jenkins.example.invalid"
+        ],
+        "snyk": [
+          "https://snyk.example.invalid"
+        ],
+        "sonarqube": [
+          "https://sonarqube.example.invalid"
+        ]
       }
+    },
+    {
+      "id": "new-project",
+      "name": "New Project",
+      "loginUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
+      "runType": "report",
+      "enabled": false
     }
   ]
 }

@@ -159,11 +159,26 @@ export function normalizeProjectConfigDocument(
   return normalizeDocument(assertProjectConfigDocument(document), env, validateSecrets);
 }
 
+export interface LoadedProjectConfigDocument {
+  readonly document: ProjectConfigDocumentV1;
+  readonly projects: readonly NormalizedProjectConfig[];
+}
+
+export function loadProjectConfigWithDocument(
+  filePath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  validateSecrets = false,
+): LoadedProjectConfigDocument {
+  assertNoLegacyEnvironmentInputs(env);
+  const document = readDocument(filePath);
+  const projects = normalizeDocument(document, env, validateSecrets);
+  return { document, projects };
+}
+
 export function loadProjectConfig(
   filePath: string,
   env: NodeJS.ProcessEnv = process.env,
   validateSecrets = false,
 ): readonly NormalizedProjectConfig[] {
-  assertNoLegacyEnvironmentInputs(env);
-  return normalizeDocument(readDocument(filePath), env, validateSecrets);
+  return loadProjectConfigWithDocument(filePath, env, validateSecrets).projects;
 }

@@ -38,6 +38,13 @@ Jenkins origin and base context. `baseUrl`, `jobPath`, `loginPath`,
 `triggerMode`, `buildNumber`, `captureFrom`, and other legacy structural keys
 are not accepted.
 
+`reportWorkers` is an optional top-level field for the whole report batch. It
+must be an integer from 1 through 4; omission means 1. It is not accepted under
+`defaults` or a project, and schema-v1 remains unchanged. `ConfigStore` validates
+the field with the document on read and write, so it follows the existing Save
+and ETag flow.
+
+
 `enabled: false` retains an entry without executing it. Optional project and
 `defaults` fields cover `timeoutMs`, `browser`, `artifactDir`, selectors,
 origin policy, credential references, and source settings for `snyk` and
@@ -154,7 +161,7 @@ per-run and does not mutate the caller environment or `process.env`.
 
 ```json
 {
-  "schemaVersion": 1,
+  "reportWorkers": 2,
   "defaults": {
     "credentials": {
       "usernameVariable": "JENKINS_USERNAME",
@@ -306,10 +313,14 @@ within the Jenkins base context or an explicitly allowed origin. Credential-
 like query keys/values, traversal, unsafe selectors, URL fragments, duplicate
 IDs, and invalid project identities are rejected.
 
-The loader validates the JSON before a browser is launched. A file is a
-regular JSON file no larger than 1 MiB. Timeouts, origins, selectors, artifact
-identities, and report data are bounded. Enabled projects must share one
-browser and one global `artifactDir` for the sequential runner.
+The loader validates the JSON before browser launch. The report CLI uses
+`loadProjectConfigWithDocument` to read the file once and retain both the
+validated document and normalized projects; `loadProjectConfig` keeps its
+normalized-array return contract. A file is a regular JSON file no larger than
+1 MiB. Timeouts, origins, selectors, artifact identities, and report data are
+bounded. Projects selected for one report batch share a browser and an
+`artifactDir`.
+
 
 ## Execution and output
 
@@ -348,18 +359,30 @@ data includes the direct schema-3 state and bounded diagnostics; persistence
 uses a bounded fallback after the workflow deadline and records a warning if
 both persistence attempts fail.
 
-## Sequential and mode boundaries
+## Bounded report pool and mode boundaries
 
-Enabled report projects run one at a time through one browser process, with a
-fresh Playwright context and one absolute workflow deadline per project. Each
-project authenticates through its exact `loginUrl`, opens its exact `jobUrl`,
-discovers publisher destinations once, and captures the configured Snyk and
-SonarQube evidence. There is no job search, trigger, queue/build correlation,
-terminal polling, or build-number path in this report workflow.
+`runFromConfig` reads the validated document and normalized projects together,
+selects enabled `report` projects, and passes the saved `reportWorkers` value
+to the runner. Omission means one worker. The count applies to the whole batch:
+the runner starts `min(reportWorkers, selected projects)` fixed in-process
+loops, with one browser and a fresh Playwright context plus absolute workflow
+deadline per project. Direct `runConfiguredProjects` callers may instead pass
+`workerCount`; the same 1–4 policy is checked before artifact initialization
+or browser launch.
 
-`runFromConfig` calls `selectReportProjects` before `runConfiguredProjects`, so
+Workers claim the next project index synchronously and store outcomes in the
+matching slot, so aggregate order remains the selected configuration order
+regardless of completion order. A project rejection is recorded as a
+failed/unallocated outcome; its worker continues with queued projects, and all
+loops settle before the browser closes. One report-root lock remains held
+through worker settlement, browser close, cleanup, manifest discovery, and
+aggregate publication.
+
+`runFromConfig` calls `selectReportProjects` before the runner, so
 `npm run report` never invokes an auto-build project even when both modes are
-present in the same file.
+present in the same file. Control-run forwarding of the saved count belongs to
+Phase 02; Phase 01 enables document persistence and direct CLI execution.
+
 
 ### Explicit auto-build execution
 

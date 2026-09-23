@@ -58,6 +58,9 @@ Deterministic template tests use local fixtures; no live Jenkins run is claimed.
   `localStorage` (`jenkins_control_active_config`) and URL (`?config=<name>`).
   Precedence: valid URL candidate > valid stored candidate > first available config.
   The hook result no longer exposes `setActiveConfigName`.
+- Bounded report-worker Phase 01: optional top-level `reportWorkers` (integer
+  1–4, default 1), one-read direct CLI loading, and a fixed in-process report
+  pool with indexed outcomes and per-project failure isolation.
 - Repomix inventory refreshed for this summary; ignored and binary files remain
   outside the compaction.
 
@@ -67,8 +70,9 @@ Deterministic template tests use local fixtures; no live Jenkins run is claimed.
 | --- | --- |
 | `scripts/run-report.mjs` | Builds the report launcher and invokes the report CLI. |
 | `src/cli.ts` | Parses the explicit `--config` path and reports project outcomes. |
-| `src/config.ts` | Public configuration exports, types, validation, normalization, and mode-selection helpers. |
-| `src/runner.ts` | Sequential multi-project report execution and aggregate publication. |
+| `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and mode-selection helpers. |
+| `src/runner.ts` | Saved-count report dispatch, bounded multi-project execution, and aggregate publication. |
+| `src/project/report-worker-pool.ts` | Fixed in-process loops with indexed outcomes and per-project failure isolation. |
 | `src/project/auto-build-runner.ts` | Explicit one-project auto-build API; not a CLI entry point. |
 | `src/jenkins/build-trigger.ts` | Exact build-page/form validation and one guarded POST. |
 | `src/templates/template-report-fixture.ts` | Public fixture facade, HTTP server exports, and template project document builder. |
@@ -97,7 +101,9 @@ Useful package scripts include `typecheck`, `build` (compiles TypeScript, bundle
 
 Configuration is one schema-v1 JSON document passed through `--config`. The
 loader validates the document before browser launch, rejects unknown keys and
-unsafe values, then returns frozen normalized projects.
+unsafe values, and exposes both the validated document and normalized projects
+through `loadProjectConfigWithDocument`; the existing `loadProjectConfig`
+continues to return normalized projects.
 
 Each project requires a safe `id`, display `name`, exact credential-free
 Jenkins `loginUrl`, and exact credential-free `jobUrl` on one Jenkins origin
@@ -141,12 +147,15 @@ the local template fixture mock server (`http://127.0.0.1:4174`).
 3. Normalize defaults, including `runType: 'report'`, selectors, origins, and
    absolute artifact roots.
 4. Select enabled report projects with `selectReportProjects`.
-5. Launch one configured browser and execute projects in configuration order,
-   using a fresh context and absolute deadline per project.
-6. Authenticate at the exact Jenkins login URL, open the exact job URL, and
+5. Read the document and normalized projects together once; use optional
+   top-level `reportWorkers` (integer 1–4, default 1) for the whole report batch.
+6. Launch one configured browser and start `min(reportWorkers, selected
+   projects)` fixed in-process loops, each using a fresh context and absolute
+   deadline. Store outcomes by configuration index and continue after failures.
+7. Authenticate at the exact Jenkins login URL, open the exact job URL, and
    discover allowed Snyk/SonarQube destinations.
-7. Normalize bounded evidence and publish per-run artifacts plus an aggregate
-   index. A project failure is retained so later projects can continue.
+8. Normalize bounded evidence and publish per-run artifacts plus an aggregate
+   index. Keep the report-root lock through worker settlement and publication.
 
 The report path never searches jobs, opens a build page, submits a build form,
 inspects queues/build identities, polls terminal status, or accepts a

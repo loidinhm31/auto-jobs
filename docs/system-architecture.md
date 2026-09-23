@@ -102,7 +102,7 @@ defaults or environment configuration. `enabled: false` always wins.
 
 | Caller boundary | Input | Executor | Output/side effect |
 | --- | --- | --- | --- |
-| `selectReportProjects(projects)` | normalized config | `runFromConfig` → `runConfiguredProjects` | sequential report outcomes and aggregate artifacts |
+| `selectReportProjects(projects)` | normalized config | `runFromConfig` → `runConfiguredProjects` | bounded report outcomes and aggregate artifacts |
 | `selectAutoBuildProject(projects, projectId)` | normalized config plus exact ID | `runAutoBuildProject` | one build outcome; no report artifacts |
 
 `selectReportProjects` returns all enabled report projects and fails when none
@@ -119,7 +119,8 @@ flowchart LR
   Validate --> Normalize[Frozen normalized projects]
   Normalize --> ReportSelect[selectReportProjects]
   ReportSelect --> Browser[One configured browser]
-  Browser --> Context[Fresh context per project]
+  Browser --> WorkerPool[At most four report workers]
+  WorkerPool --> Context[Fresh context and deadline per project]
   Context --> Login[submitJenkinsLogin]
   Login --> Job[openJenkinsJob exact jobUrl]
   Job --> Discover[Publisher link discovery]
@@ -130,11 +131,17 @@ flowchart LR
   Publish --> Aggregate[Aggregate index and data]
 ```
 
-`src/runner.ts` keeps selected projects in configuration order, continues after
-an individual failure, and publishes one aggregate. The report path owns the
-artifact root lock, staging/report paths, manifests, cleanup, and aggregate
-recovery. A fresh Playwright context and one project-local absolute deadline
-is used for each report project while the browser process is shared.
+`loadProjectConfigWithDocument` reads and validates one file, returning the
+document with normalized projects; `loadProjectConfig` keeps its
+normalized-array contract. `runFromConfig` uses the document's top-level
+`reportWorkers` for file-mode reports (default one, maximum four). The pool
+claims project indices synchronously and stores outcomes in matching slots,
+preserving selected configuration order while continuing after project
+failures. Each project receives a fresh context and deadline in one browser.
+The report-root lock spans recovery, worker settlement, browser close, cleanup,
+manifest discovery, and aggregate publication. Direct worker-count values are
+validated before artifact initialization or browser launch. Control execution
+still uses the default count; forwarding its saved value is Phase 02.
 
 ## Auto-build data flow
 

@@ -2,7 +2,21 @@
 
 Last updated: 2026-09-23  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
-Active initiative: [Control Active Config Persistence & Form Builder](../plans/260923-0837-control-active-config-form-builder/plan.md)
+Active initiative: [Bounded Parallel Report Workers](../plans/260923-1402-parallel-report-workers/plan.md)
+
+## Bounded parallel report workers
+
+Plan: [Bounded Parallel Report Workers](../plans/260923-1402-parallel-report-workers/plan.md)
+
+**Overall status:** In progress · **37.5%** (3.0 of 8.0 planned hours; 1 of 3 phases complete; 2026-09-23).
+
+| Phase | Status | Progress | Effort | Evidence/detail |
+|---|---|---:|---:|---|
+| 1. Bounded report execution and saved config | **DONE** | **100%** | 3h | Completed 2026-09-23; schema-v1 document-scoped `reportWorkers`, single-read CLI loader, bounded execution, ordered outcomes and failure isolation. Review: 40/40 focused tests, 353/353 unit tests, typecheck clean; see [phase](../plans/260923-1402-parallel-report-workers/phase-01-bounded-report-execution.md) and [review](../plans/reports/code-review-260923-1924-phase-01-bounded-report-execution.md). |
+| 2. Control run contract | **PENDING** | 0% | 2h | Reject request-level worker overrides; derive count only from ETag-verified document. |
+| 3. Dashboard and integration verification | **PENDING** | 0% | 3h | Saved-document selector and UI/API/CLI integration/release audit. |
+
+Review note: code review flagged `new-project` in the example config; Main confirmed this is pre-existing user-modified state, and the file was preserved unchanged.
 
 ## Control Page React Refactor status
 
@@ -98,6 +112,9 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 
 ### 0.1.0 (development) — 2026-09-23
 
+- Completed Phase 01 of Bounded Parallel Report Workers on 2026-09-23 ([phase plan](../plans/260923-1402-parallel-report-workers/phase-01-bounded-report-execution.md)); added the schema-v1 document worker bound, single-read CLI loading and bounded report execution.
+- Phase 01 evidence: focused unit specs passed 40/40, full unit suite passed 353/353, and typecheck reported 0 errors; code review scored 9/10 with no critical issues.
+- Review follow-up resolved: code review flagged `new-project` in the example config; Main confirmed it is pre-existing user-modified state and it was left untouched.
 - Completed Phase 01 (Active Configuration Persistence) of the Control Active Config Persistence & Form Builder plan ([phase plan](../plans/260923-0837-control-active-config-form-builder/phase-01-active-config-persistence.md)).
 - Restores selection by valid URL query, then valid localStorage name, then first available config; stores only the selected filename and retains unrelated URL state.
 - Focused Phase 01 unit spec passed 27/27 tests; TypeScript typecheck reported 0 errors.

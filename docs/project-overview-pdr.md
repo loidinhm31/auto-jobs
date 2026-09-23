@@ -102,6 +102,9 @@ and failure semantics are validated before side effects.
 - Treat `enabled: false` as an unconditional execution gate.
 - Validate selectors, source origins, paths, identities, timeouts, and
   credential-variable references before browser launch.
+- Accept optional top-level `reportWorkers` for the complete report batch:
+  integer 1–4, default 1, saved with the schema-v1 document through the
+  existing ConfigStore validation and ETag flow.
 
 ### FR-2: Mode selection
 
@@ -110,14 +113,21 @@ and failure semantics are validated before side effects.
 - `selectAutoBuildProject(projects, projectId)` requires one exact non-empty ID,
   an enabled project, and normalized `runType: 'auto-build'`.
 - Selection helpers are pure and cannot submit a request.
-- `runFromConfig` passes only report projects to the sequential report runner.
+- `runFromConfig` passes only report projects to the bounded report runner.
 
 ### FR-3: Report execution
 
-- Use one configured browser and a fresh context per selected project.
-- Execute in configuration order and continue after an individual failure.
+- Use one configured browser and a fresh context plus absolute deadline per
+  selected project.
+- Apply `reportWorkers` to the batch: run at most `min(count, selected projects)`
+  at once using fixed in-process loops; direct runner counts are validated
+  before artifact initialization or browser launch.
+- Preserve selected configuration order in outcomes and continue queued work
+  after an individual project failure.
 - Authenticate through exact Jenkins login, open exact `jobUrl`, discover
   allowed publisher links once, and capture bounded Snyk/SonarQube evidence.
+- Hold the report-root lock through worker settlement, browser close, final
+  cleanup, manifest discovery, and aggregate publication.
 - Stage, validate, and publish immutable per-run artifacts and an aggregate.
 
 ### FR-4: Auto-build execution

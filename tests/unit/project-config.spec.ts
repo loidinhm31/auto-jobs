@@ -5,13 +5,17 @@ import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import {
+  DEFAULT_REPORT_WORKERS,
+  MAX_REPORT_WORKERS,
   assertAllowedUrl,
   assertProjectConfigDocument,
   canonicalizeBaseUrl,
   canonicalizeOrigin,
   deriveJenkinsBaseUrl,
   loadProjectConfig,
+  loadProjectConfigWithDocument,
   normalizeConfiguredUrl,
+  normalizeReportWorkerCount,
   resolveProjectSecrets,
   resolveSafeRelativeUrl,
 } from '../../src/config.js';
@@ -94,7 +98,7 @@ test('loads the committed two-project example with runtime-only secret values', 
     SERVICE_B_JENKINS_USERNAME: 'fixture-user-b',
     SERVICE_B_JENKINS_PASSWORD: 'fixture-password-b',
   });
-  expect(projects.map((project) => project.id)).toEqual(['service-a', 'service-b']);
+  expect(projects.map((project) => project.id)).toEqual(['service-a', 'service-b', 'new-project']);
   expect(projects.every((project) => Object.isFrozen(project))).toBe(true);
   expect(projects[0]?.sources.snyk.projectId).toBeUndefined();
   expect(projects[0]?.sources.sonarqube.projectId).toBeUndefined();
@@ -254,4 +258,69 @@ test('canonicalizes origins and contains relative navigation', () => {
     'https://jenkins.example/jenkins',
     ['https://sonar.example'],
   )).toThrow(/configured origins/u);
+});
+
+test('normalizeReportWorkerCount enforces integer 1-4 and default 1', () => {
+  expect(DEFAULT_REPORT_WORKERS).toBe(1);
+  expect(MAX_REPORT_WORKERS).toBe(4);
+  expect(normalizeReportWorkerCount(undefined)).toBe(1);
+  expect(normalizeReportWorkerCount(1)).toBe(1);
+  expect(normalizeReportWorkerCount(2)).toBe(2);
+  expect(normalizeReportWorkerCount(3)).toBe(3);
+  expect(normalizeReportWorkerCount(4)).toBe(4);
+
+  for (const invalid of [0, 5, -1, 10, 1.5, NaN, Infinity, -Infinity]) {
+    expect(() => normalizeReportWorkerCount(invalid)).toThrow(RangeError);
+  }
+  for (const invalid of [null, '2', false, true, [], {}]) {
+    expect(() => normalizeReportWorkerCount(invalid)).toThrow(RangeError);
+  }
+});
+
+test('assertProjectConfigDocument validates top-level reportWorkers and rejects invalid or misplaced locations', () => {
+  const base = validDocument();
+  expect(assertProjectConfigDocument({ ...base, reportWorkers: 1 }).reportWorkers).toBe(1);
+  expect(assertProjectConfigDocument({ ...base, reportWorkers: 4 }).reportWorkers).toBe(4);
+  expect(assertProjectConfigDocument(base).reportWorkers).toBeUndefined();
+
+  for (const invalid of [0, 5, -1, 1.5, '2', null, false, [], {}]) {
+    expect(() => assertProjectConfigDocument({ ...base, reportWorkers: invalid })).toThrow(
+      /config\.reportWorkers/u,
+    );
+  }
+
+  expect(() => assertProjectConfigDocument({
+    ...base,
+    defaults: { ...base.defaults, reportWorkers: 2 } as unknown as typeof base.defaults,
+  })).toThrow(/defaults\.reportWorkers is not supported/u);
+
+  expect(() => assertProjectConfigDocument({
+    ...base,
+    projects: [{ ...base.projects[0], reportWorkers: 2 }] as unknown as typeof base.projects,
+  })).toThrow(/projects\[0\]\.reportWorkers is not supported/u);
+});
+
+test('loadProjectConfigWithDocument loads document and projects in one read with parity to loadProjectConfig', () => {
+  const base = { ...validDocument(), reportWorkers: 3 };
+  const filePath = writeConfig(base);
+  try {
+    const withDoc = loadProjectConfigWithDocument(filePath);
+    const projectsOnly = loadProjectConfig(filePath);
+    expect(withDoc.document.reportWorkers).toBe(3);
+    expect(withDoc.projects).toEqual(projectsOnly);
+  } finally {
+    fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
+  }
+});
+
+test('old schema-v1 JSON without reportWorkers continues to validate and load with default', () => {
+  const base = validDocument();
+  const filePath = writeConfig(base);
+  try {
+    const withDoc = loadProjectConfigWithDocument(filePath);
+    expect(withDoc.document.reportWorkers).toBeUndefined();
+    expect(normalizeReportWorkerCount(withDoc.document.reportWorkers)).toBe(1);
+  } finally {
+    fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
+  }
 });

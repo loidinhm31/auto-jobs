@@ -83,7 +83,7 @@ async function readStylesheet(deadline?: WorkflowDeadline): Promise<string> {
   return stylesheet;
 }
 
-async function ensureStylesheet(reportRoot: string, deadline?: WorkflowDeadline): Promise<void> {
+export async function ensureStylesheet(reportRoot: string, deadline?: WorkflowDeadline): Promise<void> {
   requireDeadline(deadline);
   const assets = path.join(reportRoot, 'assets');
   await bounded(() => fsp.mkdir(assets, { recursive: true, mode: 0o700 }), deadline);
@@ -94,11 +94,20 @@ async function ensureStylesheet(reportRoot: string, deadline?: WorkflowDeadline)
   try {
     const existing = await bounded(() => fsp.lstat(filename), deadline);
     if (existing.isSymbolicLink() || !existing.isFile()) throw new Error('Report stylesheet is unsafe');
+    return;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   requireDeadline(deadline);
-  await writeAtomic(filename, await readStylesheet(deadline), true, deadline);
+  try {
+    await writeAtomic(filename, await readStylesheet(deadline), true, deadline);
+  } catch (error) {
+    const existing = await bounded(() => fsp.lstat(filename), deadline).catch(() => undefined);
+    if (existing?.isFile() && !existing.isSymbolicLink()) {
+      return;
+    }
+    throw error;
+  }
 }
 
 function defaultReportRoot(directory: string): string {

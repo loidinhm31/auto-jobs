@@ -17,6 +17,7 @@ export const ROOT_KEYS: Record<string, true> = {
   schemaVersion: true,
   projects: true,
   defaults: true,
+  reportWorkers: true,
 };
 
 export const PROJECT_KEYS: Record<string, true> = {
