@@ -20,14 +20,14 @@ Active initiative: [Control Active Config Persistence & Form Builder](../plans/2
 
 Plan: [Control Active Config Persistence & Form Builder](../plans/260923-0837-control-active-config-form-builder/plan.md)
 
-**Overall status:** In Progress · **50%** (4.5 of 9.0 planned hours).
+**Overall status:** In Progress · **72%** (6.5 of 9.0 planned hours; Phases 01–03 complete, Phase 04 pending).
 
 | Phase | Status | Progress | Effort | Evidence/detail |
 |---|---|---:|---:|---|
 | 1. Active Configuration Persistence | **COMPLETE** | **100%** | 1.5h | Completed 2026-09-23T09:28:48+07:00; URL/localStorage selection restoration |
 | 2. Config Form Builder Component | **COMPLETE** | **100%** | 3.0h | Completed 2026-09-23; controlled project/default editing with inheritance and preserved schema-supported fields. Focused tests 35/35; typecheck/build passed; browser smoke covered controlled mutations, defaults, valid/invalid raw Apply, dirty JSON, and removal invariants. Code review found no actionable findings. User approved Phase 02; canonical adviser checkpoint was explicitly waived by the user and was not run. |
-| 3. Side-by-side Integration | **PENDING** | **0%** | 2.0h | Responsive workspace and synchronized editors |
-| 4. Verification and Release Audit | **PENDING** | **0%** | 2.5h | Unit/E2E coverage, Axe audit, release gate |
+| 3. Side-by-side Integration | **COMPLETE / DONE** | **100%** | 2.0h | Completed 2026-09-23T12:30:04+07:00; responsive workspace and synchronized editors. `npm run test:control` passed 8/8 after exact `.project-card` heading assertions; typecheck/build passed; desktop/mobile smoke confirmed layout, selectors, synchronization, invalid JSON preservation. |
+| 4. Verification and Release Audit | **PENDING** | **0%** | 2.5h | Durable new browser E2E coverage, Axe audit, and `npm run test:release` remain pending. |
 
 Phase 01 validation: 27/27 focused unit tests passed and TypeScript typecheck reported 0 errors ([review report](../plans/reports/code-review-260923-0918-phase-01-active-config-persistence.md)). Non-blocking review follow-up: browser-context tests do not invoke the exported browser helpers directly.
 
@@ -101,9 +101,12 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Completed Phase 01 (Active Configuration Persistence) of the Control Active Config Persistence & Form Builder plan ([phase plan](../plans/260923-0837-control-active-config-form-builder/phase-01-active-config-persistence.md)).
 - Restores selection by valid URL query, then valid localStorage name, then first available config; stores only the selected filename and retains unrelated URL state.
 - Focused Phase 01 unit spec passed 27/27 tests; TypeScript typecheck reported 0 errors.
-- Completed Phase 02 (Config Form Builder Component) of the Control Active Config Persistence & Form Builder plan ([phase plan](../plans/260923-0837-control-active-config-form-builder/phase-02-config-form-builder-component.md)); Phase 03 integration and Phase 04 release audit remain pending.
+- Completed Phase 02 (Config Form Builder Component) of the Control Active Config Persistence & Form Builder plan ([phase plan](../plans/260923-0837-control-active-config-form-builder/phase-02-config-form-builder-component.md)); Phase 03 integration is complete and Phase 04 release audit remains pending.
 - Focused Phase 02 tests passed 35/35; typecheck and build passed. Browser smoke exercised controlled mutations, inheritance, defaults, valid/invalid raw Apply, dirty JSON, and project-removal invariants; code review found no actionable findings.
 - Phase 02 was user-approved; the canonical adviser checkpoint was explicitly waived by the user and was not run.
+- Completed Phase 03 (Side-by-side Integration) at `2026-09-23T12:30:04+07:00` ([phase plan](../plans/260923-0837-control-active-config-form-builder/phase-03-side-by-side-integration.md)); the builder and raw JSON editor share a responsive workspace and synchronized document state.
+- Phase 03 validation: `npm run test:control` passed 8/8 after exact `.project-card` heading assertions; typecheck/build passed; manual desktop/mobile browser smoke confirmed layout, selectors, synchronization, and invalid JSON preservation.
+- Phase 04 remains pending and owns durable new browser E2E coverage, Axe scans, and `npm run test:release`; none are claimed as complete or passed.
 
 ### 0.1.0 (development) — 2026-09-06
 

@@ -8,6 +8,7 @@ import { StatusBanner } from '../components/atoms/StatusBanner.js';
 import { HeaderBar } from '../components/organisms/HeaderBar.js';
 import { ProjectsGrid } from '../components/organisms/ProjectsGrid.js';
 import { RawJsonSection } from '../components/organisms/RawJsonSection.js';
+import { ConfigFormBuilder } from '../components/organisms/ConfigFormBuilder.js';
 import { ExecutionSection } from '../components/organisms/ExecutionSection.js';
 import { RunStatusCard } from '../components/organisms/RunStatusCard.js';
 import { BuildConfirmDialog } from '../components/organisms/BuildConfirmDialog.js';
@@ -26,6 +27,11 @@ export function DashboardPage() {
     isLoading: isConfigLoading,
     banner,
     jsonValidationMsg,
+    validationErrors,
+    updateProjectAt,
+    addProject,
+    removeProjectAt,
+    updateDefaults,
     loadConfigList,
     loadConfig,
     reloadConfig,
@@ -166,6 +172,16 @@ export function DashboardPage() {
           onToggleEnabled={handleToggleEnabled}
           onChangeRunType={handleChangeRunType}
           onTriggerBuild={handleOpenAutoBuildConfirm}
+        />
+      }
+      formBuilderSection={
+        <ConfigFormBuilder
+          document={currentDoc}
+          validationErrors={validationErrors}
+          onAddProject={addProject}
+          onUpdateProject={updateProjectAt}
+          onRemoveProject={removeProjectAt}
+          onUpdateDefaults={updateDefaults}
         />
       }
       rawJsonSection={

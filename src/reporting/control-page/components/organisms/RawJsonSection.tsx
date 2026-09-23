@@ -27,7 +27,7 @@ export function RawJsonSection({
   }, [rawJson]);
 
   return (
-    <details id="json-editor-details" className={cn('group', className)}>
+    <details id="json-editor-details" className={cn('group', className)} open>
       <summary
         id="section-editor-title"
         className="cursor-pointer font-bold text-slate-800 hover:text-slate-950 py-1"

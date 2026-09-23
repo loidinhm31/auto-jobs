@@ -9,7 +9,7 @@
 - [Existing E2E DOM contract](../../tests/e2e/control-page.spec.ts)
 
 ## Overview
-**Priority:** P2 · **Status:** Pending · **Estimate:** 2h. Place the structured builder and existing raw JSON editor in one responsive workspace. Preserve the old document controls and use one document state for both surfaces.
+**Priority:** P2 · **Status:** COMPLETE / DONE · Completed `2026-09-23T12:30:04+07:00` · **Estimate:** 2h. The structured builder and existing raw JSON editor share one responsive workspace and document state.
 
 ## Key Insights
 - `DashboardLayout` already owns the main dashboard sections; `DashboardPage` supplies `rawJsonSection` as a React node. `RawJsonSection` owns `#raw-json-textarea`, `#btn-apply-json`, `#json-validation-msg`, and `#section-editor-title`.
@@ -36,7 +36,7 @@ A failed Apply updates only `jsonValidationMsg`; it must not mutate `currentDoc`
 - Modify `src/reporting/control-page/pages/DashboardPage.tsx` — wire the same hook state/actions into builder and JSON editor.
 - Modify `src/reporting/control-page/components/organisms/RawJsonSection.tsx` — keep selectors and accessible editor controls; expose textarea visibly by default.
 - Reuse `src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx` from phase 2.
-- Modify `tests/e2e/control-page.spec.ts` in phase 4 to assert sync, layout, and selectors.
+- Update the existing expectation in `tests/e2e/control-page.spec.ts` to assert exact `.project-card` headings; Phase 04 owns durable new browser coverage for the integrated workflows.
 
 ## Implementation Steps
 1. Extend `DashboardLayoutProps` with required form-builder content; update the sole dashboard caller rather than adding a compatibility alias.
@@ -45,12 +45,19 @@ A failed Apply updates only `jsonValidationMsg`; it must not mutate `currentDoc`
 4. Open `RawJsonSection` by default without renaming/removing its `<details>`, summary ID, textarea ID, Apply ID, or validation message ID.
 5. Verify builder-originated changes serialize once through the document editor, raw Apply commits only after schema validation, and selection changes do not reset unrelated sections or project card behavior.
 
+## Validation Record
+- `npm run test:control`: 8/8 passed after exact `.project-card` heading assertions.
+- Typecheck and build passed.
+- Manual desktop/mobile browser smoke confirmed layout, selectors, synchronization, and invalid JSON preservation.
+- Phase 04 remains pending: durable new browser E2E coverage, Axe scans, and `npm run test:release` are not claimed as complete or passed.
+
+
 ## Todo List
-- [ ] Add the builder slot and two-column grid to `DashboardLayout`.
-- [ ] Wire the builder to the manager-owned document actions in `DashboardPage`.
-- [ ] Make the JSON editor visible by default while preserving its controls and summary.
-- [ ] Confirm form-to-JSON immediate sync and JSON-to-form Apply sync.
-- [ ] Confirm mobile stacking and no existing selector/class removals.
+- [x] Add the builder slot and two-column grid to `DashboardLayout`.
+- [x] Wire the builder to the manager-owned document actions in `DashboardPage`.
+- [x] Make the JSON editor visible by default while preserving its controls and summary.
+- [x] Confirm form-to-JSON immediate sync and JSON-to-form Apply sync.
+- [x] Confirm mobile stacking and no existing selector/class removals.
 
 ## Success Criteria
 - At desktop (`lg` and wider), builder and JSON editor appear side-by-side; below `lg`, they stack with no horizontal overflow.
@@ -63,10 +70,10 @@ A failed Apply updates only `jsonValidationMsg`; it must not mutate `currentDoc`
 - API, save/ETag, project-card, run, credentials, and browser-settings behavior stay owned by their existing components/hooks.
 
 ## Side-Effect Review Checklist
-- [ ] Grid/layout changes only affect presentation and do not re-order lifecycle effects or trigger requests.
-- [ ] Builder edits remain local until Save; Apply validates/commits locally only.
-- [ ] Keep raw Apply explicit; do not auto-apply incomplete JSON on every keystroke.
-- [ ] No form action invokes a run or credentials endpoint.
+- [x] Grid/layout changes only affect presentation and do not re-order lifecycle effects or trigger requests.
+- [x] Builder edits remain local until Save; Apply validates/commits locally only.
+- [x] Keep raw Apply explicit; do not auto-apply incomplete JSON on every keystroke.
+- [x] No form action invokes a run or credentials endpoint.
 
 ## Risk Assessment
 - **Hidden raw editor:** set `details` open initially and verify the textarea is actually visible at desktop and mobile widths.

@@ -655,7 +655,7 @@ The Control Dashboard frontend refactor implements Atomic Design principles, cle
    - The loopback dashboard frontend is 100% React, compiled via Vite into `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, `assets/control-page.js`).
    - `scripts/copy-report-assets.mjs` stages only `report.css`.
 
-### Phase 02 configuration form builder (implementation; Dashboard integration pending)
+### Configuration form builder and Dashboard integration (Phases 02–03)
 
 `ConfigFormBuilder` is a document-controlled organism that composes the
 `ConfigProjectEditor` and `ConfigDefaultsEditor` molecules. The project editor
@@ -674,10 +674,16 @@ boundary in `src/config/project-config-schema.ts`. `useConfigManager` retains
 configuration listing/loading and the existing API save flow, including the
 current ETag in `If-Match` and conflict handling.
 
-`DashboardPage` currently renders `RawJsonSection` and does not mount
-`ConfigFormBuilder`. Side-by-side integration remains Phase 03 work; the new
-organism and its editor state are implemented components/hooks, not a claim
-that the running Dashboard already includes the form.
+`DashboardPage` supplies `ConfigFormBuilder` and `RawJsonSection` to
+`DashboardLayout`; the builder-first grid uses two columns at desktop (`lg`) and
+stacks on mobile. Both are wired to `useConfigManager`: the form receives
+manager-owned document state and mutation actions, while the raw editor receives
+its JSON draft and Apply action. Form mutations update the document and
+regenerate formatted JSON. Raw edits remain a draft until explicit
+**Apply & Validate**; invalid JSON or configuration leaves the current form
+model unchanged. Existing `#raw-json-textarea` and `#config-select` selectors
+remain. This Phase 03 integration does not change configuration APIs, the
+save/ETag (`If-Match`) flow, run behavior, or credential behavior.
 
 ## Test and release boundary
 

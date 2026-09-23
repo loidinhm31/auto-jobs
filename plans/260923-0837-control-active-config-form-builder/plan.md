@@ -12,16 +12,16 @@ created: 2026-09-23
 # Control Active Configuration & Form Builder
 
 ## Overview
-Add client-side active-configuration restoration and a structured editor beside the existing raw JSON editor in `npm run serve:control`. Preserve the schema-v1 document contract, save flow, backend routes, and Playwright DOM selectors; this plan does not implement the feature.
+Add client-side active-configuration restoration and a responsive, schema-valid form editor synchronized with raw JSON in `npm run serve:control`. Preserve the schema-v1 document contract, save flow, backend routes, and Playwright DOM selectors.
 
 ## Phase Progress & Navigation
-**Overall status:** In Progress / **50%** (4.5 of 9.0 planned hours; Phases 01–02 complete, Phases 03–04 pending).
+**Overall status:** In Progress / **72%** (6.5 of 9.0 planned hours; Phases 01–03 complete, Phase 04 pending).
 
 | # | Phase | Status / progress | Effort | Deliverable |
 |---|---|---|---:|---|
 | 1 | [Active configuration persistence](./phase-01-active-config-persistence.md) | Complete / 100% · 2026-09-23T09:28:48+07:00 | 1.5h | URL + localStorage selection restoration |
 | 2 | [Config form builder component](./phase-02-config-form-builder-component.md) | Complete / 100% · 2026-09-23 | 3h | Controlled project and defaults editor |
-| 3 | [Side-by-side integration](./phase-03-side-by-side-integration.md) | Pending / 0% | 2h | Responsive workspace and synchronized editors |
+| 3 | [Side-by-side integration](./phase-03-side-by-side-integration.md) | Complete / 100% · 2026-09-23T12:30:04+07:00 | 2h | Responsive workspace and synchronized editors |
 | 4 | [Verification and release audit](./phase-04-verification-and-release-audit.md) | Pending / 0% | 2.5h | Unit/E2E coverage, Axe audit, release gate |
 
 ## Deliverables and Scope

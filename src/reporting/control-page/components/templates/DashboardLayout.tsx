@@ -4,6 +4,7 @@ export interface DashboardLayoutProps {
   header: React.ReactNode;
   banner?: React.ReactNode;
   projectsSection: React.ReactNode;
+  formBuilderSection: React.ReactNode;
   rawJsonSection: React.ReactNode;
   actionsSection: React.ReactNode;
   runSection: React.ReactNode;
@@ -14,6 +15,7 @@ export function DashboardLayout({
   header,
   banner,
   projectsSection,
+  formBuilderSection,
   rawJsonSection,
   actionsSection,
   runSection,
@@ -47,7 +49,10 @@ export function DashboardLayout({
           aria-labelledby="section-editor-title"
           className="dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm"
         >
-          {rawJsonSection}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {formBuilderSection}
+            {rawJsonSection}
+          </div>
         </section>
 
         <section

@@ -148,8 +148,8 @@ test.describe('Control Page Dashboard E2E', () => {
 
     // Check project cards
     await expect(page.locator('.project-card')).toHaveCount(2);
-    await expect(page.locator('text=Demo Report Service')).toBeVisible();
-    await expect(page.locator('text=Demo Build Service')).toBeVisible();
+    await expect(page.locator('.project-card').getByRole('heading', { name: 'Demo Report Service', exact: true })).toBeVisible();
+    await expect(page.locator('.project-card').getByRole('heading', { name: 'Demo Build Service', exact: true })).toBeVisible();
 
     // Toggle enabled checkbox on first project -> Save button enables
     const saveBtn = page.locator('#btn-save');
