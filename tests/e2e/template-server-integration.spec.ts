@@ -353,6 +353,7 @@ test.describe('Template Server Validation & Integration (Phase 05)', () => {
             name: 'Template Auto Build Service',
             enabled: true,
             runType: 'auto-build' as const,
+            waitForCompletion: false,
             loginUrl: templateServer.fixture.loginUrl,
             jobUrl: templateServer.fixture.jobUrl,
             sourceOrigins: {

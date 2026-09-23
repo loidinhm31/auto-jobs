@@ -5,23 +5,30 @@ import { resolveProjectSecrets } from '../config/project-config-loader.js';
 import type { NormalizedProjectConfig, ProjectSecrets } from '../config/config-types.js';
 import { defaultLaunch, type BrowserLauncher } from '../browser-launcher.js';
 import { executeJenkinsAutoBuildWorkflow, type AutoBuildWorkflowResult } from './project-workflow.js';
+import type { StageViewStage } from '../jenkins/stage-view-types.js';
 import { settleCleanup, WorkflowDeadline } from '../workflow/workflow-deadline.js';
 
 export type AutoBuildOutcomeState =
+  | 'succeeded'
   | 'submitted'
   | 'rejected'
   | 'submission-unknown'
-  | 'failed-before-submit';
+  | 'failed-before-submit'
+  | 'failed'
+  | 'timeout';
 
 export interface AutoBuildRunOutcome {
   readonly projectId: string;
   readonly projectName: string;
   readonly state: AutoBuildOutcomeState;
   readonly jobUrl: string;
-  readonly buildPageUrl?: string;
-  readonly submittedAt?: string;
-  readonly responseStatus?: number;
-  readonly error?: string;
+  readonly buildPageUrl?: string | undefined;
+  readonly buildNumber?: string | undefined;
+  readonly buildResult?: string | undefined;
+  readonly stages?: readonly StageViewStage[] | undefined;
+  readonly submittedAt?: string | undefined;
+  readonly responseStatus?: number | undefined;
+  readonly error?: string | undefined;
   readonly exitCode: 0 | 1;
 }
 
@@ -33,8 +40,14 @@ export interface AutoBuildRunnerDependencies {
     project: NormalizedProjectConfig,
     secrets: ProjectSecrets,
     deadline: WorkflowDeadline,
+    options?: {
+      readonly waitForCompletion?: boolean | undefined;
+      readonly onProgress?: ((message: string) => void) | undefined;
+    } | undefined,
   ) => Promise<AutoBuildWorkflowResult>;
   readonly configureContext?: (context: BrowserContext) => Promise<void>;
+  readonly waitForCompletion?: boolean | undefined;
+  readonly onProgress?: ((message: string) => void) | undefined;
 }
 
 export async function runAutoBuildProject(
@@ -70,30 +83,25 @@ export async function runAutoBuildProject(
 
     const page = await context.newPage();
     const workflow = dependencies.executeWorkflow ?? executeJenkinsAutoBuildWorkflow;
-    const result = await workflow(page, project, secrets, deadline);
+    const result = await workflow(page, project, secrets, deadline, {
+      waitForCompletion: dependencies.waitForCompletion ?? project.waitForCompletion,
+      onProgress: dependencies.onProgress,
+    });
 
-    if (result.state === 'submitted') {
-      return {
-        projectId: project.id,
-        projectName: project.name,
-        state: 'submitted',
-        jobUrl: project.jobUrl,
-        buildPageUrl: result.buildPageUrl,
-        submittedAt: result.submittedAt,
-        ...(result.responseStatus === undefined ? {} : { responseStatus: result.responseStatus }),
-        exitCode: 0,
-      };
-    }
-
+    const isSuccess = result.state === 'succeeded' || result.state === 'submitted';
     return {
       projectId: project.id,
       projectName: project.name,
       state: result.state,
       jobUrl: project.jobUrl,
       buildPageUrl: result.buildPageUrl,
+      buildNumber: result.buildNumber,
+      buildResult: result.buildResult,
+      stages: result.stages,
       submittedAt: result.submittedAt,
       ...(result.responseStatus === undefined ? {} : { responseStatus: result.responseStatus }),
-      exitCode: 1,
+      ...(result.error === undefined ? {} : { error: result.error }),
+      exitCode: isSuccess ? 0 : 1,
     };
   } catch (error) {
     const safeError = formatDiagnostic(error, secretValues);

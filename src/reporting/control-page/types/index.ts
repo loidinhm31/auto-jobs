@@ -19,6 +19,7 @@ export interface ProjectConfigInput {
   loginUrl: string;
   jobUrl: string;
   runType?: RunType;
+  waitForCompletion?: boolean;
   enabled?: boolean;
   timeoutMs?: number;
   browser?: BrowserName;
@@ -75,9 +76,19 @@ export interface RunLogEntry {
   message: string;
 }
 
+export interface RunStageResult {
+  readonly index: number;
+  readonly name: string;
+  readonly status: string;
+  readonly duration?: string;
+}
+
 export interface RunResult {
   reportUrl?: string;
   buildState?: string;
+  buildNumber?: string;
+  buildResult?: string;
+  stages?: readonly RunStageResult[];
   jobUrl?: string;
   buildPageUrl?: string;
   error?: string;
@@ -109,6 +120,7 @@ export interface RunTriggerRequest {
   configEtag: string;
   runType: RunType;
   projectId?: string;
+  waitForCompletion?: boolean;
 }
 
 export interface RunTriggerResponse {

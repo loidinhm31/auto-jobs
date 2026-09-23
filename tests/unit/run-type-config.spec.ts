@@ -150,3 +150,39 @@ test('selectAutoBuildProject rejects missing, disabled, and non-auto-build proje
   expect(() => selectAutoBuildProject(normalized, 'build-disabled')).toThrow(/project 'build-disabled' is disabled/u);
   expect(() => selectAutoBuildProject(normalized, 'report-project')).toThrow(/project 'report-project' is not configured for auto-build/u);
 });
+
+test('normalizes missing waitForCompletion to true by default', () => {
+  const [project] = normalizeProjectConfigDocument(baseDocument(), mockSecrets);
+  expect(project?.waitForCompletion).toBe(true);
+});
+
+test('accepts explicit waitForCompletion boolean in project and defaults', () => {
+  const [projectFalse] = normalizeProjectConfigDocument(baseDocument({ waitForCompletion: false }), mockSecrets);
+  expect(projectFalse?.waitForCompletion).toBe(false);
+
+  const [projectTrue] = normalizeProjectConfigDocument(baseDocument({ waitForCompletion: true }), mockSecrets);
+  expect(projectTrue?.waitForCompletion).toBe(true);
+
+  const docWithDefaults = {
+    ...baseDocument(),
+    defaults: { ...defaultOptions, waitForCompletion: false },
+  };
+  const [projectInherited] = normalizeProjectConfigDocument(docWithDefaults, mockSecrets);
+  expect(projectInherited?.waitForCompletion).toBe(false);
+});
+
+test('rejects non-boolean waitForCompletion in project and defaults', () => {
+  expect(() => assertProjectConfigDocument(baseDocument({ waitForCompletion: 'true' }))).toThrow(
+    /projects\[0\]\.waitForCompletion must be boolean/u,
+  );
+  expect(() => assertProjectConfigDocument(baseDocument({ waitForCompletion: 123 }))).toThrow(
+    /projects\[0\]\.waitForCompletion must be boolean/u,
+  );
+  const docBadDefaults = {
+    ...baseDocument(),
+    defaults: { ...defaultOptions, waitForCompletion: 'invalid' as unknown as boolean },
+  };
+  expect(() => assertProjectConfigDocument(docBadDefaults)).toThrow(
+    /config\.defaults\.waitForCompletion must be boolean/u,
+  );
+});

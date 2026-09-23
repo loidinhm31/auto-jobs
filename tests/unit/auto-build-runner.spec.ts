@@ -168,3 +168,58 @@ test('cleans up context and browser resources even when workflow throws', async 
   expect(contextClosed).toBe(true);
   expect(browserClosed).toBe(true);
 });
+
+test('runs auto-build workflow with waitForCompletion and returns succeeded state with build details', async () => {
+  const { browser } = mockBrowser();
+  const project = autoBuildProject({ waitForCompletion: true });
+  let passedOptions: { waitForCompletion?: boolean | undefined; onProgress?: ((message: string) => void) | undefined } | undefined;
+  const outcome = await runAutoBuildProject(project, {
+    runtimeEnvironment: mockEnv,
+    launchBrowser: async () => browser,
+    executeWorkflow: async (_page, _proj, _sec, _dl, options) => {
+      passedOptions = options;
+      return {
+        state: 'succeeded',
+        jobUrl: project.jobUrl,
+        buildPageUrl: `${project.jobUrl}build`,
+        buildNumber: '#22',
+        buildResult: 'SUCCESS',
+        stages: [{ index: 0, name: 'Build', status: 'SUCCESS', duration: '10s' }],
+        submittedAt: new Date().toISOString(),
+        responseStatus: 302,
+      };
+    },
+  });
+
+  expect(outcome.state).toBe('succeeded');
+  expect(outcome.exitCode).toBe(0);
+  expect(outcome.buildNumber).toBe('#22');
+  expect(outcome.buildResult).toBe('SUCCESS');
+  expect(outcome.stages).toHaveLength(1);
+  expect(passedOptions?.waitForCompletion).toBe(true);
+});
+
+test('runs auto-build workflow with waitForCompletion: false override in dependencies', async () => {
+  const { browser } = mockBrowser();
+  const project = autoBuildProject({ waitForCompletion: true });
+  let passedOptions: { waitForCompletion?: boolean | undefined; onProgress?: ((message: string) => void) | undefined } | undefined;
+  const outcome = await runAutoBuildProject(project, {
+    runtimeEnvironment: mockEnv,
+    launchBrowser: async () => browser,
+    waitForCompletion: false,
+    executeWorkflow: async (_page, _proj, _sec, _dl, options) => {
+      passedOptions = options;
+      return {
+        state: 'submitted',
+        jobUrl: project.jobUrl,
+        buildPageUrl: `${project.jobUrl}build`,
+        submittedAt: new Date().toISOString(),
+        responseStatus: 302,
+      };
+    },
+  });
+
+  expect(outcome.state).toBe('submitted');
+  expect(outcome.exitCode).toBe(0);
+  expect(passedOptions?.waitForCompletion).toBe(false);
+});

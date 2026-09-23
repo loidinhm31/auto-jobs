@@ -112,6 +112,59 @@ test('submits parameterized build when form action carries ?delay=0sec', async (
   }
 });
 
+test('waits for Stage View completion when waitForCompletion: true', async ({ page }) => {
+  let postCount = 0;
+  let jobVisitCount = 0;
+  const { server, baseUrl } = await listen((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/') {
+      jobVisitCount += 1;
+      response.writeHead(200, { 'content-type': 'text/html' });
+      if (jobVisitCount === 1) {
+        response.end(
+          '<div id="side-panel"><a href="/jenkins/job/service-a/build">Build with Parameters</a></div><div id="pipeline-box"><table class="jobsTable"><thead><tr class="header"><th>Build</th></tr></thead><tbody><tr class="job SUCCESS" data-runid="10"><td>#10</td></tr></tbody></table></div>',
+        );
+      } else {
+        response.end(
+          '<div id="side-panel"><a href="/jenkins/job/service-a/build">Build with Parameters</a></div><div id="pipeline-box"><table class="jobsTable"><thead><tr class="header"><th class="stage-start"></th><th>Build</th></tr></thead><tbody><tr class="job SUCCESS" data-runid="11"><td class="stage-start"><div class="cell-box"><div class="jobName"><span class="badge"><a>#11</a></span></div></div></td><td class="stage-cell SUCCESS"><div class="duration">12s</div></td></tr><tr class="job SUCCESS" data-runid="10"><td>#10</td></tr></tbody></table></div>',
+        );
+      }
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/build') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(VALID_FORM);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/jenkins/job/service-a/build') {
+      postCount += 1;
+      response.writeHead(302, { location: '/jenkins/job/service-a/' });
+      response.end();
+      return;
+    }
+    response.writeHead(404);
+    response.end('not found');
+  });
+  try {
+    const config = runnerConfig(baseUrl);
+    await page.goto(`${baseUrl}/job/service-a/`);
+    const progressMessages: string[] = [];
+    const result = await triggerParameterizedBuild(page, config, new WorkflowDeadline(3_000), {
+      waitForCompletion: true,
+      onProgress: (msg) => progressMessages.push(msg),
+    });
+    expect(result.state).toBe('succeeded');
+    expect(result.buildNumber).toBe('#11');
+    expect(result.buildResult).toBe('SUCCESS');
+    expect(result.jobUrl).toBe(config.jobUrl);
+    expect(result.responseStatus).toBe(302);
+    expect(postCount).toBe(1);
+    expect(progressMessages.some((m) => m.includes('Build #11'))).toBe(true);
+  } finally {
+    await close(server);
+  }
+});
+
 test('handles rejected build response >= 400', async ({ page }) => {
   let postCount = 0;
   const { server, baseUrl } = await listen((request, response) => {

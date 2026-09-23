@@ -1,10 +1,9 @@
 # Codebase summary
 
-This summary is derived from a fresh Repomix compaction (`repomix-output.xml`)
-and the checked-in source/configuration files. It records implementation
-through Bounded Parallel Report Workers Phase 03 and the integrated Dashboard
-editor. The form builder and raw JSON view share the saved document state.
-Deterministic template tests use local fixtures; no live Jenkins run is claimed.
+This summary is based on a fresh Repomix compaction (`repomix-output.xml`) and
+the checked-in source/configuration, including Stage View completion monitoring
+and its Control Page wait toggle. The form builder and raw JSON view share the
+saved document state. Tests use local fixtures; no live Jenkins run is claimed.
 
 ## Repository profile
 
@@ -67,6 +66,9 @@ Deterministic template tests use local fixtures; no live Jenkins run is claimed.
   through shared editor state; dirty/raw-JSON state requires Save before
   report execution. Report POSTs send no `workerCount`; UI and CLI share schema
   validation, and the CLI document loader reads once.
+- Stage View completion monitoring: optional auto-build wait (default `true`),
+  run and stage parsing, live progress logs, and build-number/result/stage data
+  for the Control Page.
 - Repomix inventory refreshed for this summary; ignored and binary files remain
   outside the compaction.
 
@@ -79,8 +81,11 @@ Deterministic template tests use local fixtures; no live Jenkins run is claimed.
 | `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and mode-selection helpers. |
 | `src/runner.ts` | Saved-count report dispatch, bounded multi-project execution, and aggregate publication. |
 | `src/project/report-worker-pool.ts` | Fixed in-process loops with indexed outcomes and per-project failure isolation. |
-| `src/project/auto-build-runner.ts` | Explicit one-project auto-build API; not a CLI entry point. |
-| `src/jenkins/build-trigger.ts` | Exact build-page/form validation and one guarded POST. |
+| `src/project/auto-build-runner.ts` | Explicit one-project auto-build API with optional Stage View wait and rich build outcome. |
+| `src/jenkins/build-trigger.ts` | Exact build-page/form validation, one guarded POST, and optional completion wait. |
+| `src/jenkins/stage-view.ts` | Detects a newly triggered run and observes it to terminal status under the workflow deadline. |
+| `src/jenkins/stage-view-parser.ts` | Parses the Stage View run rows, stage statuses, names, and durations. |
+| `src/jenkins/stage-view-types.ts` | Defines run identity, overall statuses, completion result, and stage details. |
 | `src/templates/template-report-fixture.ts` | Public fixture facade, HTTP server exports, and template project document builder. |
 | [`src/templates/template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server.ts) | Standalone native Node.js HTTP server serving Developer Hub index page (`/`, `/index.html`) with 9 mock endpoints and offline template fixtures on port 4174. |
 | `src/templates/template-server-cli.ts` | CLI entrypoint and argument parser (`--host`, `--port`) for the standalone template mock HTTP server. |
@@ -116,6 +121,10 @@ schema boundary.
 Each project requires a safe `id`, display `name`, exact credential-free
 Jenkins `loginUrl`, and exact credential-free `jobUrl` on one Jenkins origin
 and base context. `enabled: false` remains an execution gate.
+
+`waitForCompletion?: boolean` is accepted in `defaults` or per project;
+project values override defaults. If both are absent, the normalized default
+is `true`. It applies to auto-build only; the report flow ignores it.
 
 `RunType` is the project-only union `'report' | 'auto-build'`. Missing input
 normalizes to `'report'`; it is not present in `ProjectConfigDefaults` and is
@@ -174,36 +183,28 @@ build-number override.
 An integration must normalize the document, call
 `selectAutoBuildProject(projects, projectId)`, and pass only that project to
 `runAutoBuildProject`. The runner rejects disabled or wrong-mode inputs before
-launch, resolves the referenced credentials, creates one browser/context/page,
-and shares one `WorkflowDeadline` across login, navigation, validation,
-submission, and cleanup.
+launch, resolves credentials, creates one browser/context/page, and shares one
+`WorkflowDeadline` across login, submission, and cleanup.
 
-The workflow is:
+The workflow validates the exact job's **Build with Parameters** link and
+`POST` form, then clicks once. When waiting is enabled, it snapshots the latest
+Stage View run ID before submission; after an accepted POST it returns to the
+job page and monitors a newer run (or a fresh in-progress run if no baseline
+was available). The monitor polls under the shared deadline, emits stage
+transition logs, and stops at `SUCCESS`, `FAILED`, `UNSTABLE`, or `ABORTED`.
 
-1. submit Jenkins login and validate the authenticated destination;
-2. open the exact configured `jobUrl`;
-3. require one visible `#side-panel` and one configured
-   **Build with Parameters** link within it;
-4. resolve and validate that link as the exact configured job `/build` action,
-   allowing only the detail-page `?delay=0sec` query;
-5. require one visible `#bottom-sticker`, one configured **Build** button,
-   required Jenkins class tokens, one ancestor form, `POST`, and the exact
-   same `/build` action;
-6. arm request/response observers, click once, and classify the result.
+With waiting disabled, an accepted response returns `submitted` immediately.
+HTTP status at or above 400 is `rejected`; a matching POST with no determinate
+response is `submission-unknown`. Pre-POST errors become sanitized
+`failed-before-submit`, and the runner never retries after a possible side
+effect. With waiting enabled, `SUCCESS` maps to `succeeded`, the other terminal
+results map to `failed`, and timeout returns any build details already seen.
 
-`triggerParameterizedBuild` returns `submitted` for a matching response below
-HTTP 400, `rejected` for a matching response at or above 400, and
-`submission-unknown` when a matching POST was observed but the response is
-indeterminate. A failure before a matching POST throws a sanitized
-`JenkinsFlowError`; `runAutoBuildProject` maps it to `failed-before-submit`.
-No branch retries after a possible side effect.
-
-Auto-build outcomes expose only project identity, configured job URL, validated
-build-page URL, timestamp, optional numeric response status, safe error text,
-and exit code. They do not expose form bodies, parameters, crumbs, headers,
-cookies, response bodies, queue IDs, or build numbers. The runner closes the
-context and browser with bounded best-effort cleanup and clears mutable secret
-copies.
+The in-memory outcome carries `buildNumber`, `buildResult`, and the stage
+breakdown (`name`, `status`, and optional duration), alongside existing safe
+job/build URLs, timestamp, response status, and error fields. Form bodies,
+parameters, crumbs, headers, cookies, response bodies, and queue IDs are not
+exposed. Auto-build does not capture reports or write report artifacts.
 
 ### Control-run environment injection
 
@@ -302,6 +303,13 @@ project references inheriting defaults when overrides are absent. The defaults
 editor handles timeout, browser, artifact directory, and default credential
 references. Credential controls accept variable names only, never secret
 values.
+
+For auto-build projects, `ConfigProjectEditor` persists the optional
+`waitForCompletion` toggle. `BuildConfirmDialog` starts checked according to
+the project's effective setting and sends the operator's choice as a per-run
+override in `POST /api/run`. `RunResultBox` displays the build number, terminal
+result, and stage names, statuses, and durations.
+
 
 `useConfigDocumentEditor` owns document/raw-JSON synchronization, validation,
 dirty state, raw JSON Apply, and mutations. Its

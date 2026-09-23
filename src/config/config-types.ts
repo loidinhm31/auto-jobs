@@ -30,6 +30,7 @@ export interface ProjectConfigInput {
   loginUrl: string;
   jobUrl: string;
   runType?: RunType;
+  waitForCompletion?: boolean;
   enabled?: boolean;
   timeoutMs?: number;
   browser?: BrowserName;
@@ -43,6 +44,7 @@ export interface ProjectConfigInput {
 }
 
 export interface ProjectConfigDefaults {
+  waitForCompletion?: boolean;
   timeoutMs?: number;
   browser?: BrowserName;
   artifactDir?: string;
@@ -69,6 +71,7 @@ export interface NormalizedProjectConfig {
   readonly id: string;
   readonly name: string;
   readonly runType: RunType;
+  readonly waitForCompletion?: boolean;
   readonly enabled: boolean;
   readonly loginUrl: string;
   readonly jobUrl: string;

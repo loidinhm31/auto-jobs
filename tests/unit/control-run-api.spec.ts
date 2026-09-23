@@ -226,4 +226,43 @@ test.describe('Control Run API', () => {
     const bodyWithoutCount = await postResWithoutCount.json();
     expect(bodyWithoutCount.error.code).toBe('MISSING_PROJECT_ID');
   });
+
+  test('POST /api/run accepts optional waitForCompletion boolean', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const resTrue = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: 'build-proj', waitForCompletion: true },
+    });
+    expect(resTrue.status()).toBe(202);
+    const bodyTrue = await resTrue.json();
+    const runTrue = await pollRun(request, serverUrl, bodyTrue.id);
+    expect(runTrue.status).toBe('succeeded');
+
+    const resFalse = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: 'build-proj', waitForCompletion: false },
+    });
+    expect(resFalse.status()).toBe(202);
+    const bodyFalse = await resFalse.json();
+    const runFalse = await pollRun(request, serverUrl, bodyFalse.id);
+    expect(runFalse.status).toBe('succeeded');
+  });
+
+  test('POST /api/run rejects non-boolean waitForCompletion with 422 INVALID_WAIT_FOR_COMPLETION', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const res = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: 'build-proj', waitForCompletion: 'true' },
+    });
+    expect(res.status()).toBe(422);
+    const body = await res.json();
+    expect(body.error).toEqual({
+      code: 'INVALID_WAIT_FOR_COMPLETION',
+      message: 'waitForCompletion must be boolean',
+    });
+  });
 });

@@ -120,6 +120,20 @@ export function ConfigProjectEditor({
         </label>
         {enabledError && <span id="config-project-enabled-error" className="text-xs font-medium text-red-600" role="alert">{enabledError}</span>}
       </div>
+      {project.runType === 'auto-build' && (
+        <div>
+          <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-slate-800">
+            <input
+              type="checkbox"
+              id="config-project-wait-for-completion"
+              checked={project.waitForCompletion !== false}
+              onChange={(event) => updateField('waitForCompletion', event.target.checked)}
+              className="h-4 w-4 accent-sky-700"
+            />
+            Wait for completion in Stage View
+          </label>
+        </div>
+      )}
       <div className="space-y-2 sm:col-span-2">
         <div className="grid gap-4 sm:grid-cols-2">
           {credentialField('usernameVariable', project.credentials ? undefined : defaultsCredentials?.usernameVariable)}

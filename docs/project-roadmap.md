@@ -1,8 +1,24 @@
 # Project roadmap
 
-Last updated: 2026-09-23  
+Last updated: 2026-09-24  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
-Completed initiative: [Bounded Parallel Report Workers](../plans/260923-1402-parallel-report-workers/plan.md)
+Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
+
+## Jenkins Stage View Build Monitoring & Status Tracking
+
+Plan: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
+
+**Overall status:** Complete · **100%** (5 of 5 phases DONE; completed 2026-09-24T03:00:00+07:00).
+
+| Phase | Status | Progress | Completed | Evidence/detail |
+|---|---|---:|---|---|
+| 1. Config & API Contracts | **DONE** | **100%** | 2026-09-24 | Added `waitForCompletion` config/API contract and default-on behavior. |
+| 2. Stage View Observation Engine | **DONE** | **100%** | 2026-09-24 | Parses run/stage state, streams transitions, and observes terminal results within the workflow deadline. |
+| 3. Auto-Build Runner & Log Streaming | **DONE** | **100%** | 2026-09-24 | Carries build result metadata and streams stage progress into Control Dashboard logs. |
+| 4. Control Page UI Enhancements | **DONE** | **100%** | 2026-09-24 | Modal toggle and rich build result display delivered; optional `ConfigProjectEditor` toggle deferred (JSON configuration remains available). |
+| 5. Testing, Fixture & E2E Verification | **DONE** | **100%** | 2026-09-24 | See [code review and verification](../plans/reports/code-review-260924-0254-jenkins-stage-view.md): typecheck/build passed, unit 379/379, control 18/18, template auto-build 1/1, template integration 11/11. |
+
+Code review passed at 9.2/10 with no critical issues; it noted two warnings and three suggestions, including a possible pre-build run-identification race and repeated queue-wait logs. See the [review](../plans/reports/code-review-260924-0254-jenkins-stage-view.md).
 
 ## Bounded parallel report workers
 
@@ -109,6 +125,12 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Verified zero dangling references in codebase; updated `docs/codebase-summary.md` and `docs/project-overview-pdr.md`.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-24
+
+- Completed Jenkins Stage View Build Monitoring & Status Tracking at 100% across five DONE phases on 2026-09-24T03:00:00+07:00 ([plan](../plans/260924-0218-stage-view-build-monitoring/plan.md)).
+- Added configurable build-completion waiting, live Stage View transitions in Control Dashboard logs, and terminal build/stage results; the optional `ConfigProjectEditor` toggle remains deferred, with configuration available through project JSON and the confirmation modal.
+- Verification recorded in the [code review](../plans/reports/code-review-260924-0254-jenkins-stage-view.md): typecheck/build passed, unit 379/379, control 18/18, template auto-build 1/1, and template integration 11/11. Review passed with no critical issues; two warnings and three suggestions remain documented.
 
 ### 0.1.0 (development) — 2026-09-23
 

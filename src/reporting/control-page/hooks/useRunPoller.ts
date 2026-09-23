@@ -22,6 +22,7 @@ export interface UseRunPollerResult {
     configEtag: string,
     runType: 'report' | 'auto-build',
     projectId?: string,
+    waitForCompletion?: boolean,
   ) => Promise<string | null>;
   resetRun: () => void;
   stopPolling: () => void;
@@ -172,6 +173,7 @@ export function useRunPoller(apiOverride?: UseControlApiResult): UseRunPollerRes
       configEtag: string,
       runType: 'report' | 'auto-build',
       projectId?: string,
+      waitForCompletion?: boolean,
     ): Promise<string | null> => {
       stopPolling();
       setIsTriggering(true);
@@ -184,6 +186,7 @@ export function useRunPoller(apiOverride?: UseControlApiResult): UseRunPollerRes
         configEtag,
         runType,
         ...(projectId ? { projectId } : {}),
+        ...(waitForCompletion !== undefined ? { waitForCompletion } : {}),
       };
 
       try {

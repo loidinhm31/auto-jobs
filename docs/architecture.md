@@ -1,19 +1,14 @@
 # Current architecture
 
 This document describes the implemented schema-v1 configuration, report and
-target-branch Jenkins auto-build workflows, the local SecretStore backend, the
-loopback control secrets API, the Phase 04 credential-management UI, and the
-Phase 05 verification boundary. Phase 03 adds per-run SecretStore environment
-injection and redaction to control runs. Phase 04 adds a CSRF-aware modal that
-discovers referenced variable names, displays presence only, persists
-replacements, and wipes password inputs. Phase 05 verifies the persistence,
-API, and browser contracts without live services. Phase 3 adds an offline
-build-page fixture and exact routes so the auto-build path can be exercised
-without live side effects. Phase 01 adds validated local persistence; Phase 02
-exposes guarded presence-only `GET`, `PUT`, and `DELETE /api/secrets`
-operations. The report command remains report-only; auto-build is an explicit
-library boundary and is not inferred from URLs, selectors, CLI names, or
-environment.
+Jenkins auto-build workflows, Stage View completion monitoring, and the
+loopback Control Page. It covers the local SecretStore, guarded secrets API,
+credential-management UI, and deterministic verification boundaries. The
+report command remains report-only; auto-build is an explicit library boundary
+and is not inferred from URLs, selectors, CLI names, or environment.
+
+When enabled, auto-build waits for its new Stage View run and returns the build
+identity, terminal result, and stage details in its in-memory outcome.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -77,6 +72,8 @@ flowchart LR
   BuildLogin --> BuildJob[Exact Jenkins job page]
   BuildJob --> Trigger[Validate controls and submit once]
   Trigger --> BuildResult[submitted / rejected / submission-unknown]
+  BuildResult -->|wait enabled and accepted| StageView[Observe new Stage View run]
+  StageView --> BuildDetails[build number / terminal result / stage breakdown]
   TestRoutes[Test-only exact URL routes] -. tests only .-> Browser
 ```
 
@@ -112,7 +109,10 @@ flowchart LR
 - `src/jenkins/locators.ts` maps configured selectors to Playwright locators
   and reads candidate hrefs without trusting them. `build-trigger-validation.ts`
   enforces structural containers, control counts, class tokens, form method,
-  and exact action URL. `build-trigger.ts` performs one guarded submission.
+  and exact action URL. `src/jenkins/build-trigger.ts` performs one guarded
+  submission; monitoring is in `src/jenkins/stage-view.ts`, parsing in
+  `src/jenkins/stage-view-parser.ts`, and contracts in
+  `src/jenkins/stage-view-types.ts`.
 - `src/reports/snyk/` and `src/reports/sonarqube/` validate allowed links,
   handle SonarQube login redirects when required, capture bounded visible
   evidence, and normalize source-specific results.
@@ -213,6 +213,10 @@ sets concurrency for one report batch only; nested placements are rejected.
 There must be one to 50 projects and at least one enabled entry. Each project
 requires a unique safe ID, display name, exact Jenkins `loginUrl` and `jobUrl`
 on the same canonical Jenkins origin and base context.
+
+`waitForCompletion` is optional in `defaults` and per project; project values
+override defaults. If absent from both, normalized default is `true`. It
+applies to auto-build only; report workflows ignore it.
 
 The runtime command receives the JSON path explicitly:
 
@@ -435,34 +439,34 @@ status, or accepts a build-number override.
 ### Auto-build workflow
 
 The auto-build path reuses the same credential resolution, login validation,
-exact job navigation, and one absolute `WorkflowDeadline`, then:
+exact job navigation, and one absolute `WorkflowDeadline`, then validates the
+scoped **Build with Parameters** link and **Build** form before clicking once.
 
-1. requires exactly one visible `#side-panel`;
-2. resolves the configured **Build with Parameters** locator within that
-   container and validates its href as the exact configured job `/build` action;
-3. navigates to that validated detail page;
-4. requires exactly one visible `#bottom-sticker`, one visible configured
-   **Build** button, all three Jenkins class tokens
-   (`jenkins-button`, `jenkins-button--primary`, and
-   `jenkins-!-build-color`), and exactly one ancestor form;
-5. requires form method `POST` and validates the resolved action as the same
-   exact job `/build` action;
-6. arms request/response observers, clicks once, and returns only the
-   configured job URL, validated build-page URL, timestamp, state, and
-   optional response status.
+When `waitForCompletion` is enabled (the default), the trigger snapshots the
+latest Stage View run ID before submission. After an accepted POST it returns
+to the job page and tracks a newer run (or a fresh in-progress run if there was
+no baseline). `stage-view.ts` polls the page until the run reaches `SUCCESS`,
+`FAILED`, `UNSTABLE`, or `ABORTED`, logging stage changes along the way.
+`stage-view-parser.ts` maps row and cell classes, stage names, and durations;
+`stage-view-types.ts` defines the run, status, and stage contracts.
 
-The trigger never reads or returns form bodies, parameters, crumb values,
-headers, cookies, or response bodies. After a matching POST is observed, a
-missing/indeterminate response is `submission-unknown`; it is not retried.
-An HTTP response below 400 is `submitted`, while a response at or above 400 is
-`rejected`. Failures before a matching POST surface as sanitized
-`JenkinsFlowError` values and become `failed-before-submit` at the runner
-boundary. Auto-build does not invoke source capture or report persistence.
+With waiting disabled, an accepted POST returns `submitted` immediately. HTTP
+responses at or above 400 are `rejected`; an observed POST without a
+determinate response is `submission-unknown`. Pre-POST failures become
+sanitized `failed-before-submit` outcomes, and possible side effects are never
+retried. A completed `SUCCESS` maps to `succeeded`; other terminal statuses map
+to `failed`. A timeout includes any observed build number, current result, and
+stage breakdown. Outcomes do not expose form bodies, parameters, crumbs,
+headers, cookies, or response bodies, and auto-build does not persist reports.
+
+The Control Page persists the project setting in `ConfigProjectEditor`.
+`BuildConfirmDialog` initializes its checkbox from the selected project's
+effective value and sends the operator's per-run choice; `RunResultBox` shows
+the build number, terminal result, and stage names, statuses, and durations.
 
 Every configured, discovered, redirected, and final URL in either path must be
-credential-free HTTP(S) and inside its allowed canonical origin. A single
-absolute deadline covers the workflow; context/browser cleanup is bounded and
-best-effort.
+credential-free HTTP(S) and inside its allowed canonical origin. Context and
+browser cleanup is bounded and best-effort.
 
 ## Evidence capture and result contract
 

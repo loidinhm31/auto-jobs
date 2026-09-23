@@ -7,24 +7,52 @@ import {
 } from './build-trigger-validation.js';
 import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
 import type { JenkinsRunnerConfig } from './runner-config.js';
-import { isExactJenkinsJobActionUrl, validateJenkinsJobActionUrl } from './url-identity.js';
+import { isExactJenkinsJobActionUrl, isExactJobUrl, validateJenkinsJobActionUrl } from './url-identity.js';
+import { getLatestStageViewRun, waitForStageViewCompletion } from './stage-view.js';
+import type { StageViewStage } from './stage-view-types.js';
 
-export type JenkinsBuildTriggerState = 'submitted' | 'rejected' | 'submission-unknown';
+export type JenkinsBuildTriggerState =
+  | 'succeeded'
+  | 'submitted'
+  | 'rejected'
+  | 'submission-unknown'
+  | 'failed'
+  | 'timeout';
+
+export interface TriggerParameterizedBuildOptions {
+  readonly waitForCompletion?: boolean | undefined;
+  readonly onProgress?: ((message: string) => void) | undefined;
+}
 
 export interface JenkinsBuildTriggerResult {
   readonly state: JenkinsBuildTriggerState;
   readonly jobUrl: string;
   readonly buildPageUrl: string;
+  readonly buildNumber?: string | undefined;
+  readonly buildResult?: string | undefined;
+  readonly stages?: readonly StageViewStage[] | undefined;
   readonly submittedAt: string;
-  readonly responseStatus?: number;
+  readonly responseStatus?: number | undefined;
+  readonly error?: string | undefined;
 }
 
 export async function triggerParameterizedBuild(
   page: Page,
   config: JenkinsRunnerConfig,
   deadline: WorkflowDeadline,
+  options: TriggerParameterizedBuildOptions = {},
 ): Promise<JenkinsBuildTriggerResult> {
   deadline.requireRemaining();
+  const waitForCompletion = options.waitForCompletion === true;
+  let previousRunId: number | undefined;
+  if (waitForCompletion) {
+    try {
+      const latest = await getLatestStageViewRun(page);
+      previousRunId = latest?.runId;
+    } catch {
+      // Continue if initial Stage View read is unready
+    }
+  }
   // Step 1: Locate and validate link inside #side-panel
   const buildLink = await locateAndValidateBuildParametersLink(page, config);
 
@@ -80,12 +108,58 @@ export async function triggerParameterizedBuild(
     const [response] = await Promise.all([responsePromise, clickPromise]);
     const status = response.status();
     if (status < 400) {
+      if (!waitForCompletion) {
+        return {
+          state: 'submitted',
+          jobUrl: config.jobUrl,
+          buildPageUrl,
+          submittedAt,
+          responseStatus: status,
+        };
+      }
+
+      options.onProgress?.(`[Auto-Build] Build form submitted (HTTP ${status}). Following redirect to job page...`);
+      try {
+        await page.waitForURL((url) => isExactJobUrl(url.toString(), config.jobUrl), {
+          timeout: Math.max(1_000, Math.min(deadline.remainingMs(), config.timeoutMs)),
+        });
+      } catch {
+        try {
+          await page.goto(config.jobUrl, { waitUntil: 'domcontentloaded' });
+        } catch {
+          // Fall through to Stage View check
+        }
+      }
+
+      const stageViewResult = await waitForStageViewCompletion(page, previousRunId, deadline, {
+        onProgress: options.onProgress,
+      });
+
+      if (stageViewResult.completed && stageViewResult.run) {
+        const run = stageViewResult.run;
+        const isSuccess = run.status === 'SUCCESS';
+        return {
+          state: isSuccess ? 'succeeded' : 'failed',
+          jobUrl: config.jobUrl,
+          buildPageUrl,
+          buildNumber: run.buildNumber,
+          buildResult: run.status,
+          stages: run.stages,
+          submittedAt,
+          responseStatus: status,
+        };
+      }
+
       return {
-        state: 'submitted',
+        state: 'timeout',
         jobUrl: config.jobUrl,
         buildPageUrl,
+        buildNumber: stageViewResult.run?.buildNumber,
+        buildResult: stageViewResult.run?.status,
+        stages: stageViewResult.run?.stages,
         submittedAt,
         responseStatus: status,
+        error: stageViewResult.error ?? 'Stage View build observation did not complete within deadline',
       };
     }
     return {

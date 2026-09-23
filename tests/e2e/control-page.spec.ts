@@ -213,7 +213,9 @@ test.describe('Control Page Dashboard E2E', () => {
     const dialog = page.locator('#build-confirm-dialog');
     await expect(dialog).toBeVisible();
     await expect(page.locator('#confirm-project-id')).toHaveText('demo-build-service');
-
+    const waitCheckbox = page.locator('#checkbox-wait-for-completion');
+    await expect(waitCheckbox).toBeVisible();
+    await expect(waitCheckbox).toBeChecked();
     // Confirm build
     await page.locator('#btn-confirm-build').click();
     await expect(dialog).not.toBeVisible();
@@ -838,6 +840,7 @@ test.describe('Control Page Dashboard E2E', () => {
     expect(autoBuildPostData).toBeDefined();
     expect(autoBuildPostData?.['runType']).toBe('auto-build');
     expect(autoBuildPostData?.['projectId']).toBe('demo-build-service');
+    expect(autoBuildPostData?.['waitForCompletion']).toBe(true);
     expect('workerCount' in (autoBuildPostData ?? {})).toBe(false);
 
     // 2. Fetch current ETag

@@ -8,6 +8,7 @@ import { runAutoBuildProject, type AutoBuildRunnerDependencies } from '../projec
 import type { NormalizedProjectConfig } from '../config/config-types.js';
 import type { RunnerExecutionResult } from '../project/project-types.js';
 import type { AutoBuildRunOutcome } from '../project/auto-build-runner.js';
+import type { StageViewStage } from '../jenkins/stage-view-types.js';
 import { executeControlRun } from './report-server-run-executor.js';
 
 export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'submission-unknown';
@@ -23,6 +24,7 @@ export interface ControlRunRecord {
   readonly configEtag: string;
   readonly runType: 'report' | 'auto-build';
   readonly projectId?: string | undefined;
+  readonly waitForCompletion?: boolean | undefined;
   status: RunStatus;
   readonly queuedAt: string;
   startedAt?: string | undefined;
@@ -31,6 +33,9 @@ export interface ControlRunRecord {
   result?: {
     readonly reportUrl?: string | undefined;
     readonly buildState?: string | undefined;
+    readonly buildNumber?: string | undefined;
+    readonly buildResult?: string | undefined;
+    readonly stages?: readonly StageViewStage[] | undefined;
     readonly jobUrl?: string | undefined;
     readonly buildPageUrl?: string | undefined;
     readonly submittedAt?: string | undefined;
@@ -56,6 +61,7 @@ export interface StartRunParams {
   readonly configEtag: string;
   readonly runType: 'report' | 'auto-build';
   readonly projectId?: string | undefined;
+  readonly waitForCompletion?: boolean | undefined;
 }
 
 export interface RunManager {
@@ -137,6 +143,7 @@ export function createRunManager(options: RunManagerOptions): RunManager {
       configEtag: params.configEtag,
       runType: params.runType,
       projectId: params.projectId,
+      waitForCompletion: params.waitForCompletion,
       status: 'queued',
       queuedAt: clock().toISOString(),
       logs: [],

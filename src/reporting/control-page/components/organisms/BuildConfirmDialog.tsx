@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { ProjectCardData } from '../../types/component-contracts.js';
 import { Button } from '../atoms/Button.js';
@@ -6,7 +6,7 @@ import { Button } from '../atoms/Button.js';
 export interface BuildConfirmDialogProps {
   isOpen: boolean;
   project: ProjectCardData | null;
-  onConfirm: (projectId: string) => void | Promise<void>;
+  onConfirm: (projectId: string, waitForCompletion?: boolean) => void | Promise<void>;
   onCancel: () => void;
 }
 
@@ -16,9 +16,15 @@ export function BuildConfirmDialog({
   onConfirm,
   onCancel,
 }: BuildConfirmDialogProps) {
+  const [waitForCompletion, setWaitForCompletion] = useState<boolean>(true);
+
+  useEffect(() => {
+    setWaitForCompletion(project?.waitForCompletion !== false);
+  }, [project]);
+
   const handleConfirm = () => {
     if (project?.id) {
-      void onConfirm(project.id);
+      void onConfirm(project.id, waitForCompletion);
     }
   };
 
@@ -53,6 +59,18 @@ export function BuildConfirmDialog({
               {project?.jobUrl ?? ''}
             </dd>
           </dl>
+          <div className="mt-4 pt-3 border-t border-slate-200 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="checkbox-wait-for-completion"
+              checked={waitForCompletion}
+              onChange={(e) => setWaitForCompletion(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            />
+            <label htmlFor="checkbox-wait-for-completion" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
+              Wait for build completion in Stage View
+            </label>
+          </div>
           <div className="dialog-actions">
             <Button
               type="button"

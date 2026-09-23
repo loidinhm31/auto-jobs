@@ -93,6 +93,7 @@ export function DashboardPage() {
       loginUrl: p.loginUrl,
       jobUrl: p.jobUrl,
       runType: (p.runType as 'report' | 'auto-build') || 'report',
+      waitForCompletion: (p.waitForCompletion ?? currentDoc.defaults?.waitForCompletion) !== false,
       enabled: p.enabled !== false,
     }));
   }, [currentDoc]);
@@ -110,10 +111,10 @@ export function DashboardPage() {
     setConfirmProject(project);
   };
 
-  const handleConfirmAutoBuild = async (projectId: string) => {
+  const handleConfirmAutoBuild = async (projectId: string, waitForCompletion?: boolean) => {
     setConfirmProject(null);
     if (activeConfigName && etag) {
-      await triggerRun(activeConfigName, etag, 'auto-build', projectId);
+      await triggerRun(activeConfigName, etag, 'auto-build', projectId, waitForCompletion);
     }
   };
 

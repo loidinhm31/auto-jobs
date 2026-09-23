@@ -79,10 +79,17 @@ export async function executeControlRun(
         throw new Error('autoBuildExecutor is required for auto-build run');
       }
       const buildProject = selectAutoBuildProject(normalized, record.projectId);
-      safeAddLog(`Executing auto-build for project '${buildProject.id}' (${buildProject.jobUrl})`);
-      const outcome = await autoBuildExecutor(buildProject, { runtimeEnvironment: runEnv });
+      const shouldWait = record.waitForCompletion ?? buildProject.waitForCompletion;
+      safeAddLog(
+        `Executing auto-build for project '${buildProject.id}' (${buildProject.jobUrl}) [waitForCompletion: ${shouldWait}]`,
+      );
+      const outcome = await autoBuildExecutor(buildProject, {
+        runtimeEnvironment: runEnv,
+        waitForCompletion: shouldWait,
+        onProgress: (msg) => safeAddLog(msg),
+      });
 
-      if (outcome.state === 'submitted') {
+      if (outcome.state === 'succeeded' || outcome.state === 'submitted') {
         record.status = 'succeeded';
       } else if (outcome.state === 'submission-unknown') {
         record.status = 'submission-unknown';
@@ -92,13 +99,18 @@ export async function executeControlRun(
 
       record.result = {
         buildState: outcome.state,
+        buildNumber: outcome.buildNumber,
+        buildResult: outcome.buildResult,
+        stages: outcome.stages,
         jobUrl: outcome.jobUrl ? redactText(outcome.jobUrl, secretValues) : outcome.jobUrl,
         buildPageUrl: outcome.buildPageUrl ? redactText(outcome.buildPageUrl, secretValues) : outcome.buildPageUrl,
         submittedAt: outcome.submittedAt,
         responseStatus: outcome.responseStatus,
         error: outcome.error ? redactText(outcome.error, secretValues) : undefined,
       };
-      safeAddLog(`Auto-build run finished with state: ${outcome.state}`);
+      safeAddLog(
+        `Auto-build run finished with state: ${outcome.state}${outcome.buildResult ? ` (${outcome.buildResult})` : ''}`,
+      );
     }
   } catch (err) {
     const rawMessage = err instanceof Error ? err.message : String(err);

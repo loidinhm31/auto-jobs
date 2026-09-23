@@ -59,6 +59,7 @@ export function templateProjectDocument(
         name: projectName,
         enabled: true,
         runType,
+        waitForCompletion: env['TEMPLATE_WAIT_FOR_COMPLETION'] === 'true',
         loginUrl: fixture.loginUrl,
         jobUrl: fixture.jobUrl,
         timeoutMs,

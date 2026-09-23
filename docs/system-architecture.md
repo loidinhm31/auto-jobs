@@ -1,30 +1,29 @@
 # System architecture
 
-This component-level view covers the shipped bounded-report worker dashboard
-integration and dynamic-credential Phases 01–05. It describes two separate
-execution paths, the local SecretStore, loopback control API/UI, saved
-report-worker editing, and deterministic verification:
+This component-level view covers bounded report workers, Jenkins auto-build
+Stage View monitoring, and dynamic credentials. It describes the shipped
+execution paths, local SecretStore, loopback control API/UI, and deterministic
+verification:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
-- **Auto-build:** authenticate, inspect one exact Jenkins job, validate the
-  parameterized-build controls, and submit one Jenkins form. It returns a
-  safe in-memory outcome and does not capture or publish reports.
+- **Auto-build:** validate and submit one Jenkins form; optionally wait for the
+  new Stage View run and return a safe in-memory result with build number,
+  terminal status, and stage details. It does not publish reports.
 - **Offline fixture:** load the checked-in nine-file corpus and fulfill only
   exact synthetic URLs for deterministic report and auto-build tests.
 - **SecretStore and secrets API:** persist validated local credential values
   outside project JSON and expose only boolean presence through guarded
   `/api/secrets` operations.
-- **Control UI:** edit the schema-v1 document through the shared form/raw-JSON
-  editor, set saved report workers beside Generate Reports, manage credentials,
-  and wipe password inputs on save, clear, or close.
+- **Control UI:** edit schema-v1 settings, manage credentials, and set report
+  workers. Auto-build projects have a saved wait toggle and a confirmation
+  modal override; the result card shows build and stage status.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
   driven.
-- **Verification:** isolated SecretStore/API unit contracts and Chromium/WebKit
-  control-page E2E scenarios prove dynamic credential persistence, injected
-  execution, and zero leakage without contacting Jenkins.
+- **Verification:** isolated contracts and Chromium/WebKit Control UI scenarios
+  cover credentials and auto-build behavior without contacting Jenkins.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
@@ -106,6 +105,12 @@ without carrying a worker count. The UI and CLI share
 `loadProjectConfigWithDocument` and uses both its document and normalized
 projects.
 
+For auto-builds, schema-v1 accepts `waitForCompletion` in `defaults` or per
+project (project value wins; if absent from both, normalized default is `true`).
+`ConfigProjectEditor` persists the project setting; `BuildConfirmDialog` sends
+a per-run choice in `POST /api/run`. The report runner ignores this option.
+
+
 The file-mode report CLI and direct library calls keep their existing
 caller-supplied environment behavior; this injection boundary belongs only to
 control-run execution.
@@ -179,24 +184,40 @@ sequenceDiagram
   Jenkins-->>Runner: authenticated page
   Runner->>Jenkins: open exact jobUrl
   Runner->>Trigger: triggerParameterizedBuild(page, config, deadline)
-  Trigger->>Jenkins: validate scoped link and GET exact job/build
-  Trigger->>Jenkins: validate scoped POST form
-  Trigger->>Jenkins: click Build once
+  opt waitForCompletion enabled
+    Trigger->>Jenkins: snapshot latest Stage View run ID
+  end
+  Trigger->>Jenkins: validate build link/form and submit once
   Jenkins-->>Trigger: matching POST response or indeterminate result
-  Trigger-->>Runner: submitted / rejected / submission-unknown
+  alt accepted response and waiting enabled
+    Trigger->>Jenkins: return to jobUrl and poll Stage View
+    Jenkins-->>Trigger: build number, terminal result, stage status/duration
+    Trigger-->>Runner: succeeded / failed / timeout with build details
+  else waiting disabled, rejected, or indeterminate
+    Trigger-->>Runner: submitted / rejected / submission-unknown
+  end
   Runner->>Browser: bounded context/browser cleanup
   Runner-->>Caller: sanitized in-memory outcome
 ```
 
-The auto-build runner does not use `ArtifactPaths`, report capture, queue APIs,
-build-number APIs, polling, cancellation, or retry logic. It clears mutable
-secret copies during cleanup. A failure before a matching POST is represented
-as `failed-before-submit`; once a matching POST is observed, indeterminate
-completion is `submission-unknown` and must not be retried.
+The runner does not use `ArtifactPaths`, report capture, Jenkins queue or
+build-number APIs, cancellation, or retries. With waiting enabled, it polls
+Stage View on the job page; a successful `SUCCESS` run becomes `succeeded`,
+while `FAILED`, `UNSTABLE`, and `ABORTED` become `failed`. Timeout outcomes
+retain any build details already observed. Pre-POST failures are represented
+as `failed-before-submit`; an indeterminate matching POST is
+`submission-unknown` and must not be retried.
 
-Control runs invoke this same runner with the merged `runtimeEnvironment`
-created by `executeControlRun`; direct integrations can continue to provide
-their own environment through `AutoBuildRunnerDependencies`.
+`build-trigger.ts` captures the baseline run ID; `stage-view.ts` owns
+new-run selection, polling, reloads, and progress messages.
+`stage-view-parser.ts` reads the `#pipeline-box` table, mapping run and stage
+statuses, header names, and optional durations; `stage-view-types.ts` defines
+`StageViewRun`, `StageViewStage`, and terminal status contracts. Control runs
+stream progress messages to the run log.
+
+Control runs invoke this runner with the merged `runtimeEnvironment` created
+by `executeControlRun`; direct integrations can provide their own environment
+through `AutoBuildRunnerDependencies`.
 
 ## Jenkins component contracts
 
@@ -231,12 +252,31 @@ locators and resolves hrefs relative to the current page without trusting them.
 6. a form action that is the same exact configured job `/build` action.
 
 `src/jenkins/build-trigger.ts` installs request and response observers before
-the click. It accepts one matching POST only. A response status below 400 is
-`submitted`; status 400 or higher is `rejected`; a matching request without a
-determinate response is `submission-unknown`. Pre-POST validation/navigation
-errors are sanitized `JenkinsFlowError` failures. The trigger returns no form
-body, parameter, crumb, header, cookie, queue, build-number, or response-body
-data.
+the click. A matching POST response at or above HTTP 400 is `rejected`; an
+observed POST without a determinate response is `submission-unknown`. With
+waiting disabled, a response below 400 returns `submitted`; with waiting
+enabled, the trigger monitors the new Stage View run. Pre-POST validation or
+navigation errors are sanitized `JenkinsFlowError` failures. The trigger does
+not expose form bodies, parameters, crumbs, headers, cookies, or response
+bodies.
+
+### Stage View completion observation
+
+`src/jenkins/build-trigger.ts` snapshots the latest `runId` before build
+navigation when waiting is enabled. After an accepted POST, it follows the
+redirect to the job page, falling back to direct `jobUrl` navigation if needed.
+`src/jenkins/stage-view.ts` selects a newer run (or a fresh in-progress run if
+no baseline exists), polls under the shared `WorkflowDeadline`, and emits
+progress when run or stage state changes. It finishes for `SUCCESS`, `FAILED`,
+`UNSTABLE`, or `ABORTED`; a timeout returns partial run details when available.
+
+`src/jenkins/stage-view-parser.ts` reads the `#pipeline-box` table, stage
+headers, row/cell class statuses, build number, and optional cell duration.
+`src/jenkins/stage-view-types.ts` defines run identity, the terminal/in-progress/
+unknown status union, and each stage's name, status, and duration. The resulting
+auto-build data carries `buildNumber`, `buildResult`, and `stages`; the Control
+Page result card renders the build number, result badge, and stage summaries.
+
 
 ## Resource and error boundaries
 

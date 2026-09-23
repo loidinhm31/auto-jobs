@@ -99,6 +99,12 @@ export async function handleRunApi(
       sendError(response, 422, 'INVALID_WORKER_COUNT', 'workerCount is not supported in run requests; use saved document configuration');
       return;
     }
+    if (Object.hasOwn(data, 'waitForCompletion') && typeof data['waitForCompletion'] !== 'boolean') {
+      sendError(response, 422, 'INVALID_WAIT_FOR_COMPLETION', 'waitForCompletion must be boolean');
+      return;
+    }
+    const waitForCompletion =
+      typeof data['waitForCompletion'] === 'boolean' ? data['waitForCompletion'] : undefined;
     const projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
     if (runType === 'auto-build' && (projectId === undefined || projectId.trim().length === 0)) {
       sendError(response, 422, 'MISSING_PROJECT_ID', 'projectId is required for auto-build');
@@ -111,6 +117,7 @@ export async function handleRunApi(
         configEtag: data['configEtag'],
         runType: runType as 'report' | 'auto-build',
         projectId,
+        waitForCompletion,
       });
       sendJson(response, 202, { id: record.id, status: record.status });
     } catch (err) {

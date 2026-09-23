@@ -116,6 +116,7 @@ function normalizeDocument(
       id: project.id.trim(),
       name: project.name.trim(),
       runType,
+      waitForCompletion: (project.waitForCompletion ?? defaults.waitForCompletion) !== false,
       enabled: project.enabled !== false,
       loginUrl,
       jobUrl,

@@ -54,6 +54,7 @@ export interface ProjectCardData {
   loginUrl: string;
   jobUrl: string;
   runType: 'report' | 'auto-build';
+  waitForCompletion?: boolean;
   enabled: boolean;
   credentials?: {
     usernameVariable: string;
