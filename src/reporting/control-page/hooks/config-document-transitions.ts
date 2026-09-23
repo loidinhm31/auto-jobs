@@ -1,4 +1,5 @@
 import { PROJECT_CONFIG_LIMITS } from '../../../config/project-config-schema.js';
+import { normalizeReportWorkerCount } from '../../../config/report-worker-count.js';
 import type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
@@ -65,4 +66,12 @@ export function updateProjectDocumentDefaults(
   if (Object.keys(defaults).length > 0) updated.defaults = defaults;
   else delete updated.defaults;
   return updated;
+}
+
+export function updateProjectDocumentReportWorkers(
+  document: ProjectConfigDocumentV1,
+  count: number,
+): ProjectConfigDocumentV1 {
+  const normalized = normalizeReportWorkerCount(count);
+  return { ...document, reportWorkers: normalized };
 }

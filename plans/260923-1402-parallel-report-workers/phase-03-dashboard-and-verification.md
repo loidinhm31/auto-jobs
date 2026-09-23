@@ -1,11 +1,11 @@
-# Phase 03 — dashboard and integration verification (NOT IMPLEMENTED)
+# Phase 03 — dashboard and integration verification (DONE — 2026-09-23)
 
 ## Context links
 - [Master contract](./plan.md) · [Hard brief](./cmd-plan.md) · [Phase 01 schema/CLI/runner](./phase-01-bounded-report-execution.md) · [Phase 02 API](./phase-02-control-run-contract.md) · [Control/UI research](./research/researcher-02-control-ui-and-contract.md) · [Runner/artifact research](./research/researcher-01-runner-and-artifacts.md). Browser-local/per-request recommendations in control/UI research are **rejected by user's saved-document decision**.
 - Current UI: `src/reporting/control-page/pages/DashboardPage.tsx:19-43,112-123,195-201`, `src/reporting/control-page/hooks/useConfigDocumentEditor.ts:19-34,47-75,132-151`, `src/reporting/control-page/hooks/useConfigManager.ts:113-187`, `src/reporting/control-page/components/organisms/ExecutionSection.tsx:5-31`, `src/reporting/control-page/components/atoms/Select.tsx`, `src/reporting/control-page/hooks/useRunPoller.ts:169-194`. [Codebase summary](../../docs/codebase-summary.md) confirms React dashboard, not legacy imperative assets.
 
 ## Overview
-**Pending; P2; 3h; depends on phases 01 and 02.** Show one accessible **Report workers** 1–4 selector beside Generate Reports in `ExecutionSection`, bound to the current schema-v1 document rather than each project. Changing it updates the shared editor's document/raw JSON and dirty state; operator must Save with existing ETag flow before Generate Reports is enabled. Run POST remains unchanged and server reads the saved count. Verify browser, direct API and CLI use the same persisted document; no browser preference. This is planned, not implemented today.
+**DONE — 2026-09-23; P2; 3h; depends on phases 01 and 02.** Added one accessible **Report workers** 1–4 selector beside Generate Reports in `ExecutionSection`, bound to the current schema-v1 document rather than each project. Changes update the shared editor's document/raw JSON and dirty state; operators Save through the existing ETag flow before Generate Reports is enabled. Run POST remains unchanged and the server reads the saved count. UI/API integration and CLI `runFromConfig` saved-count/default behavior are verified without a browser preference; the direct command smoke is deferred to Main's final audit. Documentation is synchronized.
 
 ## Key insights
 - `useConfigDocumentEditor.setDocument(updated, true)` already validates, synchronizes raw JSON and marks dirty; `useConfigManager.saveConfig` uses `If-Match: etag`, reads the saved document/new ETag, then clears dirty via `setDocument`. Add a **document-level** update action to this shared editor rather than local Dashboard state or a new save channel.
@@ -40,13 +40,13 @@
 2. Wire `DashboardPage` through `useConfigManager` to `ExecutionSection`; leave `ConfigFormBuilder` and report/build `triggerRun` calls unchanged. Verify dirty state disables Generate Reports until successful Save; Save sends full JSON with top-level field and If-Match, gets new ETag and clears dirty; conflict keeps run blocked until reload/resolution.
 3. In isolated Chromium/WebKit control-page E2E, start with a schema-v1 config lacking the field: select displays 1. Choose 4; assert raw JSON top-level value, dirty badge, disabled Generate Reports and **no report POST** until Save; inspect config PUT/If-Match and resulting ETag, then report POST with new ETag and **no `workerCount`**. Reload: value 4. Switch between two different saved configs (4 vs absent/2): each shows own count; no cross-config/browser preference. Apply raw JSON 2 and verify selector/dirty; reject invalid JSON field. Test stale Save conflict and unchanged Run disabling; run axe/keyboard checks for selector.
 4. Test a document containing a selected auto-build project and `reportWorkers: 4`: build request retains only existing fields, one build submission and no report artifact/count propagation. Direct crafted report and auto-build POST with any own `workerCount` still get 422/no run. Confirm Host/Origin/CSRF guard, active-run 409, report-only selection and secret redaction from phase 02.
-5. Cross-check one saved temporary JSON fixture through `runFromConfig` with deterministic offline browser injection and the dashboard control executor: both use saved count and default 1 for a missing field. Confirm `src/cli.ts` still invokes `runFromConfig` for `npm run report -- --config <file>`; exercise that actual command with an isolated offline fixture when verifying CLI entrypoint so the named command is covered, not merely a request wrapper. Use barrier-based overlap and ordered manifest proof, no live Jenkins/vendor calls. After code integration, update doc inventory to match **observed shipped behavior**; keep the separate proposed architecture note explicitly NOT IMPLEMENTED until then. Run targeted checks and one release gate only during implementation.
+5. Phase test evidence: `runFromConfig` and CLI delegation use the saved count (default 1); dashboard/control executor behavior is covered by targeted tests. The actual `npm run report -- --config <fixture>` entrypoint smoke is deferred to Main's final offline CLI audit, using a deterministic fixture and no live Jenkins/vendor calls. Documentation was updated to describe shipped behavior. Main owns the single `npm run test:release` run after all agent changes land.
 
 ## Todo list
-- [ ] Document-level accessible selector/editor action; Save/ETag/JSON integration.
-- [ ] Browser reload/config-switch/conflict/raw JSON and no-override request evidence.
-- [ ] CLI/UI saved-count parity and auto-build/report safety evidence.
-- [ ] Implementation docs synchronization and final release gate after all phases.
+- [x] Document-level accessible selector/editor action; Save/ETag/JSON integration.
+- [x] Browser reload/config-switch/conflict/raw JSON and no-override request evidence.
+- [x] CLI/UI saved-count parity and auto-build/report safety evidence.
+- [x] Implementation docs synchronized; Phase 03 targeted verification and review complete (137/137 Playwright tests, typecheck clean, review 10/10). Main reports full tests and build passed. Direct CLI entrypoint smoke and once-only `npm run test:release` remain deferred to Main's final release audit; see [documentation summary](../../reports/documentation-260923-2311-bounded-report-workers-phase-03.md).
 
 ## Success criteria
 - Selector reflects current document/default 1 and survives reload **only after Save**; switching configs loads their own persisted values. Editing marks dirty, raw JSON matches, and Generate Reports cannot run until saved ETag is current. Invalid document field is rejected by validation; existing saved configuration is not altered by rejected raw JSON.
@@ -62,7 +62,7 @@
 - Keep credentials out of document worker selector, URLs and diagnostics. Preserve CSRF-aware `apiFetch`, Host/Origin/Fetch Metadata checks, SecretStore isolation, report-root validation and auto-build one-POST guarantee. Selector offers only valid choices but persisted schema validation and server reject path are authoritative.
 
 ## Next steps
-- After implementation, reconcile proposed architecture note and linked docs with actual code; run full release gate once and release only with verified artifact/UI/API/CLI evidence. This plan-writing assignment changes no production code or validation gates.
+- Phase 03 implementation, targeted verification/review, and documentation are complete. Main owns the final release audit: run the direct CLI entrypoint smoke and `npm run test:release` once after all agent changes land; record actual results before release.
 
 ## Unresolved questions
 - None. A saved-document count shared by UI and CLI is the confirmed contract; browser-local preference is not in scope.

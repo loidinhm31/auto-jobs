@@ -8,6 +8,7 @@ import {
   removeProjectDocumentAt,
   updateProjectDocumentAt,
   updateProjectDocumentDefaults,
+  updateProjectDocumentReportWorkers,
 } from '../../src/reporting/control-page/hooks/config-document-transitions.js';
 import {
   ControlApiError,
@@ -731,6 +732,29 @@ test.describe('Control Page Phase 02: Types, Utility & Hook Contracts', () => {
       const completelyCleared = updateProjectDocumentDefaults(withoutTimeout, () => ({}));
       expect(completelyCleared.defaults).toBeUndefined();
       expect('defaults' in completelyCleared).toBe(false);
+    });
+
+    test('updates document reportWorkers and preserves existing properties', () => {
+      const base: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'p1',
+            name: 'P1',
+            loginUrl: 'https://jenkins.example/login',
+            jobUrl: 'https://jenkins.example/job/p1',
+          },
+        ],
+      };
+      const updated = updateProjectDocumentReportWorkers(base, 3);
+      expect(updated.reportWorkers).toBe(3);
+      expect(updated.schemaVersion).toBe(1);
+      expect(updated.projects).toEqual(base.projects);
+
+      // Rejects invalid values via normalizeReportWorkerCount
+      expect(() => updateProjectDocumentReportWorkers(base, 0)).toThrow(RangeError);
+      expect(() => updateProjectDocumentReportWorkers(base, 5)).toThrow(RangeError);
+      expect(() => updateProjectDocumentReportWorkers(base, 2.5)).toThrow(RangeError);
     });
 
     test('validates schema contracts via assertProjectConfigDocument', () => {

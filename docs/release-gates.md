@@ -427,15 +427,14 @@ npm run test:unit
 npm run test:control
 ```
 
-`npm run test:control` runs `tests/e2e/control-page.spec.ts` in both Chromium
-and WebKit across four test scenarios (8 checks total). The browser contract verifies
-an accessible credential dialog, dynamic credential-name discovery, Missing/Configured
-presence transitions, CSRF-protected save and clear flows, persistence after close/reopen
-and page reload, browser settings configuration and clearing, and a run that fails without
-credentials then succeeds after SecretStore-injected credentials. It also asserts that
-submitted values are absent from cleared inputs, page HTML, and run logs. The E2E server
-uses temporary roots and injected executors; it does not contact Jenkins or vendor
-services.
+`npm run test:control` runs `tests/e2e/control-page.spec.ts` in Chromium and
+WebKit. The 2026-09-23 Phase 03 run passed 18/18 tests ([test report](../plans/reports/tester-260923-2218-phase-03-dashboard-and-verification.md)).
+The browser contract covers the document-bound Report workers selector (saved
+values/default 1 and config switching), raw JSON synchronization, dirty-state
+and Save/ETag run gating, request omission of `workerCount`, crafted override
+rejection, auto-build isolation, and keyboard/accessibility behavior, alongside
+existing credentials and browser-settings flows. Tests use temporary config
+roots and injected executors; they do not contact Jenkins or vendor services.
 
 The 2026-09-03 Phase 05 verification snapshot recorded:
 

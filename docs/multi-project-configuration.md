@@ -7,6 +7,9 @@ callers use the normalized configuration; loopback control runs additionally
 overlay a per-run SecretStore snapshot before executor dispatch and expose the
 Phase 04 credential modal for presence-only local management. Phase 05 verifies
 the persistence, API, and browser contracts around that flow.
+The optional top-level `reportWorkers` setting controls the report batch in
+both file-mode CLI and Control Dashboard execution.
+
 The configuration contract is implemented in `src/config/` and consumed by
 `src/runner.ts` (report), `src/project/auto-build-runner.ts` (auto-build), or
 `src/reporting/report-server-run-executor.ts` (control dispatch).
@@ -41,8 +44,9 @@ are not accepted.
 `reportWorkers` is an optional top-level field for the whole report batch. It
 must be an integer from 1 through 4; omission means 1. It is not accepted under
 `defaults` or a project, and schema-v1 remains unchanged. `ConfigStore` validates
-the field with the document on read and write, so it follows the existing Save
-and ETag flow.
+the field on read/write, so it follows the existing document Save and ETag
+flow. The Dashboard selector edits this saved field; the Run control stays
+disabled until the document has been saved.
 
 
 `enabled: false` retains an entry without executing it. Optional project and
@@ -379,12 +383,23 @@ through worker settlement, browser close, cleanup, manifest discovery, and
 aggregate publication.
 
 `runFromConfig` selects enabled report projects, so `npm run report` never
-executes an auto-build project in a mixed document. Control `POST /api/run`
-rejects any own `workerCount` with `422 INVALID_WORKER_COUNT` before `startRun`.
-After the executor verifies the request ETag against the saved document, only
-report mode passes `reportWorkers ?? 1` as `workerCount` to `reportExecutor`.
-Auto-build keeps its existing `{ runtimeEnvironment }` dependency and never
-receives a report worker count.
+executes an auto-build project in a mixed document. It reads the config once
+through `loadProjectConfigWithDocument`; CLI and Dashboard validation share
+`assertProjectConfigDocument`.
+
+The Dashboard's `ExecutionSection` places the accessible `Report workers`
+selector (1–4, default 1) beside Generate Reports and binds it to the current
+shared document. A selection marks the document dirty and updates raw JSON;
+valid raw-JSON Apply validates and updates that same document, while invalid
+JSON leaves the model unchanged. Save uses the existing `If-Match` ETag flow,
+and Generate Reports stays disabled until Save succeeds.
+
+A report `POST /api/run` contains only `configName`, `configEtag`, and `runType`;
+it never carries `workerCount`. A crafted request with its own `workerCount`
+gets `422 INVALID_WORKER_COUNT` before run admission. The executor verifies the
+ETag and passes the saved count only to report execution. Auto-build keeps its
+existing `projectId` request field and `{ runtimeEnvironment }` dependency; it
+does not receive a report worker count.
 
 
 ### Explicit auto-build execution

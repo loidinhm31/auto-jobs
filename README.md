@@ -165,8 +165,8 @@ Open `http://127.0.0.1:4173/` in your browser.
 
 > **Warning:** Triggering `auto-build` from the dashboard submits a parameterized build to the target Jenkins job. Always confirm the target job and project configuration before submitting.
 
-- **Config management**: Edit `enabled`, `runType` (`report` vs `auto-build`), and raw JSON configuration safely with ETag concurrency control.
-- **Mutual exclusion**: Report generation and auto-build runs are mutually exclusive and executed one at a time.
+- **Config management**: Edit `enabled`, `runType` (`report` vs `auto-build`), and raw JSON with ETag concurrency control. Choose **Report workers** (1–4, default 1) for the saved schema-v1 document; changing it updates raw JSON and requires the existing ETag-protected Save before Generate Reports can run.
+- **Mutual exclusion**: Only one report or auto-build run may be active at a time. Within a report batch, saved `reportWorkers` bounds concurrent selected report projects (default 1, maximum 4); auto-build remains a single-project run.
 - **Security**: The control dashboard is strictly restricted to loopback (`127.0.0.1`) and rejects non-loopback bindings and cross-origin state-modifying requests.
 - **Build pipeline**: Bundled via Vite (`vite.control.config.ts`) into `.runner-build/reporting/control-page/` as single-bundle CSS and JS, ensuring strict Content Security Policy (`script-src 'self'`, `style-src 'self'`) compliance without inline styles or eval.
 

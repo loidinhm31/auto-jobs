@@ -688,4 +688,202 @@ test.describe('Control Page Dashboard E2E', () => {
     });
     expect(mobileNoOverflow).toBe(true);
   });
+
+  test('manages report workers selector: loads default 1, changes to 4, syncs raw JSON, disables run until save, persists across reload, switches configs, and verifies no workerCount in POST', async ({ page }) => {
+    // Prepare other config on disk with reportWorkers: 2 ('default.json' sorts before 'other.json')
+    fs.writeFileSync(
+      path.join(configRoot, 'other.json'),
+      JSON.stringify({ ...createAlternateConfig(reportRoot), reportWorkers: 2 }, null, 2),
+      'utf8',
+    );
+
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    const workersSelect = page.locator('#select-report-workers');
+    const runReportsBtn = page.locator('#btn-run-reports');
+    const saveBtn = page.locator('#btn-save');
+    const rawJson = page.locator('#raw-json-textarea');
+
+    // 1. Initial state: absent reportWorkers displays as '1'
+    await expect(workersSelect).toBeVisible();
+    await expect(workersSelect).toHaveValue('1');
+    await expect(runReportsBtn).toBeEnabled();
+    await expect(saveBtn).toBeDisabled();
+
+    // 2. Select '4': marks dirty, disables Generate Reports, syncs raw JSON
+    await workersSelect.selectOption('4');
+    await expect(workersSelect).toHaveValue('4');
+    await expect(runReportsBtn).toBeDisabled();
+    await expect(saveBtn).toBeEnabled();
+    await expect(rawJson).toHaveValue(/"reportWorkers":\s*4/);
+
+    // 3. Save config
+    let savedPutBody: { reportWorkers?: number } | undefined;
+    page.on('request', (req) => {
+      if (req.method() === 'PUT' && req.url().includes('/api/config')) {
+        try {
+          savedPutBody = req.postDataJSON() as { reportWorkers?: number };
+        } catch {
+          // ignore non-json
+        }
+      }
+    });
+
+    await saveBtn.click();
+    await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
+    expect(savedPutBody?.reportWorkers).toBe(4);
+    await expect(saveBtn).toBeDisabled();
+    await expect(runReportsBtn).toBeEnabled();
+
+    // 4. Trigger run: verify report POST carries NO workerCount
+    let runPostData: Record<string, unknown> | undefined;
+    page.on('request', (req) => {
+      if (req.method() === 'POST' && req.url().includes('/api/run')) {
+        try {
+          runPostData = req.postDataJSON() as Record<string, unknown>;
+        } catch {
+          // ignore non-json
+        }
+      }
+    });
+
+    await runReportsBtn.click();
+    await expect(page.locator('#run-status-badge')).toHaveText(/running|succeeded/i, { timeout: 10_000 });
+
+    expect(runPostData).toBeDefined();
+    expect(runPostData?.['runType']).toBe('report');
+    expect(runPostData?.['configName']).toBe('default.json');
+    expect('workerCount' in (runPostData ?? {})).toBe(false);
+
+    // 5. Reload page: persists saved '4'
+    await page.reload();
+    await expect(workersSelect).toBeVisible();
+    await expect(workersSelect).toHaveValue('4');
+
+    // 6. Switch to other config: displays its own count '2'
+    const configSelect = page.locator('#config-select');
+    await configSelect.selectOption('other.json');
+    await expect(workersSelect).toHaveValue('2');
+
+    // 7. Switch back to default.json: displays '4'
+    await configSelect.selectOption('default.json');
+    await expect(workersSelect).toHaveValue('4');
+    await expect(rawJson).toHaveValue(/"reportWorkers":\s*4/);
+
+    // 8. Edit via raw JSON: apply valid '3'
+    const jsonWith4 = await rawJson.inputValue();
+    const jsonWith3 = jsonWith4.replace(/"reportWorkers":\s*4/, '"reportWorkers": 3');
+    await rawJson.fill(jsonWith3);
+    await page.locator('#btn-apply-json').click();
+    await expect(page.locator('#json-validation-msg')).toHaveText(/JSON valid and applied to model/i);
+    await expect(workersSelect).toHaveValue('3');
+    await expect(saveBtn).toBeEnabled();
+    await expect(runReportsBtn).toBeDisabled();
+
+    // 9. Edit via raw JSON: reject invalid '99'
+    const jsonWith99 = jsonWith3.replace('"reportWorkers": 3', '"reportWorkers": 99');
+    await rawJson.fill(jsonWith99);
+    await page.locator('#btn-apply-json').click();
+    await expect(page.locator('#json-validation-msg')).toHaveText(/Invalid JSON or configuration/i);
+    // Selector retains prior valid value 3
+    await expect(workersSelect).toHaveValue('3');
+
+    // 10. Axe accessibility on the selector
+    const a11yResult = await new AxeBuilder({ page }).include('#select-report-workers').analyze();
+    expect(a11yResult.violations).toEqual([]);
+
+    // 11. Keyboard navigation on selector
+    await workersSelect.focus();
+    await page.keyboard.press('ArrowUp');
+    const keyVal = await workersSelect.inputValue();
+    expect(['1', '2', '3', '4']).toContain(keyVal);
+  });
+
+  test('auto-build and crafted request safety: auto-build omits workerCount, crafted requests with workerCount get 422', async ({ page }) => {
+    // Set default config to have reportWorkers: 4 on disk
+    fs.writeFileSync(
+      path.join(configRoot, 'default.json'),
+      JSON.stringify({ ...createValidConfig(reportRoot), reportWorkers: 4 }, null, 2),
+      'utf8',
+    );
+
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    // 1. Trigger auto-build on demo-build-service
+    const buildCard = page.locator('.project-card', { hasText: 'Demo Build Service' });
+    const buildBtn = buildCard.getByRole('button', { name: 'Build' });
+    await buildBtn.click();
+
+    const dialog = page.locator('#build-confirm-dialog');
+    await expect(dialog).toBeVisible();
+
+    let autoBuildPostData: Record<string, unknown> | undefined;
+    page.on('request', (req) => {
+      if (req.method() === 'POST' && req.url().includes('/api/run')) {
+        try {
+          autoBuildPostData = req.postDataJSON() as Record<string, unknown>;
+        } catch {
+          // ignore non-json
+        }
+      }
+    });
+
+    const confirmBtn = page.locator('#btn-confirm-build');
+    await confirmBtn.click();
+    await expect(dialog).not.toBeVisible();
+
+    await expect(page.locator('#run-status-badge')).toHaveText(/running|succeeded/i, { timeout: 10_000 });
+    expect(autoBuildPostData).toBeDefined();
+    expect(autoBuildPostData?.['runType']).toBe('auto-build');
+    expect(autoBuildPostData?.['projectId']).toBe('demo-build-service');
+    expect('workerCount' in (autoBuildPostData ?? {})).toBe(false);
+
+    // 2. Fetch current ETag
+    const getRes = await page.request.get(`${serverUrl}api/config?name=default.json`);
+    const currentConfig = (await getRes.json()) as { etag: string };
+    const etag = currentConfig.etag;
+    // 3. Extract CSRF token from page
+    const csrfToken = await page.evaluate(
+      () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+    );
+
+    // 4. Direct crafted POST with workerCount (report): 422 INVALID_WORKER_COUNT
+    const craftedReportRes = await page.request.post(`${serverUrl}api/run`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+        Origin: new URL(serverUrl).origin,
+      },
+      data: {
+        configName: 'default.json',
+        configEtag: etag,
+        runType: 'report',
+        workerCount: 2,
+      },
+    });
+    expect(craftedReportRes.status()).toBe(422);
+    const craftedReportBody = (await craftedReportRes.json()) as { error: { code: string; message: string } };
+    expect(craftedReportBody.error.code).toBe('INVALID_WORKER_COUNT');
+
+    // 5. Direct crafted POST with workerCount (auto-build): 422 INVALID_WORKER_COUNT
+    const craftedBuildRes = await page.request.post(`${serverUrl}api/run`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+        Origin: new URL(serverUrl).origin,
+      },
+      data: {
+        configName: 'default.json',
+        configEtag: etag,
+        runType: 'auto-build',
+        projectId: 'demo-build-service',
+        workerCount: 2,
+      },
+    });
+    expect(craftedBuildRes.status()).toBe(422);
+    const craftedBuildBody = (await craftedBuildRes.json()) as { error: { code: string; message: string } };
+    expect(craftedBuildBody.error.code).toBe('INVALID_WORKER_COUNT');
+  });
 });

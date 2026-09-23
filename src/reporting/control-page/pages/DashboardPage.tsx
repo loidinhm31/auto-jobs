@@ -32,6 +32,7 @@ export function DashboardPage() {
     addProject,
     removeProjectAt,
     updateDefaults,
+    updateReportWorkers,
     loadConfigList,
     loadConfig,
     reloadConfig,
@@ -197,6 +198,9 @@ export function DashboardPage() {
           isDirty={isDirty}
           isLoading={isTriggering}
           onRunReports={() => void handleRunReports()}
+          reportWorkers={typeof currentDoc?.reportWorkers === 'number' ? currentDoc.reportWorkers : 1}
+          hasDocument={Boolean(currentDoc)}
+          onReportWorkersChange={updateReportWorkers}
         />
       }
       runSection={

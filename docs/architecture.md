@@ -685,35 +685,27 @@ The Control Dashboard frontend refactor implements Atomic Design principles, cle
    - The loopback dashboard frontend is 100% React, compiled via Vite into `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, `assets/control-page.js`).
    - `scripts/copy-report-assets.mjs` stages only `report.css`.
 
-### Configuration form builder and Dashboard integration (Phases 02–03)
+### Dashboard report-worker selector and shared editor
 
-`ConfigFormBuilder` is a document-controlled organism that composes the
-`ConfigProjectEditor` and `ConfigDefaultsEditor` molecules. The project editor
-edits project fields and credential environment-variable references, with
-project references inheriting defaults when overrides are absent. The defaults
-editor handles timeout, browser, artifact directory, and default credential
-references. Credential inputs accept variable names only; they do not accept
-secret values.
+`ConfigFormBuilder` edits project/default fields; `ExecutionSection` adds an
+accessible `Report workers` selector (1–4, default 1) beside Generate Reports.
+`DashboardPage` binds it to `useConfigManager.updateReportWorkers`, backed by
+`useConfigDocumentEditor`; the transition updates top-level `reportWorkers`,
+marks the document dirty, and regenerates formatted raw JSON. The form and
+valid raw-JSON Apply update the same schema-validated document; invalid JSON
+leaves the applied model unchanged.
 
-`useConfigDocumentEditor` separates document/raw-JSON synchronization, dirty
-state, validation, raw JSON Apply, and document mutations from
-`useConfigManager`. The immutable add, update, remove, and defaults transitions
-are in `hooks/config-document-transitions.ts`. Both this browser editor and the
-runtime config loader use the browser-safe `assertProjectConfigDocument`
-boundary in `src/config/project-config-schema.ts`. `useConfigManager` retains
-configuration listing/loading and the existing API save flow, including the
-current ETag in `If-Match` and conflict handling.
+A dirty document disables Generate Reports. Save writes the document through
+`PUT /api/config` with the current `If-Match` ETag; successful Save updates the
+local ETag. A report `POST /api/run` contains exactly `configName`,
+`configEtag`, and `runType`—never `workerCount`. The API rejects any crafted
+request with its own `workerCount` as `422 INVALID_WORKER_COUNT`. The executor
+verifies the ETag and passes the saved count only to the report executor;
+auto-build receives no count.
 
-`DashboardPage` supplies `ConfigFormBuilder` and `RawJsonSection` to
-`DashboardLayout`; the builder-first grid uses two columns at desktop (`lg`) and
-stacks on mobile. Both are wired to `useConfigManager`: the form receives
-manager-owned document state and mutation actions, while the raw editor receives
-its JSON draft and Apply action. Form mutations update the document and
-regenerate formatted JSON. Raw edits remain a draft until explicit
-**Apply & Validate**; invalid JSON or configuration leaves the current form
-model unchanged. Existing `#raw-json-textarea` and `#config-select` selectors
-remain. This Phase 03 integration does not change configuration APIs, the
-save/ETag (`If-Match`) flow, run behavior, or credential behavior.
+The UI and CLI share `assertProjectConfigDocument`. `runFromConfig` calls
+`loadProjectConfigWithDocument`, reading once and using the saved count with
+normalized projects.
 
 ## Test and release boundary
 
@@ -742,12 +734,9 @@ Phase 02 control hooks and interface contracts coverage in
 `tests/unit/control-hooks-and-types.spec.ts` verifies credential variable discovery,
 CSRF auto-injection, run poller exponential backoff and terminal state transitions,
 and end-to-end hook integration with loopback config, secrets, and run APIs.
-Phase 03 atomic design components coverage in
-`tests/unit/control-atomic-components.spec.ts` verifies 21 unit checks across
-all atom primitives (`Badge`, `Button`, `Input`, `Select`, `StatusBanner`, `LoadingIndicator`)
-and compound molecules (`CredentialRow`, `BrowserSettingRow`, `ConfigSelectorBar`,
-`LogViewer`, `RunResultBox`), verifying DOM ID and CSS class fidelity, accessibility
-roles/live regions, disabled/loading states, and data attribute bindings.
+Phase 03 atomic-component coverage in `tests/unit/control-atomic-components.spec.ts`
+exercises `ExecutionSection`, including the worker selector's 1–4 options and
+disabled states, alongside DOM, accessibility, and data-attribute contracts.
 Phase 03 run-environment coverage is in
 `tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
 `tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection
@@ -764,13 +753,16 @@ collision-free project creation, immutable field/default updates, advanced
 field preservation, deletion invariants, and schema validation.
 
 Control-page E2E coverage verifies selection persistence in localStorage and
-`?config=` across reload, URL deep-link precedence over stored selection, and
-fallback from stale names. The builder workflow exercises project add/edit/
-remove and default edits, builder-to-JSON live updates, valid JSON Apply back
-into form controls, invalid/schema-invalid Apply preserving the prior model,
-and the existing save path. The same suite retains coverage for credential
-presence/save/clear, browser settings, execution injection, and zero plaintext
-leakage. Seven E2E cases run in Chromium and WebKit for 14 browser executions.
+`?config=` across reload, URL deep-link priority, stale-name fallback, project
+edits, and builder/raw-JSON synchronization. Valid Apply updates form controls;
+invalid/schema-invalid Apply preserves the prior model.
+
+Two report-worker scenarios cover the default and 1–4 selector, JSON sync,
+dirty/run gating, saved-config persistence, and config switching. They also
+verify report/auto-build requests omit `workerCount` and crafted requests with
+that field return `422 INVALID_WORKER_COUNT`. Credential, browser-settings,
+execution-injection, and zero-leakage scenarios remain covered in Chromium
+and WebKit.
 
 The desktop/mobile test audits the editor with Axe at 1280×800 and 375×667,
 expects zero violations at both sizes, and verifies no horizontal overflow.
@@ -778,10 +770,11 @@ expects zero violations at both sizes, and verifies no horizontal overflow.
 Template Servers, template-config loading, production report and auto-build
 flows, and Control Page rendering without CORS/CSP console errors.
 
-The 2026-09-23 release audit completed `npm run test:release` at 371/371
-(100%) with 0 errors; typecheck and build passed, code review scored 10/10, and
-the user approved the release. The deterministic fixture suite does not contact
-live Jenkins or vendor services.
+The 2026-09-23 Active Config Phase 04 audit recorded
+`npm run test:release` at 371/371 (100%) with typecheck/build passing and code
+review approval at 10/10. This dated snapshot predates bounded-report Phase 03
+and is not evidence for its verification results. Deterministic fixtures do
+not contact live Jenkins or vendor services.
 
 Phase 05 SecretStore/API unit additions are
 `tests/unit/control-secret-store.spec.ts` and

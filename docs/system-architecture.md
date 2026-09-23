@@ -1,9 +1,9 @@
 # System architecture
 
-This is the component-level view of `auto-jobs` after Phase 3 and dynamic-
-credentials Phases 01–05. The repository has two intentionally separate
-execution paths plus a local persistence seam, a loopback control API/UI, a
-control-run environment boundary, and deterministic Phase 05 verification:
+This component-level view covers the shipped bounded-report worker dashboard
+integration and dynamic-credential Phases 01–05. It describes two separate
+execution paths, the local SecretStore, loopback control API/UI, saved
+report-worker editing, and deterministic verification:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
@@ -15,9 +15,9 @@ control-run environment boundary, and deterministic Phase 05 verification:
 - **SecretStore and secrets API:** persist validated local credential values
   outside project JSON and expose only boolean presence through guarded
   `/api/secrets` operations.
-- **Control UI:** discover credential-variable names from the active
-  configuration, show presence-only state, persist guarded replacements, and
-  wipe password inputs on save, clear, or close.
+- **Control UI:** edit the schema-v1 document through the shared form/raw-JSON
+  editor, set saved report workers beside Generate Reports, manage credentials,
+  and wipe password inputs on save, clear, or close.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
@@ -77,11 +77,12 @@ is mutated. It normalizes the configuration and passes the new object as
 
 ## Control-run environment flow
 
-`POST /api/run` supplies `configName`, `configEtag`, explicit `runType`, and
-optional auto-build `projectId`; it never carries secret values. The control
-API rejects any request with its own `workerCount` property as `422
-INVALID_WORKER_COUNT` before calling `startRun`. The run manager accepts one
-active run and dispatches asynchronously; the executor then:
+A report `POST /api/run` carries only `configName`, `configEtag`, and `runType`;
+an auto-build request additionally carries its existing `projectId`. Neither
+mode sends `workerCount` or secret values. The API rejects any own
+`workerCount` property with `422 INVALID_WORKER_COUNT` before `startRun`. The
+run manager accepts one active run and dispatches asynchronously; the executor
+then:
 
 | Stage | Contract |
 | --- | --- |
@@ -92,6 +93,18 @@ active run and dispatches asynchronously; the executor then:
 | Report dispatch | Pass selected report projects and `{ runtimeEnvironment, workerCount: configEntry.document.reportWorkers ?? 1 }` to `reportExecutor` only. |
 | Auto-build dispatch | Call `autoBuildExecutor` with its existing `{ runtimeEnvironment }` dependency; do not pass a report worker count. |
 | Redact | Use every non-empty stored value to redact control logs, report warnings, caught errors/stacks, and auto-build URL result fields before recording them. |
+
+`DashboardPage` binds the `ExecutionSection` selector beside Generate Reports
+to the active document's `updateReportWorkers` transition. A selection updates
+the shared document, marks it dirty, and regenerates raw JSON. Valid raw-JSON
+Apply validates through the shared schema and updates the same document;
+invalid input leaves the applied model unchanged. Generate Reports stays
+disabled while the document is dirty; Save persists it through the existing
+`If-Match` ETag flow. The report POST then identifies that saved document,
+without carrying a worker count. The UI and CLI share
+`assertProjectConfigDocument`; `runFromConfig` reads the file once through
+`loadProjectConfigWithDocument` and uses both its document and normalized
+projects.
 
 The file-mode report CLI and direct library calls keep their existing
 caller-supplied environment behavior; this injection boundary belongs only to
@@ -421,12 +434,12 @@ sequenceDiagram
   UI->>API: DELETE /api/secrets?name=... or wipe locally
 ```
 
-The browser-facing contract is covered by
-`tests/e2e/control-page.spec.ts`: it checks modal accessibility, dynamic key
-discovery, Missing/Configured transitions, save/clear/reopen state, injected
-credential execution, input wiping, and absence of test secrets in page HTML
-and run logs. The isolated E2E fixture runs the four scenarios in both
-Chromium and WebKit, for eight checks total, and does not contact Jenkins.
+The browser-facing contract in `tests/e2e/control-page.spec.ts` covers
+credential discovery, presence, save/clear/reopen, input wiping, and absence of
+test secrets from page HTML and run logs. It also covers report-worker
+selection, raw-JSON sync, dirty/save gating, persistence, request payloads, and
+crafted-request rejection. Chromium/WebKit scenarios use local fixtures and
+do not contact Jenkins.
 
 ### Control UI headless hook architecture and component contracts (Phase 02)
 
@@ -568,7 +581,8 @@ graph TD
    - Exact DOM ID and CSS class preservation satisfies Playwright E2E locators (`tests/e2e/control-page.spec.ts`) without requiring test changes.
    - Preserves `<textarea id="raw-json-textarea">` as a native textarea for Playwright `.fill()` and `.textContent` operations.
    - Enforces zero plaintext credential leakage: password masking, `autoComplete="off"`, and input value clearing on save, clear, or dialog close.
-   - Verified by 21 unit tests in `tests/unit/control-atomic-components.spec.ts`.
+   - The suite also covers `ExecutionSection`'s report-worker selector options
+     and disabled states.
 
 #### React Application Assembly and Legacy Cleanup (Phases 04 - 06)
 

@@ -17,6 +17,7 @@ import {
   LogViewer,
   RunResultBox,
 } from '../../src/reporting/control-page/components/molecules/index.js';
+import { ExecutionSection } from '../../src/reporting/control-page/components/organisms/ExecutionSection.js';
 
 test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
   test.describe('Atoms', () => {
@@ -459,6 +460,60 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
         );
         expect(hiddenHtml).toContain('id="run-result-box"');
         expect(hiddenHtml).toContain('hidden');
+      });
+    });
+    test.describe('ExecutionSection', () => {
+      test('renders Generate Reports button and Report workers select with options 1-4', () => {
+        const html = renderToString(
+          React.createElement(ExecutionSection, {
+            onRunReports: () => {},
+            reportWorkers: 1,
+            hasDocument: true,
+          }),
+        );
+        expect(html).toContain('id="btn-run-reports"');
+        expect(html).toContain('id="select-report-workers"');
+        expect(html).toContain('Report workers');
+        expect(html).toContain('value="1"');
+        expect(html).toContain('value="4"');
+      });
+
+      test('disables selector when hasDocument is false or isLoading is true', () => {
+        const noDocHtml = renderToString(
+          React.createElement(ExecutionSection, {
+            onRunReports: () => {},
+            hasDocument: false,
+          }),
+        );
+        expect(noDocHtml).toMatch(/id="select-report-workers"[^>]*disabled/);
+
+        const loadingHtml = renderToString(
+          React.createElement(ExecutionSection, {
+            onRunReports: () => {},
+            hasDocument: true,
+            isLoading: true,
+          }),
+        );
+        expect(loadingHtml).toMatch(/id="select-report-workers"[^>]*disabled/);
+      });
+
+      test('disables Generate Reports button when isDirty, isLoading, or hasDocument is false', () => {
+        const dirtyHtml = renderToString(
+          React.createElement(ExecutionSection, {
+            onRunReports: () => {},
+            isDirty: true,
+            hasDocument: true,
+          }),
+        );
+        expect(dirtyHtml).toMatch(/id="btn-run-reports"[^>]*disabled/);
+
+        const noDocHtml = renderToString(
+          React.createElement(ExecutionSection, {
+            onRunReports: () => {},
+            hasDocument: false,
+          }),
+        );
+        expect(noDocHtml).toMatch(/id="btn-run-reports"[^>]*disabled/);
       });
     });
   });

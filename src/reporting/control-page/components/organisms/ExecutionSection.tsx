@@ -1,31 +1,73 @@
 import React from 'react';
 import { Button } from '../atoms/Button.js';
+import { Select } from '../atoms/Select.js';
+import type { SelectOption } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
 
 export interface ExecutionSectionProps {
   isDirty?: boolean;
   isLoading?: boolean;
   onRunReports: () => void;
+  reportWorkers?: number;
+  hasDocument?: boolean;
+  onReportWorkersChange?: (count: number) => void;
   className?: string;
 }
+
+const REPORT_WORKER_OPTIONS: SelectOption[] = [
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4' },
+];
 
 export function ExecutionSection({
   isDirty = false,
   isLoading = false,
   onRunReports,
+  reportWorkers = 1,
+  hasDocument = true,
+  onReportWorkersChange,
   className,
 }: ExecutionSectionProps) {
-  return (
-    <div className={cn('actions-bar flex gap-4 items-center', className)}>
-      <Button
-        type="button"
-        id="btn-run-reports"
-        variant="primary"
-        disabled={isDirty || isLoading}
-        onClick={onRunReports}
-      >
-        Generate Reports (All Enabled)
-      </Button>
-    </div>
+  const handleWorkersChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextCount = Number.parseInt(event.target.value, 10);
+    if (!Number.isNaN(nextCount) && onReportWorkersChange) {
+      onReportWorkersChange(nextCount);
+    }
+  };
+
+  const runButton = React.createElement(
+    Button,
+    {
+      type: 'button',
+      id: 'btn-run-reports',
+      variant: 'primary',
+      disabled: isDirty || isLoading || !hasDocument,
+      onClick: onRunReports,
+    },
+    'Generate Reports (All Enabled)',
+  );
+
+  const selectWorkers = React.createElement(Select, {
+    id: 'select-report-workers',
+    label: 'Report workers',
+    options: REPORT_WORKER_OPTIONS,
+    value: String(reportWorkers ?? 1),
+    disabled: !hasDocument || isLoading,
+    onChange: handleWorkersChange,
+  });
+
+  const selectContainer = React.createElement(
+    'div',
+    { className: 'w-36' },
+    selectWorkers,
+  );
+
+  return React.createElement(
+    'div',
+    { className: cn('actions-bar flex flex-wrap gap-4 items-end', className) },
+    runButton,
+    selectContainer,
   );
 }

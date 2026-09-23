@@ -386,3 +386,63 @@ test('runFromConfig forwards saved reportWorkers and ignores caller-supplied wor
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('runFromConfig defaults workerCount to 1 when reportWorkers is omitted', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-jobs-report-workers-default-'));
+  const environment = {
+    A_USER: 'user-a',
+    A_PASSWORD: 'secret-password-a',
+    B_USER: 'user-b',
+    B_PASSWORD: 'secret-password-b',
+  };
+  const filePath = projectFile(root);
+  fs.writeFileSync(
+    filePath,
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 10_000 },
+        projects: [
+          { id: 'proj-a', name: 'Proj A', runType: 'report', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/proj-a/', credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASSWORD' } },
+          { id: 'proj-b', name: 'Proj B', runType: 'report', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/proj-b/', credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASSWORD' } },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+
+  let activeWorkers = 0;
+  let maxActiveWorkers = 0;
+  try {
+    const options: RunnerDependencies = {
+      launchBrowser: async () => fakeBrowser(),
+      executeProject: async (project) => {
+        activeWorkers += 1;
+        maxActiveWorkers = Math.max(maxActiveWorkers, activeWorkers);
+        type PromiseWithResolversTarget = {
+          withResolvers: <T>() => { promise: Promise<T>; resolve: (v?: T) => void };
+        };
+        const promiseCtor = Promise as unknown as PromiseWithResolversTarget;
+        const { promise, resolve } = promiseCtor.withResolvers();
+        setTimeout(resolve, 20);
+        await promise;
+        activeWorkers -= 1;
+        return {
+          projectId: project.id,
+          name: project.name,
+          state: 'success',
+          runId: `run-${project.id}`,
+          warnings: [],
+        };
+      },
+    };
+
+    const result = await runFromConfig(filePath, environment, options);
+
+    expect(maxActiveWorkers).toBe(1);
+    expect(result.outcomes.map((o) => o.projectId)).toEqual(['proj-a', 'proj-b']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

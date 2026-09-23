@@ -6,6 +6,7 @@ import {
   removeProjectDocumentAt,
   updateProjectDocumentAt,
   updateProjectDocumentDefaults,
+  updateProjectDocumentReportWorkers,
   type ProjectUpdate,
 } from './config-document-transitions.js';
 import type {
@@ -31,6 +32,7 @@ export interface UseConfigDocumentEditorResult {
   addProject: (projectInput?: ProjectConfigInput) => string | null;
   removeProjectAt: (projectIndex: number) => boolean;
   updateDefaults: (update: (previous: ProjectConfigDefaults) => ProjectConfigDefaults) => void;
+  updateReportWorkers: (count: number) => void;
 }
 
 function getValidationErrors(document: ProjectConfigDocumentV1 | null): string[] {
@@ -132,6 +134,10 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
   const updateDefaults = useCallback((update: (previous: ProjectConfigDefaults) => ProjectConfigDefaults): void => {
     if (currentDoc) setDocument(updateProjectDocumentDefaults(currentDoc, update), true);
   }, [currentDoc, setDocument]);
+  const updateReportWorkers = useCallback((count: number): void => {
+    if (currentDoc) setDocument(updateProjectDocumentReportWorkers(currentDoc, count), true);
+  }, [currentDoc, setDocument]);
+
 
   return {
     currentDoc,
@@ -148,5 +154,6 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     addProject,
     removeProjectAt,
     updateDefaults,
+    updateReportWorkers,
   };
 }
