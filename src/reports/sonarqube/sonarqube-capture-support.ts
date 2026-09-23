@@ -125,16 +125,29 @@ export async function screenshotFacetRange(
   outputDirectory: string,
   filename: string,
   deadline: WorkflowDeadline,
+  extraHeader?: Locator,
 ): Promise<Pick<CaptureMetadata, 'screenshotPath' | 'screenshotSha256' | 'viewport'>> {
   await withWorkflowDeadline(() => first.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() }), deadline);
   await withWorkflowDeadline(() => second.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() }), deadline);
   const firstBox = await withWorkflowDeadline(() => first.boundingBox(), deadline);
   const secondBox = await withWorkflowDeadline(() => second.boundingBox(), deadline);
   if (firstBox === null || secondBox === null) throw new Error('SonarQube Type/Severity facet bounds were unavailable');
-  const left = Math.floor(Math.min(firstBox.x, secondBox.x));
-  const top = Math.floor(Math.min(firstBox.y, secondBox.y));
-  const right = Math.ceil(Math.max(firstBox.x + firstBox.width, secondBox.x + secondBox.width));
-  const bottom = Math.ceil(Math.max(firstBox.y + firstBox.height, secondBox.y + secondBox.height));
+  let left = Math.floor(Math.min(firstBox.x, secondBox.x));
+  let top = Math.floor(Math.min(firstBox.y, secondBox.y));
+  let right = Math.ceil(Math.max(firstBox.x + firstBox.width, secondBox.x + secondBox.width));
+  let bottom = Math.ceil(Math.max(firstBox.y + firstBox.height, secondBox.y + secondBox.height));
+
+  if (extraHeader !== undefined) {
+    await withWorkflowDeadline(() => extraHeader.scrollIntoViewIfNeeded({ timeout: deadline.requireRemaining() }), deadline).catch(() => undefined);
+    const headerBox = await withWorkflowDeadline(() => extraHeader.boundingBox(), deadline).catch(() => null);
+    if (headerBox !== null && headerBox.width > 0 && headerBox.height > 0) {
+      left = Math.floor(Math.min(left, headerBox.x));
+      top = Math.floor(Math.min(top, headerBox.y));
+      right = Math.ceil(Math.max(right, headerBox.x + headerBox.width));
+      bottom = Math.ceil(Math.max(bottom, headerBox.y + headerBox.height));
+    }
+  }
+
   const width = right - left;
   const height = bottom - top;
   if (width <= 0 || height <= 0) throw new Error('SonarQube Type/Severity facet bounds were empty');

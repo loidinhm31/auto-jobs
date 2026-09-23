@@ -11,6 +11,7 @@ import {
   issuesControlCandidates,
   projectIdentityCandidates,
   projectIdentityHrefCandidates,
+  projectNameNavButton,
 } from './sonarqube-locators.js';
 import { normalizeSonarIssueFacets } from './sonarqube-issue-facets.js';
 import {
@@ -206,6 +207,7 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
   let screenshotMetadata: Awaited<ReturnType<typeof screenshotFacetRange>> | undefined;
   const isAllZero = normalized.facets.types.every((t) => t.count === 0) &&
     normalized.facets.severities.every((s) => s.count === 0);
+  const navButton = await projectNameNavButton(input.page).catch(() => undefined);
 
   if (typeFacet !== undefined && severityFacet !== undefined && !isAllZero) {
     try {
@@ -218,6 +220,7 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
         input.outputDirectory,
         SONAR_SCREENSHOTS.issues,
         input.deadline,
+        navButton,
       );
       screenshot = SONAR_SCREENSHOTS.issues;
     } catch (error) {
@@ -227,13 +230,24 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
     try {
       const mainPanel = input.page.locator('main, #issues-page, [data-component="issues-page"], .it__layout-page-main-inner, body').first();
       await visible(mainPanel, input, 'SonarQube main content region was not visible');
-      screenshotMetadata = await screenshotRegion(
-        input.page,
-        mainPanel,
-        input.outputDirectory,
-        SONAR_SCREENSHOTS.issues,
-        input.deadline,
-      );
+      if (navButton !== undefined) {
+        screenshotMetadata = await screenshotFacetRange(
+          input.page,
+          navButton,
+          mainPanel,
+          input.outputDirectory,
+          SONAR_SCREENSHOTS.issues,
+          input.deadline,
+        );
+      } else {
+        screenshotMetadata = await screenshotRegion(
+          input.page,
+          mainPanel,
+          input.outputDirectory,
+          SONAR_SCREENSHOTS.issues,
+          input.deadline,
+        );
+      }
       screenshot = SONAR_SCREENSHOTS.issues;
     } catch {
       if (typeFacet !== undefined && severityFacet !== undefined) {
@@ -244,6 +258,7 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
           input.outputDirectory,
           SONAR_SCREENSHOTS.issues,
           input.deadline,
+          navButton,
         ).catch(() => undefined);
         if (screenshotMetadata !== undefined) screenshot = SONAR_SCREENSHOTS.issues;
       }
