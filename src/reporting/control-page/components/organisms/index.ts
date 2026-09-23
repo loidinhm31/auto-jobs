@@ -6,4 +6,5 @@ export * from './ProjectCard.js';
 export * from './ProjectsGrid.js';
 export * from './RawJsonSection.js';
 export * from './ExecutionSection.js';
+export * from './ConfigFormBuilder.js';
 export * from './RunStatusCard.js';

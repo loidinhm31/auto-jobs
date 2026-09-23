@@ -85,7 +85,8 @@ flowchart LR
   runner. It has no auto-build command or template/runtime source switch.
 - `src/config/` validates schema keys, exact HTTP(S) URLs, project-only
   `runType`, credential references, source origins, selectors, and bounded
-  runtime settings. Normalization defaults an omitted `runType` to `report`.
+  runtime settings through the browser-safe shared `assertProjectConfigDocument`
+  boundary. Normalization defaults an omitted `runType` to `report`.
 - `src/config/project-run-selection.ts` owns the explicit
   `selectReportProjects` and `selectAutoBuildProject` boundaries. Selection is
   pure and has no browser or Jenkins side effect.
@@ -127,7 +128,9 @@ flowchart LR
   (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
   Tailwind class merge utility ([`utils/cn.ts`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4)),
   headless React hooks (`hooks/useControlApi.ts`, `hooks/useConfigManager.ts`,
-  `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`, `hooks/useRunPoller.ts`),
+  `hooks/useConfigDocumentEditor.ts` for document/raw-JSON editing and
+  validation, `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`,
+  `hooks/useRunPoller.ts`),
   atomic design UI primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/):
   [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31),
   [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5),
@@ -139,6 +142,7 @@ flowchart LR
   [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8),
   [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28),
   [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7),
+  `ConfigProjectEditor`, `ConfigDefaultsEditor`,
   [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23),
   [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5)),
   compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/):
@@ -650,6 +654,30 @@ The Control Dashboard frontend refactor implements Atomic Design principles, cle
    - Completely removed legacy imperative files: `src/reporting/control-page/control-page.js`, `control-page.html`, and `control-page.css`.
    - The loopback dashboard frontend is 100% React, compiled via Vite into `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, `assets/control-page.js`).
    - `scripts/copy-report-assets.mjs` stages only `report.css`.
+
+### Phase 02 configuration form builder (implementation; Dashboard integration pending)
+
+`ConfigFormBuilder` is a document-controlled organism that composes the
+`ConfigProjectEditor` and `ConfigDefaultsEditor` molecules. The project editor
+edits project fields and credential environment-variable references, with
+project references inheriting defaults when overrides are absent. The defaults
+editor handles timeout, browser, artifact directory, and default credential
+references. Credential inputs accept variable names only; they do not accept
+secret values.
+
+`useConfigDocumentEditor` separates document/raw-JSON synchronization, dirty
+state, validation, raw JSON Apply, and document mutations from
+`useConfigManager`. The immutable add, update, remove, and defaults transitions
+are in `hooks/config-document-transitions.ts`. Both this browser editor and the
+runtime config loader use the browser-safe `assertProjectConfigDocument`
+boundary in `src/config/project-config-schema.ts`. `useConfigManager` retains
+configuration listing/loading and the existing API save flow, including the
+current ETag in `If-Match` and conflict handling.
+
+`DashboardPage` currently renders `RawJsonSection` and does not mount
+`ConfigFormBuilder`. Side-by-side integration remains Phase 03 work; the new
+organism and its editor state are implemented components/hooks, not a claim
+that the running Dashboard already includes the form.
 
 ## Test and release boundary
 

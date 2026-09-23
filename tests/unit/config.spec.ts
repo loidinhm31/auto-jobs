@@ -67,6 +67,34 @@ test('normalizes exact URLs, defaults, selectors, and runtime-only credentials',
   expect(config).not.toHaveProperty('password');
 });
 
+test('validates artifact directories across POSIX and Windows path forms', () => {
+  const document = validDocument();
+  const withArtifactDir = (artifactDir: string) => ({
+    ...document,
+    defaults: { ...document.defaults, artifactDir },
+  });
+
+  for (const root of ['/', '\\', 'C:\\', 'C:/', '\\\\server\\share', '\\\\server\\share\\']) {
+    expect(() => assertProjectConfigDocument(withArtifactDir(root))).toThrow(/filesystem root/u);
+  }
+  for (const traversal of ['../reports', '..\\reports', 'C:\\..\\reports', 'C:/../reports']) {
+    expect(() => assertProjectConfigDocument(withArtifactDir(traversal))).toThrow(/traversal segments/u);
+  }
+
+  for (const timeoutMs of [1_000, 3_600_000]) {
+    expect(() => assertProjectConfigDocument({
+      ...document,
+      defaults: { ...document.defaults, timeoutMs },
+    })).not.toThrow();
+  }
+  for (const timeoutMs of [999, 3_600_001, 1_000.5]) {
+    expect(() => assertProjectConfigDocument({
+      ...document,
+      defaults: { ...document.defaults, timeoutMs },
+    })).toThrow(/integer from 1000 to 3600000/u);
+  }
+});
+
 test('parses only an explicit config path', () => {
   expect(parseReportArguments(['--config', 'config/projects.json'])).toEqual({
     configPath: 'config/projects.json',

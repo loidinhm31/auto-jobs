@@ -2,6 +2,12 @@ import { expect, test } from '@playwright/test';
 
 import { discoverRequiredCredentialKeys } from '../../src/reporting/control-page/utils/discoverCredentialKeys.js';
 import {
+  addProjectDraft,
+  removeProjectDocumentAt,
+  updateProjectDocumentAt,
+  updateProjectDocumentDefaults,
+} from '../../src/reporting/control-page/hooks/config-document-transitions.js';
+import {
   ControlApiError,
   getCsrfTokenFromDom,
 } from '../../src/reporting/control-page/hooks/useControlApi.js';
@@ -496,6 +502,91 @@ test.describe('Control Page Phase 02: Types, Utility & Hook Contracts', () => {
         expect(() => syncUrlActiveConfig('test.json')).not.toThrow();
         expect(() => syncUrlActiveConfig(null)).not.toThrow();
       });
+    });
+
+  });
+
+  test.describe('Controlled configuration document transitions', () => {
+    const document: ProjectConfigDocumentV1 = {
+      schemaVersion: 1,
+      defaults: {
+        timeoutMs: 30_000,
+        browser: 'firefox',
+        artifactDir: 'reports',
+        allowedOrigins: ['https://jenkins.example'],
+      },
+      projects: [
+        {
+          id: 'new-project',
+          name: 'Existing',
+          loginUrl: 'https://jenkins.example/login',
+          jobUrl: 'https://jenkins.example/job/build',
+          allowedOrigins: ['https://jenkins.example'],
+        },
+        {
+          id: 'new-project-2',
+          name: 'Second',
+          loginUrl: 'https://jenkins.example/login',
+          jobUrl: 'https://jenkins.example/job/second',
+          enabled: true,
+        },
+      ],
+    };
+
+    test('adds a collision-free draft and preserves untouched project fields', () => {
+      const added = addProjectDraft(document);
+      expect(added?.projectId).toBe('new-project-3');
+      expect(added?.document.projects[2]).toMatchObject({
+        id: 'new-project-3',
+        name: 'New Project',
+        loginUrl: '',
+        jobUrl: '',
+        runType: 'report',
+        enabled: true,
+      });
+      expect(document.projects).toHaveLength(2);
+
+      const edited = updateProjectDocumentAt(document, 0, { name: 'Renamed' });
+      expect(edited.projects[0]).toMatchObject({
+        name: 'Renamed',
+        allowedOrigins: ['https://jenkins.example'],
+      });
+      expect(document.projects[0]?.name).toBe('Existing');
+    });
+
+    test('preserves unrelated defaults, removes empty defaults, and protects project invariants', () => {
+      const updated = updateProjectDocumentDefaults(document, (previous) => ({
+        ...previous,
+        timeoutMs: 60_000,
+      }));
+      expect(updated.defaults).toMatchObject({
+        timeoutMs: 60_000,
+        browser: 'firefox',
+        artifactDir: 'reports',
+        allowedOrigins: ['https://jenkins.example'],
+      });
+      expect(updateProjectDocumentDefaults(document, () => ({}))).not.toHaveProperty('defaults');
+      expect(removeProjectDocumentAt(document, 0)?.projects.map((project) => project.id))
+        .toEqual(['new-project-2']);
+
+      const onlyEnabledProject = {
+        ...document,
+        projects: [
+          { ...document.projects[0]!, enabled: true },
+          { ...document.projects[1]!, enabled: false },
+        ],
+      };
+      expect(removeProjectDocumentAt(onlyEnabledProject, 0)).toBeNull();
+      expect(removeProjectDocumentAt({ ...document, projects: [document.projects[0]!] }, 0)).toBeNull();
+
+      const fullDocument = {
+        ...document,
+        projects: Array.from({ length: 50 }, (_, index) => ({
+          ...document.projects[0]!,
+          id: `project-${index}`,
+        })),
+      };
+      expect(addProjectDraft(fullDocument)).toBeNull();
     });
   });
 

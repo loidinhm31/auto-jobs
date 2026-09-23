@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 
 import { ConfigError } from '../config-errors.js';
 import { normalizeConfiguredUrl } from '../config-values.js';
@@ -104,15 +103,20 @@ export function exactUrl(value: unknown, fieldName: string, issues: string[]): v
   }
 }
 
+function isFilesystemRoot(value: string): boolean {
+  const normalized = value.replaceAll('\\', '/');
+  return /^\/+$/u.test(normalized)
+    || /^[a-z]:\/+$/iu.test(normalized)
+    || /^\/\/[^/]+\/[^/]+\/*$/u.test(normalized);
+}
+
 export function safeArtifactPath(value: unknown, fieldName: string, issues: string[]): void {
   optionalString(value, fieldName, issues);
   if (typeof value !== 'string' || value.trim().length === 0) return;
   const trimmed = value.trim();
   if (containsPathTraversal(trimmed)) {
     issues.push(`${fieldName} must not contain traversal segments`);
-    return;
-  }
-  if (path.resolve(trimmed) === path.parse(path.resolve(trimmed)).root) {
+  } else if (isFilesystemRoot(trimmed)) {
     issues.push(`${fieldName} must not be the filesystem root`);
   }
 }

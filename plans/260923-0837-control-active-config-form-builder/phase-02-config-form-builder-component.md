@@ -10,7 +10,11 @@
 - [Organism exports](../../src/reporting/control-page/components/organisms/index.ts) · [Code standards](../../docs/code-standards.md)
 
 ## Overview
-**Priority:** P2 · **Status:** Pending · **Estimate:** 3h. Add an accessible, controlled `ConfigFormBuilder` organism for project add/edit/remove and common-default editing. It edits the existing schema-v1 document; it does not create configuration files or credentials.
+**Priority:** P2 · **Status:** Complete / 100% · **Completed:** `2026-09-23` · **Estimate:** 3h. Add an accessible, controlled `ConfigFormBuilder` organism for project add/edit/remove and common-default editing. It edits the existing schema-v1 document; it does not create configuration files or credentials.
+
+## Completion Evidence
+- Approval: Phase 02 was user-approved. The canonical adviser checkpoint was explicitly waived by the user and was not run.
+- Verification: Code review found no actionable findings; focused tests passed 35/35; `npm run typecheck` and `npm run build` passed. Browser smoke exercised controlled mutations, inheritance, defaults, valid/invalid raw Apply, dirty JSON, and project-removal invariants.
 
 ## Key Insights
 - `ProjectConfigDocumentV1` and `ProjectConfigInput` permit unrelated supported fields (`selectors`, `allowedOrigins`, source settings, and optional execution settings). Form updates must merge only edited keys, not reconstruct the whole object.
@@ -50,11 +54,11 @@ Project editor behavior:
 6. Add focused unit behavior checks and export the new organism. Keep the public hook contract consumed by `DashboardPage` coherent; do not introduce duplicate source-of-truth state.
 
 ## Todo List
-- [ ] Add the controlled builder and public organism export.
-- [ ] Add project selection, add/edit/remove, defaults editing, and inheritance handling.
-- [ ] Keep schema-valid optional values and untouched advanced fields intact.
-- [ ] Make shared validation browser-safe and use it for Apply/Save.
-- [ ] Test mutations, document preservation, invalid constraints, and default field bounds.
+- [x] Add the controlled builder and public organism export.
+- [x] Add project selection, add/edit/remove, defaults editing, and inheritance handling.
+- [x] Keep schema-valid optional values and untouched advanced fields intact.
+- [x] Make shared validation browser-safe and use it for Apply/Save.
+- [x] Test mutations, document preservation, invalid constraints, and default field bounds.
 
 ## Success Criteria
 - Operators can create a project draft and fill every requested project field; changes immediately update the controlled document and dirty state.
@@ -67,10 +71,10 @@ Project editor behavior:
 - Keep the existing raw editor selectors and save/ETag contract; schema-v1 remains the only document shape.
 
 ## Side-Effect Review Checklist
-- [ ] Add/update/remove/default operations touch only the in-memory selected document and formatted raw JSON.
-- [ ] Do not call `/api/config`, `/api/secrets`, or `/api/run` from field handlers.
-- [ ] Removing a project does not delete files, secrets, saved configs, or browser data; persistence occurs only through the existing explicit Save.
-- [ ] The browser-safe validator does not alter server acceptance or introduce Node-only imports into the Vite bundle.
+- [x] Add/update/remove/default operations touch only the in-memory selected document and formatted raw JSON.
+- [x] Do not call `/api/config`, `/api/secrets`, or `/api/run` from field handlers.
+- [x] Removing a project does not delete files, secrets, saved configs, or browser data; persistence occurs only through the existing explicit Save.
+- [x] The browser-safe validator does not alter server acceptance or introduce Node-only imports into the Vite bundle.
 
 ## Risk Assessment
 - **Schema drift:** reuse `assertProjectConfigDocument`; the browser-safe extraction must retain existing server boundary cases.

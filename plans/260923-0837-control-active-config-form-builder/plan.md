@@ -15,12 +15,12 @@ created: 2026-09-23
 Add client-side active-configuration restoration and a structured editor beside the existing raw JSON editor in `npm run serve:control`. Preserve the schema-v1 document contract, save flow, backend routes, and Playwright DOM selectors; this plan does not implement the feature.
 
 ## Phase Progress & Navigation
-**Overall status:** In Progress / **17%** (1.5 of 9.0 planned hours; Phase 01 complete, Phases 02–04 pending).
+**Overall status:** In Progress / **50%** (4.5 of 9.0 planned hours; Phases 01–02 complete, Phases 03–04 pending).
 
 | # | Phase | Status / progress | Effort | Deliverable |
 |---|---|---|---:|---|
 | 1 | [Active configuration persistence](./phase-01-active-config-persistence.md) | Complete / 100% · 2026-09-23T09:28:48+07:00 | 1.5h | URL + localStorage selection restoration |
-| 2 | [Config form builder component](./phase-02-config-form-builder-component.md) | Pending / 0% | 3h | Controlled project and defaults editor |
+| 2 | [Config form builder component](./phase-02-config-form-builder-component.md) | Complete / 100% · 2026-09-23 | 3h | Controlled project and defaults editor |
 | 3 | [Side-by-side integration](./phase-03-side-by-side-integration.md) | Pending / 0% | 2h | Responsive workspace and synchronized editors |
 | 4 | [Verification and release audit](./phase-04-verification-and-release-audit.md) | Pending / 0% | 2.5h | Unit/E2E coverage, Axe audit, release gate |
 
