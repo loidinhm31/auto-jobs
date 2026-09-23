@@ -159,4 +159,71 @@ test.describe('Control Run API', () => {
     const statuses = [res1.status(), res2.status()];
     expect(statuses).toContain(202);
   });
+
+  test('POST /api/run rejects request workerCount override on report run for all values with 422 INVALID_WORKER_COUNT', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const testValues = [1, 4, 0, 5, 2.5, '2', null, true, false, [], {}];
+    for (const val of testValues) {
+      const postRes = await request.post(`${serverUrl}api/run`, {
+        headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+        data: { configName: 'default.json', configEtag: etag, runType: 'report', workerCount: val },
+      });
+
+      expect(postRes.status()).toBe(422);
+      const body = await postRes.json();
+      expect(body.error).toEqual({
+        code: 'INVALID_WORKER_COUNT',
+        message: 'workerCount is not supported in run requests; use saved document configuration',
+      });
+      expect(reportCalls).toHaveLength(0);
+      expect(buildCalls).toHaveLength(0);
+    }
+  });
+
+  test('POST /api/run rejects request workerCount override on auto-build run for all values with 422 INVALID_WORKER_COUNT', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const testValues = [1, 4, 0, 5, 2.5, '2', null, true, false, [], {}];
+    for (const val of testValues) {
+      const postRes = await request.post(`${serverUrl}api/run`, {
+        headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+        data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: 'build-proj', workerCount: val },
+      });
+
+      expect(postRes.status()).toBe(422);
+      const body = await postRes.json();
+      expect(body.error).toEqual({
+        code: 'INVALID_WORKER_COUNT',
+        message: 'workerCount is not supported in run requests; use saved document configuration',
+      });
+      expect(reportCalls).toHaveLength(0);
+      expect(buildCalls).toHaveLength(0);
+    }
+  });
+
+  test('POST /api/run rejects supplied workerCount before checking auto-build projectId (precedence)', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    // Both workerCount present and projectId missing -> must return INVALID_WORKER_COUNT
+    const postResWithCount = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', workerCount: 2 },
+    });
+    expect(postResWithCount.status()).toBe(422);
+    const bodyWithCount = await postResWithCount.json();
+    expect(bodyWithCount.error.code).toBe('INVALID_WORKER_COUNT');
+
+    // Omitted workerCount and projectId missing -> must return MISSING_PROJECT_ID
+    const postResWithoutCount = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build' },
+    });
+    expect(postResWithoutCount.status()).toBe(422);
+    const bodyWithoutCount = await postResWithoutCount.json();
+    expect(bodyWithoutCount.error.code).toBe('MISSING_PROJECT_ID');
+  });
 });

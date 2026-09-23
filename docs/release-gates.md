@@ -329,6 +329,24 @@ This browser gate proves the UI/API boundary and zero-leakage DOM behavior. It
 does not contact Jenkins or vendor services; per-run SecretStore injection and
 diagnostic redaction remain covered by the Phase 03 gate below.
 
+## Phase 02 control-run worker-count gate
+
+Run the focused API and executor contracts:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-run-api.spec.ts \
+  tests/unit/control-run-executor-secrets.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The API suite verifies that a request-level `workerCount` is rejected for
+report and auto-build requests with `422 INVALID_WORKER_COUNT` before
+`startRun`. Executor coverage verifies the default count, saved counts from the
+ETag-matched config, rejection of a stale ETag, and that auto-build receives no
+report worker count. These tests use local control/config fixtures and injected
+executors; they do not contact Jenkins or vendor services.
+
 ## Phase 03 run-executor environment gate
 
 Run the focused control-run contract:

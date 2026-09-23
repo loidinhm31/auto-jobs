@@ -1,47 +1,50 @@
 This file is a merged representation of the entire codebase, combined into a single document by Repomix.
 
-<file_summary>
-This section contains a summary of this file.
+================================================================
+File Summary
+================================================================
 
-<purpose>
+Purpose:
+--------
 This file contains a packed representation of the entire repository's contents.
 It is designed to be easily consumable by AI systems for analysis, code review,
 or other automated processes.
-</purpose>
 
-<file_format>
+File Format:
+------------
 The content is organized as follows:
 1. This summary section
 2. Repository information
 3. Directory structure
-4. Repository files, each consisting of:
-  - File path as an attribute
-  - Full contents of the file
-</file_format>
+4. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
 
-<usage_guidelines>
+Usage Guidelines:
+-----------------
 - This file should be treated as read-only. Any changes should be made to the
   original repository files, not this packed version.
 - When processing this file, use the file path to distinguish
   between different files in the repository.
 - Be aware that this file may contain sensitive information. Handle it with
   the same level of security as you would the original repository.
-</usage_guidelines>
 
-<notes>
+Notes:
+------
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
-</notes>
 
-<additional_info>
+Additional Info:
+----------------
 
-</additional_info>
-
-</file_summary>
-
-<directory_structure>
+================================================================
+Directory Structure
+================================================================
 .codegraph/.gitignore
 .gitignore
 .repomixignore
@@ -319,20 +322,23 @@ tests/unit/template-server.spec.ts
 tsconfig.build.json
 tsconfig.json
 vite.control.config.ts
-</directory_structure>
 
-<files>
-This section contains the contents of the repository's files.
+================================================================
+Files
+================================================================
 
-<file path=".codegraph/.gitignore">
+================
+File: .codegraph/.gitignore
+================
 # CodeGraph data files — local to each machine, not for committing.
 # Ignore everything in .codegraph/ except this file itself, so transient
 # files (the database, daemon.pid, sockets, logs) never show up in git.
 *
 !.gitignore
-</file>
 
-<file path=".gitignore">
+================
+File: .gitignore
+================
 [n]ode_modules/
 
 .*env*
@@ -358,9 +364,10 @@ reports/
 coverage/
 .DS_Store
 .idea/
-</file>
 
-<file path=".repomixignore">
+================
+File: .repomixignore
+================
 # Dot-folders (not covered by .gitignore defaults)
 .omp/
 .git/
@@ -415,18 +422,20 @@ Cargo.lock
 
 # Repomix output
 repomix-output.*
-</file>
 
-<file path="config/ci-env.template">
+================
+File: config/ci-env.template
+================
 # Inject the credential values referenced by config/projects.example.json.
 # Keep actual values in the CI secret store; these placeholders are examples.
 JENKINS_USERNAME=replace-with-jenkins-username
 JENKINS_PASSWORD=replace-with-jenkins-password
 SERVICE_B_JENKINS_USERNAME=replace-with-service-b-username
 SERVICE_B_JENKINS_PASSWORD=replace-with-service-b-password
-</file>
 
-<file path="config/projects.example.json">
+================
+File: config/projects.example.json
+================
 {
   "schemaVersion": 1,
   "defaults": {
@@ -491,9 +500,10 @@ SERVICE_B_JENKINS_PASSWORD=replace-with-service-b-password
     }
   ]
 }
-</file>
 
-<file path="config/projects.template.json">
+================
+File: config/projects.template.json
+================
 {
   "schemaVersion": 1,
   "defaults": {
@@ -524,9 +534,10 @@ SERVICE_B_JENKINS_PASSWORD=replace-with-service-b-password
     }
   ]
 }
-</file>
 
-<file path="docs/architecture.md">
+================
+File: docs/architecture.md
+================
 # Current architecture
 
 This document describes the implemented schema-v1 configuration, report and
@@ -1324,9 +1335,10 @@ Phase 06 legacy cleanup removed all legacy control page files
 (`control-page.js`, `control-page.html`, `control-page.css`). Current release
 validation is recorded above; no live Jenkins controller or vendor service is
 contacted by the deterministic suites.
-</file>
 
-<file path="docs/code-standards.md">
+================
+File: docs/code-standards.md
+================
 # Code standards
 
 This guide describes the conventions enforced by the current TypeScript
@@ -1615,9 +1627,10 @@ Before opening a change, verify:
    paths, and each changed Markdown file remains below 800 lines.
 8. Run the narrowest behavioral proof first, then the repository release gates
    once all concurrent work is integrated.
-</file>
 
-<file path="docs/codebase-summary.md">
+================
+File: docs/codebase-summary.md
+================
 # Codebase summary
 
 This summary is derived from a fresh repository compaction generated by Repomix
@@ -2135,9 +2148,10 @@ project; `runType` defaults to `report`, while the auto-build E2E passes
 - Update [multi-project configuration](./multi-project-configuration.md) for
   field-level changes, [architecture](./architecture.md) for data-flow
   changes, and [code standards](./code-standards.md) for implementation rules.
-</file>
 
-<file path="docs/multi-project-configuration.md">
+================
+File: docs/multi-project-configuration.md
+================
 # Multi-project configuration
 
 The Jenkins source reads one schema-v1 JSON document, normalizes its enabled
@@ -2625,9 +2639,10 @@ root can race publication. Use a trusted isolated root for sensitive runs.
 For the complete command and release boundary, see
 [release-gates.md](./release-gates.md). This repository documentation does not
 claim that a live Jenkins or browser execution has been run.
-</file>
 
-<file path="docs/project-overview-pdr.md">
+================
+File: docs/project-overview-pdr.md
+================
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
@@ -3075,9 +3090,10 @@ production auto-build command.
 
 - Completed Phase 05 unit, API, and Playwright E2E verification with
   254/254 checks passing, zero secret leakage, and approved 9.5/10 review.
-</file>
 
-<file path="docs/project-roadmap.md">
+================
+File: docs/project-roadmap.md
+================
 # Project roadmap
 
 Last updated: 2026-09-23  
@@ -3088,12 +3104,12 @@ Active initiative: [Bounded Parallel Report Workers](../plans/260923-1402-parall
 
 Plan: [Bounded Parallel Report Workers](../plans/260923-1402-parallel-report-workers/plan.md)
 
-**Overall status:** In progress · **37.5%** (3.0 of 8.0 planned hours; 1 of 3 phases complete; 2026-09-23).
+**Overall status:** In progress · **62.5%** (5.0 of 8.0 planned hours; 2 of 3 phases complete; 2026-09-23).
 
 | Phase | Status | Progress | Effort | Evidence/detail |
 |---|---|---:|---:|---|
 | 1. Bounded report execution and saved config | **DONE** | **100%** | 3h | Completed 2026-09-23; schema-v1 document-scoped `reportWorkers`, single-read CLI loader, bounded execution, ordered outcomes and failure isolation. Review: 40/40 focused tests, 353/353 unit tests, typecheck clean; see [phase](../plans/260923-1402-parallel-report-workers/phase-01-bounded-report-execution.md) and [review](../plans/reports/code-review-260923-1924-phase-01-bounded-report-execution.md). |
-| 2. Control run contract | **PENDING** | 0% | 2h | Reject request-level worker overrides; derive count only from ETag-verified document. |
+| 2. Control run contract | **DONE** | **100%** | 2h | Completed 2026-09-23; reject request-level worker overrides with 422 `INVALID_WORKER_COUNT` before admission; derive report worker count from the ETag-checked saved document (`reportWorkers ?? 1`). Preserved single-active-run behavior, auto-build isolation, security gates and SecretStore redaction. Evidence: 16/16 focused tests, 360/360 full unit tests, `tsc` 0 errors; see [phase](../plans/260923-1402-parallel-report-workers/phase-02-control-run-contract.md) and [review](../plans/reports/code-review-260923-2117-phase-02-control-run-contract.md).
 | 3. Dashboard and integration verification | **PENDING** | 0% | 3h | Saved-document selector and UI/API/CLI integration/release audit. |
 
 Review note: code review flagged `new-project` in the example config; Main confirmed this is pre-existing user-modified state, and the file was preserved unchanged.
@@ -3195,6 +3211,8 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Completed Phase 01 of Bounded Parallel Report Workers on 2026-09-23 ([phase plan](../plans/260923-1402-parallel-report-workers/phase-01-bounded-report-execution.md)); added the schema-v1 document worker bound, single-read CLI loading and bounded report execution.
 - Phase 01 evidence: focused unit specs passed 40/40, full unit suite passed 353/353, and typecheck reported 0 errors; code review scored 9/10 with no critical issues.
 - Review follow-up resolved: code review flagged `new-project` in the example config; Main confirmed it is pre-existing user-modified state and it was left untouched.
+- Completed Phase 02 (Control run contract) on 2026-09-23 ([phase plan](../plans/260923-1402-parallel-report-workers/phase-02-control-run-contract.md)); `POST /api/run` rejects request-level worker overrides before admission, while the report executor uses the ETag-checked saved document count (`reportWorkers ?? 1`).
+- Phase 02 preserved single-active-run behavior, auto-build isolation, security gates and SecretStore redaction; focused tests passed 16/16, full unit tests passed 360/360, and TypeScript `tsc` reported 0 errors ([code review](../plans/reports/code-review-260923-2117-phase-02-control-run-contract.md)).
 - Completed Phase 01 (Active Configuration Persistence) of the Control Active Config Persistence & Form Builder plan ([phase plan](../plans/260923-0837-control-active-config-form-builder/phase-01-active-config-persistence.md)).
 - Restores selection by valid URL query, then valid localStorage name, then first available config; stores only the selected filename and retains unrelated URL state.
 - Focused Phase 01 unit spec passed 27/27 tests; TypeScript typecheck reported 0 errors.
@@ -3232,9 +3250,10 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 ## Unresolved questions
 
 None.
-</file>
 
-<file path="docs/release-gates.md">
+================
+File: docs/release-gates.md
+================
 # Release gates
 
 This project has deterministic local gates for native browsers, offline report
@@ -3803,9 +3822,10 @@ running the relevant command; the command output is the release evidence.
 
 Native browser, fixture startup, and live Jenkins results are environment
 evidence only when their commands are freshly run in the target environment.
-</file>
 
-<file path="docs/system-architecture.md">
+================
+File: docs/system-architecture.md
+================
 # System architecture
 
 This is the component-level view of `auto-jobs` after Phase 3 and dynamic-
@@ -4505,9 +4525,10 @@ On [`template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template
    `runtimeEnvironment`, and redact every stored value from control output.
 10. Treat Windows file-mode bits as advisory; rely on protected
     config-directory ACLs.
-</file>
 
-<file path="package.json">
+================
+File: package.json
+================
 {
   "name": "auto-jobs",
   "version": "0.1.0",
@@ -4561,9 +4582,10 @@ On [`template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template
     "tailwind-merge": "^3.6.0"
   }
 }
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/cmd-plan.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/cmd-plan.md
+================
 # Implementation Plan: Serve Control Dynamic Credentials
 
 > Quick access overview for tracking implementation progress.
@@ -4590,9 +4612,10 @@ On [`template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template
 - [ ] **Phase 05: Unit, API & Playwright E2E Verification** (1.0h)
   - Path: [`phase-05-test-suite-and-e2e-verification.md`](./phase-05-test-suite-and-e2e-verification.md)
   - Core: SecretStore unit tests, API tests, E2E browser credential lifecycle test.
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-01-backend-secret-store.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/phase-01-backend-secret-store.md
+================
 # Phase 01: SecretStore Backend Module
 
 ## Context Links
@@ -4688,9 +4711,10 @@ On [`template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template
 
 ## Next Steps
 Proceed to Phase 02: Control Secrets API & Security Gates.
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/phase-02-control-secrets-api.md
+================
 # Phase 02: Control Secrets API & Security Gates
 
 ## Context Links
@@ -4804,9 +4828,10 @@ handleApiRequest ('/api/secrets')
 
 ## Next Steps
 Proceed to Phase 03: Run Executor Environment Injection.
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-03-run-executor-environment-injection.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/phase-03-run-executor-environment-injection.md
+================
 # Phase 03: Run Executor Environment Injection
 
 ## Context Links
@@ -4907,9 +4932,10 @@ executeControlRun(record, options, addLog)
 
 ## Next Steps
 Proceed to Phase 04: Control UI Credential Modal & State.
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/phase-04-control-ui-credential-management.md
+================
 # Phase 04: Control UI Credential Modal & State
 
 ## Context Links
@@ -5023,9 +5049,10 @@ Header
 
 ## Next Steps
 Proceed to Phase 05: Unit, API & Playwright E2E Verification.
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/phase-05-test-suite-and-e2e-verification.md
+================
 # Phase 05: Unit, API & Playwright E2E Verification
 
 ## Context Links
@@ -5128,9 +5155,10 @@ Test Suite Hierarchy
 
 ## Next Steps
 All phases (Phase 01 through Phase 05) completed. Proceed to final plan closure and release verification.
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/plan.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/plan.md
+================
 ---
 title: "Dynamic Credential Management and Persistence for Serve Control"
 description: "Enable operators to dynamically configure, persist, and update credentials via the serve:control UI into git-ignored config/secrets.local.json."
@@ -5235,9 +5263,10 @@ Overall plan completion: **COMPLETED** — 2026-09-03T19:50:00+07:00
 - **Typecheck**: `npm run typecheck` (`tsc --noEmit`) — **passed, 0 errors**.
 - **Review**: [Phase 02 code review](../reports/code-review-260903-1510-phase-02-control-secrets-api.md) — **APPROVED WITH WARNINGS, 9.0/10**, no critical issues.
 - **Security scope delivered**: presence-only GET responses; guarded PUT/DELETE mutations; strict key/value validation; no-store responses; zero plaintext leakage.
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/research/researcher-01-backend-secret-store.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/research/researcher-01-backend-secret-store.md
+================
 # Backend secret storage / control API research
 
 ## Scope and existing seams
@@ -5324,9 +5353,10 @@ const runEnv = { ...baseEnv, ...stored };
 - Confirm whether the established JSON envelope uses `secrets`, `variables`, or an array; preserve the control API's existing response/error conventions while retaining the presence-only semantics above.
 - Confirm whether the product needs deletion/clearing. If yes, specify `DELETE` or an explicit `{value:null}` contract plus presence semantics; do not infer it from PUT.
 - Confirm desired precedence if operators intentionally use process-level overrides; recommendation here is stored-dashboard values win for dynamic credential updates.
-</file>
 
-<file path="plans/260903-1251-serve-control-dynamic-credentials/research/researcher-02-ui-credential-flow.md">
+================
+File: plans/260903-1251-serve-control-dynamic-credentials/research/researcher-02-ui-credential-flow.md
+================
 # UI credential flow research
 
 ## Existing surface and conventions
@@ -5404,9 +5434,10 @@ Extend `control-config-api.spec.ts` or add a focused `control-secrets-api.spec.t
 - Whether `credentialVariables` is available on normalized config today, and whether disabled projects should contribute keys, needs a single documented rule.
 - PUT semantics for omitted, blank, and explicit-clear values; define before implementing UI/tests.
 - Windows permission guarantee (mode bits vs ACL) needs the chosen SecretStore policy reflected in platform-guarded assertions.
-</file>
 
-<file path="plans/260904-1640-control-page-react-refactor/phase-01-tooling-vite-pipeline-server-asset-routing.md">
+================
+File: plans/260904-1640-control-page-react-refactor/phase-01-tooling-vite-pipeline-server-asset-routing.md
+================
 # Phase 01: Tooling, Vite Pipeline & Server Asset Routing
 
 ## Context Links
@@ -5584,9 +5615,10 @@ Must match the structure expected by the server's CSRF injection:
 
 ## Next Steps
 - Proceed to [Phase 02: Core Types, Hooks & Interface Contracts](phase-02-types-and-custom-hooks.md).
-</file>
 
-<file path="plans/260904-1640-control-page-react-refactor/phase-02-types-and-custom-hooks.md">
+================
+File: plans/260904-1640-control-page-react-refactor/phase-02-types-and-custom-hooks.md
+================
 # Phase 02: Core Types, Hooks & Interface Contracts
 
 ## Context Links
@@ -5850,9 +5882,10 @@ function discoverRequiredCredentialKeys(doc: ProjectConfigDocumentV1): string[] 
 
 ## Next Steps
 - Proceed to [Phase 03: Atomic Design Components (Atoms & Molecules)](phase-03-atoms-and-molecules.md).
-</file>
 
-<file path="plans/260904-1640-control-page-react-refactor/phase-03-atoms-and-molecules.md">
+================
+File: plans/260904-1640-control-page-react-refactor/phase-03-atoms-and-molecules.md
+================
 # Phase 03: Atomic Design Components (Atoms & Molecules)
 
 ## Context Links
@@ -6098,9 +6131,10 @@ function discoverRequiredCredentialKeys(doc: ProjectConfigDocumentV1): string[] 
 
 ## Next Steps
 - Proceed to [Phase 04: Organisms, Modals & Dashboard Assembly](phase-04-organisms-and-page-assembly.md).
-</file>
 
-<file path="plans/260904-1640-control-page-react-refactor/phase-04-organisms-and-page-assembly.md">
+================
+File: plans/260904-1640-control-page-react-refactor/phase-04-organisms-and-page-assembly.md
+================
 # Phase 04: Organisms, Modals & Dashboard Assembly
 
 ## Context Links
@@ -6586,9 +6620,10 @@ function discoverRequiredCredentialKeys(doc: ProjectConfigDocumentV1): string[] 
 
 ## Next Steps
 - Proceed to [Phase 05: Verification, Playwright E2E & Accessibility Audit](phase-05-verification-and-release-audit.md).
-</file>
 
-<file path="plans/260904-1640-control-page-react-refactor/phase-05-verification-and-release-audit.md">
+================
+File: plans/260904-1640-control-page-react-refactor/phase-05-verification-and-release-audit.md
+================
 # Phase 05: Verification, Playwright E2E & Accessibility Audit
 
 ## Context Links
@@ -6759,9 +6794,10 @@ function discoverRequiredCredentialKeys(doc: ProjectConfigDocumentV1): string[] 
 ## Next Steps
 - Phase 05 completed: 2026-09-04
 - Proceed to [Phase 06: Legacy Cleanup & Documentation](phase-06-legacy-cleanup.md).
-</file>
 
-<file path="plans/260904-1640-control-page-react-refactor/phase-06-legacy-cleanup.md">
+================
+File: plans/260904-1640-control-page-react-refactor/phase-06-legacy-cleanup.md
+================
 # Phase 06: Legacy Cleanup & Documentation
 
 ## Context Links
@@ -6860,9 +6896,10 @@ Delete the following files that are fully replaced by the React application:
 
 ## Next Steps
 - Refactor complete. Ready for final review, commit, and merge.
-</file>
 
-<file path="plans/260904-1640-control-page-react-refactor/plan.md">
+================
+File: plans/260904-1640-control-page-react-refactor/plan.md
+================
 ---
 title: "Control Page React Refactor with Atomic Design"
 description: "Refactor legacy DOM-scripting control page into a modern, robust React application using Atomic Design, Tailwind CSS, and Radix UI primitives"
@@ -6938,9 +6975,10 @@ Phase 06 completion: **DONE** — 2026-09-05 (Verified: legacy files deleted, bu
 
 ## Next Steps
 - Refactor complete. Ready for final review, commit, and merge.
-</file>
 
-<file path="plans/260905-0418-host-template-mock-server/phase-01-core-server.md">
+================
+File: plans/260905-0418-host-template-mock-server/phase-01-core-server.md
+================
 # Phase 01: Core Template HTTP Server
 
 > Parent: [plan.md](plan.md) | Dependencies: none | Docs: [templates/jenkins-template/README.md](../../templates/jenkins-template/README.md)
@@ -7018,9 +7056,10 @@ Use Node.js native `node:http` `createServer` — matches existing `report-serve
 
 ## Next Steps
 → Phase 02: CLI entrypoint
-</file>
 
-<file path="plans/260905-0418-host-template-mock-server/phase-02-cli-entrypoint.md">
+================
+File: plans/260905-0418-host-template-mock-server/phase-02-cli-entrypoint.md
+================
 # Phase 02: CLI Entrypoint + npm Script
 
 > Parent: [plan.md](plan.md) | Dependencies: [Phase 01](phase-01-core-server.md) | Docs: [report-server-cli.ts](../../src/reporting/report-server-cli.ts)
@@ -7092,9 +7131,10 @@ Use Node.js native `node:http` `createServer` — matches existing `report-serve
 
 ## Next Steps
 → Phase 03: Template config
-</file>
 
-<file path="plans/260905-0418-host-template-mock-server/phase-03-template-config.md">
+================
+File: plans/260905-0418-host-template-mock-server/phase-03-template-config.md
+================
 # Phase 03: Template Project Config
 
 > Parent: [plan.md](plan.md) | Dependencies: none (parallel with Phase 01-02) | Docs: [projects.example.json](../../config/projects.example.json)
@@ -7180,9 +7220,10 @@ Use Node.js native `node:http` `createServer` — matches existing `report-serve
 
 ## Next Steps
 → Phase 05: Validation
-</file>
 
-<file path="plans/260905-0418-host-template-mock-server/phase-04-dev-hub.md">
+================
+File: plans/260905-0418-host-template-mock-server/phase-04-dev-hub.md
+================
 # Phase 04: Developer Hub Index Page
 
 > Parent: [plan.md](plan.md) | Dependencies: [Phase 01](phase-01-core-server.md)
@@ -7241,9 +7282,10 @@ Use Node.js native `node:http` `createServer` — matches existing `report-serve
 
 ## Next Steps
 → Phase 05: Validation
-</file>
 
-<file path="plans/260905-0418-host-template-mock-server/phase-05-validation.md">
+================
+File: plans/260905-0418-host-template-mock-server/phase-05-validation.md
+================
 # Phase 05: Validation & Testing
 
 > Parent: [plan.md](plan.md) | Dependencies: [Phase 01](phase-01-core-server.md), [Phase 02](phase-02-cli-entrypoint.md), [Phase 03](phase-03-template-config.md), [Phase 04](phase-04-dev-hub.md)
@@ -7318,9 +7360,10 @@ Use Node.js native `node:http` `createServer` — matches existing `report-serve
 - Confirm Control Server CSP still blocks unauthorized cross-origin requests
 - Template server must not leak into the Control Server's origin
 - Template credentials are mock-only — no real secrets at risk
-</file>
 
-<file path="plans/260905-0418-host-template-mock-server/plan.md">
+================
+File: plans/260905-0418-host-template-mock-server/plan.md
+================
 ---
 title: Host Template Mock Server
 description: Dedicated standalone HTTP server on port 4174 to serve templates/ fixtures for browser preview and Control Page execution
@@ -7368,9 +7411,10 @@ Phase 05 completion: **DONE** — 2026-09-06
 ## Scope Boundary
 - **In**: Standalone template HTTP server, CLI, config template, developer hub page
 - **Out**: Modifying core capture engine, modifying offline template HTML files, adding new dependencies
-</file>
 
-<file path="plans/260923-0837-control-active-config-form-builder/phase-01-active-config-persistence.md">
+================
+File: plans/260923-0837-control-active-config-form-builder/phase-01-active-config-persistence.md
+================
 # Phase 01 — Active Configuration Persistence
 
 ## Context Links
@@ -7448,9 +7492,10 @@ Phase 01 complete and verified by unit test contracts (27 passing tests) and cod
 
 ## Unresolved Questions
 - None; precedence and stale-name behavior are fixed above.
-</file>
 
-<file path="plans/260923-0837-control-active-config-form-builder/phase-02-config-form-builder-component.md">
+================
+File: plans/260923-0837-control-active-config-form-builder/phase-02-config-form-builder-component.md
+================
 # Phase 02 — Config Form Builder Component
 
 ## Context Links
@@ -7545,9 +7590,10 @@ Phase 02 is complete; Phases 03 and 04 have also been completed, including the f
 
 ## Unresolved Questions
 - None; schema-supported browser values and explicit draft behavior are determined from current types/validation.
-</file>
 
-<file path="plans/260923-0837-control-active-config-form-builder/phase-03-side-by-side-integration.md">
+================
+File: plans/260923-0837-control-active-config-form-builder/phase-03-side-by-side-integration.md
+================
 # Phase 03 — Side-by-Side Integration
 
 ## Context Links
@@ -7641,9 +7687,10 @@ Integration is complete, and Phase 04 has completed the browser verification, ac
 
 ## Unresolved Questions
 - None; raw-to-form synchronization occurs on the existing explicit Apply action, not on incomplete keystrokes.
-</file>
 
-<file path="plans/260923-0837-control-active-config-form-builder/phase-04-verification-and-release-audit.md">
+================
+File: plans/260923-0837-control-active-config-form-builder/phase-04-verification-and-release-audit.md
+================
 # Phase 04 — Verification and Release Audit
 
 ## Context Links
@@ -7733,9 +7780,10 @@ Phase 04 complete. All gates passed: `npm run test:unit` (337/337), `npm run tes
 
 ## Unresolved Questions
 - None; test fixtures and acceptance outcomes are specified above.
-</file>
 
-<file path="plans/260923-0837-control-active-config-form-builder/plan.md">
+================
+File: plans/260923-0837-control-active-config-form-builder/plan.md
+================
 ---
 title: "Control Active Config Persistence & Form Builder"
 description: "Restore the selected configuration and add a responsive, schema-valid form editor synchronized with raw JSON."
@@ -7789,9 +7837,10 @@ Phase 1 is independent; phase 2 supplies controlled form actions to phase 3; pha
 
 ## Unresolved Questions
 - None. When source files and the scout report disagree, preserve the schema's currently supported values (including `firefox` for `BrowserName`).
-</file>
 
-<file path="plans/260923-1402-parallel-report-workers/cmd-plan.md">
+================
+File: plans/260923-1402-parallel-report-workers/cmd-plan.md
+================
 # /cmd-plan__hard — bounded parallel report collection (NOT IMPLEMENTED)
 
 ## Mission
@@ -7824,9 +7873,10 @@ Implement the confirmed saved-document contract in [plan.md](./plan.md) across [
 
 ## Unresolved questions
 - None for scope. Raising cap 4 requires separate load/provider-quota evidence.
-</file>
 
-<file path="plans/260923-1402-parallel-report-workers/phase-01-bounded-report-execution.md">
+================
+File: plans/260923-1402-parallel-report-workers/phase-01-bounded-report-execution.md
+================
 # Phase 01 — bounded report execution and saved config (DONE — 2026-09-23)
 
 ## Context links
@@ -7898,17 +7948,18 @@ Implement the confirmed saved-document contract in [plan.md](./plan.md) across [
 
 ## Unresolved questions
 - None. Cap 4 remains a conservative limit; increasing it needs separate load and provider-quota measurements.
-</file>
 
-<file path="plans/260923-1402-parallel-report-workers/phase-02-control-run-contract.md">
-# Phase 02 — control run contract (NOT IMPLEMENTED)
+================
+File: plans/260923-1402-parallel-report-workers/phase-02-control-run-contract.md
+================
+# Phase 02 — control run contract (DONE — 2026-09-23)
 
 ## Context links
 - [Master contract](./plan.md) · [Hard brief](./cmd-plan.md) · [Phase 01 schema/runner](./phase-01-bounded-report-execution.md) · [Control/UI research](./research/researcher-02-control-ui-and-contract.md) (browser-local/request recommendation rejected) · [Runner/artifact research](./research/researcher-01-runner-and-artifacts.md).
 - Current code: `src/reporting/report-server-control-api.ts:69-140`, `src/reporting/report-server-run-manager.ts:20-63,108-167`, `src/reporting/report-server-run-executor.ts:18-75`, `src/reporting/report-server-config-store.ts:98-130`, `src/reporting/report-server-control-security.ts`; conventions: [PDR](../../docs/project-overview-pdr.md), [code standards](../../docs/code-standards.md).
 
 ## Overview
-**Pending; P2; 2h; depends on phase 01.** Keep `POST /api/run` request and run-manager record unchanged. Reject any request-level worker override, and after ETag verification derive the report worker bound from the saved schema-v1 document. Keep loopback mutation security, single-active-run manager, report selection and auto-build behavior. This is planned, not current behavior.
+**DONE — 2026-09-23; P2; 2h; depends on phase 01.** Keep `POST /api/run` request and run-manager record unchanged. Reject any request-level worker override, and after ETag verification derive the report worker bound from the saved schema-v1 document. Keep loopback mutation security, single-active-run manager, report selection and auto-build behavior.
 
 ## Key insights
 - Current API validates mutation/JSON/mode/project ID, calls `startRun`, then returns 202. An override must be rejected **before** admission; an asynchronous executor failure after 202 is the wrong boundary.
@@ -7950,15 +8001,20 @@ Auto-build -> same saved document validated -> existing one-project selection
 4. With temporary ConfigStore JSON, prove old document -> runner count 1, saved 1/4 -> count 1/4, report with an auto-build project -> only report selected, auto-build with `reportWorkers: 4` -> exactly one build call/no report count. Modify file between acceptance and executor read to prove stale ETag stops execution; modify after matched read to prove in-flight report uses that entry, not a later file value. Use deferred executor for active-run 409 and check SecretStore values remain redacted.
 
 ## Todo list
-- [ ] Reject all request worker overrides before manager admission.
-- [ ] Resolve count from ETag-checked saved document in report executor only.
-- [ ] Focused API/executor evidence for defaults/bounds/ETag/409/security/build isolation.
+- [x] Reject all request worker overrides before manager admission.
+- [x] Resolve count from ETag-checked saved document in report executor only.
+- [x] Focused API/executor evidence for defaults/bounds/ETag/409/security/build isolation.
+
+## Completion evidence
+- Any request-level `workerCount` is rejected with `422 INVALID_WORKER_COUNT` before run-manager admission. The report executor derives `configEntry.document.reportWorkers ?? 1` from the same ETag-checked saved document; auto-build does not receive or use the setting.
+- Preserved single-active-run admission, auto-build isolation, Host/Origin/Fetch Metadata/CSRF/content-type/body-size security gates, report-root containment and SecretStore redaction.
+- Focused API/executor unit tests: **16/16 passed**; full unit suite: **360/360 passed**; TypeScript `tsc`: **0 errors**. See [Phase 02 code review](../reports/code-review-260923-2117-phase-02-control-run-contract.md).
 
 ## Success criteria
 - Report and auto-build POST with a supplied `workerCount` always yield 422 `INVALID_WORKER_COUNT` before acceptance; an absent field retains the original 202 flow. Neither response nor run record gains count.
 - ETag-matched saved 1, 4 or absent document field reaches report executor as 1, 4 or 1. Auto-build in a document with the field remains one project/one submission; it never receives worker count or produces report artifacts.
 - Stale ETag prevents execution; one-active-run 409, Host/Origin/CSRF/content-type/body checks, report-root containment and SecretStore redaction remain observable.
-- **Implementation-stage targeted command, not run by planner:** `node scripts/run-playwright.mjs playwright test tests/unit/control-run-api.spec.ts tests/unit/control-run-executor-secrets.spec.ts --config=playwright.unit.config.ts`. Phase 03 owns integrated release gate.
+- **Completed evidence:** focused API/executor unit tests passed 16/16; full unit suite passed 360/360; TypeScript `tsc` reported 0 errors. See [Phase 02 code review](../reports/code-review-260923-2117-phase-02-control-run-contract.md).
 
 ## Risk assessment
 - Truthiness or value validation of request `workerCount` would accidentally accept a numeric override; reject **presence**. Reading a second time after ETag check risks count/project mismatch; use the one validated `configEntry.document`. Do not move ETag check after executor dispatch.
@@ -7972,9 +8028,10 @@ Auto-build -> same saved document validated -> existing one-project selection
 
 ## Unresolved questions
 - None. Cap is fixed at 4 for this feature, not runtime-configurable.
-</file>
 
-<file path="plans/260923-1402-parallel-report-workers/phase-03-dashboard-and-verification.md">
+================
+File: plans/260923-1402-parallel-report-workers/phase-03-dashboard-and-verification.md
+================
 # Phase 03 — dashboard and integration verification (NOT IMPLEMENTED)
 
 ## Context links
@@ -8043,9 +8100,10 @@ Auto-build -> same saved document validated -> existing one-project selection
 
 ## Unresolved questions
 - None. A saved-document count shared by UI and CLI is the confirmed contract; browser-local preference is not in scope.
-</file>
 
-<file path="plans/260923-1402-parallel-report-workers/plan.md">
+================
+File: plans/260923-1402-parallel-report-workers/plan.md
+================
 ---
 title: "Bounded Parallel Report Workers"
 description: "Persist one bounded report-worker setting per schema-v1 document for both dashboard and CLI runs."
@@ -8060,13 +8118,13 @@ created: 2026-09-23
 # Bounded Parallel Report Workers — implementation plan (IN PROGRESS)
 
 ## Overview
-Generate Reports and `npm run report -- --config <file>` share an optional top-level `reportWorkers` setting from their saved schema-v1 JSON document. Phase 01 is implemented: persisted setting validation, one-read CLI loading, and bounded report execution. Phases 02–03 remain pending for the control API and dashboard; the complete UI/API/CLI contract is not done.
+Generate Reports and `npm run report -- --config <file>` share an optional top-level `reportWorkers` setting from their saved schema-v1 JSON document. Phases 01–02 are implemented: persisted setting validation, one-read CLI loading, bounded report execution, and the ETag-checked control run contract. Phase 03 remains pending; the complete UI/API/CLI contract is not done.
 
 ## Phases
 | Phase | Status / completion | Effort | Dependency | Deliverable |
 | --- | --- | ---: | --- | --- |
 | [01 Bounded report execution](./phase-01-bounded-report-execution.md) | **DONE — 2026-09-23** | 3h | none | Schema-v1 validation, one-read CLI parity, direct runner bound, fixed project loops, artifact/lifecycle proof |
-| [02 Control run contract](./phase-02-control-run-contract.md) | Pending | 2h | 01 shared policy/schema | Reject request overrides; ETag-verified document drives report executor |
+| [02 Control run contract](./phase-02-control-run-contract.md) | **DONE — 2026-09-23** | 2h | 01 shared policy/schema | Reject request overrides; ETag-verified document drives report executor |
 | [03 Dashboard and verification](./phase-03-dashboard-and-verification.md) | Pending | 3h | 01 schema/editor policy and 02 API contract | Saved-document selector, end-to-end parity, implementation docs/release gate |
 
 ## Contract and design decisions
@@ -8078,7 +8136,8 @@ Generate Reports and `npm run report -- --config <file>` share an optional top-l
 
 ## Implementation status — 2026-09-23
 - Phase 01 **DONE**: schema-v1 `reportWorkers` validation (1–4; omitted defaults to 1), single-read loader/direct CLI saved-count support, and bounded execution with ordered outcomes and worker failure isolation. Evidence: 40/40 focused tests, 353/353 unit tests, and TypeScript typecheck with 0 errors (code-review report).
-- Phases 02–03 pending: reject request-level worker overrides and derive count through ETag-matched control config; add saved-document dashboard selector and verify integrated UI/API/CLI parity.
+- Phase 02 **DONE — 2026-09-23**: reject request-level worker overrides (`422 INVALID_WORKER_COUNT`) before manager admission, and derive worker bound (`configEntry.document.reportWorkers ?? 1`) from the ETag-checked saved document in the report executor only. Preserved single-active-run behavior, auto-build isolation, security gates and SecretStore redaction. Evidence: 16/16 focused tests, 360/360 full unit tests, and TypeScript `tsc` with 0 errors; see [code review](../reports/code-review-260923-2117-phase-02-control-run-contract.md).
+- Phase 03 pending: add saved-document dashboard selector and verify integrated UI/API/CLI parity.
 - Review context: [Phase 01 review](../reports/code-review-260923-1924-phase-01-bounded-report-execution.md) flagged the user-modified example config and aligned test expectation; Main confirmed the config pre-existed this work. Both were left unchanged during this status/documentation update.
 
 ## Evidence and constraints
@@ -8091,9 +8150,10 @@ Phase 01 targeted tests/typecheck and full unit results are recorded in its revi
 
 ## Unresolved questions
 - None. Cap 4 remains a conservative limit; increasing it needs separate load and provider-quota measurements.
-</file>
 
-<file path="plans/260923-1402-parallel-report-workers/research/researcher-01-runner-and-artifacts.md">
+================
+File: plans/260923-1402-parallel-report-workers/research/researcher-01-runner-and-artifacts.md
+================
 # Runner and artifact research: bounded report workers
 
 **Timestamp:** 2026-09-23 (Asia/Bangkok)  
@@ -8136,9 +8196,10 @@ Phase 01 targeted tests/typecheck and full unit results are recorded in its revi
 
 - Runner/API work depends on the UI/config contract supplying one validated effective worker count; worker scheduling belongs only in report project execution after report-project selection (`src/runner.ts:187-195`). No auto-build selection change is needed.
 - Unresolved: product must define the worker-count maximum (and confirm the UI/config-facing default). Recommendation here: default `1`; reject invalid/out-of-range values before browser launch or artifact-root side effects.
-</file>
 
-<file path="plans/260923-1402-parallel-report-workers/research/researcher-02-control-ui-and-contract.md">
+================
+File: plans/260923-1402-parallel-report-workers/research/researcher-02-control-ui-and-contract.md
+================
 # Control UI/API contract research: bounded report workers
 
 Research date: 2026-09-23. Scope: current report-run API, run manager/executor boundary, configuration persistence, and dashboard UI. Repository evidence below; recommendations are labeled.
@@ -8175,9 +8236,10 @@ Research date: 2026-09-23. Scope: current report-run API, run manager/executor b
 ## Risks / unresolved question
 
 The maximum of 4 is an initial bounded recommendation, not verified by a benchmark. Confirm the supported memory/browser/provider-quota envelope before shipping; default 1 preserves current resource use. Parallel execution can expose shared-browser/session or artifact-writer races; the runner implementation must own those guarantees. No other unresolved UI/API contract question.
-</file>
 
-<file path="playwright.config.ts">
+================
+File: playwright.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -8225,9 +8287,10 @@ export default defineConfig({
     },
   ],
 });
-</file>
 
-<file path="playwright.control.config.ts">
+================
+File: playwright.control.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -8271,9 +8334,10 @@ export default defineConfig({
     { name: 'webkit-control', use: { browserName: 'webkit' } },
   ],
 });
-</file>
 
-<file path="playwright.template.config.ts">
+================
+File: playwright.template.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -8318,9 +8382,10 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium-template', use: { browserName: 'chromium' } }],
 });
-</file>
 
-<file path="playwright.unit.config.ts">
+================
+File: playwright.unit.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 import { parseBrowserName } from './src/config.js';
@@ -8371,9 +8436,10 @@ export default defineConfig({
     },
   ],
 });
-</file>
 
-<file path="playwright.webkit.config.ts">
+================
+File: playwright.webkit.config.ts
+================
 import { defineConfig } from '@playwright/test';
 
 const environment = process.env;
@@ -8414,18 +8480,20 @@ export default defineConfig({
   },
   projects: [{ name: 'webkit-template', use: { browserName: 'webkit' } }],
 });
-</file>
 
-<file path="postcss.config.js">
+================
+File: postcss.config.js
+================
 export default {
   plugins: {
     tailwindcss: {},
     autoprefixer: {},
   },
 };
-</file>
 
-<file path="README.md">
+================
+File: README.md
+================
 # Jenkins Playwright vulnerability reports
 
 This project collects bounded Snyk and SonarQube evidence from configured
@@ -8792,9 +8860,10 @@ then uses a bounded fallback and records a warning if both attempts fail.
   The lock owner record contains a token, PID, and hostname—not a UID—so the
   lock is not a same-UID authorization boundary or a distributed lock.
 - This documentation does not claim live Jenkins or browser execution.
-</file>
 
-<file path="scripts/copy-report-assets.mjs">
+================
+File: scripts/copy-report-assets.mjs
+================
 import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8810,9 +8879,10 @@ await copyFile(
   resolve(projectRoot, 'src', 'reporting', 'report.css'),
   resolve(reportingOutput, 'report.css'),
 );
-</file>
 
-<file path="scripts/report-runtime.mjs">
+================
+File: scripts/report-runtime.mjs
+================
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -9011,9 +9081,10 @@ export async function createRuntimeDirectory() {
     throw error;
   }
 }
-</file>
 
-<file path="scripts/run-playwright.mjs">
+================
+File: scripts/run-playwright.mjs
+================
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 
@@ -9146,9 +9217,10 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
-</file>
 
-<file path="scripts/run-report.mjs">
+================
+File: scripts/run-report.mjs
+================
 import { spawn } from 'node:child_process';
 
 import { createRuntimeDirectory, removeRuntimeDirectory } from './report-runtime.mjs';
@@ -9277,9 +9349,10 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
-</file>
 
-<file path="scripts/run-template-report.mjs">
+================
+File: scripts/run-template-report.mjs
+================
 import { spawn } from 'node:child_process';
 
 import { createRuntimeDirectory, removeRuntimeDirectory } from './report-runtime.mjs';
@@ -9408,9 +9481,10 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
-</file>
 
-<file path="src/artifacts/aggregate-manifest-reader.ts">
+================
+File: src/artifacts/aggregate-manifest-reader.ts
+================
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -9720,9 +9794,10 @@ export async function discoverRunManifests(
   });
   return { manifests, warnings, ignoredIncompatibleCount };
 }
-</file>
 
-<file path="src/artifacts/aggregate-publication-recovery.ts">
+================
+File: src/artifacts/aggregate-publication-recovery.ts
+================
 import { constants } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -9849,9 +9924,10 @@ export async function recoverAggregatePublication(reportRoot: string): Promise<v
     await fs.unlink(journalPath);
   }
 }
-</file>
 
-<file path="src/artifacts/aggregate-report-publisher.ts">
+================
+File: src/artifacts/aggregate-report-publisher.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -9995,13 +10071,15 @@ export async function writeAggregateDataPair(
     }
   }
 }
-</file>
 
-<file path="src/artifacts/artifact-identity.ts">
+================
+File: src/artifacts/artifact-identity.ts
+================
 export const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,80}$/u;
-</file>
 
-<file path="src/artifacts/artifact-manifest.ts">
+================
+File: src/artifacts/artifact-manifest.ts
+================
 import type { ProjectOutcomeState } from '../project/project-types.js';
 
 export interface ProjectRunManifest {
@@ -10052,9 +10130,10 @@ export interface ManifestDiscoveryResult {
   readonly warnings: readonly string[];
   readonly ignoredIncompatibleCount: number;
 }
-</file>
 
-<file path="src/artifacts/artifact-paths.ts">
+================
+File: src/artifacts/artifact-paths.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -10280,9 +10359,10 @@ export class ArtifactPaths {
     return acquireReportRootLock(this.reportRoot, options);
   }
 }
-</file>
 
-<file path="src/artifacts/failure-artifact-inventory.ts">
+================
+File: src/artifacts/failure-artifact-inventory.ts
+================
 import * as crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import type { Dirent } from 'node:fs';
@@ -10625,9 +10705,10 @@ export async function failureManifestWithAvailableArtifacts(
     warnings,
   });
 }
-</file>
 
-<file path="src/artifacts/orphan-cleanup.ts">
+================
+File: src/artifacts/orphan-cleanup.ts
+================
 import type { Dirent, Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -10879,9 +10960,10 @@ export async function cleanupOrphans(
   await cleanupReportRoot(report, state);
   return { inspected: state.inspected, removed: state.removed, warnings: state.warnings };
 }
-</file>
 
-<file path="src/artifacts/process-instance-inspector.ts">
+================
+File: src/artifacts/process-instance-inspector.ts
+================
 import { execFile } from 'node:child_process';
 
 const MAX_INSPECTOR_OUTPUT_BYTES = 1_024;
@@ -10968,9 +11050,10 @@ export const inspectProcessInstance: ProcessInstanceInspector = async (pid) => {
   if (!Number.isSafeInteger(pid) || pid < 1) return { state: 'unknown' };
   return process.platform === 'win32' ? inspectWithPowerShell(pid) : inspectWithNode(pid);
 };
-</file>
 
-<file path="src/artifacts/report-root-lock-owner.ts">
+================
+File: src/artifacts/report-root-lock-owner.ts
+================
 import { constants, type Dirent, type Stats } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -11228,9 +11311,10 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
     }
   }
 }
-</file>
 
-<file path="src/artifacts/report-root-lock.ts">
+================
+File: src/artifacts/report-root-lock.ts
+================
 export {
   acquireReportRootLock,
   REPORT_LOCK_HEARTBEAT_MS,
@@ -11238,9 +11322,10 @@ export {
   REPORT_LOCK_WAIT_MS,
 } from './report-root-lock-owner.js';
 export type { ReportRootLock, ReportRootLockOptions } from './report-root-lock-owner.js';
-</file>
 
-<file path="src/artifacts/result-sanitizer.ts">
+================
+File: src/artifacts/result-sanitizer.ts
+================
 import { redactText, sanitizeUrl } from '../config-errors.js';
 import type {
   CaptureMetadata,
@@ -11418,9 +11503,10 @@ export function safeFailure(value: ProjectFailureResultV3): ProjectFailureResult
 }
 
 export { assertValidFailureResult, assertValidProjectResult };
-</file>
 
-<file path="src/artifacts/result-validation.ts">
+================
+File: src/artifacts/result-validation.ts
+================
 import type {
   AggregateProjectSummary,
   AggregateReportResult,
@@ -11828,9 +11914,10 @@ export function isValidAggregateResult(value: unknown): value is AggregateReport
 export function assertValidAggregateResult(value: unknown): asserts value is AggregateReportResult {
   if (!isValidAggregateResult(value)) throw new Error('aggregate result schema is invalid');
 }
-</file>
 
-<file path="src/artifacts/result-writer.ts">
+================
+File: src/artifacts/result-writer.ts
+================
 import * as crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
@@ -12035,9 +12122,10 @@ export async function writeAggregateData(
 ): Promise<string> {
   return writeAggregateDataPair(reportRoot, aggregate);
 }
-</file>
 
-<file path="src/artifacts/snyk-result-sanitizer.ts">
+================
+File: src/artifacts/snyk-result-sanitizer.ts
+================
 import { redactText } from '../config-errors.js';
 import type {
   SnykFinding,
@@ -12116,9 +12204,10 @@ export function safeSnykSource(
     ...(value.findings === undefined ? {} : { findings: value.findings.slice(0, MAX_SNYK_FINDINGS).map((finding) => safeFinding(finding, sanitize)) }),
   };
 }
-</file>
 
-<file path="src/artifacts/staging-lease.ts">
+================
+File: src/artifacts/staging-lease.ts
+================
 import { constants } from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
@@ -12252,9 +12341,10 @@ export async function releaseStagingLease(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 }
-</file>
 
-<file path="src/browser-launcher.ts">
+================
+File: src/browser-launcher.ts
+================
 import { chromium, firefox, webkit, type Browser } from '@playwright/test';
 
 import type { BrowserName } from './types.js';
@@ -12308,9 +12398,10 @@ export async function defaultLaunch(
   if (browserName === 'webkit') return webkit.launch(options);
   return chromium.launch(options);
 }
-</file>
 
-<file path="src/cli.ts">
+================
+File: src/cli.ts
+================
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12436,9 +12527,10 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     process.exitCode = 1;
   }
 }
-</file>
 
-<file path="src/config-errors.ts">
+================
+File: src/config-errors.ts
+================
 export class ConfigError extends Error {
   readonly issues: readonly string[];
 
@@ -12511,9 +12603,10 @@ export function sanitizeUrl(value: string): string {
     return redactText(value);
   }
 }
-</file>
 
-<file path="src/config-selectors.ts">
+================
+File: src/config-selectors.ts
+================
 import type {
   LocatorSelector,
   SelectorConfig,
@@ -12633,9 +12726,10 @@ export function parseSelectorValue(
   }
   return selector;
 }
-</file>
 
-<file path="src/config-values.ts">
+================
+File: src/config-values.ts
+================
 import type { BrowserName } from './types.js';
 
 import { ConfigError } from './config-errors.js';
@@ -12719,9 +12813,10 @@ export function parseBrowserName(value: string | undefined): BrowserName {
   }
   return input as BrowserName;
 }
-</file>
 
-<file path="src/config.ts">
+================
+File: src/config.ts
+================
 export {
   ConfigError,
   formatDiagnostic,
@@ -12779,9 +12874,10 @@ export {
   isWithinBasePath,
 } from './security/url-policy.js';
 export { resolveSafeRelativeUrl } from './security/relative-url-policy.js';
-</file>
 
-<file path="src/config/config-types.ts">
+================
+File: src/config/config-types.ts
+================
 import type {
   BrowserName,
   RunType,
@@ -12876,9 +12972,10 @@ export interface ProjectSecrets {
   readonly username: string;
   readonly password: string;
 }
-</file>
 
-<file path="src/config/project-config-environment.ts">
+================
+File: src/config/project-config-environment.ts
+================
 import { ConfigError } from '../config-errors.js';
 import type {
   NormalizedProjectConfig,
@@ -12936,9 +13033,10 @@ export function resolveProjectSecrets(
   if (issues.length > 0) throw new ConfigError(issues);
   return Object.freeze({ username: username as string, password: password as string });
 }
-</file>
 
-<file path="src/config/project-config-field-validation.ts">
+================
+File: src/config/project-config-field-validation.ts
+================
 import { ConfigError } from '../config-errors.js';
 import { normalizeConfiguredUrl } from '../config-values.js';
 import {
@@ -13060,9 +13158,10 @@ export function safeArtifactPath(value: unknown, fieldName: string, issues: stri
     issues.push(`${fieldName} must not be the filesystem root`);
   }
 }
-</file>
 
-<file path="src/config/project-config-loader.ts">
+================
+File: src/config/project-config-loader.ts
+================
 import * as path from 'node:path';
 
 import { ConfigError } from '../config-errors.js';
@@ -13247,9 +13346,10 @@ export function loadProjectConfig(
 ): readonly NormalizedProjectConfig[] {
   return loadProjectConfigWithDocument(filePath, env, validateSecrets).projects;
 }
-</file>
 
-<file path="src/config/project-config-normalization.ts">
+================
+File: src/config/project-config-normalization.ts
+================
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -13411,9 +13511,10 @@ export function normalizedSource(
     ...(input?.projectId === undefined ? {} : { projectId: input.projectId.trim() }),
   });
 }
-</file>
 
-<file path="src/config/project-config-project-validation.ts">
+================
+File: src/config/project-config-project-validation.ts
+================
 import { ConfigError } from '../config-errors.js';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
 import { DEFAULT_SELECTORS, isRecord, parseSelectorValue } from '../config-selectors.js';
@@ -13596,9 +13697,10 @@ export function validateDefaults(value: unknown, issues: string[]): void {
     issues.push('config.defaults must be an object');
   }
 }
-</file>
 
-<file path="src/config/project-config-schema.ts">
+================
+File: src/config/project-config-schema.ts
+================
 import { ConfigError } from '../config-errors.js';
 import { isRecord } from '../config-selectors.js';
 import type { ProjectConfigDocumentV1 } from './config-types.js';
@@ -13662,9 +13764,10 @@ export function assertProjectConfigDocument(value: unknown): ProjectConfigDocume
   if (issues.length > 0) throw new ConfigError(issues);
   return value as unknown as ProjectConfigDocumentV1;
 }
-</file>
 
-<file path="src/config/project-run-selection.ts">
+================
+File: src/config/project-run-selection.ts
+================
 import { ConfigError } from '../config-errors.js';
 import type { NormalizedProjectConfig } from './config-types.js';
 
@@ -13699,9 +13802,10 @@ export function selectAutoBuildProject(
   }
   return project;
 }
-</file>
 
-<file path="src/config/report-worker-count.ts">
+================
+File: src/config/report-worker-count.ts
+================
 export const DEFAULT_REPORT_WORKERS = 1;
 export const MAX_REPORT_WORKERS = 4;
 
@@ -13724,9 +13828,10 @@ export function normalizeReportWorkerCount(
   }
   return value;
 }
-</file>
 
-<file path="src/jenkins/auth.ts">
+================
+File: src/jenkins/auth.ts
+================
 import {
   expect,
   type Browser,
@@ -13950,9 +14055,10 @@ export async function createJenkinsSession(
     throw error;
   }
 }
-</file>
 
-<file path="src/jenkins/build-trigger-validation.ts">
+================
+File: src/jenkins/build-trigger-validation.ts
+================
 import type { Locator, Page } from '@playwright/test';
 
 import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
@@ -14070,9 +14176,10 @@ export async function locateAndValidateBuildFormAndButton(
 
   return buildButton;
 }
-</file>
 
-<file path="src/jenkins/build-trigger.ts">
+================
+File: src/jenkins/build-trigger.ts
+================
 import type { Page, Request, Response } from '@playwright/test';
 
 import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
@@ -14186,9 +14293,10 @@ export async function triggerParameterizedBuild(
     page.off('response', onResponse);
   }
 }
-</file>
 
-<file path="src/jenkins/errors.ts">
+================
+File: src/jenkins/errors.ts
+================
 import type { Page } from '@playwright/test';
 
 import {
@@ -14227,9 +14335,10 @@ export function formatJenkinsFailure(
   const safeUrl = formatDiagnostic(sanitizeUrl(currentUrl), [config.username, config.password]);
   return `${action} at ${safeUrl}: ${formatJenkinsObservation(error, config)}${suffix}`;
 }
-</file>
 
-<file path="src/jenkins/locators.ts">
+================
+File: src/jenkins/locators.ts
+================
 import type { Locator, Page } from '@playwright/test';
 
 import type { LocatorSelector } from '../types.js';
@@ -14288,9 +14397,10 @@ export function selectorDescription(selector: LocatorSelector): string {
   const name = selector.name === undefined ? '' : ` name=${selector.name}`;
   return `${selector.kind}:${selector.value}${name}`;
 }
-</file>
 
-<file path="src/jenkins/runner-config.ts">
+================
+File: src/jenkins/runner-config.ts
+================
 import type { BrowserName, LocatorSelector } from '../types.js';
 
 export interface JenkinsRunnerSelectors {
@@ -14330,9 +14440,10 @@ export const DEFAULT_JENKINS_RUNNER_SELECTORS: JenkinsRunnerSelectors = {
     required: true,
   },
 };
-</file>
 
-<file path="src/jenkins/url-identity.ts">
+================
+File: src/jenkins/url-identity.ts
+================
 import { assertAllowedUrl } from '../security/url-policy.js';
 
 export function normalizedPathname(url: string): string {
@@ -14435,9 +14546,10 @@ export function validateJenkinsJobActionUrl(
 export function validateJenkinsUrl(candidateUrl: string, baseUrl: string): string {
   return assertAllowedUrl(candidateUrl, baseUrl, [], 'Jenkins URL');
 }
-</file>
 
-<file path="src/project/auto-build-runner.ts">
+================
+File: src/project/auto-build-runner.ts
+================
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 import { formatDiagnostic } from '../config-errors.js';
@@ -14562,9 +14674,10 @@ export async function runAutoBuildProject(
     }
   }
 }
-</file>
 
-<file path="src/project/project-capture.ts">
+================
+File: src/project/project-capture.ts
+================
 import type { Page } from '@playwright/test';
 
 import { redactText, sanitizeUrl } from '../config-errors.js';
@@ -14792,9 +14905,10 @@ export function sanitizeProjectDiagnostics(
     observationErrors: boundedDiagnostics(diagnostics.observationErrors.map((value) => redactText(value, secretValues))),
   };
 }
-</file>
 
-<file path="src/project/project-manifest.ts">
+================
+File: src/project/project-manifest.ts
+================
 import type { NormalizedProjectConfig } from '../config/config-types.js';
 import type { ProjectRunManifest } from '../artifacts/artifact-manifest.js';
 import { boundedDiagnostics } from '../workflow/diagnostics.js';
@@ -14843,9 +14957,10 @@ export function createProjectManifest(
     }),
   };
 }
-</file>
 
-<file path="src/project/project-run-state.ts">
+================
+File: src/project/project-run-state.ts
+================
 import type { ProjectRunIdentity } from './project-types.js';
 
 export type ProjectRunPhase =
@@ -14894,9 +15009,10 @@ export class ProjectRunState {
     this.currentPhase = 'failed';
   }
 }
-</file>
 
-<file path="src/project/project-runner.ts">
+================
+File: src/project/project-runner.ts
+================
 import type { BrowserContext, Browser, Page } from '@playwright/test';
 
 import { formatDiagnostic, sanitizeUrl } from '../config-errors.js';
@@ -15198,9 +15314,10 @@ export async function runProject(
     };
   }
 }
-</file>
 
-<file path="src/project/project-types.ts">
+================
+File: src/project/project-types.ts
+================
 import type { AggregateReportResult } from '../result-types.js';
 import type { DiscoveredRunManifest } from '../artifacts/artifact-manifest.js';
 
@@ -15233,9 +15350,10 @@ export interface RunnerExecutionResult {
   readonly warnings: readonly string[];
   readonly exitCode: 0 | 1;
 }
-</file>
 
-<file path="src/project/project-workflow.ts">
+================
+File: src/project/project-workflow.ts
+================
 import type { Page } from '@playwright/test';
 
 import { deriveJenkinsBaseUrl } from '../config-values.js';
@@ -15321,9 +15439,10 @@ export async function executeJenkinsAutoBuildWorkflow(
   await openJenkinsJob(page, config, deadline);
   return triggerParameterizedBuild(page, config, deadline);
 }
-</file>
 
-<file path="src/project/report-worker-pool.ts">
+================
+File: src/project/report-worker-pool.ts
+================
 import type { Browser, BrowserContext } from '@playwright/test';
 
 import type { ArtifactPaths } from '../artifacts/artifact-paths.js';
@@ -15400,9 +15519,10 @@ export async function executeProjectWorkerPool(
 
   return outcomes;
 }
-</file>
 
-<file path="src/reporting/aggregate-report-renderer.ts">
+================
+File: src/reporting/aggregate-report-renderer.ts
+================
 import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from '../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from './html-escape.js';
 import { localManifestHref, localReportHref } from './report-links.js';
@@ -15456,9 +15576,10 @@ export function renderAggregateReport(aggregate: AggregateReportResult): string 
 </html>
 `;
 }
-</file>
 
-<file path="src/reporting/control-page/App.tsx">
+================
+File: src/reporting/control-page/App.tsx
+================
 import React from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { DashboardPage } from './pages/DashboardPage.js';
@@ -15470,9 +15591,10 @@ export default function App() {
     </ErrorBoundary>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/atoms/Badge.tsx">
+================
+File: src/reporting/control-page/components/atoms/Badge.tsx
+================
 import React, { forwardRef } from 'react';
 import type { BadgeProps, BadgeVariant } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
@@ -15523,9 +15645,10 @@ export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(function Badge(
 });
 
 Badge.displayName = 'Badge';
-</file>
 
-<file path="src/reporting/control-page/components/atoms/Button.tsx">
+================
+File: src/reporting/control-page/components/atoms/Button.tsx
+================
 import React, { forwardRef } from 'react';
 import type { ButtonProps } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
@@ -15571,18 +15694,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 });
 
 Button.displayName = 'Button';
-</file>
 
-<file path="src/reporting/control-page/components/atoms/index.ts">
+================
+File: src/reporting/control-page/components/atoms/index.ts
+================
 export * from './Badge.js';
 export * from './Button.js';
 export * from './Input.js';
 export * from './Select.js';
 export * from './StatusBanner.js';
 export * from './LoadingIndicator.js';
-</file>
 
-<file path="src/reporting/control-page/components/atoms/Input.tsx">
+================
+File: src/reporting/control-page/components/atoms/Input.tsx
+================
 import React, { forwardRef } from 'react';
 import type { InputProps } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
@@ -15659,9 +15784,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 });
 
 Input.displayName = 'Input';
-</file>
 
-<file path="src/reporting/control-page/components/atoms/LoadingIndicator.tsx">
+================
+File: src/reporting/control-page/components/atoms/LoadingIndicator.tsx
+================
 import React, { forwardRef } from 'react';
 import type { LoadingIndicatorProps } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
@@ -15686,9 +15812,10 @@ export const LoadingIndicator = forwardRef<HTMLDivElement, LoadingIndicatorProps
 );
 
 LoadingIndicator.displayName = 'LoadingIndicator';
-</file>
 
-<file path="src/reporting/control-page/components/atoms/Select.tsx">
+================
+File: src/reporting/control-page/components/atoms/Select.tsx
+================
 import React, { forwardRef } from 'react';
 import type { SelectProps } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
@@ -15746,9 +15873,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
 });
 
 Select.displayName = 'Select';
-</file>
 
-<file path="src/reporting/control-page/components/atoms/StatusBanner.tsx">
+================
+File: src/reporting/control-page/components/atoms/StatusBanner.tsx
+================
 import React, { forwardRef } from 'react';
 import type { StatusBannerProps } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
@@ -15779,9 +15907,10 @@ export const StatusBanner = forwardRef<HTMLDivElement, StatusBannerProps>(functi
 });
 
 StatusBanner.displayName = 'StatusBanner';
-</file>
 
-<file path="src/reporting/control-page/components/ErrorBoundary.tsx">
+================
+File: src/reporting/control-page/components/ErrorBoundary.tsx
+================
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
 
 export interface ErrorBoundaryProps {
@@ -15849,9 +15978,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return this.props.children;
   }
 }
-</file>
 
-<file path="src/reporting/control-page/components/molecules/BrowserSettingRow.tsx">
+================
+File: src/reporting/control-page/components/molecules/BrowserSettingRow.tsx
+================
 import React, { forwardRef } from 'react';
 import { Badge } from '../atoms/Badge.js';
 import { Button } from '../atoms/Button.js';
@@ -15992,9 +16122,10 @@ export const BrowserSettingRow = forwardRef<HTMLDivElement, BrowserSettingRowPro
 );
 
 BrowserSettingRow.displayName = 'BrowserSettingRow';
-</file>
 
-<file path="src/reporting/control-page/components/molecules/ConfigDefaultsEditor.tsx">
+================
+File: src/reporting/control-page/components/molecules/ConfigDefaultsEditor.tsx
+================
 import type {
   BrowserName,
   ProjectConfigDefaults,
@@ -16112,9 +16243,10 @@ export function ConfigDefaultsEditor({
     </details>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/molecules/ConfigProjectEditor.tsx">
+================
+File: src/reporting/control-page/components/molecules/ConfigProjectEditor.tsx
+================
 import type {
   ProjectConfigInput,
   ProjectCredentialReferences,
@@ -16251,9 +16383,10 @@ export function ConfigProjectEditor({
     </div>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx">
+================
+File: src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx
+================
 import React, { forwardRef } from 'react';
 import { Button } from '../atoms/Button.js';
 import { Select } from '../atoms/Select.js';
@@ -16363,9 +16496,10 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
 );
 
 ConfigSelectorBar.displayName = 'ConfigSelectorBar';
-</file>
 
-<file path="src/reporting/control-page/components/molecules/CredentialRow.tsx">
+================
+File: src/reporting/control-page/components/molecules/CredentialRow.tsx
+================
 import React, { forwardRef } from 'react';
 import { Badge } from '../atoms/Badge.js';
 import { Button } from '../atoms/Button.js';
@@ -16466,17 +16600,19 @@ export const CredentialRow = forwardRef<HTMLDivElement, CredentialRowProps>(
 );
 
 CredentialRow.displayName = 'CredentialRow';
-</file>
 
-<file path="src/reporting/control-page/components/molecules/index.ts">
+================
+File: src/reporting/control-page/components/molecules/index.ts
+================
 export * from './CredentialRow.js';
 export * from './BrowserSettingRow.js';
 export * from './ConfigSelectorBar.js';
 export * from './LogViewer.js';
 export * from './RunResultBox.js';
-</file>
 
-<file path="src/reporting/control-page/components/molecules/LogViewer.tsx">
+================
+File: src/reporting/control-page/components/molecules/LogViewer.tsx
+================
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { LogViewerProps } from '../../types/component-contracts.js';
 import type { RunLogEntry } from '../../types/index.js';
@@ -16529,9 +16665,10 @@ export const LogViewer = forwardRef<HTMLPreElement, LogViewerProps>(function Log
 });
 
 LogViewer.displayName = 'LogViewer';
-</file>
 
-<file path="src/reporting/control-page/components/molecules/RunResultBox.tsx">
+================
+File: src/reporting/control-page/components/molecules/RunResultBox.tsx
+================
 import React, { forwardRef } from 'react';
 import type { RunResultBoxProps } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
@@ -16629,9 +16766,10 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
 );
 
 RunResultBox.displayName = 'RunResultBox';
-</file>
 
-<file path="src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx">
+================
+File: src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx
+================
 import React, { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { BrowserSettingKey, DialogMessage } from '../../types/component-contracts.js';
@@ -16789,9 +16927,10 @@ export function BrowserSettingsDialog({
     </Dialog.Root>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx">
+================
+File: src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx
+================
 import React from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { ProjectCardData } from '../../types/component-contracts.js';
@@ -16870,9 +17009,10 @@ export function BuildConfirmDialog({
     </Dialog.Root>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx">
+================
+File: src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx
+================
 import { useEffect, useState } from 'react';
 import type {
   ProjectConfigDefaults,
@@ -17105,9 +17245,10 @@ export function ConfigFormBuilder({
     </section>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/CredentialsDialog.tsx">
+================
+File: src/reporting/control-page/components/organisms/CredentialsDialog.tsx
+================
 import React, { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { CredentialRowData, DialogMessage } from '../../types/component-contracts.js';
@@ -17260,9 +17401,10 @@ export function CredentialsDialog({
     </Dialog.Root>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/ExecutionSection.tsx">
+================
+File: src/reporting/control-page/components/organisms/ExecutionSection.tsx
+================
 import React from 'react';
 import { Button } from '../atoms/Button.js';
 import { cn } from '../../utils/cn.js';
@@ -17294,9 +17436,10 @@ export function ExecutionSection({
     </div>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/HeaderBar.tsx">
+================
+File: src/reporting/control-page/components/organisms/HeaderBar.tsx
+================
 import React from 'react';
 import { ConfigSelectorBar } from '../molecules/ConfigSelectorBar.js';
 import type { ConfigSelectorBarProps } from '../../types/component-contracts.js';
@@ -17318,9 +17461,10 @@ export function HeaderBar({
     </header>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/index.ts">
+================
+File: src/reporting/control-page/components/organisms/index.ts
+================
 export * from './BuildConfirmDialog.js';
 export * from './CredentialsDialog.js';
 export * from './BrowserSettingsDialog.js';
@@ -17331,9 +17475,10 @@ export * from './RawJsonSection.js';
 export * from './ExecutionSection.js';
 export * from './ConfigFormBuilder.js';
 export * from './RunStatusCard.js';
-</file>
 
-<file path="src/reporting/control-page/components/organisms/ProjectCard.tsx">
+================
+File: src/reporting/control-page/components/organisms/ProjectCard.tsx
+================
 import React from 'react';
 import type { ProjectCardData } from '../../types/component-contracts.js';
 import { Button } from '../atoms/Button.js';
@@ -17442,9 +17587,10 @@ export function ProjectCard({
     </div>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/ProjectsGrid.tsx">
+================
+File: src/reporting/control-page/components/organisms/ProjectsGrid.tsx
+================
 import React from 'react';
 import type { ProjectCardData } from '../../types/component-contracts.js';
 import { ProjectCard } from './ProjectCard.js';
@@ -17494,9 +17640,10 @@ export function ProjectsGrid({
     </div>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/RawJsonSection.tsx">
+================
+File: src/reporting/control-page/components/organisms/RawJsonSection.tsx
+================
 import React, { useEffect, useRef } from 'react';
 import type { JsonValidationStatus } from '../../hooks/useConfigManager.js';
 import { Button } from '../atoms/Button.js';
@@ -17570,9 +17717,10 @@ export function RawJsonSection({
     </details>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/organisms/RunStatusCard.tsx">
+================
+File: src/reporting/control-page/components/organisms/RunStatusCard.tsx
+================
 import React from 'react';
 import type { RunLogEntry, RunResult, RunStatus } from '../../types/index.js';
 import { Badge } from '../atoms/Badge.js';
@@ -17615,9 +17763,10 @@ export function RunStatusCard({
     </div>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/components/templates/DashboardLayout.tsx">
+================
+File: src/reporting/control-page/components/templates/DashboardLayout.tsx
+================
 import React from 'react';
 
 export interface DashboardLayoutProps {
@@ -17706,9 +17855,10 @@ export function DashboardLayout({
     </div>
   );
 }
-</file>
 
-<file path="src/reporting/control-page/hooks/config-document-transitions.ts">
+================
+File: src/reporting/control-page/hooks/config-document-transitions.ts
+================
 import { PROJECT_CONFIG_LIMITS } from '../../../config/project-config-schema.js';
 import type {
   ProjectConfigDefaults,
@@ -17777,9 +17927,10 @@ export function updateProjectDocumentDefaults(
   else delete updated.defaults;
   return updated;
 }
-</file>
 
-<file path="src/reporting/control-page/hooks/useBrowserSettings.ts">
+================
+File: src/reporting/control-page/hooks/useBrowserSettings.ts
+================
 import { useCallback, useState } from 'react';
 import type { BrowserSettingKey, SecretsPresenceMap } from '../types/index.js';
 import type { DialogMessage } from '../types/component-contracts.js';
@@ -17964,9 +18115,10 @@ export function useBrowserSettings(apiOverride?: UseControlApiResult): UseBrowse
     setMessage,
   };
 }
-</file>
 
-<file path="src/reporting/control-page/hooks/useConfigDocumentEditor.ts">
+================
+File: src/reporting/control-page/hooks/useConfigDocumentEditor.ts
+================
 import { useCallback, useState } from 'react';
 import { ConfigError } from '../../../config-errors.js';
 import { assertProjectConfigDocument } from '../../../config/project-config-schema.js';
@@ -18119,9 +18271,10 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     updateDefaults,
   };
 }
-</file>
 
-<file path="src/reporting/control-page/hooks/useConfigManager.ts">
+================
+File: src/reporting/control-page/hooks/useConfigManager.ts
+================
 import { useCallback, useState } from 'react';
 import type { ConfigFileListResponse, ConfigResponse, ConfigSummary } from '../types/index.js';
 import type { BannerMessage, BannerVariant } from '../types/component-contracts.js';
@@ -18310,9 +18463,10 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
     hideBanner,
   };
 }
-</file>
 
-<file path="src/reporting/control-page/hooks/useControlApi.ts">
+================
+File: src/reporting/control-page/hooks/useControlApi.ts
+================
 import { useCallback, useMemo, useState } from 'react';
 import type { ApiErrorResponse } from '../types/index.js';
 
@@ -18426,9 +18580,10 @@ export function useControlApi(): UseControlApiResult {
     [csrfToken, apiFetch, requestJson],
   );
 }
-</file>
 
-<file path="src/reporting/control-page/hooks/useCredentialsManager.ts">
+================
+File: src/reporting/control-page/hooks/useCredentialsManager.ts
+================
 import { useCallback, useState } from 'react';
 import type { ProjectConfigDocumentV1, SecretsPresenceMap } from '../types/index.js';
 import type { CredentialRowData, DialogMessage } from '../types/component-contracts.js';
@@ -18612,9 +18767,10 @@ export function useCredentialsManager(apiOverride?: UseControlApiResult): UseCre
     setMessage,
   };
 }
-</file>
 
-<file path="src/reporting/control-page/hooks/useRunPoller.ts">
+================
+File: src/reporting/control-page/hooks/useRunPoller.ts
+================
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   RunLogEntry,
@@ -18869,9 +19025,10 @@ export function useRunPoller(apiOverride?: UseControlApiResult): UseRunPollerRes
     stopPolling,
   };
 }
-</file>
 
-<file path="src/reporting/control-page/index.html">
+================
+File: src/reporting/control-page/index.html
+================
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18885,9 +19042,10 @@ export function useRunPoller(apiOverride?: UseControlApiResult): UseRunPollerRes
   <script type="module" src="./main.tsx"></script>
 </body>
 </html>
-</file>
 
-<file path="src/reporting/control-page/main.tsx">
+================
+File: src/reporting/control-page/main.tsx
+================
 import React, { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.js';
@@ -18902,9 +19060,10 @@ if (rootElement) {
     </StrictMode>,
   );
 }
-</file>
 
-<file path="src/reporting/control-page/pages/DashboardPage.tsx">
+================
+File: src/reporting/control-page/pages/DashboardPage.tsx
+================
 import React, { useEffect, useMemo, useState } from 'react';
 import type { ProjectCardData } from '../types/component-contracts.js';
 import { useConfigManager } from '../hooks/useConfigManager.js';
@@ -19148,9 +19307,10 @@ export function DashboardPage() {
     />
   );
 }
-</file>
 
-<file path="src/reporting/control-page/styles/globals.css">
+================
+File: src/reporting/control-page/styles/globals.css
+================
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -19468,9 +19628,10 @@ details:not([open]) > :not(summary) {
     transition-duration: 0.01ms !important;
   }
 }
-</file>
 
-<file path="src/reporting/control-page/types/component-contracts.ts">
+================
+File: src/reporting/control-page/types/component-contracts.ts
+================
 import type { ReactNode, Ref } from 'react';
 import type {
   BrowserSettingKey,
@@ -19649,9 +19810,10 @@ export interface RunResultBoxProps {
   className?: string;
   id?: string;
 }
-</file>
 
-<file path="src/reporting/control-page/types/index.ts">
+================
+File: src/reporting/control-page/types/index.ts
+================
 import type {
   BrowserName,
   RunType,
@@ -19792,18 +19954,20 @@ export interface ApiErrorResponse {
   error?: ApiErrorDetail;
   message?: string;
 }
-</file>
 
-<file path="src/reporting/control-page/utils/cn.ts">
+================
+File: src/reporting/control-page/utils/cn.ts
+================
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
-</file>
 
-<file path="src/reporting/control-page/utils/config-selection.ts">
+================
+File: src/reporting/control-page/utils/config-selection.ts
+================
 /**
  * Storage key for active configuration persistence in jenkins control page.
  */
@@ -19925,9 +20089,10 @@ export function syncUrlActiveConfig(name: string | null): void {
     // history.replaceState may be restricted
   }
 }
-</file>
 
-<file path="src/reporting/control-page/utils/discoverCredentialKeys.ts">
+================
+File: src/reporting/control-page/utils/discoverCredentialKeys.ts
+================
 import type { ProjectConfigDocumentV1 } from '../types/index.js';
 
 /**
@@ -20001,13 +20166,15 @@ export function discoverRequiredCredentialKeys(
 
   return Array.from(keys).sort();
 }
-</file>
 
-<file path="src/reporting/control-page/vite-env.d.ts">
+================
+File: src/reporting/control-page/vite-env.d.ts
+================
 /// <reference types="vite/client" />
-</file>
 
-<file path="src/reporting/html-escape.ts">
+================
+File: src/reporting/html-escape.ts
+================
 const HTML_ENTITIES: Readonly<Record<string, string>> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -20030,9 +20197,10 @@ export function escapeHtmlText(value: string): string {
 export function escapeHtmlAttribute(value: string): string {
   return escape(value);
 }
-</file>
 
-<file path="src/reporting/project-report-renderer.ts">
+================
+File: src/reporting/project-report-renderer.ts
+================
 import { escapeHtmlAttribute, escapeHtmlText } from './html-escape.js';
 import { REPORT_ANCHORS, stateClass, stateLabel, type ProjectReportViewModel } from './report-view-model.js';
 import { renderArtifactSection } from './sections/artifact-section.js';
@@ -20079,9 +20247,10 @@ export function renderProjectReport(model: ProjectReportViewModel): string {
 </html>
 `;
 }
-</file>
 
-<file path="src/reporting/report-links.ts">
+================
+File: src/reporting/report-links.ts
+================
 import { assertSafeReferenceUrl } from '../security/url-policy.js';
 
 const SAFE_LOCAL_SEGMENT = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
@@ -20123,9 +20292,10 @@ export function localReportHref(value: string | undefined): string | undefined {
 export function localManifestHref(value: string | undefined): string | undefined {
   return value === undefined || !value.endsWith('/manifest.json') ? undefined : safeLocalPath(value);
 }
-</file>
 
-<file path="src/reporting/report-output.ts">
+================
+File: src/reporting/report-output.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -20275,9 +20445,10 @@ export function reportFileExists(filename: string): boolean {
     return false;
   }
 }
-</file>
 
-<file path="src/reporting/report-server-cli.ts">
+================
+File: src/reporting/report-server-cli.ts
+================
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20466,9 +20637,10 @@ if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLTo
     process.exitCode = 1;
   });
 }
-</file>
 
-<file path="src/reporting/report-server-config-store.ts">
+================
+File: src/reporting/report-server-config-store.ts
+================
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -20633,9 +20805,10 @@ export async function createConfigStore(configDirectory: string): Promise<Config
     writeConfig,
   };
 }
-</file>
 
-<file path="src/reporting/report-server-constants.ts">
+================
+File: src/reporting/report-server-constants.ts
+================
 export const MAX_STATIC_FILE_BYTES = 16 * 1_048_576;
 export const MAX_CONFIG_FILE_BYTES = 1_048_576;
 export const MAX_CONTROL_BODY_BYTES = 1_048_576;
@@ -20647,9 +20820,10 @@ export const REPORT_CSP = "default-src 'none'; img-src 'self' data:; style-src '
 export const CONTROL_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 export const SECRETS_FILE_NAME = 'secrets.local.json';
 export const MAX_SECRET_FILE_BYTES = 1_048_576;
-</file>
 
-<file path="src/reporting/report-server-control-api.ts">
+================
+File: src/reporting/report-server-control-api.ts
+================
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { validateMutationRequest } from './report-server-control-security.js';
@@ -20747,6 +20921,10 @@ export async function handleRunApi(
       sendError(response, 422, 'INVALID_RUN_TYPE', 'runType must be report or auto-build');
       return;
     }
+    if (Object.hasOwn(data, 'workerCount')) {
+      sendError(response, 422, 'INVALID_WORKER_COUNT', 'workerCount is not supported in run requests; use saved document configuration');
+      return;
+    }
     const projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
     if (runType === 'auto-build' && (projectId === undefined || projectId.trim().length === 0)) {
       sendError(response, 422, 'MISSING_PROJECT_ID', 'projectId is required for auto-build');
@@ -20790,9 +20968,10 @@ export async function handleRunApi(
   response.setHeader('allow', 'GET, POST');
   sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/run');
 }
-</file>
 
-<file path="src/reporting/report-server-control-page.ts">
+================
+File: src/reporting/report-server-control-page.ts
+================
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20848,9 +21027,10 @@ export async function getControlJs(): Promise<string> {
   const { js } = await loadControlAssets();
   return js;
 }
-</file>
 
-<file path="src/reporting/report-server-control-secrets-api.ts">
+================
+File: src/reporting/report-server-control-secrets-api.ts
+================
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { validateMutationRequest } from './report-server-control-security.js';
@@ -21030,9 +21210,10 @@ export async function handleSecretsApi(
   response.setHeader('allow', 'GET, PUT, DELETE');
   sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for /api/secrets');
 }
-</file>
 
-<file path="src/reporting/report-server-control-security.ts">
+================
+File: src/reporting/report-server-control-security.ts
+================
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 
@@ -21143,9 +21324,10 @@ export function validateMutationRequest(
   }
   return { valid: true };
 }
-</file>
 
-<file path="src/reporting/report-server-control.ts">
+================
+File: src/reporting/report-server-control.ts
+================
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as path from 'node:path';
 
@@ -21295,9 +21477,10 @@ async function handleApiRequest(
 
   sendError(response, 404, 'NOT_FOUND', 'API endpoint not found');
 }
-</file>
 
-<file path="src/reporting/report-server-file-io.ts">
+================
+File: src/reporting/report-server-file-io.ts
+================
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -21558,9 +21741,10 @@ export async function readBounded(file: OpenedReportFile): Promise<Buffer> {
   }
   return Buffer.concat(chunks, total);
 }
-</file>
 
-<file path="src/reporting/report-server-files.ts">
+================
+File: src/reporting/report-server-files.ts
+================
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as path from 'node:path';
 
@@ -21652,9 +21836,10 @@ export async function handleReportRequest(root: string, request: IncomingMessage
     await file.handle.close().catch(() => undefined);
   }
 }
-</file>
 
-<file path="src/reporting/report-server-json.ts">
+================
+File: src/reporting/report-server-json.ts
+================
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { MAX_CONTROL_BODY_BYTES } from './report-server-constants.js';
@@ -21742,9 +21927,10 @@ export async function readBoundedJsonBody(
     request.on('error', onError);
   });
 }
-</file>
 
-<file path="src/reporting/report-server-run-executor.ts">
+================
+File: src/reporting/report-server-run-executor.ts
+================
 import * as path from 'node:path';
 
 import { redactText } from '../config-errors.js';
@@ -21792,7 +21978,8 @@ export async function executeControlRun(
       if (!reportExecutor) {
         throw new Error('reportExecutor is required for report run');
       }
-      const result = await reportExecutor(reportProjects, { runtimeEnvironment: runEnv });
+      const workerCount = configEntry.document.reportWorkers ?? 1;
+      const result = await reportExecutor(reportProjects, { runtimeEnvironment: runEnv, workerCount });
 
       const reportProject = result.aggregate.projects.find((p) => p.reportPath !== undefined);
       const relReport = reportProject?.reportPath ?? result.aggregate.projects[0]?.reportPath;
@@ -21849,9 +22036,10 @@ export async function executeControlRun(
     throw error;
   }
 }
-</file>
 
-<file path="src/reporting/report-server-run-manager.ts">
+================
+File: src/reporting/report-server-run-manager.ts
+================
 import { randomUUID } from 'node:crypto';
 
 import { MAX_CONTROL_LOG_ENTRIES, MAX_CONTROL_LOG_LENGTH, MAX_RETAINED_RUNS } from './report-server-constants.js';
@@ -22020,9 +22208,10 @@ export function createRunManager(options: RunManagerOptions): RunManager {
     getActiveRun,
   };
 }
-</file>
 
-<file path="src/reporting/report-server-secret-store.ts">
+================
+File: src/reporting/report-server-secret-store.ts
+================
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -22216,9 +22405,10 @@ export async function createSecretStore(configDirectory: string): Promise<Secret
     },
   };
 }
-</file>
 
-<file path="src/reporting/report-server.ts">
+================
+File: src/reporting/report-server.ts
+================
 import { createServer, type Server } from 'node:http';
 import { isIP, type Socket } from 'node:net';
 import { randomBytes } from 'node:crypto';
@@ -22389,9 +22579,10 @@ export async function createReportServer(
     close,
   };
 }
-</file>
 
-<file path="src/reporting/report-view-model.ts">
+================
+File: src/reporting/report-view-model.ts
+================
 import type { ProjectFailureResultV3, ProjectRunManifest } from '../artifacts/artifact-manifest.js';
 import type {
   CaptureMetadata,
@@ -22510,9 +22701,10 @@ export function createProjectReportViewModel(
     ...(manifest.artifacts.trace === undefined ? {} : { trace: manifest.artifacts.trace }),
   };
 }
-</file>
 
-<file path="src/reporting/report.css">
+================
+File: src/reporting/report.css
+================
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -22583,9 +22775,10 @@ footer { padding: 0 0 3rem; color: var(--ink-muted); font-size: 0.86rem; }
   th, td { padding: 0.45rem; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
-</file>
 
-<file path="src/reporting/sections/artifact-section.ts">
+================
+File: src/reporting/sections/artifact-section.ts
+================
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref } from '../report-links.js';
 import { REPORT_ANCHORS, type ProjectReportViewModel } from '../report-view-model.js';
@@ -22614,9 +22807,10 @@ export function renderArtifactSection(model: ProjectReportViewModel): string {
     <p class="security-note">When served over HTTP, add a response-header CSP with <code>frame-ancestors 'none'</code>; a meta policy cannot enforce that directive.</p>
   </section>`;
 }
-</file>
 
-<file path="src/reporting/sections/jenkins-section.ts">
+================
+File: src/reporting/sections/jenkins-section.ts
+================
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localAnchorHref, safeExternalHref } from '../report-links.js';
 import { REPORT_ANCHORS, stateClass, stateLabel, type ProjectReportViewModel } from '../report-view-model.js';
@@ -22663,9 +22857,10 @@ export function renderJenkinsSection(model: ProjectReportViewModel): string {
     <nav aria-label="Report sections"><h3>Evidence navigation</h3>${navigationLinks(model)}</nav>
   </section>`;
 }
-</file>
 
-<file path="src/reporting/sections/snyk-section.ts">
+================
+File: src/reporting/sections/snyk-section.ts
+================
 import type { CaptureMetadata, SnykFinding, SnykSourceEvidence } from '../../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref, safeExternalHref } from '../report-links.js';
@@ -22724,9 +22919,10 @@ export function renderSnykSection(model: ProjectReportViewModel): string {
   if (source === undefined) return `<section id="snyk-test-report" aria-labelledby="snyk-heading"><h2 id="snyk-heading">Snyk test report</h2><p class="state-message">Snyk evidence was not available for this failed run.</p></section>`;
   return `<section id="snyk-test-report" aria-labelledby="snyk-heading"><div class="section-heading"><div><p class="eyebrow">Snyk</p><h2 id="snyk-heading">Snyk test report</h2></div>${badge(source.state)}</div><p class="state-message">${source.state === 'found' ? 'Normalized evidence captured.' : source.state === 'not_found' ? 'No Snyk report link was found on the Jenkins job page.' : 'Snyk evidence is incomplete; warnings explain what was retained.'}</p>${screenshot(source, model.artifacts)}${summary(source)}<h3>Detailed findings</h3>${findings(source)}${source.captures.length === 0 ? '' : `<h3>Capture provenance</h3><ul class="provenance-list">${source.captures.map(sourceLine).join('')}</ul>`}${source.warnings.length === 0 ? '' : `<ul class="warning-list">${source.warnings.map((warning) => `<li>${escapeHtmlText(warning)}</li>`).join('')}</ul>`}</section>`;
 }
-</file>
 
-<file path="src/reporting/sections/sonarqube-section.ts">
+================
+File: src/reporting/sections/sonarqube-section.ts
+================
 import type { CaptureMetadata, SonarFacetValue, SonarSourceEvidence } from '../../result-types.js';
 import { escapeHtmlAttribute, escapeHtmlText } from '../html-escape.js';
 import { localArtifactHref, safeExternalHref } from '../report-links.js';
@@ -22776,9 +22972,10 @@ export function renderSonarqubeSection(model: ProjectReportViewModel): string {
   const issuesTarget = source.navigation.find((item) => item.key === 'sonarqube-issues');
   return `<section id="sonarqube-overall" aria-labelledby="sonarqube-heading"><div class="section-heading"><div><p class="eyebrow">SonarQube</p><h2 id="sonarqube-heading">Overall and Issues evidence</h2></div>${badge(source.state)}</div>${homeSection(source)}<div class="subsection"><div class="section-heading"><h3>Overall</h3>${badge(overallTarget?.state ?? 'incomplete')}</div>${evidenceImage(source, 'sonarqube-overall.png', model.artifacts, 'SonarQube Overall evidence screenshot')} ${sourceAction(overall)}</div><section id="sonarqube-issues" class="subsection" aria-labelledby="sonarqube-issues-heading"><div class="section-heading"><h3 id="sonarqube-issues-heading">Issues</h3>${badge(issuesTarget?.state ?? 'incomplete')}</div>${evidenceImage(source, 'sonarqube-issues.png', model.artifacts, 'SonarQube Issues Type and Severity evidence screenshot')} ${sourceAction(issues)}<div class="facet-grid">${facetTable('Type', source.facets?.types)}${facetTable('Severity', source.facets?.severities)}</div></section>${source.warnings.length === 0 ? '' : `<ul class="warning-list">${source.warnings.map((warning) => `<li>${escapeHtmlText(warning)}</li>`).join('')}</ul>`}</section>`;
 }
-</file>
 
-<file path="src/reports/snyk/snyk-capture-support.ts">
+================
+File: src/reports/snyk/snyk-capture-support.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -23158,9 +23355,10 @@ export async function screenshotReport(
 export function captureFailureMessage(error: unknown): string {
   return formatDiagnostic(error);
 }
-</file>
 
-<file path="src/reports/snyk/snyk-capture.ts">
+================
+File: src/reports/snyk/snyk-capture.ts
+================
 import type { Page } from '@playwright/test';
 
 import { sanitizeUrl } from '../../config-errors.js';
@@ -23420,9 +23618,10 @@ export async function captureSnykEvidence(input: {
     );
   }
 }
-</file>
 
-<file path="src/reports/snyk/snyk-html-extractor.ts">
+================
+File: src/reports/snyk/snyk-html-extractor.ts
+================
 import type { Page } from '@playwright/test';
 
 import type {
@@ -23657,9 +23856,10 @@ export async function extractSnykHtml(page: Page): Promise<SnykHtmlEvidence> {
     };
   }, { severityNames: [...SEVERITIES], maxDetailCards: MAX_DETAIL_CARDS });
 }
-</file>
 
-<file path="src/reports/snyk/snyk-normalize.ts">
+================
+File: src/reports/snyk/snyk-normalize.ts
+================
 import type {
   SnykFinding,
   SnykScanMetadata,
@@ -23851,9 +24051,10 @@ export function normalizeSnykEvidence(input: SnykNormalizationInput): Normalized
     warnings,
   };
 }
-</file>
 
-<file path="src/reports/snyk/snyk-summary-parser.ts">
+================
+File: src/reports/snyk/snyk-summary-parser.ts
+================
 import type { SnykSeverity, SnykSeverityCounts } from '../../result-types.js';
 import { isRecord } from '../../config-selectors.js';
 
@@ -23897,9 +24098,10 @@ export function parseSnykSummaryJson(text: string): ParsedSnykSummary {
     return { warnings: ['Snyk summary JSON could not be parsed'] };
   }
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-capture-step-types.ts">
+================
+File: src/reports/sonarqube/sonarqube-capture-step-types.ts
+================
 import type { Page } from '@playwright/test';
 
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
@@ -23925,9 +24127,10 @@ export interface SonarStepResult {
 export interface SonarIssuesStepResult extends SonarStepResult {
   facets: SonarIssueFacets;
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-capture-steps.ts">
+================
+File: src/reports/sonarqube/sonarqube-capture-steps.ts
+================
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import type { NavigationTargets } from '../../result-types.js';
@@ -24063,9 +24266,10 @@ export async function assertHomeIdentity(
   }
   return `${identityStrategy};${overview.strategy}`;
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-capture-support.ts">
+================
+File: src/reports/sonarqube/sonarqube-capture-support.ts
+================
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -24288,9 +24492,10 @@ export function createRouteHandler(
 export function captureFailureMessage(error: unknown): string {
   return formatDiagnostic(error);
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-capture.ts">
+================
+File: src/reports/sonarqube/sonarqube-capture.ts
+================
 import { expect, type Page, type Route } from '@playwright/test';
 
 import type { NormalizedProjectConfig, ProjectSecrets } from '../../config/config-types.js';
@@ -24516,9 +24721,10 @@ export async function captureSonarqubeEvidence(input: SonarCaptureInput): Promis
     }
   }
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-facet-locators.ts">
+================
+File: src/reports/sonarqube/sonarqube-facet-locators.ts
+================
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import { MAX_SONAR_FACETS, type SonarFacetCandidate } from './sonarqube-issue-facets.js';
@@ -24690,9 +24896,10 @@ export async function facetCandidates(
 ): Promise<SonarFacetCandidate[]> {
   return (await facetCandidatesWithStatus(facet, kind, deadline)).values;
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-issue-facets.ts">
+================
+File: src/reports/sonarqube/sonarqube-issue-facets.ts
+================
 import type { SonarFacetValue, SonarIssueFacets } from '../../result-types.js';
 
 export const MAX_SONAR_FACETS = 64;
@@ -24775,9 +24982,10 @@ export function sanitizeSonarIssueFacets(
     })),
   };
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-issues-capture-step.ts">
+================
+File: src/reports/sonarqube/sonarqube-issues-capture-step.ts
+================
 import { expect, type Locator } from '@playwright/test';
 
 import type { SonarIssueFacets } from '../../result-types.js';
@@ -25063,9 +25271,10 @@ export async function captureIssuesStep(input: SonarStepInput): Promise<SonarIss
     warnings: [...new Set(warnings)],
   };
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-locators.ts">
+================
+File: src/reports/sonarqube/sonarqube-locators.ts
+================
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { WorkflowDeadline } from '../../workflow/workflow-deadline.js';
 import { exactQueryValue, hasCredentialFreeAuthority } from './sonarqube-url-identity.js';
@@ -25356,9 +25565,10 @@ export function sonarLoginSubmitCandidates(page: Page): SonarLocator[] {
     { locator: page.getByRole('button', { name: /^sign in$/iu }), strategy: 'role:button:Sign in' },
   ];
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-login-step.ts">
+================
+File: src/reports/sonarqube/sonarqube-login-step.ts
+================
 import type { Page } from '@playwright/test';
 
 import type { ProjectSecrets } from '../../config/config-types.js';
@@ -25418,9 +25628,10 @@ export async function submitSonarqubeLogin(
     );
   }
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-project-identity-locators.ts">
+================
+File: src/reports/sonarqube/sonarqube-project-identity-locators.ts
+================
 import type { Locator, Page } from '@playwright/test';
 
 import type { SonarLocator } from './sonarqube-locators.js';
@@ -25488,9 +25699,10 @@ export async function projectIdentityHrefCandidates(page: Page, projectKey: stri
   }
   return candidates;
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-source-link-classifier.ts">
+================
+File: src/reports/sonarqube/sonarqube-source-link-classifier.ts
+================
 import type { NormalizedProjectConfig } from '../../config/config-types.js';
 import { assertAllowedUrl } from '../../security/url-policy.js';
 import { deriveJenkinsBaseUrl } from '../../config-values.js';
@@ -25575,9 +25787,10 @@ export function classifySonarLinks(
   const single = unique.length === 1 ? unique[0] : undefined;
   return { ...(single === undefined ? {} : { home: single }), warnings };
 }
-</file>
 
-<file path="src/reports/sonarqube/sonarqube-url-identity.ts">
+================
+File: src/reports/sonarqube/sonarqube-url-identity.ts
+================
 export function exactQueryValue(url: URL, key: string): string | undefined {
   const values = url.searchParams.getAll(key);
   if (values.length !== 1) return undefined;
@@ -25608,9 +25821,10 @@ export function isSonarqubeLoginLocation(url: URL): boolean {
     /\/sessions\/(?:new|login|init)(?:\/|$)/iu.test(path)
   );
 }
-</file>
 
-<file path="src/reports/source-link-classifier.ts">
+================
+File: src/reports/source-link-classifier.ts
+================
 import type { NormalizedProjectConfig } from '../config/config-types.js';
 import { assertAllowedUrl } from '../security/url-policy.js';
 import { deriveJenkinsBaseUrl } from '../config-values.js';
@@ -25841,9 +26055,10 @@ export function classifySnykLinks(
 
 export type { SonarLinkClassification } from './sonarqube/sonarqube-source-link-classifier.js';
 export { classifySonarLinks } from './sonarqube/sonarqube-source-link-classifier.js';
-</file>
 
-<file path="src/result-types.ts">
+================
+File: src/result-types.ts
+================
 import type { ReportState } from './types.js';
 
 export interface CaptureMetadata {
@@ -26021,9 +26236,10 @@ export interface AggregateReportResult {
   projects: AggregateProjectSummary[];
   warnings: string[];
 }
-</file>
 
-<file path="src/runner.ts">
+================
+File: src/runner.ts
+================
 import type { Browser, BrowserContext } from '@playwright/test';
 
 import { ArtifactPaths } from './artifacts/artifact-paths.js';
@@ -26222,9 +26438,10 @@ export async function runFromConfig(
     workerCount: document.reportWorkers ?? 1,
   });
 }
-</file>
 
-<file path="src/security/relative-url-policy.ts">
+================
+File: src/security/relative-url-policy.ts
+================
 import { ConfigError } from '../config-errors.js';
 import {
   canonicalizeBaseUrl,
@@ -26258,9 +26475,10 @@ export function resolveSafeRelativeUrl(
   }
   return result;
 }
-</file>
 
-<file path="src/security/url-policy.ts">
+================
+File: src/security/url-policy.ts
+================
 import { ConfigError } from '../config-errors.js';
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/u;
@@ -26456,9 +26674,10 @@ export function isSafeReferenceUrl(value: unknown): value is string {
     return false;
   }
 }
-</file>
 
-<file path="src/templates/template-fixture-build-validation.ts">
+================
+File: src/templates/template-fixture-build-validation.ts
+================
 import {
   attribute,
   decodeHtmlEntities,
@@ -26540,9 +26759,10 @@ export function validateBuildTemplate(
   }
   return { buildCanonical, buildAction };
 }
-</file>
 
-<file path="src/templates/template-fixture-file-io.ts">
+================
+File: src/templates/template-fixture-file-io.ts
+================
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26678,9 +26898,10 @@ export async function resolveTemplateRoot(
     rootIdentity: { dev: rootStat.dev, ino: rootStat.ino },
   };
 }
-</file>
 
-<file path="src/templates/template-fixture-html.ts">
+================
+File: src/templates/template-fixture-html.ts
+================
 import type { ArtifactLink } from './template-fixture-types.js';
 
 export function escapeHtml(value: string): string {
@@ -26873,9 +27094,10 @@ export function isExactFixtureUrl(candidate: URL, expected: string): boolean {
     candidate.hash === target.hash
   );
 }
-</file>
 
-<file path="src/templates/template-fixture-loader.ts">
+================
+File: src/templates/template-fixture-loader.ts
+================
 import {
   extractSidePanelBuildLink,
   validateBuildTemplate,
@@ -27034,9 +27256,10 @@ export async function loadTemplateReportFixture(
     sonarqubeProjectId,
   };
 }
-</file>
 
-<file path="src/templates/template-fixture-routes.ts">
+================
+File: src/templates/template-fixture-routes.ts
+================
 import type { BrowserContext, Route } from '@playwright/test';
 
 import { sanitizeUrl } from '../config-errors.js';
@@ -27201,9 +27424,10 @@ export async function installTemplateReportRoutes(
 
   return recorder;
 }
-</file>
 
-<file path="src/templates/template-fixture-sonarqube.ts">
+================
+File: src/templates/template-fixture-sonarqube.ts
+================
 import {
   escapeHtml,
   escapedPattern,
@@ -27264,9 +27488,10 @@ export function rewriteSonarqubeLinks(
     (_whole: string, prefix: string, suffix: string) => `${prefix}${escapeHtml(projectName)}${suffix}`,
   );
 }
-</file>
 
-<file path="src/templates/template-fixture-types.ts">
+================
+File: src/templates/template-fixture-types.ts
+================
 export interface TemplateReportFixture {
   readonly loginUrl: string;
   readonly loginActionUrl: string;
@@ -27335,9 +27560,10 @@ export interface SonarqubeRouteMap {
   readonly overallUrl: string;
   readonly issuesUrl: string;
 }
-</file>
 
-<file path="src/templates/template-report-cli.ts">
+================
+File: src/templates/template-report-cli.ts
+================
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -27381,9 +27607,10 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     process.exitCode = 1;
   }
 }
-</file>
 
-<file path="src/templates/template-report-fixture.ts">
+================
+File: src/templates/template-report-fixture.ts
+================
 import type { ProjectConfigDocumentV1, RunType } from '../config/config-types.js';
 import { parseBrowserName, parsePositiveInteger } from '../config-values.js';
 import { MAX_TEMPLATE_TOTAL_BYTES } from './template-fixture-file-io.js';
@@ -27466,9 +27693,10 @@ export function templateProjectDocument(
     ],
   };
 }
-</file>
 
-<file path="src/templates/template-report-runner.ts">
+================
+File: src/templates/template-report-runner.ts
+================
 import type { Page } from '@playwright/test';
 import { normalizeProjectConfigDocument } from '../config/project-config-loader.js';
 import { runProject } from '../project/project-runner.js';
@@ -27558,9 +27786,10 @@ export async function runFromTemplates(
     }),
   });
 }
-</file>
 
-<file path="src/templates/template-server-cli.ts">
+================
+File: src/templates/template-server-cli.ts
+================
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27699,9 +27928,10 @@ if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLTo
     process.exitCode = 1;
   });
 }
-</file>
 
-<file path="src/templates/template-server.ts">
+================
+File: src/templates/template-server.ts
+================
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { isIP, type Socket } from 'node:net';
 
@@ -28246,9 +28476,10 @@ export async function createTemplateServer(
     },
   };
 }
-</file>
 
-<file path="src/types.ts">
+================
+File: src/types.ts
+================
 export type ReportState = 'found' | 'not_found' | 'incomplete';
 export type RunType = 'report' | 'auto-build';
 export type SourceName = 'snyk' | 'sonarqube';
@@ -28321,9 +28552,10 @@ export type {
   ProjectRunIdentity,
   RunnerExecutionResult,
 } from './project/project-types.js';
-</file>
 
-<file path="src/workflow/diagnostics.ts">
+================
+File: src/workflow/diagnostics.ts
+================
 export const MAX_DIAGNOSTIC_ITEMS = 32;
 export const MAX_DIAGNOSTIC_LENGTH = 500;
 
@@ -28335,9 +28567,10 @@ export function pushDiagnostic(target: string[], value: string): void {
 export function boundedDiagnostics(values: readonly string[]): string[] {
   return values.slice(-MAX_DIAGNOSTIC_ITEMS).map((value) => value.slice(0, MAX_DIAGNOSTIC_LENGTH));
 }
-</file>
 
-<file path="src/workflow/workflow-deadline.ts">
+================
+File: src/workflow/workflow-deadline.ts
+================
 export class WorkflowDeadlineExceededError extends Error {
   public constructor() {
     super('Jenkins workflow deadline expired');
@@ -28436,9 +28669,10 @@ export async function withWorkflowDeadlineAndLateResource<T>(
     if (timer !== undefined) clearTimeout(timer);
   }
 }
-</file>
 
-<file path="tailwind.config.ts">
+================
+File: tailwind.config.ts
+================
 import type { Config } from 'tailwindcss';
 
 export default {
@@ -28484,9 +28718,10 @@ export default {
   },
   plugins: [],
 } satisfies Config;
-</file>
 
-<file path="templates/jenkins-template/login.html">
+================
+File: templates/jenkins-template/login.html
+================
 <!DOCTYPE html>
 <html lang="en-US" data-theme="none">
 
@@ -30053,9 +30288,10 @@ export default {
 </body>
 
 </html>
-</file>
 
-<file path="templates/jenkins-template/README.md">
+================
+File: templates/jenkins-template/README.md
+================
 url:
 https://jenkins-example.example-domain.com/job/Container%20Platform/job/XX/job/job-id/job/Service%20Name/job/Build/job/Build%20Servie%20Name/job/release%252Fsit/
 
@@ -30281,9 +30517,10 @@ node scripts/run-playwright.mjs playwright test \
 # Run all template test suites (navigation, auto-build, integration)
 npm run test:e2e:templates
 ```
-</file>
 
-<file path="templates/jenkins-template/template-build.html">
+================
+File: templates/jenkins-template/template-build.html
+================
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30315,9 +30552,10 @@ npm run test:e2e:templates
   </main>
 </body>
 </html>
-</file>
 
-<file path="templates/jenkins-template/template.html">
+================
+File: templates/jenkins-template/template.html
+================
 <!DOCTYPE html>
 <html data-theme="none">
 
@@ -62542,9 +62780,10 @@ start of main content ⇒
 </body>
 
 </html>
-</file>
 
-<file path="templates/snyk-template/snyk-sca-results-summary.json">
+================
+File: templates/snyk-template/snyk-sca-results-summary.json
+================
 {
   "source": {
     "com.example-domain.example-package:com.example-domain.example-package.service": {
@@ -62559,9 +62798,10 @@ start of main content ⇒
     "low": 0
   }
 }
-</file>
 
-<file path="templates/snyk-template/template.html">
+================
+File: templates/snyk-template/template.html
+================
 <!DOCTYPE html>
 <!-- saved from url=(0227)https://jenkins-example.example-domain.com/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/10/artifact/snyk-results.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -63486,9 +63726,10 @@ start of main content ⇒
 
 
 </body></html>
-</file>
 
-<file path="templates/sonarqube-template/template-home.html">
+================
+File: templates/sonarqube-template/template-home.html
+================
 <!DOCTYPE html>
 <html lang="en">
 
@@ -82881,9 +83122,10 @@ start of main content ⇒
 </body>
 
 </html>
-</file>
 
-<file path="templates/sonarqube-template/template-issues.html">
+================
+File: templates/sonarqube-template/template-issues.html
+================
 <!DOCTYPE html>
 <html lang="en">
 
@@ -102196,9 +102438,10 @@ start of main content ⇒
 </body>
 
 </html>
-</file>
 
-<file path="templates/sonarqube-template/template-login.html">
+================
+File: templates/sonarqube-template/template-login.html
+================
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><script type="application/ld+json">{
   "@context": "https://schema.org",
@@ -102244,9 +102487,10 @@ start of main content ⇒
 
 
 </body></html>
-</file>
 
-<file path="templates/sonarqube-template/template-overall.html">
+================
+File: templates/sonarqube-template/template-overall.html
+================
 <!DOCTYPE html>
 <html lang="en">
 
@@ -117830,9 +118074,10 @@ start of main content ⇒
 </body>
 
 </html>
-</file>
 
-<file path="tests/e2e/control-page.spec.ts">
+================
+File: tests/e2e/control-page.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -118524,9 +118769,10 @@ test.describe('Control Page Dashboard E2E', () => {
     expect(mobileNoOverflow).toBe(true);
   });
 });
-</file>
 
-<file path="tests/e2e/generated-report-fixtures.ts">
+================
+File: tests/e2e/generated-report-fixtures.ts
+================
 import * as http from 'node:http';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -118640,9 +118886,10 @@ export async function createGeneratedReportFixture(): Promise<{ baseUrl: string;
   const server = await listen(root);
   return { ...server, reportPath: `/reports/${reportPath}` };
 }
-</file>
 
-<file path="tests/e2e/generated-report-image.ts">
+================
+File: tests/e2e/generated-report-image.ts
+================
 import { deflateSync } from 'node:zlib';
 
 const WIDTH = 320;
@@ -118698,9 +118945,10 @@ export function generatedReportImage(): Buffer {
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
-</file>
 
-<file path="tests/e2e/generated-report.spec.ts">
+================
+File: tests/e2e/generated-report.spec.ts
+================
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
@@ -118799,9 +119047,10 @@ test.describe('generated offline reports', () => {
     await expect(page.getByRole('heading', { name: 'Overall and Issues evidence' })).toBeVisible();
   });
 });
-</file>
 
-<file path="tests/e2e/multi-project-report-flow.spec.ts">
+================
+File: tests/e2e/multi-project-report-flow.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -118898,9 +119147,10 @@ test('runs two projects in order with fresh browser state and later-project cont
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/e2e/template-auto-build.spec.ts">
+================
+File: tests/e2e/template-auto-build.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 import { normalizeProjectConfigDocument } from '../../src/config/project-config-loader.js';
@@ -118981,9 +119231,10 @@ test.describe('template auto-build e2e workflow', () => {
     expect(requestSequence).toContain(`POST ${fixture.buildActionUrl}`);
   });
 });
-</file>
 
-<file path="tests/e2e/template-navigation.spec.ts">
+================
+File: tests/e2e/template-navigation.spec.ts
+================
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -119034,9 +119285,10 @@ test('runs the production direct workflow against exact checked-in template rout
     await fs.rm(reportRoot, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/e2e/template-server-integration.spec.ts">
+================
+File: tests/e2e/template-server-integration.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -119463,9 +119715,10 @@ test.describe('Template Server Validation & Integration (Phase 05)', () => {
     });
   });
 });
-</file>
 
-<file path="tests/e2e/vendor-template-capture.spec.ts">
+================
+File: tests/e2e/vendor-template-capture.spec.ts
+================
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -119736,9 +119989,10 @@ test('captures SonarQube through login template redirect to Overall to Issues', 
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/artifact-lifecycle.spec.ts">
+================
+File: tests/unit/artifact-lifecycle.spec.ts
+================
 import * as fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import * as os from 'node:os';
@@ -120048,9 +120302,10 @@ test('rejects overlapping report and staging roots before creating output', asyn
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/artifact-paths.spec.ts">
+================
+File: tests/unit/artifact-paths.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -120231,9 +120486,10 @@ test('rejects unsafe manifest discovery limits', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/auto-build-runner.spec.ts">
+================
+File: tests/unit/auto-build-runner.spec.ts
+================
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 import { normalizeProjectConfigDocument } from '../../src/config.js';
@@ -120404,9 +120660,10 @@ test('cleans up context and browser resources even when workflow throws', async 
   expect(contextClosed).toBe(true);
   expect(browserClosed).toBe(true);
 });
-</file>
 
-<file path="tests/unit/bounded-report-workers.spec.ts">
+================
+File: tests/unit/bounded-report-workers.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -120912,9 +121169,10 @@ test('subsequent run with same project and same second clock fails safely withou
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/contract-hardening.spec.ts">
+================
+File: tests/unit/contract-hardening.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -121103,9 +121361,10 @@ test('requires all five keyed navigation targets', () => {
   expect(hasCompleteNavigationTargets(complete)).toBe(false);
   expect(hasCompleteNavigationTargets(Object.values(complete))).toBe(false);
 });
-</file>
 
-<file path="tests/unit/control-assets-routing.spec.ts">
+================
+File: tests/unit/control-assets-routing.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -121225,9 +121484,10 @@ test.describe('Control Page Asset Routing & Build Output (Phase 01)', () => {
     }
   });
 });
-</file>
 
-<file path="tests/unit/control-atomic-components.spec.ts">
+================
+File: tests/unit/control-atomic-components.spec.ts
+================
 import { expect, test } from '@playwright/test';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
@@ -121693,9 +121953,10 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
     });
   });
 });
-</file>
 
-<file path="tests/unit/control-config-api.spec.ts">
+================
+File: tests/unit/control-config-api.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -121927,9 +122188,10 @@ test.describe('Control Config API', () => {
     expect(body.error.message).toContain('reportWorkers');
   });
 });
-</file>
 
-<file path="tests/unit/control-hooks-and-types.spec.ts">
+================
+File: tests/unit/control-hooks-and-types.spec.ts
+================
 import { expect, test } from '@playwright/test';
 import { ConfigError } from '../../src/config-errors.js';
 import { assertProjectConfigDocument } from '../../src/config/project-config-schema.js';
@@ -123036,9 +123298,10 @@ test.describe('Control Page Phase 02: Types, Utility & Hook Contracts', () => {
     });
   });
 });
-</file>
 
-<file path="tests/unit/control-run-api.spec.ts">
+================
+File: tests/unit/control-run-api.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -123200,10 +123463,78 @@ test.describe('Control Run API', () => {
     const statuses = [res1.status(), res2.status()];
     expect(statuses).toContain(202);
   });
-});
-</file>
 
-<file path="tests/unit/control-run-executor-fixture.ts">
+  test('POST /api/run rejects request workerCount override on report run for all values with 422 INVALID_WORKER_COUNT', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const testValues = [1, 4, 0, 5, 2.5, '2', null, true, false, [], {}];
+    for (const val of testValues) {
+      const postRes = await request.post(`${serverUrl}api/run`, {
+        headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+        data: { configName: 'default.json', configEtag: etag, runType: 'report', workerCount: val },
+      });
+
+      expect(postRes.status()).toBe(422);
+      const body = await postRes.json();
+      expect(body.error).toEqual({
+        code: 'INVALID_WORKER_COUNT',
+        message: 'workerCount is not supported in run requests; use saved document configuration',
+      });
+      expect(reportCalls).toHaveLength(0);
+      expect(buildCalls).toHaveLength(0);
+    }
+  });
+
+  test('POST /api/run rejects request workerCount override on auto-build run for all values with 422 INVALID_WORKER_COUNT', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const testValues = [1, 4, 0, 5, 2.5, '2', null, true, false, [], {}];
+    for (const val of testValues) {
+      const postRes = await request.post(`${serverUrl}api/run`, {
+        headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+        data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: 'build-proj', workerCount: val },
+      });
+
+      expect(postRes.status()).toBe(422);
+      const body = await postRes.json();
+      expect(body.error).toEqual({
+        code: 'INVALID_WORKER_COUNT',
+        message: 'workerCount is not supported in run requests; use saved document configuration',
+      });
+      expect(reportCalls).toHaveLength(0);
+      expect(buildCalls).toHaveLength(0);
+    }
+  });
+
+  test('POST /api/run rejects supplied workerCount before checking auto-build projectId (precedence)', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    // Both workerCount present and projectId missing -> must return INVALID_WORKER_COUNT
+    const postResWithCount = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', workerCount: 2 },
+    });
+    expect(postResWithCount.status()).toBe(422);
+    const bodyWithCount = await postResWithCount.json();
+    expect(bodyWithCount.error.code).toBe('INVALID_WORKER_COUNT');
+
+    // Omitted workerCount and projectId missing -> must return MISSING_PROJECT_ID
+    const postResWithoutCount = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build' },
+    });
+    expect(postResWithoutCount.status()).toBe(422);
+    const bodyWithoutCount = await postResWithoutCount.json();
+    expect(bodyWithoutCount.error.code).toBe('MISSING_PROJECT_ID');
+  });
+});
+
+================
+File: tests/unit/control-run-executor-fixture.ts
+================
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import type { ControlRunRecord, RunManager } from '../../src/reporting/report-server-run-manager.js';
@@ -123293,14 +123624,16 @@ export async function waitForRunCompletion(
   }
   return runManager.getRun(runId);
 }
-</file>
 
-<file path="tests/unit/control-run-executor-secrets.spec.ts">
+================
+File: tests/unit/control-run-executor-secrets.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 
+import type { RunnerDependencies } from '../../src/runner.js';
 import { createConfigStore } from '../../src/reporting/report-server-config-store.js';
 import { createSecretStore } from '../../src/reporting/report-server-secret-store.js';
 import { createRunManager, type RunManagerOptions } from '../../src/reporting/report-server-run-manager.js';
@@ -123480,10 +123813,130 @@ test.describe('Run Executor Environment Injection & Secret Redaction', () => {
     expect(run?.result?.warnings?.[0]).toContain('[REDACTED]');
     expect(run?.result?.warnings?.[0]).not.toContain(secretVal);
   });
-});
-</file>
 
-<file path="tests/unit/control-secret-store.spec.ts">
+  test('derives workerCount from saved config document reportWorkers for report run (absent -> 1, 1 -> 1, 4 -> 4)', async () => {
+    const configStore = await createConfigStore(configRoot);
+    let capturedDeps: RunnerDependencies | undefined;
+    const options: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async (_p, deps) => {
+        capturedDeps = deps;
+        return createMockReportResult(reportRoot);
+      },
+    };
+
+    // 1. Absent reportWorkers in document -> defaults to 1
+    const entryAbsent = await configStore.readConfig('default.json');
+    const recordAbsent = createMockRecord('run-w-absent', entryAbsent.etag, 'report');
+    await executeControlRun(recordAbsent, options, () => {});
+    expect(recordAbsent.status).toBe('succeeded');
+    expect(capturedDeps?.workerCount).toBe(1);
+
+    // 2. Saved reportWorkers: 1 -> resolves to 1
+    const config1 = { ...createValidConfig(reportRoot), reportWorkers: 1 };
+    const entry1 = await configStore.writeConfig('default.json', config1, entryAbsent.etag);
+    const record1 = createMockRecord('run-w-1', entry1.etag, 'report');
+    await executeControlRun(record1, options, () => {});
+    expect(record1.status).toBe('succeeded');
+    expect(capturedDeps?.workerCount).toBe(1);
+
+    // 3. Saved reportWorkers: 4 -> resolves to 4
+    const config4 = { ...createValidConfig(reportRoot), reportWorkers: 4 };
+    const entry4 = await configStore.writeConfig('default.json', config4, entry1.etag);
+    const record4 = createMockRecord('run-w-4', entry4.etag, 'report');
+    await executeControlRun(record4, options, () => {});
+    expect(record4.status).toBe('succeeded');
+    expect(capturedDeps?.workerCount).toBe(4);
+  });
+
+  test('auto-build run does not pass workerCount even when document has reportWorkers: 4', async () => {
+    const configStore = await createConfigStore(configRoot);
+    const configWithWorkers = { ...createValidConfig(reportRoot), reportWorkers: 4 };
+    const initialEntry = await configStore.readConfig('default.json');
+    const updatedEntry = await configStore.writeConfig('default.json', configWithWorkers, initialEntry.etag);
+
+    let capturedBuildDeps: Record<string, unknown> | undefined;
+    let reportCalled = false;
+    const options: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async () => {
+        reportCalled = true;
+        return createMockReportResult(reportRoot);
+      },
+      autoBuildExecutor: async (project, deps) => {
+        capturedBuildDeps = deps as Record<string, unknown>;
+        return { projectId: project.id, projectName: project.name, state: 'submitted', jobUrl: project.jobUrl, exitCode: 0 };
+      },
+    };
+
+    const record = createMockRecord('run-build-workers', updatedEntry.etag, 'auto-build', 'build-proj');
+    await executeControlRun(record, options, () => {});
+
+    expect(record.status).toBe('succeeded');
+    expect(reportCalled).toBe(false);
+    expect(capturedBuildDeps?.['workerCount']).toBeUndefined();
+    expect(record.result?.buildState).toBe('submitted');
+    expect(record.result?.reportUrl).toBeUndefined();
+  });
+
+  test('fails execution when config is modified between acceptance and executor read (stale ETag)', async () => {
+    const configStore = await createConfigStore(configRoot);
+    const entry = await configStore.readConfig('default.json');
+    const staleRecord = createMockRecord('run-stale-etag', entry.etag, 'report');
+
+    // Overwrite config on disk with new data to change its ETag
+    const modifiedConfig = { ...createValidConfig(reportRoot), reportWorkers: 2 };
+    await configStore.writeConfig('default.json', modifiedConfig, entry.etag);
+
+    const options: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async () => createMockReportResult(reportRoot),
+    };
+
+    await expect(executeControlRun(staleRecord, options, () => {})).rejects.toThrow(
+      'Config has been modified since run was requested',
+    );
+  });
+
+  test('in-flight execution uses matched read entry even if config file is modified after matched read', async () => {
+    const configStore = await createConfigStore(configRoot);
+    const configWithWorkers = { ...createValidConfig(reportRoot), reportWorkers: 4 };
+    const initialEntry = await configStore.readConfig('default.json');
+    const entry = await configStore.writeConfig('default.json', configWithWorkers, initialEntry.etag);
+
+    let executedWorkerCount: number | undefined;
+    const options: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async (_p, deps) => {
+        executedWorkerCount = deps?.workerCount;
+        // Simulate concurrent file modification on disk while executor is running
+        const freshEntry = await configStore.readConfig('default.json');
+        const modifiedConfig = { ...createValidConfig(reportRoot), reportWorkers: 1 };
+        await configStore.writeConfig('default.json', modifiedConfig, freshEntry.etag);
+        return createMockReportResult(reportRoot);
+      },
+    };
+
+    const record = createMockRecord('run-inflight', entry.etag, 'report');
+    await executeControlRun(record, options, () => {});
+
+    expect(record.status).toBe('succeeded');
+    // In-flight run used the matched read entry with reportWorkers: 4
+    expect(executedWorkerCount).toBe(4);
+  });
+});
+
+================
+File: tests/unit/control-secret-store.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -123661,9 +124114,10 @@ test.describe('Control SecretStore - Unit & Lifecycle', () => {
     expect(secrets).toEqual({ GAMMA: '3' });
   });
 });
-</file>
 
-<file path="tests/unit/control-secrets-api.spec.ts">
+================
+File: tests/unit/control-secrets-api.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -123866,9 +124320,10 @@ test.describe('Control Secrets API - Operations', () => {
     expect(await res.json()).toEqual({ secrets: { VAR_3: true } });
   });
 });
-</file>
 
-<file path="tests/unit/control-secrets-security.spec.ts">
+================
+File: tests/unit/control-secrets-security.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -124050,9 +124505,10 @@ test.describe('Control Secrets API - Security & Validation', () => {
     expect(JSON.parse(responseBody).error.code).toBe('SERVICE_UNAVAILABLE');
   });
 });
-</file>
 
-<file path="tests/unit/diagnostics.spec.ts">
+================
+File: tests/unit/diagnostics.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 import { boundedDiagnostics, pushDiagnostic } from '../../src/workflow/diagnostics.js';
@@ -124065,9 +124521,10 @@ test('caps diagnostic history and each persisted observation', () => {
   expect(values.every((value) => value.length <= 500)).toBe(true);
   expect(boundedDiagnostics(values)).toHaveLength(32);
 });
-</file>
 
-<file path="tests/unit/immutable-run-history.spec.ts">
+================
+File: tests/unit/immutable-run-history.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -124177,9 +124634,10 @@ test('keeps direct same-job reruns in immutable report folders and aggregate lin
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/jenkins-build-trigger.spec.ts">
+================
+File: tests/unit/jenkins-build-trigger.spec.ts
+================
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test, expect } from '@playwright/test';
@@ -124381,9 +124839,10 @@ test('redacts credentials from error diagnostics', async ({ page }) => {
   expect(thrownError).toBeDefined();
   expect(thrownError?.message).not.toContain('super-secret-password');
 });
-</file>
 
-<file path="tests/unit/jenkins-phase-02.spec.ts">
+================
+File: tests/unit/jenkins-phase-02.spec.ts
+================
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -124947,9 +125406,10 @@ test('redacts credentials from Jenkins diagnostics', async ({ page }) => {
   expect(message).not.toContain('password');
   expect(message).toContain('[REDACTED]');
 });
-</file>
 
-<file path="tests/unit/launch-arguments.spec.ts">
+================
+File: tests/unit/launch-arguments.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 // @ts-expect-error JavaScript script module has no declarations
@@ -125012,9 +125472,10 @@ test('parses --env arguments for template report runner', () => {
     },
   });
 });
-</file>
 
-<file path="tests/unit/project-config.spec.ts">
+================
+File: tests/unit/project-config.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -125341,9 +125802,10 @@ test('old schema-v1 JSON without reportWorkers continues to validate and load wi
     fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/project-run-state.spec.ts">
+================
+File: tests/unit/project-run-state.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 import { ProjectRunState } from '../../src/project/project-run-state.js';
@@ -125386,9 +125848,10 @@ test('allows a failure from an active phase only once', () => {
   expect(run.failure).toBe('safe diagnostic');
   expect(() => run.fail('again')).toThrow(/Cannot fail/u);
 });
-</file>
 
-<file path="tests/unit/report-root-lock-owner.spec.ts">
+================
+File: tests/unit/report-root-lock-owner.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -125528,9 +125991,10 @@ test('reports the current and an impossible process safely', async () => {
     expect(current).toEqual({ state: 'live' });
   }
 });
-</file>
 
-<file path="tests/unit/report-server-secret-store.spec.ts">
+================
+File: tests/unit/report-server-secret-store.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -125687,9 +126151,10 @@ test.describe('SecretStore Backend Module', () => {
     }
   });
 });
-</file>
 
-<file path="tests/unit/report-server.spec.ts">
+================
+File: tests/unit/report-server.spec.ts
+================
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as os from 'node:os';
@@ -125854,9 +126319,10 @@ async function pageRequest(url: string): Promise<{ status(): number }> {
     request.once('error', reject);
   });
 }
-</file>
 
-<file path="tests/unit/reporting-output.spec.ts">
+================
+File: tests/unit/reporting-output.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -126154,9 +126620,10 @@ test('bounds cumulative historical artifact discovery reads', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/result-writer.spec.ts">
+================
+File: tests/unit/result-writer.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -126555,9 +127022,10 @@ test('bounds run-directory entries and bytes during allowlist validation', async
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/run-type-config.spec.ts">
+================
+File: tests/unit/run-type-config.spec.ts
+================
 import { expect, test } from '@playwright/test';
 
 import {
@@ -126710,9 +127178,10 @@ test('selectAutoBuildProject rejects missing, disabled, and non-auto-build proje
   expect(() => selectAutoBuildProject(normalized, 'build-disabled')).toThrow(/project 'build-disabled' is disabled/u);
   expect(() => selectAutoBuildProject(normalized, 'report-project')).toThrow(/project 'report-project' is not configured for auto-build/u);
 });
-</file>
 
-<file path="tests/unit/sequential-runner.spec.ts">
+================
+File: tests/unit/sequential-runner.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -127101,9 +127570,10 @@ test('runFromConfig forwards saved reportWorkers and ignores caller-supplied wor
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/snyk-io-regressions.spec.ts">
+================
+File: tests/unit/snyk-io-regressions.spec.ts
+================
 import { createServer } from 'node:http';
 
 import { expect, test } from '@playwright/test';
@@ -127217,9 +127687,10 @@ test('fails closed when page link metadata exceeds field or total budgets', asyn
   expect(oversizedTotal.truncated).toBe(true);
   expect(oversizedTotal.candidates.length).toBeLessThan(256);
 });
-</file>
 
-<file path="tests/unit/snyk-phase-04.spec.ts">
+================
+File: tests/unit/snyk-phase-04.spec.ts
+================
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -127472,9 +127943,10 @@ test('captures and retains double-encoded branch in Snyk report and summary capt
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/snyk-review-regressions.spec.ts">
+================
+File: tests/unit/snyk-review-regressions.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -127673,9 +128145,10 @@ test('blocks an unallowlisted report redirect before the fixture receives it', a
   expect(result.source.state).toBe('incomplete');
   expect(result.warnings.join(' ')).not.toMatch(/sessionid|evil\.example/iu);
 });
-</file>
 
-<file path="tests/unit/snyk-screenshot-retry.spec.ts">
+================
+File: tests/unit/snyk-screenshot-retry.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -127755,9 +128228,10 @@ test('does not retry non-protocol Snyk screenshot failures', async () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/sonarqube-phase-05.spec.ts">
+================
+File: tests/unit/sonarqube-phase-05.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -128585,9 +129059,10 @@ test('automatically dismisses onboarding popup with Got it button on first dashb
     fs.rmSync(outputDirectory, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/template-build-fixture.spec.ts">
+================
+File: tests/unit/template-build-fixture.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -128754,9 +129229,10 @@ test.describe('template build fixture', () => {
     }
   });
 });
-</file>
 
-<file path="tests/unit/template-report.spec.ts">
+================
+File: tests/unit/template-report.spec.ts
+================
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -128876,9 +129352,10 @@ test('rejects symlinked and oversized template sources before capture', async ()
     fs.rmSync(oversizedRoot, { recursive: true, force: true });
   }
 });
-</file>
 
-<file path="tests/unit/template-server-cli.spec.ts">
+================
+File: tests/unit/template-server-cli.spec.ts
+================
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -129047,9 +129524,10 @@ test.describe('template-server-cli', () => {
     });
   });
 });
-</file>
 
-<file path="tests/unit/template-server.spec.ts">
+================
+File: tests/unit/template-server.spec.ts
+================
 import * as http from 'node:http';
 
 import { expect, test } from '@playwright/test';
@@ -129382,9 +129860,10 @@ test.describe('template-server', () => {
     ).toThrow('Unsafe URL scheme detected');
   });
 });
-</file>
 
-<file path="tsconfig.build.json">
+================
+File: tsconfig.build.json
+================
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -129397,9 +129876,10 @@ test.describe('template-server', () => {
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["tests", "test-results", "playwright-report", ".runner-build", "src/reporting/control-page"]
 }
-</file>
 
-<file path="tsconfig.json">
+================
+File: tsconfig.json
+================
 {
   "compilerOptions": {
     "target": "ES2023",
@@ -129431,9 +129911,10 @@ test.describe('template-server', () => {
   ],
   "exclude": ["test-results", "playwright-report"]
 }
-</file>
 
-<file path="vite.control.config.ts">
+================
+File: vite.control.config.ts
+================
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
@@ -129463,6 +129944,9 @@ export default defineConfig({
     },
   },
 });
-</file>
 
-</files>
+
+
+================================================================
+End of Codebase
+================================================================

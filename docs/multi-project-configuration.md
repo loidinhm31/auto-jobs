@@ -378,10 +378,13 @@ loops settle before the browser closes. One report-root lock remains held
 through worker settlement, browser close, cleanup, manifest discovery, and
 aggregate publication.
 
-`runFromConfig` calls `selectReportProjects` before the runner, so
-`npm run report` never invokes an auto-build project even when both modes are
-present in the same file. Control-run forwarding of the saved count belongs to
-Phase 02; Phase 01 enables document persistence and direct CLI execution.
+`runFromConfig` selects enabled report projects, so `npm run report` never
+executes an auto-build project in a mixed document. Control `POST /api/run`
+rejects any own `workerCount` with `422 INVALID_WORKER_COUNT` before `startRun`.
+After the executor verifies the request ETag against the saved document, only
+report mode passes `reportWorkers ?? 1` as `workerCount` to `reportExecutor`.
+Auto-build keeps its existing `{ runtimeEnvironment }` dependency and never
+receives a report worker count.
 
 
 ### Explicit auto-build execution

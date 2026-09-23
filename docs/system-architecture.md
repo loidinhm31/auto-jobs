@@ -77,17 +77,20 @@ is mutated. It normalizes the configuration and passes the new object as
 
 ## Control-run environment flow
 
-`POST /api/run` supplies a config name/ETag, an explicit `runType`, and an
-optional auto-build `projectId`; it does not carry secret values. The run
-manager accepts one active run and dispatches asynchronously. The executor
-then applies this sequence:
+`POST /api/run` supplies `configName`, `configEtag`, explicit `runType`, and
+optional auto-build `projectId`; it never carries secret values. The control
+API rejects any request with its own `workerCount` property as `422
+INVALID_WORKER_COUNT` before calling `startRun`. The run manager accepts one
+active run and dispatches asynchronously; the executor then:
 
 | Stage | Contract |
 | --- | --- |
 | Snapshot | Read the current `SecretStore` map once for this execution. |
 | Merge | Build a fresh `NodeJS.ProcessEnv` from the supplied base environment, then overlay all stored entries; stored entries win on key collisions. |
-| Normalize | Validate and normalize the config against the merged environment, so credential-variable references resolve from stored values when present. |
-| Dispatch | Pass `runtimeEnvironment` to `runConfiguredProjects` for report mode or `runAutoBuildProject` for auto-build mode. |
+| ETag check | Read the saved config and require its ETag to match `configEtag` before using the document. |
+| Normalize | Validate and normalize the matched config against the merged environment, so credential-variable references resolve from stored values when present. |
+| Report dispatch | Pass selected report projects and `{ runtimeEnvironment, workerCount: configEntry.document.reportWorkers ?? 1 }` to `reportExecutor` only. |
+| Auto-build dispatch | Call `autoBuildExecutor` with its existing `{ runtimeEnvironment }` dependency; do not pass a report worker count. |
 | Redact | Use every non-empty stored value to redact control logs, report warnings, caught errors/stacks, and auto-build URL result fields before recording them. |
 
 The file-mode report CLI and direct library calls keep their existing
@@ -139,9 +142,10 @@ claims project indices synchronously and stores outcomes in matching slots,
 preserving selected configuration order while continuing after project
 failures. Each project receives a fresh context and deadline in one browser.
 The report-root lock spans recovery, worker settlement, browser close, cleanup,
-manifest discovery, and aggregate publication. Direct worker-count values are
-validated before artifact initialization or browser launch. Control execution
-still uses the default count; forwarding its saved value is Phase 02.
+manifest discovery, and aggregate publication. Direct `workerCount` values are
+validated before artifact initialization or browser launch. Control report runs
+use the saved count from the ETag-matched document; auto-build remains outside
+the report worker pool.
 
 ## Auto-build data flow
 

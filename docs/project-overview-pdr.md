@@ -122,6 +122,12 @@ and failure semantics are validated before side effects.
 - Apply `reportWorkers` to the batch: run at most `min(count, selected projects)`
   at once using fixed in-process loops; direct runner counts are validated
   before artifact initialization or browser launch.
+- In control mode, reject any own `workerCount` property in `POST /api/run` with
+  `422 INVALID_WORKER_COUNT` before `startRun`.
+- Require the saved configuration ETag to match the request before execution;
+  pass `reportWorkers ?? 1` from that matched document only to `reportExecutor`.
+- Keep auto-build on its existing dependency contract; it receives no report
+  worker count.
 - Preserve selected configuration order in outcomes and continue queued work
   after an individual project failure.
 - Authenticate through exact Jenkins login, open exact `jobUrl`, discover
@@ -346,6 +352,18 @@ and failure semantics are validated before side effects.
 - [x] Phase 05 verification records `npm run typecheck` with 0 errors,
   `npm run test:unit` at 248/248, `npm run test:control` at 6/6, and
   254/254 combined unit and control E2E checks with zero secret leakage.
+
+## Bounded-report Phase 02 acceptance criteria
+
+- [x] `POST /api/run` rejects any own `workerCount` property with HTTP 422
+  `INVALID_WORKER_COUNT` before `startRun`.
+- [x] Execution requires the saved config ETag to match the request and derives
+  the report `workerCount` from `reportWorkers ?? 1` in that matched document.
+- [x] Only the report executor receives the derived count; auto-build keeps its
+  existing dependency contract and receives no `workerCount`.
+- [x] `control-run-api.spec.ts` and `control-run-executor-secrets.spec.ts` cover
+  request rejection, ETag-bound count forwarding, and auto-build isolation.
+
 
 ## Phase 2 acceptance criteria
 

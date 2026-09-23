@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 
+import type { RunnerDependencies } from '../../src/runner.js';
 import { createConfigStore } from '../../src/reporting/report-server-config-store.js';
 import { createSecretStore } from '../../src/reporting/report-server-secret-store.js';
 import { createRunManager, type RunManagerOptions } from '../../src/reporting/report-server-run-manager.js';
@@ -181,5 +182,124 @@ test.describe('Run Executor Environment Injection & Secret Redaction', () => {
     }
     expect(run?.result?.warnings?.[0]).toContain('[REDACTED]');
     expect(run?.result?.warnings?.[0]).not.toContain(secretVal);
+  });
+
+  test('derives workerCount from saved config document reportWorkers for report run (absent -> 1, 1 -> 1, 4 -> 4)', async () => {
+    const configStore = await createConfigStore(configRoot);
+    let capturedDeps: RunnerDependencies | undefined;
+    const options: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async (_p, deps) => {
+        capturedDeps = deps;
+        return createMockReportResult(reportRoot);
+      },
+    };
+
+    // 1. Absent reportWorkers in document -> defaults to 1
+    const entryAbsent = await configStore.readConfig('default.json');
+    const recordAbsent = createMockRecord('run-w-absent', entryAbsent.etag, 'report');
+    await executeControlRun(recordAbsent, options, () => {});
+    expect(recordAbsent.status).toBe('succeeded');
+    expect(capturedDeps?.workerCount).toBe(1);
+
+    // 2. Saved reportWorkers: 1 -> resolves to 1
+    const config1 = { ...createValidConfig(reportRoot), reportWorkers: 1 };
+    const entry1 = await configStore.writeConfig('default.json', config1, entryAbsent.etag);
+    const record1 = createMockRecord('run-w-1', entry1.etag, 'report');
+    await executeControlRun(record1, options, () => {});
+    expect(record1.status).toBe('succeeded');
+    expect(capturedDeps?.workerCount).toBe(1);
+
+    // 3. Saved reportWorkers: 4 -> resolves to 4
+    const config4 = { ...createValidConfig(reportRoot), reportWorkers: 4 };
+    const entry4 = await configStore.writeConfig('default.json', config4, entry1.etag);
+    const record4 = createMockRecord('run-w-4', entry4.etag, 'report');
+    await executeControlRun(record4, options, () => {});
+    expect(record4.status).toBe('succeeded');
+    expect(capturedDeps?.workerCount).toBe(4);
+  });
+
+  test('auto-build run does not pass workerCount even when document has reportWorkers: 4', async () => {
+    const configStore = await createConfigStore(configRoot);
+    const configWithWorkers = { ...createValidConfig(reportRoot), reportWorkers: 4 };
+    const initialEntry = await configStore.readConfig('default.json');
+    const updatedEntry = await configStore.writeConfig('default.json', configWithWorkers, initialEntry.etag);
+
+    let capturedBuildDeps: Record<string, unknown> | undefined;
+    let reportCalled = false;
+    const options: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async () => {
+        reportCalled = true;
+        return createMockReportResult(reportRoot);
+      },
+      autoBuildExecutor: async (project, deps) => {
+        capturedBuildDeps = deps as Record<string, unknown>;
+        return { projectId: project.id, projectName: project.name, state: 'submitted', jobUrl: project.jobUrl, exitCode: 0 };
+      },
+    };
+
+    const record = createMockRecord('run-build-workers', updatedEntry.etag, 'auto-build', 'build-proj');
+    await executeControlRun(record, options, () => {});
+
+    expect(record.status).toBe('succeeded');
+    expect(reportCalled).toBe(false);
+    expect(capturedBuildDeps?.['workerCount']).toBeUndefined();
+    expect(record.result?.buildState).toBe('submitted');
+    expect(record.result?.reportUrl).toBeUndefined();
+  });
+
+  test('fails execution when config is modified between acceptance and executor read (stale ETag)', async () => {
+    const configStore = await createConfigStore(configRoot);
+    const entry = await configStore.readConfig('default.json');
+    const staleRecord = createMockRecord('run-stale-etag', entry.etag, 'report');
+
+    // Overwrite config on disk with new data to change its ETag
+    const modifiedConfig = { ...createValidConfig(reportRoot), reportWorkers: 2 };
+    await configStore.writeConfig('default.json', modifiedConfig, entry.etag);
+
+    const options: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async () => createMockReportResult(reportRoot),
+    };
+
+    await expect(executeControlRun(staleRecord, options, () => {})).rejects.toThrow(
+      'Config has been modified since run was requested',
+    );
+  });
+
+  test('in-flight execution uses matched read entry even if config file is modified after matched read', async () => {
+    const configStore = await createConfigStore(configRoot);
+    const configWithWorkers = { ...createValidConfig(reportRoot), reportWorkers: 4 };
+    const initialEntry = await configStore.readConfig('default.json');
+    const entry = await configStore.writeConfig('default.json', configWithWorkers, initialEntry.etag);
+
+    let executedWorkerCount: number | undefined;
+    const options: RunManagerOptions = {
+      configStore,
+      reportRoot,
+      env: {},
+      reportExecutor: async (_p, deps) => {
+        executedWorkerCount = deps?.workerCount;
+        // Simulate concurrent file modification on disk while executor is running
+        const freshEntry = await configStore.readConfig('default.json');
+        const modifiedConfig = { ...createValidConfig(reportRoot), reportWorkers: 1 };
+        await configStore.writeConfig('default.json', modifiedConfig, freshEntry.etag);
+        return createMockReportResult(reportRoot);
+      },
+    };
+
+    const record = createMockRecord('run-inflight', entry.etag, 'report');
+    await executeControlRun(record, options, () => {});
+
+    expect(record.status).toBe('succeeded');
+    // In-flight run used the matched read entry with reportWorkers: 4
+    expect(executedWorkerCount).toBe(4);
   });
 });

@@ -199,6 +199,11 @@ Compiler settings in `tsconfig.json` are the source of truth:
   same object as `runtimeEnvironment` to the selected report or auto-build
   executor. Keep this boundary in the control executor rather than duplicating
   SecretStore reads in mode-specific runners.
+- Treat `workerCount` as unsupported in `POST /api/run`: reject any own property
+  with `422 INVALID_WORKER_COUNT` before `RunManager.startRun`.
+- Before control-run dispatch, require the current saved config ETag to match
+  the request. Derive the report count from that document and pass it only to
+  the report executor; preserve auto-build's existing dependency contract.
 - Collect all non-empty snapshot values for redaction. Redact `addLog`
   messages, report warnings, caught error messages/stacks, and auto-build
   `jobUrl`/`buildPageUrl` result fields before the control record is persisted.
@@ -258,6 +263,9 @@ Tests must defend observable behavior and fail on plausible regressions:
   redaction of logs, warnings, errors, and result URLs. Reuse
   `tests/unit/control-run-executor-fixture.ts` for isolated config/record/result
   setup.
+- Also require `control-run-api.spec.ts` to cover request override rejection
+  and `control-run-executor-secrets.spec.ts` to cover ETag-checked saved counts,
+  the omitted-count default, and absence of `workerCount` from auto-build deps.
 - For auto-build, assert structural scoping, exact action identity, form
   method/classes, one POST, response classification, unknown-after-POST, no
   retry, mode/enabled gates, secret redaction, and resource cleanup.

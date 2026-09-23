@@ -61,6 +61,10 @@ Deterministic template tests use local fixtures; no live Jenkins run is claimed.
 - Bounded report-worker Phase 01: optional top-level `reportWorkers` (integer
   1–4, default 1), one-read direct CLI loading, and a fixed in-process report
   pool with indexed outcomes and per-project failure isolation.
+- Bounded-report Phase 02 control contract: reject request-level `workerCount`
+  with `422 INVALID_WORKER_COUNT` before manager admission; after ETag verification,
+  the report executor receives saved `reportWorkers ?? 1`. Auto-build receives no
+  report worker count and retains its separate executor dependencies.
 - Repomix inventory refreshed for this summary; ignored and binary files remain
   outside the compaction.
 
@@ -213,6 +217,13 @@ The executor normalizes the project document against `runEnv`, then passes
 `runAutoBuildProject`. The base environment object and `process.env` are not
 mutated. A later `/api/secrets` update affects a later run, not a snapshot
 already in progress.
+
+The API rejects any own `workerCount` property with `422 INVALID_WORKER_COUNT`
+before `startRun`. At execution, `executeControlRun` verifies the saved config
+ETag before mode dispatch. Report mode passes the saved
+`configEntry.document.reportWorkers ?? 1` only as `workerCount` to the report
+executor; auto-build receives its existing `{ runtimeEnvironment }` dependency
+without a worker count.
 
 Every non-empty stored value is included in the control redaction set. The
 executor redacts `addLog` messages, report warnings, caught error messages and
@@ -398,7 +409,8 @@ set `Cache-Control: no-store`.
 | `tests/unit/control-secrets-api.spec.ts` | HTTP endpoint operations: presence maps, filtering, single/batch patch, deletion, persistence, and no plaintext response. |
 | `tests/unit/control-secrets-security.spec.ts` | API redaction, Host/Origin/Fetch Metadata/CSRF/content-type gates, input validation, methods, and missing-store behavior. |
 | `tests/unit/control-run-executor-fixture.ts` | Shared isolated config, record, result, and completion helpers for run-executor tests. |
-| `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, and manager integration coverage. |
+| `tests/unit/control-run-api.spec.ts` | Verifies request-level `workerCount` rejection with 422 before manager admission. |
+| `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, ETag-checked report worker count, and auto-build isolation. |
 | `tests/unit/control-assets-routing.spec.ts` | Built control asset loading, CSRF injection and escaping, non-empty CSS/JS, and server HTTP security headers. |
 | `tests/unit/control-hooks-and-types.spec.ts` | Unit and browser-context verification of active-config preference/persistence, hooks, CSRF headers, polling backoff, and loopback API lifecycles. |
 | `tests/unit/control-atomic-components.spec.ts` | Unit verification of Phase 03 atomic and molecular components, variant classes, DOM IDs, accessibility roles, and data attributes (21 checks). |

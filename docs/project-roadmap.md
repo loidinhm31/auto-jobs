@@ -8,12 +8,12 @@ Active initiative: [Bounded Parallel Report Workers](../plans/260923-1402-parall
 
 Plan: [Bounded Parallel Report Workers](../plans/260923-1402-parallel-report-workers/plan.md)
 
-**Overall status:** In progress · **37.5%** (3.0 of 8.0 planned hours; 1 of 3 phases complete; 2026-09-23).
+**Overall status:** In progress · **62.5%** (5.0 of 8.0 planned hours; 2 of 3 phases complete; 2026-09-23).
 
 | Phase | Status | Progress | Effort | Evidence/detail |
 |---|---|---:|---:|---|
 | 1. Bounded report execution and saved config | **DONE** | **100%** | 3h | Completed 2026-09-23; schema-v1 document-scoped `reportWorkers`, single-read CLI loader, bounded execution, ordered outcomes and failure isolation. Review: 40/40 focused tests, 353/353 unit tests, typecheck clean; see [phase](../plans/260923-1402-parallel-report-workers/phase-01-bounded-report-execution.md) and [review](../plans/reports/code-review-260923-1924-phase-01-bounded-report-execution.md). |
-| 2. Control run contract | **PENDING** | 0% | 2h | Reject request-level worker overrides; derive count only from ETag-verified document. |
+| 2. Control run contract | **DONE** | **100%** | 2h | Completed 2026-09-23; reject request-level worker overrides with 422 `INVALID_WORKER_COUNT` before admission; derive `reportWorkers ?? 1` from the ETag-checked saved document for the report executor only. Preserved single-active-run behavior, auto-build isolation, security gates and SecretStore redaction. Evidence: 16/16 focused unit tests, 360/360 full unit tests, `tsc` 0 errors; see [phase](../plans/260923-1402-parallel-report-workers/phase-02-control-run-contract.md) and [review](../plans/reports/code-review-260923-2117-phase-02-control-run-contract.md).
 | 3. Dashboard and integration verification | **PENDING** | 0% | 3h | Saved-document selector and UI/API/CLI integration/release audit. |
 
 Review note: code review flagged `new-project` in the example config; Main confirmed this is pre-existing user-modified state, and the file was preserved unchanged.
@@ -115,6 +115,8 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Completed Phase 01 of Bounded Parallel Report Workers on 2026-09-23 ([phase plan](../plans/260923-1402-parallel-report-workers/phase-01-bounded-report-execution.md)); added the schema-v1 document worker bound, single-read CLI loading and bounded report execution.
 - Phase 01 evidence: focused unit specs passed 40/40, full unit suite passed 353/353, and typecheck reported 0 errors; code review scored 9/10 with no critical issues.
 - Review follow-up resolved: code review flagged `new-project` in the example config; Main confirmed it is pre-existing user-modified state and it was left untouched.
+- Completed Phase 02 (Control run contract) on 2026-09-23 ([phase plan](../plans/260923-1402-parallel-report-workers/phase-02-control-run-contract.md)); `POST /api/run` rejects request-level worker overrides before admission, while the report executor uses the ETag-checked saved document count (`reportWorkers ?? 1`).
+- Phase 02 preserved single-active-run behavior, auto-build isolation, security gates and SecretStore redaction; focused tests passed 16/16, full unit tests passed 360/360, and TypeScript `tsc` reported 0 errors ([code review](../plans/reports/code-review-260923-2117-phase-02-control-run-contract.md)).
 - Completed Phase 01 (Active Configuration Persistence) of the Control Active Config Persistence & Form Builder plan ([phase plan](../plans/260923-0837-control-active-config-form-builder/phase-01-active-config-persistence.md)).
 - Restores selection by valid URL query, then valid localStorage name, then first available config; stores only the selected filename and retains unrelated URL state.
 - Focused Phase 01 unit spec passed 27/27 tests; TypeScript typecheck reported 0 errors.

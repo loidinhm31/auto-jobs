@@ -599,10 +599,10 @@ workers, close, cleanup, manifest discovery, and aggregate publication.
 Duplicate direct-call project IDs fail before artifact or browser side effects.
 Auto-build behavior is unchanged.
 
-The Control Server still permits one active run. Forwarding the saved count to
-control report execution belongs to Phase 02; Phase 01 does not create parallel
-control runs or promise a throughput gain. See the
-[implementation plan](../plans/260923-1402-parallel-report-workers/plan.md).
+`POST /api/run` rejects an own `workerCount` property with `422 INVALID_WORKER_COUNT` before `startRun`;
+execution requires the saved config ETag to match. Report mode passes
+`reportWorkers ?? 1` only to `reportExecutor`; auto-build keeps its existing
+dependencies and the single-active-run behavior is unchanged ([plan](../plans/260923-1402-parallel-report-workers/plan.md)).
 
 
 ### Template Server (`npm run serve:templates`)

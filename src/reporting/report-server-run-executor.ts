@@ -45,7 +45,8 @@ export async function executeControlRun(
       if (!reportExecutor) {
         throw new Error('reportExecutor is required for report run');
       }
-      const result = await reportExecutor(reportProjects, { runtimeEnvironment: runEnv });
+      const workerCount = configEntry.document.reportWorkers ?? 1;
+      const result = await reportExecutor(reportProjects, { runtimeEnvironment: runEnv, workerCount });
 
       const reportProject = result.aggregate.projects.find((p) => p.reportPath !== undefined);
       const relReport = reportProject?.reportPath ?? result.aggregate.projects[0]?.reportPath;

@@ -1,11 +1,11 @@
-# Phase 02 — control run contract (NOT IMPLEMENTED)
+# Phase 02 — control run contract (DONE — 2026-09-23)
 
 ## Context links
 - [Master contract](./plan.md) · [Hard brief](./cmd-plan.md) · [Phase 01 schema/runner](./phase-01-bounded-report-execution.md) · [Control/UI research](./research/researcher-02-control-ui-and-contract.md) (browser-local/request recommendation rejected) · [Runner/artifact research](./research/researcher-01-runner-and-artifacts.md).
 - Current code: `src/reporting/report-server-control-api.ts:69-140`, `src/reporting/report-server-run-manager.ts:20-63,108-167`, `src/reporting/report-server-run-executor.ts:18-75`, `src/reporting/report-server-config-store.ts:98-130`, `src/reporting/report-server-control-security.ts`; conventions: [PDR](../../docs/project-overview-pdr.md), [code standards](../../docs/code-standards.md).
 
 ## Overview
-**Pending; P2; 2h; depends on phase 01.** Keep `POST /api/run` request and run-manager record unchanged. Reject any request-level worker override, and after ETag verification derive the report worker bound from the saved schema-v1 document. Keep loopback mutation security, single-active-run manager, report selection and auto-build behavior. This is planned, not current behavior.
+**DONE — 2026-09-23; P2; 2h; depends on phase 01.** Keep `POST /api/run` request and run-manager record unchanged. Reject any request-level worker override, and after ETag verification derive the report worker bound from the saved schema-v1 document. Keep loopback mutation security, single-active-run manager, report selection and auto-build behavior.
 
 ## Key insights
 - Current API validates mutation/JSON/mode/project ID, calls `startRun`, then returns 202. An override must be rejected **before** admission; an asynchronous executor failure after 202 is the wrong boundary.
@@ -47,15 +47,19 @@ Auto-build -> same saved document validated -> existing one-project selection
 4. With temporary ConfigStore JSON, prove old document -> runner count 1, saved 1/4 -> count 1/4, report with an auto-build project -> only report selected, auto-build with `reportWorkers: 4` -> exactly one build call/no report count. Modify file between acceptance and executor read to prove stale ETag stops execution; modify after matched read to prove in-flight report uses that entry, not a later file value. Use deferred executor for active-run 409 and check SecretStore values remain redacted.
 
 ## Todo list
-- [ ] Reject all request worker overrides before manager admission.
-- [ ] Resolve count from ETag-checked saved document in report executor only.
-- [ ] Focused API/executor evidence for defaults/bounds/ETag/409/security/build isolation.
+- [x] Reject all request worker overrides before manager admission.
+- [x] Resolve count from ETag-checked saved document in report executor only.
+- [x] Focused API/executor evidence for defaults/bounds/ETag/409/security/build isolation.
+
+## Completion evidence
+- Any request-level `workerCount` is rejected with `422 INVALID_WORKER_COUNT` before run-manager admission. The report executor derives `configEntry.document.reportWorkers ?? 1` from the same ETag-checked saved document; auto-build does not receive or use the setting.
+- Preserved single-active-run admission, auto-build isolation, Host/Origin/Fetch Metadata/CSRF/content-type/body-size security gates, report-root containment and SecretStore redaction.
+- Focused API/executor unit tests: **16/16 passed**; full unit suite: **360/360 passed**; TypeScript `tsc`: **0 errors**. See [Phase 02 code review](../reports/code-review-260923-2117-phase-02-control-run-contract.md).
 
 ## Success criteria
 - Report and auto-build POST with a supplied `workerCount` always yield 422 `INVALID_WORKER_COUNT` before acceptance; an absent field retains the original 202 flow. Neither response nor run record gains count.
 - ETag-matched saved 1, 4 or absent document field reaches report executor as 1, 4 or 1. Auto-build in a document with the field remains one project/one submission; it never receives worker count or produces report artifacts.
 - Stale ETag prevents execution; one-active-run 409, Host/Origin/CSRF/content-type/body checks, report-root containment and SecretStore redaction remain observable.
-- **Implementation-stage targeted command, not run by planner:** `node scripts/run-playwright.mjs playwright test tests/unit/control-run-api.spec.ts tests/unit/control-run-executor-secrets.spec.ts --config=playwright.unit.config.ts`. Phase 03 owns integrated release gate.
 
 ## Risk assessment
 - Truthiness or value validation of request `workerCount` would accidentally accept a numeric override; reject **presence**. Reading a second time after ETag check risks count/project mismatch; use the one validated `configEntry.document`. Do not move ETag check after executor dispatch.

@@ -12,13 +12,13 @@ created: 2026-09-23
 # Bounded Parallel Report Workers — implementation plan (IN PROGRESS)
 
 ## Overview
-Generate Reports and `npm run report -- --config <file>` share an optional top-level `reportWorkers` setting from their saved schema-v1 JSON document. Phase 01 is implemented: persisted setting validation, one-read CLI loading, and bounded report execution. Phases 02–03 remain pending for the control API and dashboard; the complete UI/API/CLI contract is not done.
+Generate Reports and `npm run report -- --config <file>` share an optional top-level `reportWorkers` setting from their saved schema-v1 JSON document. Phases 01–02 are implemented: persisted setting validation, one-read CLI loading, bounded report execution, and the ETag-checked control run contract. Phase 03 remains pending; the complete UI/API/CLI contract is not done.
 
 ## Phases
 | Phase | Status / completion | Effort | Dependency | Deliverable |
 | --- | --- | ---: | --- | --- |
 | [01 Bounded report execution](./phase-01-bounded-report-execution.md) | **DONE — 2026-09-23** | 3h | none | Schema-v1 validation, one-read CLI parity, direct runner bound, fixed project loops, artifact/lifecycle proof |
-| [02 Control run contract](./phase-02-control-run-contract.md) | Pending | 2h | 01 shared policy/schema | Reject request overrides; ETag-verified document drives report executor |
+| [02 Control run contract](./phase-02-control-run-contract.md) | **DONE — 2026-09-23** | 2h | 01 shared policy/schema | Reject request overrides; ETag-verified document drives report executor |
 | [03 Dashboard and verification](./phase-03-dashboard-and-verification.md) | Pending | 3h | 01 schema/editor policy and 02 API contract | Saved-document selector, end-to-end parity, implementation docs/release gate |
 
 ## Contract and design decisions
@@ -30,7 +30,8 @@ Generate Reports and `npm run report -- --config <file>` share an optional top-l
 
 ## Implementation status — 2026-09-23
 - Phase 01 **DONE**: schema-v1 `reportWorkers` validation (1–4; omitted defaults to 1), single-read loader/direct CLI saved-count support, and bounded execution with ordered outcomes and worker failure isolation. Evidence: 40/40 focused tests, 353/353 unit tests, and TypeScript typecheck with 0 errors (code-review report).
-- Phases 02–03 pending: reject request-level worker overrides and derive count through ETag-matched control config; add saved-document dashboard selector and verify integrated UI/API/CLI parity.
+- Phase 02 **DONE — 2026-09-23**: reject request-level worker overrides (`422 INVALID_WORKER_COUNT`) before manager admission, and derive worker bound (`configEntry.document.reportWorkers ?? 1`) from the ETag-checked saved document in the report executor only. Preserved single-active-run behavior, auto-build isolation, security gates and SecretStore redaction. Evidence: 16/16 focused unit tests, 360/360 full unit tests, and TypeScript `tsc` with 0 errors; see [code review](../reports/code-review-260923-2117-phase-02-control-run-contract.md).
+- Phase 03 pending: add saved-document dashboard selector and verify integrated UI/API/CLI parity.
 - Review context: [Phase 01 review](../reports/code-review-260923-1924-phase-01-bounded-report-execution.md) flagged the user-modified example config and aligned test expectation; Main confirmed the config pre-existed this work. Both were left unchanged during this status/documentation update.
 
 ## Evidence and constraints

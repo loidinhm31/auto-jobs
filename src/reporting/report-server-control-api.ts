@@ -95,6 +95,10 @@ export async function handleRunApi(
       sendError(response, 422, 'INVALID_RUN_TYPE', 'runType must be report or auto-build');
       return;
     }
+    if (Object.hasOwn(data, 'workerCount')) {
+      sendError(response, 422, 'INVALID_WORKER_COUNT', 'workerCount is not supported in run requests; use saved document configuration');
+      return;
+    }
     const projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
     if (runType === 'auto-build' && (projectId === undefined || projectId.trim().length === 0)) {
       sendError(response, 422, 'MISSING_PROJECT_ID', 'projectId is required for auto-build');
