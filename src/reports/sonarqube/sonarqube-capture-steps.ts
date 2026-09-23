@@ -9,6 +9,7 @@ import {
   overallControlCandidates,
   overallPanel,
   overviewCandidates,
+  projectHeaderOrNav,
 } from './sonarqube-locators.js';
 import {
   assertProjectUrl,
@@ -16,6 +17,7 @@ import {
   dismissSonarqubeModals,
   navigation,
   pageCaptureMetadata,
+  screenshotFacetRange,
   screenshotRegion,
   SONAR_SCREENSHOTS,
 } from './sonarqube-capture-support.js';
@@ -97,7 +99,10 @@ export async function captureOverallStep(input: SonarStepInput): Promise<SonarSt
   await visible(panel, input.deadline, 'SonarQube Overall panel was not visible');
   const capture = await pageCaptureMetadata(input.page, url, control.strategy, input.deadline);
   try {
-    const screenshot = await screenshotRegion(input.page, panel, input.outputDirectory, SONAR_SCREENSHOTS.overall, input.deadline);
+    const header = await projectHeaderOrNav(input.page).catch(() => undefined);
+    const screenshot = header !== undefined
+      ? await screenshotFacetRange(input.page, header, panel, input.outputDirectory, SONAR_SCREENSHOTS.overall, input.deadline)
+      : await screenshotRegion(input.page, panel, input.outputDirectory, SONAR_SCREENSHOTS.overall, input.deadline);
     return {
       capture: { ...capture, ...screenshot },
       navigation: navigation('sonarqube-overall', 'found', url),

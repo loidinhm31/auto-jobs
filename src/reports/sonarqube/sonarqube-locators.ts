@@ -242,14 +242,14 @@ export async function issuesControlCandidates(page: Page, projectKey: string, al
   return candidates;
 }
 
-export async function projectNameNavButton(page: Page): Promise<Locator | undefined> {
+export async function projectHeaderOrNav(page: Page): Promise<Locator | undefined> {
   const candidates = [
+    page.locator('[data-component="project-content-header"]').first(),
+    page.locator('.project-header, [data-testid*="header"]').first(),
     page.getByRole('navigation', { name: 'Project', exact: true }).getByRole('button').first(),
     page.locator('nav[aria-label="Project"] button').first(),
     page.locator('button[data-component="component-nav-header"]').first(),
     page.locator('#component-nav-dropdown-menu-trigger').first(),
-    page.locator('nav button:has([data-component="generic-avatar"])').first(),
-    page.locator('[data-component="project-content-header"]').first(),
   ];
   for (const candidate of candidates) {
     if (await candidate.isVisible().catch(() => false)) {
@@ -257,6 +257,10 @@ export async function projectNameNavButton(page: Page): Promise<Locator | undefi
     }
   }
   return undefined;
+}
+
+export async function projectNameNavButton(page: Page): Promise<Locator | undefined> {
+  return projectHeaderOrNav(page);
 }
 
 export function sonarLoginUsernameCandidates(page: Page): SonarLocator[] {
