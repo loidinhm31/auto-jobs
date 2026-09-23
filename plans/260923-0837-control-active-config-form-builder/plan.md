@@ -1,7 +1,7 @@
 ---
 title: "Control Active Config Persistence & Form Builder"
 description: "Restore the selected configuration and add a responsive, schema-valid form editor synchronized with raw JSON."
-status: in-progress
+status: complete
 priority: P2
 effort: 9h
 branch: main
@@ -15,14 +15,14 @@ created: 2026-09-23
 Add client-side active-configuration restoration and a responsive, schema-valid form editor synchronized with raw JSON in `npm run serve:control`. Preserve the schema-v1 document contract, save flow, backend routes, and Playwright DOM selectors.
 
 ## Phase Progress & Navigation
-**Overall status:** In Progress / **72%** (6.5 of 9.0 planned hours; Phases 01–03 complete, Phase 04 pending).
+**Overall status:** Complete / **100%** (9.0 of 9.0 planned hours; all 4 phases complete; completed 2026-09-23T13:24:08+07:00).
 
 | # | Phase | Status / progress | Effort | Deliverable |
 |---|---|---|---:|---|
 | 1 | [Active configuration persistence](./phase-01-active-config-persistence.md) | Complete / 100% · 2026-09-23T09:28:48+07:00 | 1.5h | URL + localStorage selection restoration |
 | 2 | [Config form builder component](./phase-02-config-form-builder-component.md) | Complete / 100% · 2026-09-23 | 3h | Controlled project and defaults editor |
 | 3 | [Side-by-side integration](./phase-03-side-by-side-integration.md) | Complete / 100% · 2026-09-23T12:30:04+07:00 | 2h | Responsive workspace and synchronized editors |
-| 4 | [Verification and release audit](./phase-04-verification-and-release-audit.md) | Pending / 0% | 2.5h | Unit/E2E coverage, Axe audit, release gate |
+| 4 | [Verification and release audit](./phase-04-verification-and-release-audit.md) | Complete / 100% · 2026-09-23T13:24:08+07:00 | 2.5h | Unit/E2E coverage, Axe audit, release gate |
 
 ## Deliverables and Scope
 - Persist only the active config filename as `jenkins_control_active_config` and `?config=<name>`; resolve a valid URL name first, then a valid localStorage name, then `configs[0]`.

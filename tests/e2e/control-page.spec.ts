@@ -32,6 +32,32 @@ const createValidConfig = (artifactDir: string) => ({
   ],
 });
 
+const createAlternateConfig = (artifactDir: string) => ({
+  schemaVersion: 1,
+  defaults: {
+    artifactDir,
+    timeoutMs: 40_000,
+  },
+  projects: [
+    {
+      id: 'alt-payment-service',
+      name: 'Alternate Payment Service',
+      runType: 'report',
+      enabled: true,
+      loginUrl: 'https://jenkins.example.com/login',
+      jobUrl: 'https://jenkins.example.com/job/alt-payment/',
+    },
+    {
+      id: 'alt-auth-service',
+      name: 'Alternate Auth Service',
+      runType: 'auto-build',
+      enabled: true,
+      loginUrl: 'https://jenkins.example.com/login',
+      jobUrl: 'https://jenkins.example.com/job/alt-auth/',
+    },
+  ],
+});
+
 test.describe('Control Page Dashboard E2E', () => {
   let configRoot: string;
   let reportRoot: string;
@@ -471,5 +497,195 @@ test.describe('Control Page Dashboard E2E', () => {
 
     await page.locator('#btn-cancel-browser').click();
     await expect(browserDialog).not.toBeVisible();
+  });
+
+  test('persists selected configuration across reload, respects deep-link priority, and falls back on stale names', async ({ page }) => {
+    fs.writeFileSync(
+      path.join(configRoot, 'alternate.json'),
+      JSON.stringify(createAlternateConfig(reportRoot), null, 2),
+      'utf8',
+    );
+
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    const configSelect = page.locator('#config-select');
+    await expect(configSelect).toBeVisible();
+
+    // 1. Select default.json explicitly
+    await configSelect.selectOption('default.json');
+    await expect(page.locator('.project-card').getByRole('heading', { name: 'Demo Report Service', exact: true })).toBeVisible();
+
+    const storedDefault = await page.evaluate(() => localStorage.getItem('jenkins_control_active_config'));
+    expect(storedDefault).toBe('default.json');
+    await expect(page).toHaveURL(/config=default\.json/);
+
+    // 2. Select alternate.json
+    await configSelect.selectOption('alternate.json');
+    await expect(page.locator('.project-card').getByRole('heading', { name: 'Alternate Payment Service', exact: true })).toBeVisible();
+
+    const storedAlt = await page.evaluate(() => localStorage.getItem('jenkins_control_active_config'));
+    expect(storedAlt).toBe('alternate.json');
+    await expect(page).toHaveURL(/config=alternate\.json/);
+
+    // 3. Reload page and assert persistence
+    await page.reload();
+    await expect(configSelect).toBeVisible();
+    await expect(configSelect).toHaveValue('alternate.json');
+    await expect(page).toHaveURL(/config=alternate\.json/);
+    await expect(page.locator('.project-card').getByRole('heading', { name: 'Alternate Payment Service', exact: true })).toBeVisible();
+
+    // 4. Deep-link precedence: set localStorage to default.json, but navigate with ?config=alternate.json
+    await page.evaluate(() => localStorage.setItem('jenkins_control_active_config', 'default.json'));
+    await page.goto(`${serverUrl}?config=alternate.json`);
+    await expect(configSelect).toHaveValue('alternate.json');
+    await expect(page.locator('.project-card').getByRole('heading', { name: 'Alternate Payment Service', exact: true })).toBeVisible();
+
+    // 5. Stale-name fallback: navigate with nonexistent config parameter
+    await page.goto(`${serverUrl}?config=stale-does-not-exist.json`);
+    await expect(configSelect).not.toHaveValue('');
+    const resolvedValue = await configSelect.inputValue();
+    expect(['alternate.json', 'default.json']).toContain(resolvedValue);
+    await expect(page.locator('.project-card')).toHaveCount(2);
+  });
+
+  test('supports builder add, edit, remove, defaults, and bidirectional raw JSON synchronization', async ({ page }) => {
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+    await expect(page.locator('.project-card')).toHaveCount(2);
+    await expect(page.locator('#project-selection')).toBeVisible();
+
+    const saveBtn = page.locator('#btn-save');
+    await expect(saveBtn).toBeDisabled();
+
+    const rawJson = page.locator('#raw-json-textarea');
+    await expect(rawJson).toBeVisible();
+    // 1. Add project - inits a new draft form without premature validation errors
+    const addProjectBtn = page.getByRole('button', { name: 'Add New Project' });
+    await expect(addProjectBtn).toBeVisible();
+    await addProjectBtn.click();
+
+    // Form initialized, document not dirty yet, no premature validation errors
+    await expect(saveBtn).toBeDisabled();
+    const saveProjectBtn = page.locator('#btn-save-project');
+    await expect(saveProjectBtn).toBeVisible();
+    const loginUrlError = page.locator('#config-project-login-url-error');
+    await expect(loginUrlError).not.toBeVisible();
+
+    // Clicking Save Project with empty URLs surfaces validation errors on demand
+    await saveProjectBtn.click();
+    await expect(loginUrlError).toBeVisible();
+
+    // Testing Cancel button discards draft and returns cleanly
+    const cancelProjectBtn = page.locator('#btn-cancel-project');
+    await expect(cancelProjectBtn).toBeVisible();
+    await cancelProjectBtn.click();
+    await expect(loginUrlError).not.toBeVisible();
+    await expect(saveProjectBtn).not.toBeVisible();
+
+    // Re-open Add New Project draft
+    await addProjectBtn.click();
+    await expect(saveProjectBtn).toBeVisible();
+    await expect(loginUrlError).not.toBeVisible();
+    // 2. Populate new project fields
+    await page.locator('#config-project-id').fill('service-analytics');
+    await page.locator('#config-project-name').fill('Analytics Service');
+    await page.locator('#config-project-login-url').fill('https://jenkins.example.com/login');
+    await page.locator('#config-project-job-url').fill('https://jenkins.example.com/job/analytics/');
+    await page.locator('#config-project-run-type').selectOption('auto-build');
+
+    // 3. Click Save Project button to apply new project to the list
+    await saveProjectBtn.click();
+
+    // Now project is committed to document and raw JSON updates
+    await expect(saveBtn).toBeEnabled();
+    const projectSelect = page.locator('#project-selection');
+    await expect(projectSelect).toBeVisible();
+    await expect(rawJson).toHaveValue(/service-analytics/);
+    await expect(rawJson).toHaveValue(/Analytics Service/);
+    await expect(rawJson).toHaveValue(/"runType":\s*"auto-build"/);
+
+    // 3. Edit defaults
+    const defaultsSummary = page.locator('summary', { hasText: /Edit configuration defaults/i });
+    await defaultsSummary.click();
+    await page.locator('#config-default-timeout').fill('50000');
+    await page.locator('#config-default-browser').selectOption('firefox');
+
+    await expect(rawJson).toHaveValue(/"timeoutMs":\s*50000/);
+    await expect(rawJson).toHaveValue(/"browser":\s*"firefox"/);
+
+    // 4. Bidirectional live sync: valid raw JSON apply
+    const currentJson = await rawJson.inputValue();
+    const updatedJson = currentJson.replace('Analytics Service', 'Realtime Analytics Service');
+    await rawJson.fill(updatedJson);
+    await page.locator('#btn-apply-json').click();
+
+    await expect(page.locator('#json-validation-msg')).toHaveText(/JSON valid and applied to model/i);
+    await expect(page.locator('#config-project-name')).toHaveValue('Realtime Analytics Service');
+
+    // 5. Invalid raw JSON apply rejection
+    await rawJson.fill('{ malformed json');
+    await page.locator('#btn-apply-json').click();
+    await expect(page.locator('#json-validation-msg')).toHaveText(/Invalid JSON or configuration/i);
+    // Prior valid builder value preserved
+    await expect(page.locator('#config-project-name')).toHaveValue('Realtime Analytics Service');
+
+    // 6. Schema-invalid raw JSON apply rejection (empty projects)
+    await rawJson.fill(JSON.stringify({ schemaVersion: 1, projects: [] }, null, 2));
+    await page.locator('#btn-apply-json').click();
+    await expect(page.locator('#json-validation-msg')).toHaveText(/Invalid JSON or configuration/i);
+    // Prior valid builder value preserved
+    await expect(page.locator('#config-project-name')).toHaveValue('Realtime Analytics Service');
+
+    // Reapply valid JSON before removing
+    await rawJson.fill(updatedJson);
+    await page.locator('#btn-apply-json').click();
+    await expect(page.locator('#json-validation-msg')).toHaveText(/JSON valid and applied to model/i);
+
+    // 7. Remove project
+    const removeProjectBtn = page.getByRole('button', { name: 'Remove Project' });
+    await expect(removeProjectBtn).toBeVisible();
+    await removeProjectBtn.click();
+
+    await expect(rawJson).not.toHaveValue(/service-analytics/);
+    await expect(saveBtn).toBeEnabled();
+
+    // 8. Save updated config
+    await saveBtn.click();
+    await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
+    await expect(saveBtn).toBeDisabled();
+  });
+
+  test('passes Axe accessibility audit and responsive layout check on desktop and mobile', async ({ page }) => {
+    // 1. Desktop Viewport
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+    await expect(page.locator('#config-form-title')).toBeVisible();
+    await expect(page.locator('#raw-json-textarea')).toBeVisible();
+
+    // Expand defaults summary so all controls are in the accessibility tree
+    const defaultsSummary = page.locator('summary', { hasText: /Edit configuration defaults/i });
+    await defaultsSummary.click();
+
+    const desktopA11y = await new AxeBuilder({ page }).analyze();
+    expect(desktopA11y.violations).toEqual([]);
+
+    const desktopNoOverflow = await page.evaluate(() => {
+      return document.documentElement.scrollWidth <= window.innerWidth;
+    });
+    expect(desktopNoOverflow).toBe(true);
+
+    // 2. Mobile Viewport
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.waitForTimeout(300);
+
+    const mobileA11y = await new AxeBuilder({ page }).analyze();
+    expect(mobileA11y.violations).toEqual([]);
+
+    const mobileNoOverflow = await page.evaluate(() => {
+      return document.documentElement.scrollWidth <= window.innerWidth;
+    });
+    expect(mobileNoOverflow).toBe(true);
   });
 });

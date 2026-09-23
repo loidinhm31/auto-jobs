@@ -71,7 +71,7 @@
 - Use `URLSearchParams` to encode names. Never interpolate a query string manually or place config payloads, secrets, or ETags in browser persistence.
 
 ## Next Steps
-Phase 01 complete and verified by unit test contracts (27 passing tests) and code review. Ready for Phase 02: Config Form Builder Component.
+Phase 01 complete and verified by unit test contracts (27 passing tests) and code review. Phases 02–04 have also been completed.
 
 ## Unresolved Questions
 - None; precedence and stale-name behavior are fixed above.

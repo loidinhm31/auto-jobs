@@ -725,13 +725,33 @@ for report and auto-build runs, stored-over-base environment precedence,
 non-mutation of the base environment, and redaction of logs, warnings, errors,
 and manager-level run output.
 
-Phase 04 control-page coverage and Phase 05 browser verification use
-`tests/e2e/control-page.spec.ts`. The control suite proves config/run/UI
-behavior, accessible credential management, dynamic key discovery,
-Missing/Configured transitions, guarded save/clear operations, persistence
-after reload, injected-credential execution, browser settings management,
-and zero leakage from cleared inputs, page HTML, and run logs. Its four scenarios
-run in Chromium and WebKit, producing eight E2E checks.
+The Active Config Persistence & Form Builder initiative's Phase 04 coverage
+extends `tests/unit/control-hooks-and-types.spec.ts` and
+`tests/e2e/control-page.spec.ts`. Unit contracts verify active-config
+resolution (valid URL > valid stored filename > first available), stale and
+empty candidates, storage-safe access, URL parameter/hash preservation,
+collision-free project creation, immutable field/default updates, advanced
+field preservation, deletion invariants, and schema validation.
+
+Control-page E2E coverage verifies selection persistence in localStorage and
+`?config=` across reload, URL deep-link precedence over stored selection, and
+fallback from stale names. The builder workflow exercises project add/edit/
+remove and default edits, builder-to-JSON live updates, valid JSON Apply back
+into form controls, invalid/schema-invalid Apply preserving the prior model,
+and the existing save path. The same suite retains coverage for credential
+presence/save/clear, browser settings, execution injection, and zero plaintext
+leakage. Seven E2E cases run in Chromium and WebKit for 14 browser executions.
+
+The desktop/mobile test audits the editor with Axe at 1280×800 and 375×667,
+expects zero violations at both sizes, and verifies no horizontal overflow.
+`tests/e2e/template-server-integration.spec.ts` checks concurrent Control and
+Template Servers, template-config loading, production report and auto-build
+flows, and Control Page rendering without CORS/CSP console errors.
+
+The 2026-09-23 release audit completed `npm run test:release` at 371/371
+(100%) with 0 errors; typecheck and build passed, code review scored 10/10, and
+the user approved the release. The deterministic fixture suite does not contact
+live Jenkins or vendor services.
 
 Phase 05 SecretStore/API unit additions are
 `tests/unit/control-secret-store.spec.ts` and
@@ -741,9 +761,8 @@ continues to cover plaintext redaction, Host/Origin/Fetch Metadata/CSRF gates,
 bounded JSON validation, content-type handling, unsupported methods, and
 store-availability errors.
 
-Phase 06 legacy cleanup removed all legacy control page files (`control-page.js`,
-`control-page.html`, `control-page.css`). Deterministic unit suites include 292
-passed checks (including 21 atomic component tests), 8/8 control E2E checks,
-zero secret leakage, and zero TypeScript errors. None of these deterministic
-checks contacts a live Jenkins controller or vendor service.
+Phase 06 legacy cleanup removed all legacy control page files
+(`control-page.js`, `control-page.html`, `control-page.css`). Current release
+validation is recorded above; no live Jenkins controller or vendor service is
+contacted by the deterministic suites.
 

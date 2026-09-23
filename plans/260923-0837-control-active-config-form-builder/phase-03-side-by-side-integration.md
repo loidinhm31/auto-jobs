@@ -49,7 +49,7 @@ A failed Apply updates only `jsonValidationMsg`; it must not mutate `currentDoc`
 - `npm run test:control`: 8/8 passed after exact `.project-card` heading assertions.
 - Typecheck and build passed.
 - Manual desktop/mobile browser smoke confirmed layout, selectors, synchronization, and invalid JSON preservation.
-- Phase 04 remains pending: durable new browser E2E coverage, Axe scans, and `npm run test:release` are not claimed as complete or passed.
+- Phase 04 completed at `2026-09-23T13:24:08+07:00`; `npm run test:release` passed 371/371 with typecheck/build successful and zero desktop/mobile Axe violations.
 
 
 ## Todo List
@@ -87,7 +87,7 @@ A failed Apply updates only `jsonValidationMsg`; it must not mutate `currentDoc`
 - Do not weaken CSP or add inline scripts/styles; use existing Tailwind utility classes.
 
 ## Next Steps
-After integration, phase 4 adds browser-facing reload, edit, Apply, layout, and Axe coverage, then runs the complete release gate.
+Integration is complete, and Phase 04 has completed the browser verification, accessibility audit, and release gate.
 
 ## Unresolved Questions
 - None; raw-to-form synchronization occurs on the existing explicit Apply action, not on incomplete keystrokes.

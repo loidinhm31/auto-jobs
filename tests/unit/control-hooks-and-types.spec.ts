@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { ConfigError } from '../../src/config-errors.js';
+import { assertProjectConfigDocument } from '../../src/config/project-config-schema.js';
 
 import { discoverRequiredCredentialKeys } from '../../src/reporting/control-page/utils/discoverCredentialKeys.js';
 import {
@@ -406,6 +408,24 @@ test.describe('Control Page Phase 02: Types, Utility & Hook Contracts', () => {
         });
         expect(trimmedStored).toBe('production.json');
       });
+
+      test('falls back to first available config when storage candidate is stale and query is absent', () => {
+        const result = resolveActiveConfigName({
+          availableConfigs: available,
+          queryCandidate: null,
+          storedCandidate: 'stale-removed.json',
+        });
+        expect(result).toBe('projects.json');
+      });
+
+      test('handles unknown query candidate by falling back to valid stored candidate', () => {
+        const result = resolveActiveConfigName({
+          availableConfigs: available,
+          queryCandidate: 'unknown-link.json',
+          storedCandidate: 'production.json',
+        });
+        expect(result).toBe('production.json');
+      });
     });
 
     test.describe('browser storage and URL synchronization helpers', () => {
@@ -587,6 +607,252 @@ test.describe('Control Page Phase 02: Types, Utility & Hook Contracts', () => {
         })),
       };
       expect(addProjectDraft(fullDocument)).toBeNull();
+    });
+
+    test('maintains unique IDs across sequential addProjectDraft additions', () => {
+      let currentDoc = document;
+      const firstAdded = addProjectDraft(currentDoc);
+      expect(firstAdded).not.toBeNull();
+      expect(firstAdded!.projectId).toBe('new-project-3');
+      currentDoc = firstAdded!.document;
+
+      const secondAdded = addProjectDraft(currentDoc);
+      expect(secondAdded).not.toBeNull();
+      expect(secondAdded!.projectId).toBe('new-project-4');
+      currentDoc = secondAdded!.document;
+
+      const thirdAdded = addProjectDraft(currentDoc);
+      expect(thirdAdded).not.toBeNull();
+      expect(thirdAdded!.projectId).toBe('new-project-5');
+      currentDoc = thirdAdded!.document;
+
+      const ids = currentDoc.projects.map((p) => p.id);
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(ids.length);
+      expect(ids).toContain('new-project-3');
+      expect(ids).toContain('new-project-4');
+      expect(ids).toContain('new-project-5');
+    });
+
+    test('preserves advanced fields when updating project at index', () => {
+      const advancedDoc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'svc-advanced',
+            name: 'Advanced Service',
+            loginUrl: 'https://jenkins.example/login',
+            jobUrl: 'https://jenkins.example/job/build',
+            runType: 'auto-build',
+            enabled: true,
+            allowedOrigins: ['https://jenkins.example', 'https://auth.example'],
+            credentials: {
+              usernameVariable: 'CUSTOM_USER',
+              passwordVariable: 'CUSTOM_PASS',
+            },
+            credentialVariables: ['EXTRA_SECRET_KEY'],
+          },
+        ],
+      };
+
+      const updated = updateProjectDocumentAt(advancedDoc, 0, {
+        name: 'Renamed Advanced Service',
+        loginUrl: 'https://jenkins.example/custom-login',
+      });
+
+      expect(updated.projects[0]).toEqual({
+        id: 'svc-advanced',
+        name: 'Renamed Advanced Service',
+        loginUrl: 'https://jenkins.example/custom-login',
+        jobUrl: 'https://jenkins.example/job/build',
+        runType: 'auto-build',
+        enabled: true,
+        allowedOrigins: ['https://jenkins.example', 'https://auth.example'],
+        credentials: {
+          usernameVariable: 'CUSTOM_USER',
+          passwordVariable: 'CUSTOM_PASS',
+        },
+        credentialVariables: ['EXTRA_SECRET_KEY'],
+      });
+    });
+
+    test('enforces project count and enabled invariant rules on deletion', () => {
+      const threeProjectsDoc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        projects: [
+          { id: 'p1', name: 'P1', loginUrl: 'https://j.ex/l', jobUrl: 'https://j.ex/j', enabled: true },
+          { id: 'p2', name: 'P2', loginUrl: 'https://j.ex/l', jobUrl: 'https://j.ex/j', enabled: true },
+          { id: 'p3', name: 'P3', loginUrl: 'https://j.ex/l', jobUrl: 'https://j.ex/j', enabled: false },
+        ],
+      };
+
+      // Can remove p1 because p2 is still enabled
+      const afterRemovingP1 = removeProjectDocumentAt(threeProjectsDoc, 0);
+      expect(afterRemovingP1).not.toBeNull();
+      expect(afterRemovingP1!.projects.map((p) => p.id)).toEqual(['p2', 'p3']);
+
+      // Now from ['p2' (enabled), 'p3' (disabled)], removing p2 would leave 0 enabled projects -> returns null
+      const attemptRemovingOnlyEnabled = removeProjectDocumentAt(afterRemovingP1!, 0);
+      expect(attemptRemovingOnlyEnabled).toBeNull();
+
+      // Removing disabled p3 succeeds, leaving ['p2' (enabled)]
+      const afterRemovingP3 = removeProjectDocumentAt(afterRemovingP1!, 1);
+      expect(afterRemovingP3).not.toBeNull();
+      expect(afterRemovingP3!.projects.map((p) => p.id)).toEqual(['p2']);
+
+      // Now only 1 project left -> cannot remove the last project
+      expect(removeProjectDocumentAt(afterRemovingP3!, 0)).toBeNull();
+    });
+
+    test('clears individual default fields and removes defaults object entirely when emptied', () => {
+      const withDefaults: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        defaults: {
+          timeoutMs: 45_000,
+          browser: 'chromium',
+          artifactDir: 'custom-reports',
+        },
+        projects: [
+          { id: 'p1', name: 'P1', loginUrl: 'https://j.ex/l', jobUrl: 'https://j.ex/j' },
+        ],
+      };
+
+      // Clear timeoutMs
+      const withoutTimeout = updateProjectDocumentDefaults(withDefaults, (prev) => {
+        const { timeoutMs: _removed, ...rest } = prev;
+        return rest;
+      });
+      expect(withoutTimeout.defaults).toEqual({
+        browser: 'chromium',
+        artifactDir: 'custom-reports',
+      });
+
+      // Clear remaining defaults
+      const completelyCleared = updateProjectDocumentDefaults(withoutTimeout, () => ({}));
+      expect(completelyCleared.defaults).toBeUndefined();
+      expect('defaults' in completelyCleared).toBe(false);
+    });
+
+    test('validates schema contracts via assertProjectConfigDocument', () => {
+      const validDoc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'valid-project',
+            name: 'Valid Project',
+            loginUrl: 'https://jenkins.example/login',
+            jobUrl: 'https://jenkins.example/job/build',
+            runType: 'report',
+            enabled: true,
+          },
+        ],
+      };
+      expect(assertProjectConfigDocument(validDoc)).toBe(validDoc);
+
+      // Empty projects array
+      expect(() =>
+        assertProjectConfigDocument({ schemaVersion: 1, projects: [] }),
+      ).toThrow(ConfigError);
+
+      // No enabled project
+      expect(() =>
+        assertProjectConfigDocument({
+          schemaVersion: 1,
+          projects: [{ ...validDoc.projects[0]!, enabled: false }],
+        }),
+      ).toThrow(ConfigError);
+
+      // Duplicate project ID
+      expect(() =>
+        assertProjectConfigDocument({
+          schemaVersion: 1,
+          projects: [
+            validDoc.projects[0]!,
+            { ...validDoc.projects[0]!, name: 'Copy' },
+          ],
+        }),
+      ).toThrow(/duplicate project id/i);
+
+      // Invalid schema version
+      expect(() =>
+        assertProjectConfigDocument({
+          schemaVersion: 2,
+          projects: [validDoc.projects[0]!],
+        }),
+      ).toThrow(/schemaVersion must be 1/i);
+    });
+
+    test('observable applyRawJson transitions: commits valid JSON and rejects invalid/malformed JSON', () => {
+      const initialDoc: ProjectConfigDocumentV1 = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'base-service',
+            name: 'Base Service',
+            loginUrl: 'https://jenkins.example/login',
+            jobUrl: 'https://jenkins.example/job/base',
+            enabled: true,
+          },
+        ],
+      };
+
+      const simulateApply = (
+        current: ProjectConfigDocumentV1,
+        rawString: string,
+      ): { doc: ProjectConfigDocumentV1; isDirty: boolean; error: string | null } => {
+        try {
+          const parsed = JSON.parse(rawString);
+          const validated = assertProjectConfigDocument(parsed);
+          return { doc: validated as unknown as ProjectConfigDocumentV1, isDirty: true, error: null };
+        } catch (err) {
+          const msg = err instanceof ConfigError ? err.issues.join('; ') : err instanceof Error ? err.message : String(err);
+          return { doc: current, isDirty: false, error: msg };
+        }
+      };
+
+      // 1. Valid modified JSON -> commits new doc and dirty = true
+      const validUpdate = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'base-service',
+            name: 'Updated Service Name',
+            loginUrl: 'https://jenkins.example/login',
+            jobUrl: 'https://jenkins.example/job/base',
+            enabled: true,
+          },
+        ],
+      };
+      const resultValid = simulateApply(initialDoc, JSON.stringify(validUpdate));
+      expect(resultValid.error).toBeNull();
+      expect(resultValid.isDirty).toBe(true);
+      expect(resultValid.doc.projects[0]?.name).toBe('Updated Service Name');
+
+      // 2. Malformed JSON (syntax error) -> preserves prior doc, isDirty = false, reports error
+      const resultMalformed = simulateApply(initialDoc, '{ invalid json');
+      expect(resultMalformed.error).toBeTruthy();
+      expect(resultMalformed.isDirty).toBe(false);
+      expect(resultMalformed.doc).toBe(initialDoc);
+      expect(resultMalformed.doc.projects[0]?.name).toBe('Base Service');
+
+      // 3. Schema-invalid JSON (all projects disabled) -> preserves prior doc, isDirty = false, reports validation issue
+      const schemaInvalid = {
+        schemaVersion: 1,
+        projects: [
+          {
+            id: 'base-service',
+            name: 'All Disabled',
+            loginUrl: 'https://jenkins.example/login',
+            jobUrl: 'https://jenkins.example/job/base',
+            enabled: false,
+          },
+        ],
+      };
+      const resultSchemaInvalid = simulateApply(initialDoc, JSON.stringify(schemaInvalid));
+      expect(resultSchemaInvalid.error).toContain('must contain an enabled project');
+      expect(resultSchemaInvalid.isDirty).toBe(false);
+      expect(resultSchemaInvalid.doc).toBe(initialDoc);
+      expect(resultSchemaInvalid.doc.projects[0]?.name).toBe('Base Service');
     });
   });
 

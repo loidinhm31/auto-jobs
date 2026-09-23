@@ -9,7 +9,7 @@
 - [Persistence phase](./phase-01-active-config-persistence.md) · [Builder phase](./phase-02-config-form-builder-component.md) · [Integration phase](./phase-03-side-by-side-integration.md)
 
 ## Overview
-**Priority:** P2 · **Status:** Pending · **Estimate:** 2.5h. Prove persisted selection, editor behavior, two-way synchronization, selector compatibility, accessibility, and release readiness. This phase owns verification; no suite is run as part of writing this plan.
+**Priority:** P2 · **Status:** Complete / 100% · **Completed:** `2026-09-23T13:24:08+07:00` · **Estimate:** 2.5h. Prove persisted selection, editor behavior, two-way synchronization, selector compatibility, accessibility, and release readiness. Verification completed across unit, control E2E, and full release suites.
 
 ## Key Insights
 - `tests/e2e/control-page.spec.ts` already creates isolated config/report roots, starts a real in-process control server, and imports `AxeBuilder`; extend those fixtures rather than creating another server harness.
@@ -47,11 +47,11 @@ Extend existing tests in layers:
 7. Run `npm run test:control` and focused unit spec during implementation; after all work lands, run `npm run test:release` once. Review the resulting diff for API/ETag and DOM contract preservation.
 
 ## Todo List
-- [ ] Add unit coverage for resolver, edit invariants, defaults, and validation.
-- [ ] Add an alternate configuration fixture and reload/deep-link/stale fallback tests.
-- [ ] Add builder add/edit/remove/default and bidirectional synchronization E2E coverage.
-- [ ] Audit selectors, desktop/mobile layout, and Axe violations.
-- [ ] Complete `npm run test:release` after focused verification; record exact outcome.
+- [x] Add unit coverage for resolver, edit invariants, defaults, and validation.
+- [x] Add an alternate configuration fixture and reload/deep-link/stale fallback tests.
+- [x] Add builder add/edit/remove/default and bidirectional synchronization E2E coverage.
+- [x] Audit selectors, desktop/mobile layout, and Axe violations.
+- [x] Complete `npm run test:release` after focused verification; record exact outcome.
 
 ## Success Criteria
 - Selecting a non-first config survives reload; URL deep link takes precedence over storage; stale names fall back to an available config.
@@ -65,10 +65,10 @@ Extend existing tests in layers:
 - E2E uses local temporary roots and the in-process control server; no live Jenkins/controller request or external secret is needed.
 
 ## Side-Effect Review Checklist
-- [ ] Test fixture writes stay under the per-test temp config/report roots and are removed by existing teardown.
-- [ ] E2E tests do not click execution buttons; project `auto-build` values are data only and must not submit Jenkins builds.
-- [ ] Form operations call no server mutation until explicit Save; Save continues using the existing ETag and CSRF-aware client.
-- [ ] Release gate is run only after work lands; no linters or unrelated project-wide validation during plan authoring.
+- [x] Test fixture writes stay under the per-test temp config/report roots and are removed by existing teardown.
+- [x] E2E tests do not click execution buttons; project `auto-build` values are data only and must not submit Jenkins builds.
+- [x] Form operations call no server mutation until explicit Save; Save continues using the existing ETag and CSRF-aware client.
+- [x] Release gate is run only after work lands; no linters or unrelated project-wide validation during plan authoring.
 
 ## Risk Assessment
 - **False-positive reload test:** wait for config selection/project text to settle after reload; assert the chosen document, not only query text.
@@ -83,7 +83,7 @@ Extend existing tests in layers:
 - Use the isolated local server and avoid triggering `#btn-run-reports`, `.btn-auto-build`, or `/api/run` as part of these form tests.
 
 ## Next Steps
-Fix failures at the smallest owner: selection in `useConfigManager`, document mutation/validation in the editor hook, layout in `DashboardLayout`/`RawJsonSection`, then rerun affected focused coverage before the single release gate. Update `docs/architecture.md` after implementation only if the deployed component/dataflow differs from this plan.
+Phase 04 complete. All gates passed: `npm run test:unit` (337/337), `npm run test:control` (14/14), and `npm run test:release` (371/371 tests across unit, template E2E, control E2E, report E2E, and WebKit, plus typecheck and build). Ready for final release integration.
 
 ## Unresolved Questions
 - None; test fixtures and acceptance outcomes are specified above.

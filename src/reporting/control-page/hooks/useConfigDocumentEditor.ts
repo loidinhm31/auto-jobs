@@ -11,6 +11,7 @@ import {
 import type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
+  ProjectConfigInput,
 } from '../types/index.js';
 
 type ValidationStatus = { isValid: boolean; message: string } | null;
@@ -27,7 +28,7 @@ export interface UseConfigDocumentEditorResult {
   validateCurrentDocument: () => boolean;
   updateProject: (projectId: string, update: ProjectUpdate) => void;
   updateProjectAt: (projectIndex: number, update: ProjectUpdate) => void;
-  addProject: () => string | null;
+  addProject: (projectInput?: ProjectConfigInput) => string | null;
   removeProjectAt: (projectIndex: number) => boolean;
   updateDefaults: (update: (previous: ProjectConfigDefaults) => ProjectConfigDefaults) => void;
 }
@@ -103,8 +104,17 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     if (projectIndex >= 0) updateProjectAt(projectIndex, update);
   }, [currentDoc, updateProjectAt]);
 
-  const addProject = useCallback((): string | null => {
+  const addProject = useCallback((projectInput?: ProjectConfigInput): string | null => {
     if (!currentDoc) return null;
+    if (projectInput) {
+      if (currentDoc.projects.length >= 50) return null;
+      const nextDoc: ProjectConfigDocumentV1 = {
+        ...currentDoc,
+        projects: [...currentDoc.projects, projectInput],
+      };
+      setDocument(nextDoc, true);
+      return projectInput.id;
+    }
     const added = addProjectDraft(currentDoc);
     if (!added) return null;
     setDocument(added.document, true);

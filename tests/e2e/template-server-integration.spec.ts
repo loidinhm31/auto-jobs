@@ -411,7 +411,7 @@ test.describe('Template Server Validation & Integration (Phase 05)', () => {
 
         // Verify project card renders with Template Fixture Service
         await expect(page.locator('.project-card')).toHaveCount(1);
-        await expect(page.locator('text=Template Fixture Service')).toBeVisible();
+        await expect(page.locator('.project-card').getByRole('heading', { name: 'Template Fixture Service', exact: true })).toBeVisible();
 
         // Check for absence of cross-origin or CSP security violation errors
         const corsViolations = consoleErrors.filter(
