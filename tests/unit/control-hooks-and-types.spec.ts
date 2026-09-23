@@ -5,6 +5,15 @@ import {
   ControlApiError,
   getCsrfTokenFromDom,
 } from '../../src/reporting/control-page/hooks/useControlApi.js';
+import {
+  ACTIVE_CONFIG_STORAGE_KEY,
+  clearStoredActiveConfig,
+  readStoredActiveConfig,
+  readUrlActiveConfig,
+  resolveActiveConfigName,
+  syncUrlActiveConfig,
+  writeStoredActiveConfig,
+} from '../../src/reporting/control-page/utils/config-selection.js';
 import type {
   ProjectConfigDocumentV1,
   RunStatus,
@@ -307,6 +316,186 @@ test.describe('Control Page Phase 02: Types, Utility & Hook Contracts', () => {
       expect(terminalStatuses.includes('succeeded')).toBe(true);
       expect(terminalStatuses.includes('failed')).toBe(true);
       expect(terminalStatuses.includes('submission-unknown')).toBe(true);
+    });
+  });
+
+  test.describe('Active Configuration Selection and Persistence Contracts', () => {
+    test('exports correct storage key constant', () => {
+      expect(ACTIVE_CONFIG_STORAGE_KEY).toBe('jenkins_control_active_config');
+    });
+
+    test.describe('resolveActiveConfigName precedence', () => {
+      const available = ['projects.json', 'staging.json', 'production.json'];
+
+      test('returns empty string when availableConfigs is empty', () => {
+        expect(resolveActiveConfigName({ availableConfigs: [] })).toBe('');
+        expect(
+          resolveActiveConfigName({
+            availableConfigs: [],
+            queryCandidate: 'staging.json',
+            storedCandidate: 'projects.json',
+          }),
+        ).toBe('');
+      });
+
+      test('selects valid queryCandidate over storedCandidate and first available', () => {
+        const result = resolveActiveConfigName({
+          availableConfigs: available,
+          queryCandidate: 'production.json',
+          storedCandidate: 'staging.json',
+        });
+        expect(result).toBe('production.json');
+      });
+
+      test('selects valid storedCandidate when queryCandidate is missing or null', () => {
+        const resultNull = resolveActiveConfigName({
+          availableConfigs: available,
+          queryCandidate: null,
+          storedCandidate: 'staging.json',
+        });
+        expect(resultNull).toBe('staging.json');
+
+        const resultUndefined = resolveActiveConfigName({
+          availableConfigs: available,
+          storedCandidate: 'staging.json',
+        });
+        expect(resultUndefined).toBe('staging.json');
+      });
+
+      test('ignores stale queryCandidate and falls back to valid storedCandidate', () => {
+        const result = resolveActiveConfigName({
+          availableConfigs: available,
+          queryCandidate: 'deleted-old.json',
+          storedCandidate: 'staging.json',
+        });
+        expect(result).toBe('staging.json');
+      });
+
+      test('falls back to first available config when both query and stored candidates are invalid or missing', () => {
+        const bothInvalid = resolveActiveConfigName({
+          availableConfigs: available,
+          queryCandidate: 'nonexistent-1.json',
+          storedCandidate: 'nonexistent-2.json',
+        });
+        expect(bothInvalid).toBe('projects.json');
+
+        const bothMissing = resolveActiveConfigName({
+          availableConfigs: available,
+        });
+        expect(bothMissing).toBe('projects.json');
+      });
+
+      test('trims candidate strings before validating against available list', () => {
+        const trimmedQuery = resolveActiveConfigName({
+          availableConfigs: available,
+          queryCandidate: '  staging.json  ',
+          storedCandidate: 'production.json',
+        });
+        expect(trimmedQuery).toBe('staging.json');
+
+        const trimmedStored = resolveActiveConfigName({
+          availableConfigs: available,
+          queryCandidate: null,
+          storedCandidate: '  production.json  ',
+        });
+        expect(trimmedStored).toBe('production.json');
+      });
+    });
+
+    test.describe('browser storage and URL synchronization helpers', () => {
+      test('correctly handles localStorage read, write, and clear in page context', async ({ page }) => {
+        await page.route('http://localhost:3000/**', (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: 'text/html',
+            body: '<html><body><div id="test">Hello</div></body></html>',
+          }),
+        );
+        await page.goto('http://localhost:3000/control');
+
+        const storageResults = await page.evaluate(() => {
+          const key = 'jenkins_control_active_config';
+          localStorage.removeItem(key);
+
+          const initial = localStorage.getItem(key);
+          localStorage.setItem(key, 'test-config.json');
+          const afterWrite = localStorage.getItem(key);
+          localStorage.removeItem(key);
+          const afterClear = localStorage.getItem(key);
+
+          return { initial, afterWrite, afterClear };
+        });
+
+        expect(storageResults.initial).toBeNull();
+        expect(storageResults.afterWrite).toBe('test-config.json');
+        expect(storageResults.afterClear).toBeNull();
+      });
+
+      test('URL synchronization preserves other parameters and hash without reloading', async ({ page }) => {
+        await page.route('http://localhost:3000/**', (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: 'text/html',
+            body: '<html><body><div id="test">Hello</div></body></html>',
+          }),
+        );
+        await page.goto('http://localhost:3000/control?mode=audit&config=old.json#section-1');
+
+        const urlResults = await page.evaluate(() => {
+          const readInitial = new URLSearchParams(window.location.search).get('config');
+          const readOtherParam = new URLSearchParams(window.location.search).get('mode');
+
+          // Update to new config via same logic as syncUrlActiveConfig
+          const u1 = new URL(window.location.href);
+          u1.searchParams.set('config', 'new.json');
+          window.history.replaceState(window.history.state, '', `${u1.pathname}${u1.search}${u1.hash}`);
+
+          const afterUpdateUrl = window.location.href;
+          const afterUpdateConfig = new URLSearchParams(window.location.search).get('config');
+          const afterUpdateMode = new URLSearchParams(window.location.search).get('mode');
+          const afterUpdateHash = window.location.hash;
+
+          // Clear config (empty list scenario)
+          const u2 = new URL(window.location.href);
+          u2.searchParams.delete('config');
+          window.history.replaceState(window.history.state, '', `${u2.pathname}${u2.search}${u2.hash}`);
+
+          const afterDeleteConfig = new URLSearchParams(window.location.search).get('config');
+          const afterDeleteMode = new URLSearchParams(window.location.search).get('mode');
+          const afterDeleteHash = window.location.hash;
+
+          return {
+            readInitial,
+            readOtherParam,
+            afterUpdateUrl,
+            afterUpdateConfig,
+            afterUpdateMode,
+            afterUpdateHash,
+            afterDeleteConfig,
+            afterDeleteMode,
+            afterDeleteHash,
+          };
+        });
+
+        expect(urlResults.readInitial).toBe('old.json');
+        expect(urlResults.readOtherParam).toBe('audit');
+        expect(urlResults.afterUpdateConfig).toBe('new.json');
+        expect(urlResults.afterUpdateMode).toBe('audit');
+        expect(urlResults.afterUpdateHash).toBe('#section-1');
+        expect(urlResults.afterDeleteConfig).toBeNull();
+        expect(urlResults.afterDeleteMode).toBe('audit');
+        expect(urlResults.afterDeleteHash).toBe('#section-1');
+      });
+
+      test('gracefully handles access when localStorage is blocked or restricted', () => {
+        // In Node environment without window/localStorage, helpers return null/safe no-op
+        expect(readStoredActiveConfig()).toBeNull();
+        expect(() => writeStoredActiveConfig('test.json')).not.toThrow();
+        expect(() => clearStoredActiveConfig()).not.toThrow();
+        expect(readUrlActiveConfig()).toBeNull();
+        expect(() => syncUrlActiveConfig('test.json')).not.toThrow();
+        expect(() => syncUrlActiveConfig(null)).not.toThrow();
+      });
     });
   });
 

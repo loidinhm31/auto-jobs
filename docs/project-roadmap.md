@@ -1,9 +1,10 @@
 # Project roadmap
 
-Last updated: 2026-09-06  
+Last updated: 2026-09-23  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
+Active initiative: [Control Active Config Persistence & Form Builder](../plans/260923-0837-control-active-config-form-builder/plan.md)
 
-## Overall status
+## Control Page React Refactor status
 
 - Status: **Complete**
 - Progress: **100%** (22.0 of 22.0 weighted planned hours; 6 of 6 phases complete)
@@ -14,6 +15,21 @@ Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-cont
 - Phase 04 completed: **2026-09-04**
 - Phase 05 completed: **2026-09-04**
 - Phase 06 completed: **2026-09-05**
+
+## Active configuration persistence & form builder
+
+Plan: [Control Active Config Persistence & Form Builder](../plans/260923-0837-control-active-config-form-builder/plan.md)
+
+**Overall status:** In Progress · **17%** (1.5 of 9.0 planned hours).
+
+| Phase | Status | Progress | Effort | Evidence/detail |
+|---|---|---:|---:|---|
+| 1. Active Configuration Persistence | **COMPLETE** | **100%** | 1.5h | Completed 2026-09-23T09:28:48+07:00; URL/localStorage selection restoration |
+| 2. Config Form Builder Component | **PENDING** | **0%** | 3.0h | Controlled project and defaults editor |
+| 3. Side-by-side Integration | **PENDING** | **0%** | 2.0h | Responsive workspace and synchronized editors |
+| 4. Verification and Release Audit | **PENDING** | **0%** | 2.5h | Unit/E2E coverage, Axe audit, release gate |
+
+Phase 01 validation: 27/27 focused unit tests passed and TypeScript typecheck reported 0 errors ([review report](../plans/reports/code-review-260923-0918-phase-01-active-config-persistence.md)). Non-blocking follow-ups from review: browser-context tests do not invoke the exported browser helpers directly; `useConfigManager.ts` remains over the documented 200-line guideline.
 
 ## Phase progress
 
@@ -79,6 +95,12 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Verified zero dangling references in codebase; updated `docs/codebase-summary.md` and `docs/project-overview-pdr.md`.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-23
+
+- Completed Phase 01 (Active Configuration Persistence) of the Control Active Config Persistence & Form Builder plan ([phase plan](../plans/260923-0837-control-active-config-form-builder/phase-01-active-config-persistence.md)).
+- Restores selection by valid URL query, then valid localStorage name, then first available config; stores only the selected filename and retains unrelated URL state.
+- Focused unit spec passed 27/27 tests; TypeScript typecheck reported 0 errors. Phases 02–04 remain pending.
 
 ### 0.1.0 (development) — 2026-09-06
 

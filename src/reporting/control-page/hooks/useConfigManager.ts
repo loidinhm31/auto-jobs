@@ -8,6 +8,14 @@ import type {
 } from '../types/index.js';
 import type { BannerMessage, BannerVariant } from '../types/component-contracts.js';
 import { ControlApiError, useControlApi, type UseControlApiResult } from './useControlApi.js';
+import {
+  clearStoredActiveConfig,
+  readStoredActiveConfig,
+  readUrlActiveConfig,
+  resolveActiveConfigName,
+  syncUrlActiveConfig,
+  writeStoredActiveConfig,
+} from '../utils/config-selection.js';
 
 export interface JsonValidationStatus {
   isValid: boolean;
@@ -34,7 +42,6 @@ export interface UseConfigManagerResult {
     changes: Partial<ProjectConfigInput> | ((prev: ProjectConfigInput) => ProjectConfigInput),
   ) => void;
   setRawJsonString: (val: string) => void;
-  setActiveConfigName: (name: string) => void;
   showBanner: (type: BannerVariant, message: string) => void;
   hideBanner: () => void;
 }
@@ -80,6 +87,8 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
         setRawJsonString(JSON.stringify(data.document, null, 2));
         setIsDirty(false);
         setJsonValidationMsg(null);
+        writeStoredActiveConfig(data.name);
+        syncUrlActiveConfig(data.name);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         showBanner('error', `Failed to load config: ${message}`);
@@ -97,12 +106,20 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
       const configs = data.configs || [];
       setConfigList(configs);
       if (configs.length > 0) {
-        const first = configs[0]?.name;
-        if (first) {
-          setActiveConfigName(first);
-          await loadConfig(first);
+        const availableNames = configs.map((cfg) => cfg.name);
+        const queryCandidate = readUrlActiveConfig();
+        const storedCandidate = readStoredActiveConfig();
+        const resolvedName = resolveActiveConfigName({
+          availableConfigs: availableNames,
+          queryCandidate,
+          storedCandidate,
+        });
+        if (resolvedName) {
+          await loadConfig(resolvedName);
         }
       } else {
+        clearStoredActiveConfig();
+        syncUrlActiveConfig(null);
         setActiveConfigName('');
         setCurrentDoc(null);
         setRawJsonString('');
@@ -251,7 +268,6 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
     applyRawJson,
     updateProject,
     setRawJsonString,
-    setActiveConfigName,
     showBanner,
     hideBanner,
   };

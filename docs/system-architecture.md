@@ -465,6 +465,14 @@ graph TD
 2. **`useConfigManager` (`useConfigManager.ts`)**:
    - Manages configuration file listing, retrieval, active document selection, and in-memory project updates.
    - Enforces HTTP concurrency guards: captures the `ETag` header from `GET /api/config?name=...` and attaches `If-Match: <etag>` during `PUT /api/config`. Detects `409 Conflict` and `412 Precondition Failed` to prevent lost updates.
+   - After a successful load, stores the filename in `localStorage` under
+     `jenkins_control_active_config` and mirrors it in `?config=<name>` with
+     `history.replaceState`, preserving the pathname, other query parameters, and hash.
+   - On list load, selects the first available match in this order:
+     `queryCandidate` > `storedCandidate` > first available config. With no
+     configs, it clears the stored and URL selection.
+   - `UseConfigManagerResult` exposes `activeConfigName` and load operations, but
+     not `setActiveConfigName`; that setter remains internal to the hook.
    - Synchronizes structured document edits with the raw JSON textarea view, tracking validation state (`jsonValidationMsg`) and `isDirty` flags to gate execution actions.
 
 3. **`useCredentialsManager` (`useCredentialsManager.ts`)**:
