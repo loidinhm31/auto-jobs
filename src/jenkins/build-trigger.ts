@@ -55,13 +55,13 @@ export async function triggerParameterizedBuild(
   let postResponse: { status: number; url: string } | undefined;
 
   const onRequest = (req: Request) => {
-    if (req.method() === 'POST' && isExactJenkinsJobActionUrl(req.url(), config.jobUrl, { allowDelay: false })) {
+    if (req.method() === 'POST' && isExactJenkinsJobActionUrl(req.url(), config.jobUrl, { allowDelay: true })) {
       postObserved = true;
     }
   };
 
   const onResponse = (res: Response) => {
-    if (res.request().method() === 'POST' && isExactJenkinsJobActionUrl(res.url(), config.jobUrl, { allowDelay: false })) {
+    if (res.request().method() === 'POST' && isExactJenkinsJobActionUrl(res.url(), config.jobUrl, { allowDelay: true })) {
       postResponse = { status: res.status(), url: res.url() };
     }
   };
@@ -73,7 +73,7 @@ export async function triggerParameterizedBuild(
   try {
     const remainingTimeout = Math.max(1, Math.min(deadline.remainingMs(), config.timeoutMs));
     const responsePromise = page.waitForResponse(
-      (res) => res.request().method() === 'POST' && isExactJenkinsJobActionUrl(res.url(), config.jobUrl, { allowDelay: false }),
+      (res) => res.request().method() === 'POST' && isExactJenkinsJobActionUrl(res.url(), config.jobUrl, { allowDelay: true }),
       { timeout: remainingTimeout },
     );
     const clickPromise = buildButton.click({ timeout: remainingTimeout });

@@ -18,14 +18,14 @@ test.describe('template build fixture', () => {
       'https://templates.invalid/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build?delay=0sec',
     );
     expect(fixture.buildActionUrl).toBe(
-      'https://templates.invalid/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build',
+      'https://templates.invalid/job/Container%20Platform/job/ID/job/job-id/job/Service%20Name/job/Build/job/Build%20ID%20Service%20Name/job/release%252Fsit/build?delay=0sec',
     );
 
     expect(fixture.jenkinsHtml).toContain(fixture.buildPageUrl);
     expect(fixture.buildHtml).toContain(`action="${fixture.buildActionUrl}"`);
     expect(fixture.buildHtml).toContain('id="bottom-sticker"');
     expect(fixture.buildHtml).toContain('jenkins-button--primary');
-    expect(fixture.buildHtml).toContain('Build</button>');
+    expect(fixture.buildHtml).toMatch(/Build\s*<\/button>/u);
 
     const response = templateResponse(new URL(fixture.buildPageUrl), fixture);
     expect(response).toBeDefined();
@@ -43,7 +43,7 @@ test.describe('template build fixture', () => {
 
     await page.goto(fixture.buildPageUrl);
     const responsePromise = page.waitForResponse((res) => res.url() === fixture.buildActionUrl);
-    await page.locator('#bottom-sticker button[type="submit"]').click();
+    await page.locator('#bottom-sticker button').filter({ hasText: 'Build' }).click();
     const postResponse = await responsePromise;
 
     expect(postResponse.status()).toBe(200);
@@ -109,14 +109,19 @@ test.describe('template build fixture', () => {
       const canonicalRoot = copyTemplates('canonical');
       const buildFile = path.join(canonicalRoot, 'jenkins-template', 'template-build.html');
       const buildHtml = fs.readFileSync(buildFile, 'utf8');
-      fs.writeFileSync(buildFile, buildHtml.replace('delay=0sec', 'delay=999sec'));
+      fs.writeFileSync(
+        buildFile,
+        buildHtml.replace(/rel=["']canonical["'][\s\S]*?href=["'][^"']*delay=0sec[^"']*["']/iu, (m) =>
+          m.replace('delay=0sec', 'delay=999sec'),
+        ),
+      );
       await expect(loadTemplateReportFixture({ TEMPLATES_DIR: canonicalRoot })).rejects.toThrow(
         /canonical URL/iu,
       );
 
       const getFormRoot = copyTemplates('get-form');
       const getFormFile = path.join(getFormRoot, 'jenkins-template', 'template-build.html');
-      fs.writeFileSync(getFormFile, buildHtml.replace('method="POST"', 'method="GET"'));
+      fs.writeFileSync(getFormFile, buildHtml.replace(/method=["']POST["']/iu, 'method="GET"'));
       await expect(loadTemplateReportFixture({ TEMPLATES_DIR: getFormRoot })).rejects.toThrow(
         /POST form/iu,
       );
@@ -140,9 +145,15 @@ test.describe('template build fixture', () => {
 
       const buttonTextRoot = copyTemplates('button-text');
       const buttonTextFile = path.join(buttonTextRoot, 'jenkins-template', 'template-build.html');
-      fs.writeFileSync(buttonTextFile, buildHtml.replace('>Build</button>', '>Submit</button>'));
+      fs.writeFileSync(buttonTextFile, buildHtml.replace(/Build(\s*<\/button>)/iu, 'Submit$1'));
       await expect(loadTemplateReportFixture({ TEMPLATES_DIR: buttonTextRoot })).rejects.toThrow(
         /button text must be "Build"/iu,
+      );
+      const buttonTypeRoot = copyTemplates('button-type');
+      const buttonTypeFile = path.join(buttonTypeRoot, 'jenkins-template', 'template-build.html');
+      fs.writeFileSync(buttonTypeFile, buildHtml.replace('jenkins-!-build-color">', 'jenkins-!-build-color" type="button">'));
+      await expect(loadTemplateReportFixture({ TEMPLATES_DIR: buttonTypeRoot })).rejects.toThrow(
+        /type="submit"/iu,
       );
     } finally {
       for (const root of roots) fs.rmSync(root, { recursive: true, force: true });

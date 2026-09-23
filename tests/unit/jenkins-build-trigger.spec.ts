@@ -76,6 +76,42 @@ test('submits parameterized build when side-panel link and bottom-sticker form a
   }
 });
 
+test('submits parameterized build when form action carries ?delay=0sec', async ({ page }) => {
+  let postCount = 0;
+  const { server, baseUrl } = await listen((request, response) => {
+    const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<div id="side-panel"><a href="/jenkins/job/service-a/build?delay=0sec">Build with Parameters</a></div>');
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/jenkins/job/service-a/build') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<div id="bottom-sticker"><form method="POST" action="/jenkins/job/service-a/build?delay=0sec"><button class="jenkins-button jenkins-button--primary jenkins-!-build-color">Build</button></form></div>');
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/jenkins/job/service-a/build' && url.search === '?delay=0sec') {
+      postCount += 1;
+      response.writeHead(302, { location: '/jenkins/job/service-a/' });
+      response.end();
+      return;
+    }
+    response.writeHead(404);
+    response.end('not found');
+  });
+  try {
+    const config = runnerConfig(baseUrl);
+    await page.goto(`${baseUrl}/job/service-a/`);
+    const result = await triggerParameterizedBuild(page, config, new WorkflowDeadline(2_000));
+    expect(result.state).toBe('submitted');
+    expect(result.jobUrl).toBe(config.jobUrl);
+    expect(result.responseStatus).toBe(302);
+    expect(postCount).toBe(1);
+  } finally {
+    await close(server);
+  }
+});
+
 test('handles rejected build response >= 400', async ({ page }) => {
   let postCount = 0;
   const { server, baseUrl } = await listen((request, response) => {

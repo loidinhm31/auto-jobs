@@ -57,7 +57,11 @@ export function validateBuildTemplate(
   const buildAction = parseAbsoluteUrl(rawAction, buildCanonical, 'Jenkins build action');
   if (buildAction.origin !== buildCanonical.origin) throw new Error('Jenkins build form action origin changed');
   const expectedPrefix = savedBuildUrl.pathname.replace(/\/(?:build\/?|\?.*)?$/iu, '');
-  if (buildAction.pathname.replace(/\/+$/u, '') !== `${expectedPrefix}/build` || buildAction.search || buildAction.hash) {
+  if (
+    buildAction.pathname.replace(/\/+$/u, '') !== `${expectedPrefix}/build` ||
+    (buildAction.search !== '' && buildAction.search !== '?delay=0sec') ||
+    buildAction.hash
+  ) {
     throw new Error('Jenkins build form action does not match the exact job build path');
   }
   const stickerMatch = /<div\b[^>]*\bid=["']bottom-sticker["'][^>]*>([\s\S]*?)<\/div>/iu.exec(buildHtmlRaw);
@@ -67,7 +71,8 @@ export function validateBuildTemplate(
     throw new Error('Jenkins build template #bottom-sticker must contain exactly one submit button');
   }
   const buttonTag = stickerButtons[0]!;
-  if (attribute(buttonTag, 'type')?.toLowerCase() !== 'submit') {
+  const buttonType = (attribute(buttonTag, 'type') ?? 'submit').toLowerCase();
+  if (buttonType !== 'submit') {
     throw new Error('Jenkins build button must have type="submit"');
   }
   const tokenSet = new Set((attribute(buttonTag, 'class') ?? '').split(/\s+/u).filter(Boolean));

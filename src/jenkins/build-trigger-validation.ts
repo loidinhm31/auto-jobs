@@ -108,7 +108,7 @@ export async function locateAndValidateBuildFormAndButton(
   }
   const resolvedAction = new URL(rawAction, page.url()).toString();
   try {
-    validateJenkinsJobActionUrl(resolvedAction, config.jobUrl, config.baseUrl, { allowDelay: false, actionName: 'build' });
+    validateJenkinsJobActionUrl(resolvedAction, config.jobUrl, config.baseUrl, { allowDelay: true, actionName: 'build' });
   } catch (error) {
     throw new JenkinsFlowError(formatJenkinsFailure('Validate build submit form action', error, config, page));
   }
