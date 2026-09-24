@@ -111,6 +111,53 @@ test('reclaims an incomplete claim when its recorded PID was reused', async () =
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+test('reclaims an empty abandoned lock directory when expired', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-empty-dir-'));
+  try {
+    const reportRoot = path.join(root, 'reports');
+    fs.mkdirSync(reportRoot);
+    const directory = createLock(reportRoot);
+    markOld(directory);
+    expect(await reclaimIncompleteLock(reportRoot, NOW.getTime(), 1_000, os.hostname())).toBe(true);
+    expect(fs.existsSync(directory)).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('acquireReportRootLock reclaims an empty abandoned lock directory and acquires lock', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-acquire-empty-'));
+  try {
+    const reportRoot = path.join(root, 'reports');
+    fs.mkdirSync(reportRoot);
+    const directory = createLock(reportRoot);
+    markOld(directory);
+    const lock = await acquireReportRootLock(reportRoot, { leaseMs: 2_000, heartbeatMs: 500, waitMs: 1_000, now: () => NOW.getTime() });
+    expect(fs.existsSync(directory)).toBe(true);
+    const owner = await readLockOwner(directory);
+    expect(owner).toBeDefined();
+    await lock.release();
+    expect(fs.existsSync(directory)).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('does not leak lock directory if process inspection fails before directory creation', async () => {
+  if (process.platform !== 'win32') return;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-no-leak-'));
+  try {
+    const reportRoot = path.join(root, 'reports');
+    fs.mkdirSync(reportRoot);
+    const directory = path.join(reportRoot, '.report-root-lock');
+    await expect(acquireReportRootLock(reportRoot, { pid: 99_999_999, waitMs: 0 })).rejects.toThrow(
+      /process identity could not be established/u,
+    );
+    expect(fs.existsSync(directory)).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('persists a process creation identity on Windows lock owners', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-identity-'));
@@ -136,4 +183,4 @@ test('reports the current and an impossible process safely', async () => {
   } else {
     expect(current).toEqual({ state: 'live' });
   }
-});
+});

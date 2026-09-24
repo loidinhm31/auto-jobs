@@ -136,11 +136,21 @@ function cachedInspector(inspector: LockProcessInspector): LockProcessInspector 
   };
 }
 
+let cachedCurrentPid: number | undefined;
+let cachedCurrentStartedAt: string | undefined;
+
 async function currentProcessStartedAt(pid: number): Promise<string | undefined> {
   if (process.platform !== 'win32') return undefined;
+  if (pid === cachedCurrentPid && cachedCurrentStartedAt !== undefined) {
+    return cachedCurrentStartedAt;
+  }
   const inspection = await inspectProcessInstance(pid);
   if (inspection.state !== 'live' || inspection.startedAt === undefined) {
     throw new Error('Report root lock process identity could not be established');
+  }
+  if (pid === process.pid) {
+    cachedCurrentPid = pid;
+    cachedCurrentStartedAt = inspection.startedAt;
   }
   return inspection.startedAt;
 }
@@ -158,7 +168,7 @@ export async function reclaimStaleLock(
   if (current?.token !== owner.token) return false;
   const recovery = path.join(root, `${REPORT_LOCK_RECOVERY_PREFIX}${crypto.randomBytes(8).toString('hex')}`);
   try { await fs.rename(directory, recovery); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
-  await fs.rm(recovery, { recursive: true, force: true });
+  await fs.rm(recovery, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   return true;
 }
 export async function reclaimIncompleteLock(
@@ -173,13 +183,13 @@ export async function reclaimIncompleteLock(
   try { stat = await fs.lstat(directory); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
   if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(directory) !== directory || stat.mtimeMs > now - leaseMs) return false;
   if (await readLockOwner(directory) !== undefined) return false;
-  const claim = await readClaim(directory);
-  if (claim === undefined || claim.hostname !== hostname || claim.expiresAt > now || !canReclaimProcess(claim, await inspector(claim))) return false;
   const entries = await boundedEntries(directory);
   if (entries.length > MAX_INCOMPLETE_ENTRIES || entries.some((entry) => !entry.isFile() || (entry.name !== CLAIM_FILE && !OWNER_TEMP.test(entry.name) && !CLAIM_TEMP.test(entry.name)))) return false;
+  const claim = await readClaim(directory);
+  if (claim !== undefined && (claim.hostname !== hostname || claim.expiresAt > now || !canReclaimProcess(claim, await inspector(claim)))) return false;
   const recovery = path.join(root, `${REPORT_LOCK_RECOVERY_PREFIX}${crypto.randomBytes(8).toString('hex')}`);
   try { await fs.rename(directory, recovery); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
-  await fs.rm(recovery, { recursive: true, force: true });
+  await fs.rm(recovery, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   return true;
 }
 async function assertRoot(reportRoot: string): Promise<string> {
@@ -207,10 +217,10 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
   const directory = lockPath(root);
   for (;;) {
     try {
+      const processStartedAt = await currentProcessStartedAt(pid);
       await fs.mkdir(directory, { mode: 0o700 });
       const token = crypto.randomBytes(16).toString('hex');
       const acquiredAt = new Date(currentTime(now)).toISOString();
-      const processStartedAt = await currentProcessStartedAt(pid);
       const claim: LockClaim = { schemaVersion: 1 as const, pid, hostname, acquiredAt, expiresAt: currentTime(now) + leaseMs,
         ...(processStartedAt === undefined ? {} : { processStartedAt }) };
       try {
@@ -219,7 +229,7 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
           ...(processStartedAt === undefined ? {} : { processStartedAt }) });
         await fs.unlink(path.join(directory, CLAIM_FILE)).catch(() => undefined);
       } catch (error) {
-        await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+        await fs.rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => undefined);
         throw error;
       }
       let active = true;
@@ -240,7 +250,7 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
           await heartbeatInFlight;
           try {
             await assertLockDirectory(directory);
-            if ((await readLockOwner(directory))?.token === token) await fs.rm(directory, { recursive: true, force: true });
+            if ((await readLockOwner(directory))?.token === token) await fs.rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
           } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
         },
       };
