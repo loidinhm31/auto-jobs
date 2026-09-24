@@ -176,9 +176,9 @@ Compiler settings in `tsconfig.json` are the source of truth:
 - Parse mutations through `readBoundedJsonBody`; preserve the 1 MiB body limit.
   Secrets parsing must finish before touching SecretStore; report deletion
   accepts only an empty JSON object when a body is sent.
-- Keep report-root path checks, bounded symlink-rejecting preflight, locking,
-  removal, and aggregate refresh in `report-project-deletion.ts`; do not expose
-  deletion through the read-only report server.
+- Keep canonical report-root/path checks, bounded symlink-rejecting preflight
+  (32 levels, 4,096 entries, 256 MiB), locking, removal, and aggregate refresh
+  in `report-project-deletion.ts`; do not expose deletion through report mode.
 - Return secrets presence booleans only. Report deletion success contains the
   project ID and validated-run count; never echo request bodies. Use shared
   response helpers so control responses carry `Cache-Control: no-store`.
@@ -264,16 +264,18 @@ Tests must defend observable behavior and fail on plausible regressions:
   non-JSON content types, invalid keys/values/bodies, unsupported methods, and
   the unavailable-store response. Use the real loopback server plus a direct
   handler test only for the missing dependency boundary.
-- For project report deletion, use an isolated report root and the loopback
-  server; cover unsafe IDs, mutation gates, empty-body rules, 404, 409 lock
-  contention, symlink/depth preflight, sibling/assets preservation, and the
-  aggregate rebuild in `tests/unit/control-reports-delete-api.spec.ts`.
+- For project-report deletion, use an isolated report root and loopback server.
+  Cover safe IDs, body/media-type/method rules, 404/409 outcomes, symlink/depth
+  preflight, prefix-sibling and shared-file preservation, the valid empty
+  aggregate, removal/publication failure injection, and lock release in
+  `tests/unit/control-reports-delete-api.spec.ts`. The same suite verifies the
+  report-only GET/HEAD and DELETE boundary.
 - For the Control report-management UI, `tests/unit/control-assets-routing.spec.ts`
-  covers the control-only GET/HEAD shell and the report-mode static route.
+  covers the control-only GET/HEAD shell and report-mode static route.
   `tests/e2e/control-report-management.spec.ts` runs in Chromium and WebKit;
-  cover navigation/back, empty and history-only inventories, per-project
-  pagination, cancellation, deletion with sibling preservation, and 409
-  conflict feedback.
+  cover empty and history-only inventories, independent 20/21-run pagination,
+  cancellation and Escape dismissal, deletion with sibling preservation,
+  final-project empty state, and 409/500 feedback with on-disk assertions.
 - For the dynamic-credential browser flow, `tests/e2e/control-page.spec.ts`
   must run against isolated temporary roots in Chromium and WebKit. Cover
   accessible modal state, key discovery, Missing/Configured transitions,

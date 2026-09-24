@@ -266,18 +266,23 @@ node scripts/run-playwright.mjs playwright test \
   --config=playwright.unit.config.ts
 ```
 
-The suite checks guarded deletion, empty-body and invalid-input handling,
-project-not-found behavior, report-root-lock `409`, filesystem preflight, and
-aggregate refresh while preserving sibling projects, assets, and config. It
-uses isolated temporary roots and does not contact Jenkins or vendors.
+The suite checks the request and ID boundaries, empty-body/content-type/method
+rules, missing and repeated deletes, lock-contention `409` without lock-path
+leakage, prefix-sibling preservation, and symlink/depth preflight. Injected
+removal and aggregate-publication failures verify lock release and safe
+post-failure disk state. Successful deletion preserves config, shared assets,
+and sibling projects, and publishes a valid empty aggregate when deleting the
+last project. Tests use isolated temporary roots and do not contact Jenkins or
+vendors. The tree preflight enforces 32 levels, 4,096 entries, and 256 MiB.
 
 ### Control report-management UI gate
 
 `npm run test:control` includes `tests/e2e/control-report-management.spec.ts`
 under Chromium and WebKit (`playwright.control.config.ts`). It covers dashboard
-navigation/back, missing-inventory empty state, history-only retained projects,
-per-project 20-run pagination, cancel/success side effects, sibling preservation,
-and lock-conflict feedback.
+navigation/back, an empty inventory, history-only projects, independent
+20/21-run pagination, cancel and Escape dismissal, confirmed deletion with
+sibling preservation, final-project empty-state refresh, and lock-conflict and
+server-error feedback. Assertions include on-disk state, not only UI responses.
 
 `tests/unit/control-assets-routing.spec.ts` runs under `npm run test:unit` and
 checks the control-only `/reports/index.html` GET/HEAD CSRF shell, CSP and HEAD

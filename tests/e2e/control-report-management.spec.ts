@@ -344,4 +344,197 @@ test.describe('Control Report Management Page & Deletion E2E (Phase 03)', () => 
       await lock.release();
     }
   });
+
+  test('enforces independent pagination boundaries (20 runs unpaginated vs 21 runs paginated) and escape key dialog dismissal', async ({ page }) => {
+    // Project with exactly 20 runs
+    for (let i = 1; i <= 20; i++) {
+      createProjectRunFiles(reportRoot, 'project-twenty', `run-${String(i).padStart(2, '0')}`);
+    }
+    const twentyRuns = Array.from({ length: 20 }, (_, idx) => ({
+      runId: `run-${String(20 - idx).padStart(2, '0')}`,
+      state: 'success' as const,
+      jobId: '10',
+      branch: 'main',
+      manifestPath: `project-twenty/run-${String(20 - idx).padStart(2, '0')}/manifest.json`,
+      reportPath: `project-twenty/run-${String(20 - idx).padStart(2, '0')}/index.html`,
+      warnings: [],
+    }));
+
+    // Project with exactly 21 runs
+    for (let i = 1; i <= 21; i++) {
+      createProjectRunFiles(reportRoot, 'project-twenty-one', `run-${String(i).padStart(2, '0')}`);
+    }
+    const twentyOneRuns = Array.from({ length: 21 }, (_, idx) => ({
+      runId: `run-${String(21 - idx).padStart(2, '0')}`,
+      state: 'success' as const,
+      jobId: '20',
+      branch: 'main',
+      manifestPath: `project-twenty-one/run-${String(21 - idx).padStart(2, '0')}/manifest.json`,
+      reportPath: `project-twenty-one/run-${String(21 - idx).padStart(2, '0')}/index.html`,
+      warnings: [],
+    }));
+
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'project-twenty',
+        name: 'Project Twenty',
+        state: 'success',
+        reportPath: 'project-twenty/run-20/index.html',
+        runs: twentyRuns,
+        warnings: [],
+      },
+      {
+        projectId: 'project-twenty-one',
+        name: 'Project Twenty One',
+        state: 'success',
+        reportPath: 'project-twenty-one/run-21/index.html',
+        runs: twentyOneRuns,
+        warnings: [],
+      },
+    ]);
+
+    await page.goto(`${serverUrl}reports/index.html`);
+
+    const cardTwenty = page.locator('.project-card', { has: page.locator('#project-project-twenty') });
+    await expect(cardTwenty.locator('tbody tr')).toHaveCount(20);
+    // Exactly 20 runs: pagination controls are NOT displayed
+    expect(await cardTwenty.locator('.pagination').count()).toBe(0);
+
+    const cardTwentyOne = page.locator('.project-card', { has: page.locator('#project-project-twenty-one') });
+    await expect(cardTwentyOne.locator('tbody tr')).toHaveCount(20);
+    // Exactly 21 runs: pagination is displayed (Page 1 of 2)
+    await expect(cardTwentyOne.locator('.pagination')).toBeVisible();
+    await expect(cardTwentyOne.locator('.pagination')).toContainText('Page 1 of 2');
+
+    // Navigate to page 2 of Twenty One
+    await cardTwentyOne.getByRole('button', { name: 'Next page for Project Twenty One' }).click();
+    await expect(cardTwentyOne.locator('tbody tr')).toHaveCount(1);
+    await expect(cardTwentyOne.locator('.pagination')).toContainText('Page 2 of 2');
+
+    // Sibling project Twenty is completely unchanged
+    await expect(cardTwenty.locator('tbody tr')).toHaveCount(20);
+    expect(await cardTwenty.locator('.pagination').count()).toBe(0);
+
+    // Open delete dialog and press Escape key to dismiss
+    await cardTwenty.locator('#delete-project-project-twenty-btn').click();
+    const dialog = page.locator('#delete-reports-dialog');
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // Both projects remain visible and disk files untouched
+    await expect(page.locator('#project-project-twenty')).toBeVisible();
+    await expect(page.locator('#project-project-twenty-one')).toBeVisible();
+    expect(fs.existsSync(path.join(reportRoot, 'project-twenty'))).toBe(true);
+  });
+
+  test('final project deletion transitions UI to empty state and updates published disk files', async ({ page }) => {
+    createProjectRunFiles(reportRoot, 'sole-project', 'run-01');
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'sole-project',
+        name: 'Sole Project',
+        state: 'success',
+        reportPath: 'sole-project/run-01/index.html',
+        runs: [{
+          runId: 'run-01',
+          state: 'success',
+          jobId: '1',
+          branch: 'main',
+          manifestPath: 'sole-project/run-01/manifest.json',
+          reportPath: 'sole-project/run-01/index.html',
+          warnings: [],
+        }],
+        warnings: [],
+      },
+    ]);
+
+    await page.goto(`${serverUrl}reports/index.html`);
+    await expect(page.locator('#project-sole-project')).toBeVisible();
+
+    // Delete the sole remaining project
+    await page.locator('#delete-project-sole-project-btn').click();
+    const dialog = page.locator('#delete-reports-dialog');
+    await expect(dialog).toBeVisible();
+    await page.locator('#confirm-delete-btn').click();
+
+    await expect(dialog).toBeHidden();
+    const banner = page.locator('#report-feedback-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('Successfully deleted');
+
+    // UI transitions to empty state
+    await expect(page.locator('#project-sole-project')).toBeHidden();
+    await expect(page.getByText('No retained project reports were recorded.')).toBeVisible();
+
+    // On-disk files are updated
+    expect(fs.existsSync(path.join(reportRoot, 'sole-project'))).toBe(false);
+    const aggData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8'));
+    expect(aggData.projects).toEqual([]);
+    expect(aggData.schemaVersion).toBe(3);
+
+    const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
+    expect(indexHtml).toContain(AGGREGATE_REPORT_MARKER);
+    expect(indexHtml).toContain('0 retained project(s)');
+  });
+
+  test('handles 500 error during deletion and displays error feedback in dialog', async ({ page }) => {
+    createProjectRunFiles(reportRoot, 'error-proj', 'run-01');
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'error-proj',
+        name: 'Error Project',
+        state: 'success',
+        reportPath: 'error-proj/run-01/index.html',
+        runs: [{
+          runId: 'run-01',
+          state: 'success',
+          jobId: '1',
+          branch: 'main',
+          manifestPath: 'error-proj/run-01/manifest.json',
+          reportPath: 'error-proj/run-01/index.html',
+          warnings: [],
+        }],
+        warnings: [],
+      },
+    ]);
+
+    // Intercept DELETE request and return 500
+    await page.route('**/api/reports/projects/error-proj', async (route) => {
+      if (route.request().method() === 'DELETE') {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: false,
+            error: {
+              code: 'REMOVAL_FAILED',
+              message: 'Simulated filesystem removal failure on server',
+            },
+          }),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await page.goto(`${serverUrl}reports/index.html`);
+    await expect(page.locator('#project-error-proj')).toBeVisible();
+
+    await page.locator('#delete-project-error-proj-btn').click();
+    const dialog = page.locator('#delete-reports-dialog');
+    await expect(dialog).toBeVisible();
+    await page.locator('#confirm-delete-btn').click();
+
+    // Dialog remains open with 500 error message
+    const errorMsg = page.locator('#delete-error-message');
+    await expect(errorMsg).toBeVisible();
+    await expect(errorMsg).toContainText('Simulated filesystem removal failure on server');
+
+    // Cancel button closes dialog and project remains
+    await page.locator('#cancel-delete-btn').click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('#project-error-proj')).toBeVisible();
+  });
 });

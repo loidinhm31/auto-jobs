@@ -1,21 +1,21 @@
 # Project roadmap
 
-Last updated: 2026-09-24  
+Last updated: 2026-09-25  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
-Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
+Completed initiative: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
 
 ## Persistent project report management
 
 Plan: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
 
-**Overall status:** In progress · **75%** (12 of 16 planned hours; 3 of 4 phases DONE).
+**Overall status:** Complete · **100%** (16 of 16 planned hours; 4 of 4 phases DONE; completed 2026-09-25).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
 |---|---|---:|---:|---|---|
 | 01. Persistent aggregate index builder | **DONE** | **100%** | 4h | 2026-09-24 | Merged validated retained history with active outcomes; incomplete discovery and oversized publication fail closed. Review 10/10; targeted tests 13/13, unit suite 415/415, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md), [review](../plans/reports/code-review-260924-2121-phase-01-persistent-aggregate-index-builder.md)). |
 | 02. Guarded control reports DELETE API | **DONE** | **100%** | 5h | 2026-09-24 | Added locked, fail-closed whole-project report deletion and aggregate-pair refresh. Review 10/10; 14 focused API tests, 429 unit tests, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-02-control-reports-delete-api.md), [test report](../plans/reports/tester-260924-2222-phase-02-control-reports-delete-api.md), [review](../plans/reports/code-review-260924-2226-phase-02-control-reports-delete-api.md)). |
 | 03. Report management page navigation and deletion | **DONE** | **100%** | 3h | 2026-09-24 | Added control-only Reports navigation, retained-project inventory, independent 20-run pagination and accessible confirmed deletion. Control E2E 28/28; typecheck/build passed; unit suite had 429 passes and one retry-recovered flaky test (0 final failures). Review approved 9.5/10, with a medium follow-up on malformed JSON being categorized as a general load error rather than corrupt data ([phase](../plans/260924-2019-persistent-project-report-management/phase-03-control-ui-navigation-and-deletion.md), [test report](../plans/reports/phase03Tester-260924-2304-phase-03-test-validation.md), [review](../plans/reports/code-review-260924-2308-phase-03-control-ui-navigation-and-deletion.md)). |
-| 04. Verification and caller migration | Pending | 0% | 4h | — | End-to-end security, persistence, concurrency, recovery, browser and caller verification |
+| 04. Verification and caller migration | **DONE** | **100%** | 4h | 2026-09-25 | Test report: 443/443 unit, 34/34 Control, 5/5 report passed; review 9.8/10 and typecheck 0 errors. Main owns the once-only post-integration `npm run test:release` gate. |
 
 ## Control Page Parallel Auto-Build
 
@@ -152,6 +152,11 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Verified zero dangling references in codebase; updated `docs/codebase-summary.md` and `docs/project-overview-pdr.md`.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-25
+
+- Completed Phase 04 (Verification and caller migration) and Persistent project report management at 100% (16/16 planned hours; all four phases DONE) on 2026-09-25. Phase evidence: 443/443 unit, 34/34 Control, and 5/5 report tests passed; typecheck passed with 0 errors; review approved at 9.8/10 ([test report](../plans/reports/phase04-tester-260925-0048-verification-and-caller-migration.md), [review](../plans/reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md)).
+- Main owns the once-only post-integration `npm run test:release` gate after all workstreams land.
 
 ### 0.1.0 (development) — 2026-09-24
 

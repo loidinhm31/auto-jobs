@@ -104,10 +104,18 @@ project list is allowed. Incomplete discovery prevents removal before mutation;
 if refresh fails after removal, best-effort recovery runs and the API reports
 that the project is deleted even though the index may require recovery.
 
-`tests/unit/control-reports-delete-api.spec.ts` covers successful removal,
-aggregate refresh, preservation of sibling projects/assets/config, request and
-ID validation, missing validated runs, 409 lock contention, and symlink/depth
-preflight failures.
+`tests/unit/control-reports-delete-api.spec.ts` verifies successful removal and
+validated-run counts (including cleanup of unvalidated subtree files), sibling,
+prefix-sibling, asset, and config preservation, and a valid schema-v3 empty
+aggregate after deleting the final project. Request cases cover invalid IDs and
+bodies, Origin/CSRF rejection, unsupported methods/media types, missing and
+repeated projects, lock-contention `409` without path leakage, and
+symlink/depth preflight failures.
+
+Injected removal and publication failures verify lock release and safe disk
+state; failed refresh does not claim deleted files were restored. The suite
+also confirms report mode serves GET/HEAD snapshots and rejects DELETE without
+mutating saved files.
 
 The Control report-management page at `/reports/index.html` reads the published
 aggregate and invokes this API only after confirmation; the persisted
@@ -118,9 +126,15 @@ navigation, pagination, and deletion coverage.
 ## Focused contracts
 
 - `tests/unit/aggregate-index-builder.spec.ts` covers empty indexes, incomplete
-discovery rejection, historical-only projects, run ordering, current outcomes,
-and safe metadata.
-- `tests/unit/persistent-aggregate-bounds.spec.ts` covers the 5,050 project
-ceiling, empty aggregate validation, discovery completeness, staged-file size
-rejection with preservation of the prior pair, and history across runs.
-- [Release gates](./release-gates.md) lists the focused test command.
+  discovery rejection, historical-only projects, current-outcome precedence,
+  newest-first ordering and `runId` ties, 60-run histories, run-less outcomes
+  without fake links, and warning sanitization.
+- `tests/unit/persistent-aggregate-bounds.spec.ts` covers the 5,050-project
+  ceiling, empty aggregate validation, incomplete discovery, oversized staged
+  output preserving the prior pair, malformed-row rollback, journal recovery,
+  and cross-configuration history with malformed-manifest/canary checks.
+- `tests/e2e/control-report-management.spec.ts` runs under Chromium and WebKit.
+  It covers navigation, empty/history-only inventories, independent 20/21-run
+  pagination, cancel/Escape/confirmation behavior, final-project empty state,
+  lock and server-error feedback, and on-disk aggregate/project state.
+- [Release gates](./release-gates.md) lists the focused test commands.

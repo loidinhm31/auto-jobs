@@ -4,8 +4,8 @@
 **Document scope:** schema-v1 report capture, persistent aggregate history,
 bounded execution, Control Page actions and report management, offline build
 fixtures, and dynamic credentials.<br>
-**Current milestone:** Persistent project report management — Phase 03:
-report-management page navigation and deletion (complete; 2026-09-24).<br>
+**Current milestone:** Persistent project report management — complete
+(4/4 phases; Phase 04 verification approved; 2026-09-25).<br>
 **Prior completed milestone:** Control Page Parallel Auto-Build — complete,
 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
 passed; review approved 9.3/10.
@@ -303,9 +303,11 @@ and failure semantics are validated before side effects.
   mode; validate Host/Origin/Fetch Metadata/CSRF gates and apply the body rules.
 - Validate one safe project ID, acquire the report-root lock without waiting,
   and refuse deletion when discovery is incomplete or no validated runs exist.
-- Delete only that project's report subtree, count validated runs, preserve
-  configuration, siblings, and shared assets, and return 409 on live lock
-  contention.
+- Preflight the canonical target subtree before mutation: reject symlinks and
+  non-file entries, and bound traversal to 32 levels, 4,096 entries, and
+  256 MiB. Delete the whole selected subtree, count only validated runs, and
+  preserve configuration, sibling projects, and shared assets; return 409 on
+  report-root lock contention.
 - Rebuild both aggregate files from complete surviving manifest history after
   removal. If post-removal refresh fails, attempt recovery and report the
   completed deletion separately from the index-refresh failure.
@@ -358,6 +360,27 @@ and failure semantics are validated before side effects.
   the existing aggregate pair.
 - [x] Focused coverage exists in `aggregate-index-builder.spec.ts` and
   `persistent-aggregate-bounds.spec.ts`.
+
+## Persistent report-management Phase 04 acceptance criteria
+
+- [x] Aggregate construction covers empty and incomplete inventories,
+  history-only projects, current outcomes, run ordering and tie breaks,
+  run-less outcomes without fake links, and malformed-manifest exclusion.
+- [x] Aggregate boundaries cover 5,050 project rows, incomplete discovery,
+  16 MiB staged-file rejection with the existing pair intact, and retention
+  across distinct configuration runs.
+- [x] DELETE API coverage verifies request/security and ID boundaries, missing
+  and repeated deletion, live-lock `409`, subtree preflight, sibling/config/
+  asset preservation, and valid empty schema-v3 publication.
+- [x] Injected removal and publication failures verify lock release and safe
+  on-disk outcomes; best-effort refresh/recovery is attempted without claiming
+  that deleted files were restored.
+- [x] Chromium/WebKit management-page coverage verifies independent 20/21-run
+  pagination, cancellation and Escape dismissal, lock and server-error
+  feedback, final-project empty state, and on-disk results.
+- [x] Phase 04 validation recorded 443 unit, 34 control, and 5 report checks
+  passing (482 total); no coverage metrics were collected. The code review
+  recorded a clean typecheck and approval at 9.8/10.
 
 ## Phase 01 acceptance criteria
 
@@ -527,6 +550,7 @@ require the environment variables named by project configuration.
 | Control secrets API and security gates | `src/reporting/report-server-control-secrets-api.ts`, `src/reporting/report-server-control-api.ts`, `src/reporting/report-server-control-security.ts`, `src/reporting/report-server-control.ts` | [system architecture](./system-architecture.md), [architecture](./architecture.md), [code standards](./code-standards.md) |
 | Control UI credential management | `src/reporting/control-page/` (React application: `App.tsx`, `components/`, `hooks/`) | [system architecture](./system-architecture.md), [codebase summary](./codebase-summary.md) |
 | Control report-management navigation and deletion | `src/reporting/control-page/pages/ReportManagementPage.tsx`, `src/reporting/control-page/hooks/use-delete-reports.ts`, `src/reporting/report-server-control.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
+| Persistent report-management verification | `src/artifacts/report-project-deletion.ts`, `tests/unit/aggregate-index-builder.spec.ts`, `tests/unit/persistent-aggregate-bounds.spec.ts`, `tests/unit/control-reports-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |
@@ -549,6 +573,16 @@ intent, safe outcome mapping, and no process-global credential mutation. The
 report CLI still has no production auto-build command.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-25
+
+- Completed Persistent Project Report Management Phase 04: verified aggregate
+  retention and publication bounds, guarded deletion, filesystem preflight,
+  failure recovery, caller boundaries, and browser-visible management behavior.
+- Final test evidence: `npm run test:unit` 443/443, `npm run test:control`
+  34/34, and `npm run test:report` 5/5 (482 passed; none failed or skipped).
+  No code-coverage metrics were collected. Review approved 9.8/10 with
+  `npm run typecheck` clean ([phase](../plans/260924-2019-persistent-project-report-management/phase-04-verification-and-caller-migration.md), [test report](../plans/reports/phase04-tester-260925-0048-verification-and-caller-migration.md), [review](../plans/reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md)).
 
 ### 0.1.0 (development) — 2026-09-24
 

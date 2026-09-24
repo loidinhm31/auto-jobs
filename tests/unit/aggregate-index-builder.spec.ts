@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import type { DiscoveredRunManifest, ManifestDiscoveryResult, ProjectRunManifest } from '../../src/artifacts/artifact-manifest.js';
 import type { ProjectOutcome } from '../../src/project/project-types.js';
 import { buildAggregateIndex } from '../../src/artifacts/aggregate-index-builder.js';
-import { isValidAggregateResult } from '../../src/artifacts/result-validation.js';
+import { isValidAggregateResult, MAX_AGGREGATE_PROJECTS } from '../../src/artifacts/result-validation.js';
 
 function fakeDiscoveredManifest(options: {
   projectId: string;
@@ -345,5 +345,153 @@ test.describe('buildAggregateIndex', () => {
     expect(run.warnings[1]?.length).toBeLessThanOrEqual(500);
     expect(result.warnings).toContain('caller warning');
     expect(result.warnings).toContain('initial diagnostic warning');
+  });
+
+  test('enforces deterministic newest-first ordering across many runs and tie-breaks by runId descending', () => {
+    const runs = Array.from({ length: 60 }, (_, idx) => {
+      const padded = String(idx).padStart(3, '0');
+      return fakeDiscoveredManifest({
+        projectId: 'multi-run-svc',
+        runId: `run-${padded}`,
+        observedAt: idx % 2 === 0 ? '2026-09-24T10:00:00.000Z' : '2026-09-24T12:00:00.000Z',
+      });
+    });
+
+    const discovery: ManifestDiscoveryResult = {
+      manifests: runs,
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const result = buildAggregateIndex({
+      discovery,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    const project = result.projects[0]!;
+    expect(project.runs).toHaveLength(60);
+    // First run should be the newest timestamp with highest runId
+    expect(project.runs[0]?.runId).toBe('run-059');
+    expect(project.runId).toBe('run-059');
+
+    // Verify descending order throughout
+    for (let i = 1; i < project.runs.length; i++) {
+      const prev = project.runs[i - 1]!;
+      const curr = project.runs[i]!;
+      // Either prev is newer, or same observedAt and prev runId > curr runId
+      const prevTime = runs.find((r) => r.manifest.run.runId === prev.runId)!.manifest.run.observedAt;
+      const currTime = runs.find((r) => r.manifest.run.runId === curr.runId)!.manifest.run.observedAt;
+      if (prevTime === currTime) {
+        expect(prev.runId.localeCompare(curr.runId)).toBeGreaterThan(0);
+      } else {
+        expect(prevTime.localeCompare(currTime)).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  test('throws when discovery contains 51 projects, exceeding the 50-project boundary', () => {
+    const manifests = Array.from({ length: MAX_AGGREGATE_PROJECTS + 1 }, (_, idx) => {
+      const pid = `svc-${String(idx).padStart(3, '0')}`;
+      return fakeDiscoveredManifest({
+        projectId: pid,
+        runId: `run-${pid}`,
+        observedAt: '2026-09-24T10:00:00.000Z',
+      });
+    });
+
+    const discovery: ManifestDiscoveryResult = {
+      manifests,
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    expect(() =>
+      buildAggregateIndex({
+        discovery,
+        generatedAt: '2026-09-24T12:00:00.000Z',
+      })
+    ).toThrow(/aggregate result schema is invalid/i);
+  });
+  test('combines historical-only, multi-run active, and configured run-less outcome without fake links', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'historical-svc',
+          runId: 'hist-run-1',
+          observedAt: '2026-09-24T08:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'active-multi-svc',
+          runId: 'act-run-1',
+          observedAt: '2026-09-24T09:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'active-multi-svc',
+          runId: 'act-run-2',
+          observedAt: '2026-09-24T11:00:00.000Z',
+        }),
+      ],
+      warnings: ['excluded 1 malformed manifest'],
+      ignoredIncompatibleCount: 1,
+      incomplete: false,
+    };
+
+    const outcomes: ProjectOutcome[] = [
+      {
+        projectId: 'configured-runless-svc',
+        name: 'Configured Run-less Service',
+        state: 'failed',
+        runId: 'unwritten-run-id',
+        error: 'Failed during preflight before report allocation',
+        warnings: ['preflight error'],
+      },
+      {
+        projectId: 'active-multi-svc',
+        name: 'Active Multi Service',
+        state: 'success',
+        runId: 'act-run-2',
+        warnings: [],
+      },
+    ];
+
+    const result = buildAggregateIndex({
+      discovery,
+      outcomes,
+      warnings: ['runner warning'],
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    // Order: active outcomes first in order, then historical-only
+    expect(result.projects.map((p) => p.projectId)).toEqual([
+      'configured-runless-svc',
+      'active-multi-svc',
+      'historical-svc',
+    ]);
+
+    // Run-less outcome has no reportPath and empty runs
+    const runless = result.projects.find((p) => p.projectId === 'configured-runless-svc')!;
+    expect(runless.reportPath).toBeUndefined();
+    expect(runless.runs).toEqual([]);
+    expect(runless.warnings).toContain('preflight error');
+
+    // Active multi-run service has newest run first
+    const multi = result.projects.find((p) => p.projectId === 'active-multi-svc')!;
+    expect(multi.runId).toBe('act-run-2');
+    expect(multi.reportPath).toBe('active-multi-svc/act-run-2/index.html');
+    expect(multi.runs.map((r) => r.runId)).toEqual(['act-run-2', 'act-run-1']);
+
+    // Historical-only project is retained
+    const hist = result.projects.find((p) => p.projectId === 'historical-svc')!;
+    expect(hist.runId).toBe('hist-run-1');
+    expect(hist.reportPath).toBe('historical-svc/hist-run-1/index.html');
+    expect(hist.runs.map((r) => r.runId)).toEqual(['hist-run-1']);
+
+    // Warnings preserved
+    expect(result.warnings).toContain('excluded 1 malformed manifest');
+    expect(result.warnings).toContain('runner warning');
   });
 });

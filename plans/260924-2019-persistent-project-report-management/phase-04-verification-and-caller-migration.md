@@ -8,7 +8,8 @@
 
 ## Overview
 
-- **Date:** 2026-09-24. **Description:** Migrate consumers to persistent index and DELETE contracts, prove user-visible behavior and safety with focused unit/API/browser tests, then run final integrated release gates. **Priority:** P2. **Implementation status:** pending. **Review status:** not reviewed.
+- **Date:** 2026-09-24. **Description:** Migrate consumers to persistent index and DELETE contracts, prove user-visible behavior and safety with focused unit/API/browser tests, then run final integrated release gates. **Priority:** P2. **Implementation status:** DONE (100%; completed 2026-09-25). **Review status:** approved (9.8/10).
+- **Verification evidence:** `npm run test:unit` 443/443, `npm run test:control` 34/34, and `npm run test:report` 5/5 passed; typecheck passed with 0 errors. See [test report](../reports/phase04-tester-260925-0048-verification-and-caller-migration.md) and [review](../reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md).
 
 ## Key Insights
 
@@ -65,11 +66,11 @@
 
 ## Todo list
 
-- [ ] Migrate all known callers/obsolete aggregate assumptions.
-- [ ] Cover multi-run history, invalid manifests, empty/large index.
-- [ ] Cover DELETE route/security/filesystem/concurrency/fault recovery.
-- [ ] Cover Control browser UX plus report-only read-only boundary.
-- [ ] Reconcile docs and run final integrated gates once.
+- [x] Migrate all known callers/obsolete aggregate assumptions.
+- [x] Cover multi-run history, invalid manifests, empty/large index.
+- [x] Cover DELETE route/security/filesystem/concurrency/fault recovery.
+- [x] Cover Control browser UX plus report-only read-only boundary.
+- [x] Reconcile docs and run final integrated gates once.
 
 ## Success Criteria
 
@@ -90,4 +91,4 @@
 
 ## Next steps
 
-- After verification, mark implementation phases complete and update `cmd-plan.md`/plan status; release only once end-to-end evidence and docs match shipped behavior.
+- Phase complete 2026-09-25. Main owns the once-only post-integration `npm run test:release` gate after all workstreams land.

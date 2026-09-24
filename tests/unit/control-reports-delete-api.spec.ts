@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import { createReportServer } from '../../src/reporting/report-server.js';
-import { AGGREGATE_REPORT_MARKER } from '../../src/reporting/report-server-constants.js';
+import { AGGREGATE_REPORT_MARKER, REPORT_CSP } from '../../src/reporting/report-server-constants.js';
 import { deleteProjectReports } from '../../src/artifacts/report-project-deletion.js';
 import { acquireReportRootLock } from '../../src/artifacts/report-root-lock-owner.js';
 
@@ -132,6 +132,36 @@ test.describe('Control Reports DELETE API', () => {
     const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
     expect(indexHtml).toContain(AGGREGATE_REPORT_MARKER);
     expect(indexHtml).not.toContain('target-proj');
+  });
+
+  test('deleting the final remaining project publishes valid schema v3 empty aggregate and empty message index.html', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'sole-project', 'run-01');
+
+    // Initial state: sole-project exists and aggregate contains it
+    const initRes = await request.delete(`${serverUrl}api/reports/projects/sole-project`, {
+      headers: validHeaders(),
+    });
+
+    expect(initRes.status()).toBe(200);
+    const body = await initRes.json();
+    expect(body).toEqual({
+      success: true,
+      projectId: 'sole-project',
+      deletedRunsCount: 1,
+    });
+
+    expect(fs.existsSync(path.join(reportRoot, 'sole-project'))).toBe(false);
+
+    // Assert aggregate-data.json is valid schema v3 with projects: []
+    const aggData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8'));
+    expect(aggData.schemaVersion).toBe(3);
+    expect(aggData.projects).toEqual([]);
+
+    // Assert index.html contains empty state and AGGREGATE_REPORT_MARKER
+    const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
+    expect(indexHtml).toContain(AGGREGATE_REPORT_MARKER);
+    expect(indexHtml).toContain('0 retained project(s)');
+    expect(indexHtml).toContain('No retained project reports were recorded.');
   });
 
   test('accepts empty JSON body with Content-Type application/json', async ({ request }) => {
@@ -297,6 +327,86 @@ test.describe('Control Reports DELETE API', () => {
     }
   });
 
+  test('preserves prefix-sibling projects byte-for-byte when deleting target-proj', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'service-x', 'run-01');
+    createValidRunFiles(reportRoot, 'service-x-extended', 'run-01');
+    createValidRunFiles(reportRoot, 'service-x2', 'run-01');
+
+    const res = await request.delete(`${serverUrl}api/reports/projects/service-x`, {
+      headers: validHeaders(),
+    });
+    expect(res.status()).toBe(200);
+
+    expect(fs.existsSync(path.join(reportRoot, 'service-x'))).toBe(false);
+    expect(fs.existsSync(path.join(reportRoot, 'service-x-extended', 'run-01', 'manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(reportRoot, 'service-x2', 'run-01', 'manifest.json'))).toBe(true);
+
+    const aggData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8'));
+    expect(aggData.projects.map((p: { projectId: string }) => p.projectId).sort()).toEqual([
+      'service-x-extended',
+      'service-x2',
+    ]);
+  });
+
+  test('repeated delete of same project returns 404 PROJECT_NOT_FOUND without mutating other state', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'repeat-proj', 'run-01');
+
+    const firstRes = await request.delete(`${serverUrl}api/reports/projects/repeat-proj`, {
+      headers: validHeaders(),
+    });
+    expect(firstRes.status()).toBe(200);
+    expect(fs.existsSync(path.join(reportRoot, 'repeat-proj'))).toBe(false);
+
+    const secondRes = await request.delete(`${serverUrl}api/reports/projects/repeat-proj`, {
+      headers: validHeaders(),
+    });
+    expect(secondRes.status()).toBe(404);
+    const body = await secondRes.json();
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+  });
+
+  test('rejects deletion with 500 when project contains symbolic link, preserving target', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'symlink-api-proj', 'run-01');
+    const secretFile = path.join(reportRoot, 'canary-secret.txt');
+    fs.writeFileSync(secretFile, 'secret-data', 'utf8');
+    try {
+      fs.symlinkSync(secretFile, path.join(reportRoot, 'symlink-api-proj', 'link-to-canary'));
+    } catch {
+      return;
+    }
+
+    const res = await request.delete(`${serverUrl}api/reports/projects/symlink-api-proj`, {
+      headers: validHeaders(),
+    });
+    expect(res.status()).toBe(500);
+    const body = await res.json();
+    expect(body.error.code).toBe('UNSAFE_PROJECT_DIRECTORY');
+
+    expect(fs.existsSync(path.join(reportRoot, 'symlink-api-proj'))).toBe(true);
+    expect(fs.existsSync(secretFile)).toBe(true);
+    expect(fs.readFileSync(secretFile, 'utf8')).toBe('secret-data');
+  });
+
+  test('competing DELETE requests against same root return 409 without leaking internal lock paths', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'race-a', 'run-01');
+    createValidRunFiles(reportRoot, 'race-b', 'run-01');
+
+    const lock = await acquireReportRootLock(reportRoot);
+    try {
+      const res = await request.delete(`${serverUrl}api/reports/projects/race-a`, {
+        headers: validHeaders(),
+      });
+      expect(res.status()).toBe(409);
+      const body = await res.json();
+      expect(body.error.code).toBe('REPORT_ROOT_LOCKED');
+      expect(body.error.message).toBe('report root is locked by another operation');
+      expect(JSON.stringify(body)).not.toContain('.report-root-lock');
+      expect(JSON.stringify(body)).not.toContain(reportRoot);
+    } finally {
+      await lock.release();
+    }
+  });
+
   test('direct deleteProjectReports rejects symbolic links inside project directory', async () => {
     createValidRunFiles(reportRoot, 'symlink-proj', 'run-01');
     const secretFile = path.join(reportRoot, 'secret.txt');
@@ -329,7 +439,55 @@ test.describe('Control Reports DELETE API', () => {
     expect(fs.existsSync(path.join(reportRoot, 'deep-proj'))).toBe(true);
   });
 
-  test('report-only server mode does not permit DELETE /api/reports/projects', async () => {
+  test('handles removal failure: throws REMOVAL_FAILED, releases lock, and preserves surviving projects', async () => {
+    createValidRunFiles(reportRoot, 'fail-removal-proj', 'run-01');
+    createValidRunFiles(reportRoot, 'survivor-proj', 'run-01');
+
+    await expect(
+      deleteProjectReports(reportRoot, 'fail-removal-proj', {
+        removeDirectory: async () => {
+          throw new Error('injected filesystem removal failure');
+        },
+      }),
+    ).rejects.toThrow(/failed to remove project directory: injected filesystem removal failure/u);
+
+    // Verify report root lock was released even after removal failure
+    const lock = await acquireReportRootLock(reportRoot);
+    await lock.release();
+
+    // Sibling project is untouched
+    expect(fs.existsSync(path.join(reportRoot, 'survivor-proj', 'run-01', 'manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(reportRoot, 'fail-removal-proj', 'run-01', 'manifest.json'))).toBe(true);
+
+    // Normal deletion now succeeds
+    const result = await deleteProjectReports(reportRoot, 'fail-removal-proj');
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(path.join(reportRoot, 'fail-removal-proj'))).toBe(false);
+  });
+
+  test('handles publication refresh failure: throws REFRESH_FAILED, releases lock, without restoring deleted files', async () => {
+    createValidRunFiles(reportRoot, 'fail-pub-proj', 'run-01');
+    createValidRunFiles(reportRoot, 'survivor-2-proj', 'run-01');
+
+    await expect(
+      deleteProjectReports(reportRoot, 'fail-pub-proj', {
+        publishAggregate: async () => {
+          throw new Error('injected publication failure');
+        },
+      }),
+    ).rejects.toThrow(/project deleted but index refresh failed: injected publication failure/u);
+
+    // Lock was released!
+    const lock = await acquireReportRootLock(reportRoot);
+    await lock.release();
+
+    // Files are deleted, not resurrected
+    expect(fs.existsSync(path.join(reportRoot, 'fail-pub-proj'))).toBe(false);
+    // Surviving files remain intact
+    expect(fs.existsSync(path.join(reportRoot, 'survivor-2-proj', 'run-01', 'manifest.json'))).toBe(true);
+  });
+
+  test('report-only server serves reports via GET/HEAD with REPORT_CSP and rejects DELETE and mutations', async () => {
     createValidRunFiles(reportRoot, 'ro-proj', 'run-01');
     const reportServer = await createReportServer(reportRoot, {
       mode: 'report',
@@ -337,11 +495,37 @@ test.describe('Control Reports DELETE API', () => {
       port: 0,
     });
     try {
-      const res = await fetch(`${reportServer.url}api/reports/projects/ro-proj`, {
-        method: 'DELETE',
-      });
-      expect(res.status).toBe(405);
-      expect(fs.existsSync(path.join(reportRoot, 'ro-proj'))).toBe(true);
+      // GET serves static saved index with REPORT_CSP at root in report mode
+      const getIndex = await fetch(`${reportServer.url}index.html`);
+      expect(getIndex.status).toBe(200);
+      expect(getIndex.headers.get('content-security-policy')).toBe(REPORT_CSP);
+      const getIndexText = await getIndex.text();
+      expect(getIndexText).toContain(AGGREGATE_REPORT_MARKER);
+      expect(getIndexText).not.toContain('<script type="module"');
+
+      // HEAD serves headers without body
+      const headIndex = await fetch(`${reportServer.url}index.html`, { method: 'HEAD' });
+      expect(headIndex.status).toBe(200);
+      expect(headIndex.headers.get('content-security-policy')).toBe(REPORT_CSP);
+
+      // GET serves retained run report
+      const getRun = await fetch(`${reportServer.url}ro-proj/run-01/index.html`);
+      expect(getRun.status).toBe(200);
+
+      // DELETE on /api/reports/projects/ro-proj cannot mutate anything (returns 404 or 405)
+      const delApi = await fetch(`${reportServer.url}api/reports/projects/ro-proj`, { method: 'DELETE' });
+      expect([404, 405]).toContain(delApi.status);
+
+      // DELETE on static report path is rejected with 405
+      const delStatic = await fetch(`${reportServer.url}index.html`, { method: 'DELETE' });
+      expect(delStatic.status).toBe(405);
+
+      const delRun = await fetch(`${reportServer.url}ro-proj/run-01/index.html`, { method: 'DELETE' });
+      expect(delRun.status).toBe(405);
+      // All files on disk remain untouched
+      expect(fs.existsSync(path.join(reportRoot, 'ro-proj', 'run-01', 'manifest.json'))).toBe(true);
+      expect(fs.existsSync(path.join(reportRoot, 'index.html'))).toBe(true);
+      expect(fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8')).toBe(getIndexText);
     } finally {
       await reportServer.close();
     }

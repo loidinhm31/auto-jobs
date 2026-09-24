@@ -1547,9 +1547,9 @@ Compiler settings in `tsconfig.json` are the source of truth:
 - Parse mutations through `readBoundedJsonBody`; preserve the 1 MiB body limit.
   Secrets parsing must finish before touching SecretStore; report deletion
   accepts only an empty JSON object when a body is sent.
-- Keep report-root path checks, bounded symlink-rejecting preflight, locking,
-  removal, and aggregate refresh in `report-project-deletion.ts`; do not expose
-  deletion through the read-only report server.
+- Keep canonical report-root/path checks, bounded symlink-rejecting preflight
+  (32 levels, 4,096 entries, 256 MiB), locking, removal, and aggregate refresh
+  in `report-project-deletion.ts`; do not expose deletion through report mode.
 - Return secrets presence booleans only. Report deletion success contains the
   project ID and validated-run count; never echo request bodies. Use shared
   response helpers so control responses carry `Cache-Control: no-store`.
@@ -1635,16 +1635,18 @@ Tests must defend observable behavior and fail on plausible regressions:
   non-JSON content types, invalid keys/values/bodies, unsupported methods, and
   the unavailable-store response. Use the real loopback server plus a direct
   handler test only for the missing dependency boundary.
-- For project report deletion, use an isolated report root and the loopback
-  server; cover unsafe IDs, mutation gates, empty-body rules, 404, 409 lock
-  contention, symlink/depth preflight, sibling/assets preservation, and the
-  aggregate rebuild in `tests/unit/control-reports-delete-api.spec.ts`.
+- For project-report deletion, use an isolated report root and loopback server.
+  Cover safe IDs, body/media-type/method rules, 404/409 outcomes, symlink/depth
+  preflight, prefix-sibling and shared-file preservation, the valid empty
+  aggregate, removal/publication failure injection, and lock release in
+  `tests/unit/control-reports-delete-api.spec.ts`. The same suite verifies the
+  report-only GET/HEAD and DELETE boundary.
 - For the Control report-management UI, `tests/unit/control-assets-routing.spec.ts`
-  covers the control-only GET/HEAD shell and the report-mode static route.
+  covers the control-only GET/HEAD shell and report-mode static route.
   `tests/e2e/control-report-management.spec.ts` runs in Chromium and WebKit;
-  cover navigation/back, empty and history-only inventories, per-project
-  pagination, cancellation, deletion with sibling preservation, and 409
-  conflict feedback.
+  cover empty and history-only inventories, independent 20/21-run pagination,
+  cancellation and Escape dismissal, deletion with sibling preservation,
+  final-project empty state, and 409/500 feedback with on-disk assertions.
 - For the dynamic-credential browser flow, `tests/e2e/control-page.spec.ts`
   must run against isolated temporary roots in Chromium and WebKit. Cover
   accessible modal state, key discovery, Missing/Configured transitions,
@@ -1696,8 +1698,9 @@ Before opening a change, verify:
 
 This summary reflects the refreshed `repomix-output.xml` and checked-in
 source/configuration. It includes Stage View completion monitoring, persistent
-project history, guarded Control API deletion, and Phase 03 report-management
-page navigation and deletion. Fixtures use local inputs; no live Jenkins run is claimed.
+project history, guarded Control API deletion, and Phase 04 report-management
+verification and caller migration. Fixtures use local inputs; no live Jenkins
+run is claimed.
 
 ## Repository profile
 
@@ -1780,6 +1783,16 @@ page navigation and deletion. Fixtures use local inputs; no live Jenkins run is 
   outcomes and validated history. Incomplete discovery blocks publication;
   aggregate data allows zero projects, up to 5,050 project rows, and staged
   JSON/HTML files up to 16 MiB each.
+- Project-report deletion preflights the canonical target under the shared
+  report-root lock: symlinks and non-file entries fail closed, with limits of
+  32 levels, 4,096 entries, and 256 MiB. It removes the whole selected subtree,
+  counts validated runs, and republishes surviving history; failed refresh
+  attempts recovery without claiming deleted files were restored.
+- Phase 04 verification (2026-09-25): `npm run test:unit` 443/443,
+  `npm run test:control` 34/34, and `npm run test:report` 5/5 (482 passed).
+  Coverage includes aggregate retention/bounds, DELETE security and failure
+  recovery, the read-only report boundary, and Chromium/WebKit management UX.
+  No code-coverage metrics were collected.
 - Repomix compaction regenerated at `repomix-output.xml`; repository ignore
   rules remain in effect.
 
@@ -2123,7 +2136,7 @@ set `Cache-Control: no-store`.
 | `src/reporting/report-server-control-secrets-api.ts` | Modular `/api/secrets` GET/PUT/DELETE handler, presence-map construction, bounded input, and store operations. |
 | `src/reporting/report-server-control-api.ts` | Config/run handlers and re-export facade for the secrets handler. |
 | `src/reporting/report-server-control-reports-api.ts` | Guarded project-report DELETE endpoint and request validation. |
-| `tests/unit/control-reports-delete-api.spec.ts` | Project deletion response, security/body gates, lock contention, filesystem preflight, and aggregate refresh. |
+| `tests/unit/control-reports-delete-api.spec.ts` | Project deletion security/body gates, lock and prefix safety, filesystem preflight, empty aggregate, and injected removal/publication failure handling. |
 | `src/reporting/report-server-control.ts` | Host preflight, control and built-asset routing, and `ControlRouterContext` dependencies. |
 | `src/reporting/report-server-control-page.ts` | Asset loader: reads built HTML, CSS, and JS from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches buffers. |
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
@@ -2219,8 +2232,10 @@ Report-management route behavior is covered by
 `tests/unit/control-assets-routing.spec.ts`; browser flows are covered by
 `tests/e2e/control-report-management.spec.ts` and run in Chromium and WebKit via
 `npm run test:control`. Scenarios include navigation/back, empty and
-history-only inventories, per-project pagination, cancellation, successful
-deletion with sibling preservation, and lock-conflict feedback.
+history-only inventories, independent 20/21-run pagination, cancellation and
+Escape dismissal, deletion with sibling preservation, final-project empty
+state, and 409/500 feedback. Assertions compare on-disk project and aggregate
+state.
 
 The Active Config Persistence & Form Builder Phase 04 also covers active-config
 resolution (valid URL > stored filename > first available), stale/empty
@@ -2840,8 +2855,8 @@ claim that a live Jenkins or browser execution has been run.
 **Document scope:** schema-v1 report capture, persistent aggregate history,
 bounded execution, Control Page actions and report management, offline build
 fixtures, and dynamic credentials.<br>
-**Current milestone:** Persistent project report management — Phase 03:
-report-management page navigation and deletion (complete; 2026-09-24).<br>
+**Current milestone:** Persistent project report management — complete
+(4/4 phases; Phase 04 verification approved; 2026-09-25).<br>
 **Prior completed milestone:** Control Page Parallel Auto-Build — complete,
 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
 passed; review approved 9.3/10.
@@ -3139,9 +3154,11 @@ and failure semantics are validated before side effects.
   mode; validate Host/Origin/Fetch Metadata/CSRF gates and apply the body rules.
 - Validate one safe project ID, acquire the report-root lock without waiting,
   and refuse deletion when discovery is incomplete or no validated runs exist.
-- Delete only that project's report subtree, count validated runs, preserve
-  configuration, siblings, and shared assets, and return 409 on live lock
-  contention.
+- Preflight the canonical target subtree before mutation: reject symlinks and
+  non-file entries, and bound traversal to 32 levels, 4,096 entries, and
+  256 MiB. Delete the whole selected subtree, count only validated runs, and
+  preserve configuration, sibling projects, and shared assets; return 409 on
+  report-root lock contention.
 - Rebuild both aggregate files from complete surviving manifest history after
   removal. If post-removal refresh fails, attempt recovery and report the
   completed deletion separately from the index-refresh failure.
@@ -3194,6 +3211,27 @@ and failure semantics are validated before side effects.
   the existing aggregate pair.
 - [x] Focused coverage exists in `aggregate-index-builder.spec.ts` and
   `persistent-aggregate-bounds.spec.ts`.
+
+## Persistent report-management Phase 04 acceptance criteria
+
+- [x] Aggregate construction covers empty and incomplete inventories,
+  history-only projects, current outcomes, run ordering and tie breaks,
+  run-less outcomes without fake links, and malformed-manifest exclusion.
+- [x] Aggregate boundaries cover 5,050 project rows, incomplete discovery,
+  16 MiB staged-file rejection with the existing pair intact, and retention
+  across distinct configuration runs.
+- [x] DELETE API coverage verifies request/security and ID boundaries, missing
+  and repeated deletion, live-lock `409`, subtree preflight, sibling/config/
+  asset preservation, and valid empty schema-v3 publication.
+- [x] Injected removal and publication failures verify lock release and safe
+  on-disk outcomes; best-effort refresh/recovery is attempted without claiming
+  that deleted files were restored.
+- [x] Chromium/WebKit management-page coverage verifies independent 20/21-run
+  pagination, cancellation and Escape dismissal, lock and server-error
+  feedback, final-project empty state, and on-disk results.
+- [x] Phase 04 validation recorded 443 unit, 34 control, and 5 report checks
+  passing (482 total); no coverage metrics were collected. The code review
+  recorded a clean typecheck and approval at 9.8/10.
 
 ## Phase 01 acceptance criteria
 
@@ -3363,6 +3401,7 @@ require the environment variables named by project configuration.
 | Control secrets API and security gates | `src/reporting/report-server-control-secrets-api.ts`, `src/reporting/report-server-control-api.ts`, `src/reporting/report-server-control-security.ts`, `src/reporting/report-server-control.ts` | [system architecture](./system-architecture.md), [architecture](./architecture.md), [code standards](./code-standards.md) |
 | Control UI credential management | `src/reporting/control-page/` (React application: `App.tsx`, `components/`, `hooks/`) | [system architecture](./system-architecture.md), [codebase summary](./codebase-summary.md) |
 | Control report-management navigation and deletion | `src/reporting/control-page/pages/ReportManagementPage.tsx`, `src/reporting/control-page/hooks/use-delete-reports.ts`, `src/reporting/report-server-control.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
+| Persistent report-management verification | `src/artifacts/report-project-deletion.ts`, `tests/unit/aggregate-index-builder.spec.ts`, `tests/unit/persistent-aggregate-bounds.spec.ts`, `tests/unit/control-reports-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |
@@ -3385,6 +3424,16 @@ intent, safe outcome mapping, and no process-global credential mutation. The
 report CLI still has no production auto-build command.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-25
+
+- Completed Persistent Project Report Management Phase 04: verified aggregate
+  retention and publication bounds, guarded deletion, filesystem preflight,
+  failure recovery, caller boundaries, and browser-visible management behavior.
+- Final test evidence: `npm run test:unit` 443/443, `npm run test:control`
+  34/34, and `npm run test:report` 5/5 (482 passed; none failed or skipped).
+  No code-coverage metrics were collected. Review approved 9.8/10 with
+  `npm run typecheck` clean ([phase](../plans/260924-2019-persistent-project-report-management/phase-04-verification-and-caller-migration.md), [test report](../plans/reports/phase04-tester-260925-0048-verification-and-caller-migration.md), [review](../plans/reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md)).
 
 ### 0.1.0 (development) — 2026-09-24
 
@@ -3418,22 +3467,22 @@ report CLI still has no production auto-build command.
 <file path="docs/project-roadmap.md">
 # Project roadmap
 
-Last updated: 2026-09-24  
+Last updated: 2026-09-25  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
-Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
+Completed initiative: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
 
 ## Persistent project report management
 
 Plan: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
 
-**Overall status:** In progress · **75%** (12 of 16 planned hours; 3 of 4 phases DONE).
+**Overall status:** Complete · **100%** (16 of 16 planned hours; 4 of 4 phases DONE; completed 2026-09-25).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
 |---|---|---:|---:|---|---|
 | 01. Persistent aggregate index builder | **DONE** | **100%** | 4h | 2026-09-24 | Merged validated retained history with active outcomes; incomplete discovery and oversized publication fail closed. Review 10/10; targeted tests 13/13, unit suite 415/415, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md), [review](../plans/reports/code-review-260924-2121-phase-01-persistent-aggregate-index-builder.md)). |
 | 02. Guarded control reports DELETE API | **DONE** | **100%** | 5h | 2026-09-24 | Added locked, fail-closed whole-project report deletion and aggregate-pair refresh. Review 10/10; 14 focused API tests, 429 unit tests, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-02-control-reports-delete-api.md), [test report](../plans/reports/tester-260924-2222-phase-02-control-reports-delete-api.md), [review](../plans/reports/code-review-260924-2226-phase-02-control-reports-delete-api.md)). |
 | 03. Report management page navigation and deletion | **DONE** | **100%** | 3h | 2026-09-24 | Added control-only Reports navigation, retained-project inventory, independent 20-run pagination and accessible confirmed deletion. Control E2E 28/28; typecheck/build passed; unit suite had 429 passes and one retry-recovered flaky test (0 final failures). Review approved 9.5/10, with a medium follow-up on malformed JSON being categorized as a general load error rather than corrupt data ([phase](../plans/260924-2019-persistent-project-report-management/phase-03-control-ui-navigation-and-deletion.md), [test report](../plans/reports/phase03Tester-260924-2304-phase-03-test-validation.md), [review](../plans/reports/code-review-260924-2308-phase-03-control-ui-navigation-and-deletion.md)). |
-| 04. Verification and caller migration | Pending | 0% | 4h | — | End-to-end security, persistence, concurrency, recovery, browser and caller verification |
+| 04. Verification and caller migration | **DONE** | **100%** | 4h | 2026-09-25 | Test report: 443/443 unit, 34/34 Control, 5/5 report passed; review 9.8/10 and typecheck 0 errors. Main owns the once-only post-integration `npm run test:release` gate. |
 
 ## Control Page Parallel Auto-Build
 
@@ -3570,6 +3619,11 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Verified zero dangling references in codebase; updated `docs/codebase-summary.md` and `docs/project-overview-pdr.md`.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-25
+
+- Completed Phase 04 (Verification and caller migration) and Persistent project report management at 100% (16/16 planned hours; all four phases DONE) on 2026-09-25. Phase evidence: 443/443 unit, 34/34 Control, and 5/5 report tests passed; typecheck passed with 0 errors; review approved at 9.8/10 ([test report](../plans/reports/phase04-tester-260925-0048-verification-and-caller-migration.md), [review](../plans/reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md)).
+- Main owns the once-only post-integration `npm run test:release` gate after all workstreams land.
 
 ### 0.1.0 (development) — 2026-09-24
 
@@ -3902,18 +3956,23 @@ node scripts/run-playwright.mjs playwright test \
   --config=playwright.unit.config.ts
 ```
 
-The suite checks guarded deletion, empty-body and invalid-input handling,
-project-not-found behavior, report-root-lock `409`, filesystem preflight, and
-aggregate refresh while preserving sibling projects, assets, and config. It
-uses isolated temporary roots and does not contact Jenkins or vendors.
+The suite checks the request and ID boundaries, empty-body/content-type/method
+rules, missing and repeated deletes, lock-contention `409` without lock-path
+leakage, prefix-sibling preservation, and symlink/depth preflight. Injected
+removal and aggregate-publication failures verify lock release and safe
+post-failure disk state. Successful deletion preserves config, shared assets,
+and sibling projects, and publishes a valid empty aggregate when deleting the
+last project. Tests use isolated temporary roots and do not contact Jenkins or
+vendors. The tree preflight enforces 32 levels, 4,096 entries, and 256 MiB.
 
 ### Control report-management UI gate
 
 `npm run test:control` includes `tests/e2e/control-report-management.spec.ts`
 under Chromium and WebKit (`playwright.control.config.ts`). It covers dashboard
-navigation/back, missing-inventory empty state, history-only retained projects,
-per-project 20-run pagination, cancel/success side effects, sibling preservation,
-and lock-conflict feedback.
+navigation/back, an empty inventory, history-only projects, independent
+20/21-run pagination, cancel and Escape dismissal, confirmed deletion with
+sibling preservation, final-project empty-state refresh, and lock-conflict and
+server-error feedback. Assertions include on-disk state, not only UI responses.
 
 `tests/unit/control-assets-routing.spec.ts` runs under `npm run test:unit` and
 checks the control-only `/reports/index.html` GET/HEAD CSRF shell, CSP and HEAD
@@ -4391,10 +4450,18 @@ project list is allowed. Incomplete discovery prevents removal before mutation;
 if refresh fails after removal, best-effort recovery runs and the API reports
 that the project is deleted even though the index may require recovery.
 
-`tests/unit/control-reports-delete-api.spec.ts` covers successful removal,
-aggregate refresh, preservation of sibling projects/assets/config, request and
-ID validation, missing validated runs, 409 lock contention, and symlink/depth
-preflight failures.
+`tests/unit/control-reports-delete-api.spec.ts` verifies successful removal and
+validated-run counts (including cleanup of unvalidated subtree files), sibling,
+prefix-sibling, asset, and config preservation, and a valid schema-v3 empty
+aggregate after deleting the final project. Request cases cover invalid IDs and
+bodies, Origin/CSRF rejection, unsupported methods/media types, missing and
+repeated projects, lock-contention `409` without path leakage, and
+symlink/depth preflight failures.
+
+Injected removal and publication failures verify lock release and safe disk
+state; failed refresh does not claim deleted files were restored. The suite
+also confirms report mode serves GET/HEAD snapshots and rejects DELETE without
+mutating saved files.
 
 The Control report-management page at `/reports/index.html` reads the published
 aggregate and invokes this API only after confirmation; the persisted
@@ -4405,12 +4472,18 @@ navigation, pagination, and deletion coverage.
 ## Focused contracts
 
 - `tests/unit/aggregate-index-builder.spec.ts` covers empty indexes, incomplete
-discovery rejection, historical-only projects, run ordering, current outcomes,
-and safe metadata.
-- `tests/unit/persistent-aggregate-bounds.spec.ts` covers the 5,050 project
-ceiling, empty aggregate validation, discovery completeness, staged-file size
-rejection with preservation of the prior pair, and history across runs.
-- [Release gates](./release-gates.md) lists the focused test command.
+  discovery rejection, historical-only projects, current-outcome precedence,
+  newest-first ordering and `runId` ties, 60-run histories, run-less outcomes
+  without fake links, and warning sanitization.
+- `tests/unit/persistent-aggregate-bounds.spec.ts` covers the 5,050-project
+  ceiling, empty aggregate validation, incomplete discovery, oversized staged
+  output preserving the prior pair, malformed-row rollback, journal recovery,
+  and cross-configuration history with malformed-manifest/canary checks.
+- `tests/e2e/control-report-management.spec.ts` runs under Chromium and WebKit.
+  It covers navigation, empty/history-only inventories, independent 20/21-run
+  pagination, cancel/Escape/confirmation behavior, final-project empty state,
+  lock and server-error feedback, and on-disk aggregate/project state.
+- [Release gates](./release-gates.md) lists the focused test commands.
 </file>
 
 <file path="docs/system-architecture.md">
@@ -9552,14 +9625,14 @@ None; preserve targeted scalar responses and use the batch contract above for om
 <file path="plans/260924-2019-persistent-project-report-management/cmd-plan.md">
 # Implementation phase tracker
 
-Plan: [Persistent project report management](./plan.md). Date: 2026-09-24. Total: 16h. Status: in progress; 9h complete (56%; 2 of 4 phases DONE).
+Plan: [Persistent project report management](./plan.md). Date: 2026-09-24. Total: 16h. Status: complete; 16h complete (100%; 4 of 4 phases DONE).
 
 | Phase | Status | Progress | Effort | Dependency |
 | --- | --- | --- | --- | --- |
 | [01 — Persistent aggregate index builder](./phase-01-persistent-aggregate-index-builder.md) | DONE · 2026-09-24 | 100% | 4h | Existing manifest discovery/publisher |
 | [02 — Control reports DELETE API](./phase-02-control-reports-delete-api.md) | DONE · 2026-09-24 | 100% | 5h | Phase 01 builder; shared report-root lock |
-| [03 — Report management page navigation/deletion](./phase-03-control-ui-navigation-and-deletion.md) | Pending | 0% | 3h | Phase 02 HTTP contract; Phase 01 index JSON |
-| [04 — Verification and caller migration](./phase-04-verification-and-caller-migration.md) | Pending | 0% | 4h | Integrated phases 01–03 |
+| [03 — Report management page navigation/deletion](./phase-03-control-ui-navigation-and-deletion.md) | DONE · 2026-09-24 | 100% | 3h | Phase 02 HTTP contract; Phase 01 index JSON |
+| [04 — Verification and caller migration](./phase-04-verification-and-caller-migration.md) | DONE · 2026-09-25 | 100% | 4h | Integrated phases 01–03 |
 
 ## Acceptance gate
 
@@ -9858,7 +9931,8 @@ Plan: [Persistent project report management](./plan.md). Date: 2026-09-24. Total
 
 ## Overview
 
-- **Date:** 2026-09-24. **Description:** Migrate consumers to persistent index and DELETE contracts, prove user-visible behavior and safety with focused unit/API/browser tests, then run final integrated release gates. **Priority:** P2. **Implementation status:** pending. **Review status:** not reviewed.
+- **Date:** 2026-09-24. **Description:** Migrate consumers to persistent index and DELETE contracts, prove user-visible behavior and safety with focused unit/API/browser tests, then run final integrated release gates. **Priority:** P2. **Implementation status:** DONE (100%; completed 2026-09-25). **Review status:** approved (9.8/10).
+- **Verification evidence:** `npm run test:unit` 443/443, `npm run test:control` 34/34, and `npm run test:report` 5/5 passed; typecheck passed with 0 errors. See [test report](../reports/phase04-tester-260925-0048-verification-and-caller-migration.md) and [review](../reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md).
 
 ## Key Insights
 
@@ -9915,11 +9989,11 @@ Plan: [Persistent project report management](./plan.md). Date: 2026-09-24. Total
 
 ## Todo list
 
-- [ ] Migrate all known callers/obsolete aggregate assumptions.
-- [ ] Cover multi-run history, invalid manifests, empty/large index.
-- [ ] Cover DELETE route/security/filesystem/concurrency/fault recovery.
-- [ ] Cover Control browser UX plus report-only read-only boundary.
-- [ ] Reconcile docs and run final integrated gates once.
+- [x] Migrate all known callers/obsolete aggregate assumptions.
+- [x] Cover multi-run history, invalid manifests, empty/large index.
+- [x] Cover DELETE route/security/filesystem/concurrency/fault recovery.
+- [x] Cover Control browser UX plus report-only read-only boundary.
+- [x] Reconcile docs and run final integrated gates once.
 
 ## Success Criteria
 
@@ -9940,14 +10014,14 @@ Plan: [Persistent project report management](./plan.md). Date: 2026-09-24. Total
 
 ## Next steps
 
-- After verification, mark implementation phases complete and update `cmd-plan.md`/plan status; release only once end-to-end evidence and docs match shipped behavior.
+- Phase complete 2026-09-25. Main owns the once-only post-integration `npm run test:release` gate after all workstreams land.
 </file>
 
 <file path="plans/260924-2019-persistent-project-report-management/plan.md">
 ---
 title: "Persistent project report management"
 description: "Keep one validated all-project report index and safely delete one project's retained reports from the loopback Control Dashboard."
-status: in-progress
+status: completed
 priority: P2
 effort: 16h
 branch: main
@@ -9968,7 +10042,8 @@ Keep `reports/index.html` and `reports/aggregate-data.json` as a persistent inde
 | [01: Persistent aggregate index builder](./phase-01-persistent-aggregate-index-builder.md) | Merge validated history with active outcomes; migrate runner | Done · 2026-09-24 | 100% | 4h |
 | [02: Guarded control reports DELETE API](./phase-02-control-reports-delete-api.md) | **DONE** · 2026-09-24 | 100% | 5h |
 | [03: Report management page navigation and deletion](./phase-03-control-ui-navigation-and-deletion.md) | **DONE** · 2026-09-24 | 100% | 3h |
-| [04: Verification and caller migration](./phase-04-verification-and-caller-migration.md) | Prove security, persistence, concurrency, failure recovery, browsers and callers | Pending | 0% | 4h |
+| [04: Verification and caller migration](./phase-04-verification-and-caller-migration.md) | Prove security, persistence, concurrency, failure recovery, browsers and callers | **DONE** · 2026-09-25 | 100% | 4h |
+**Overall status:** COMPLETE · 100% (16h/16h; 4 of 4 phases DONE; completed 2026-09-25).
 
 ## Dependencies
 
@@ -9992,7 +10067,7 @@ Keep `reports/index.html` and `reports/aggregate-data.json` as a persistent inde
 
 - [x] Phase 01: explicitly signal incomplete discovery and enforce the published pair's static serving size limit before replacing it.
 - [x] Phase 03: implement independent 20-run pagination with latest-first ordering and stable page transitions after deletion/reload.
-- [ ] Phase 04: prove the static/read-only index remains used, management route differs only in control mode, and the per-project pager shows all available runs without truncation.
+- [x] Phase 04: prove the static/read-only index remains used, management route differs only in control mode, and the per-project pager shows all available runs without truncation.
 
 ## Unresolved questions
 
@@ -13047,6 +13122,7 @@ import * as path from 'node:path';
 
 import { ArtifactPaths } from './artifact-paths.js';
 import type { ReportRootLock } from './report-root-lock-owner.js';
+import type { AggregateReportResult } from '../result-types.js';
 import { discoverRunManifests } from './aggregate-manifest-reader.js';
 import { buildAggregateIndex } from './aggregate-index-builder.js';
 import { writeAggregateDataPair } from './aggregate-report-publisher.js';
@@ -13060,14 +13136,15 @@ export const MAX_PREFLIGHT_BYTES = 256 * 1_048_576;
 const RESERVED_PROJECT_IDS = new Set(['assets', '.report-root-lock']);
 
 export class ProjectDeletionError extends Error {
-  public constructor(
-    public readonly status: number,
-    public readonly code: string,
-    message: string,
-  ) {
+  public constructor(public readonly status: number, public readonly code: string, message: string) {
     super(message);
     this.name = 'ProjectDeletionError';
   }
+}
+
+export interface DeleteProjectDependencies {
+  readonly removeDirectory?: (target: string) => Promise<void>;
+  readonly publishAggregate?: (reportRoot: string, aggregate: AggregateReportResult) => Promise<string>;
 }
 
 export interface ProjectDeletionResult {
@@ -13082,11 +13159,7 @@ export function assertSafeProjectId(id: string): void {
     throw new ProjectDeletionError(400, 'INVALID_PROJECT_ID', 'project id is a reserved name');
   }
 }
-
-interface PreflightBudget {
-  entries: number;
-  bytes: number;
-}
+interface PreflightBudget { entries: number; bytes: number; }
 
 async function preflightTree(currentDir: string, depth: number, budget: PreflightBudget): Promise<void> {
   if (depth > MAX_PREFLIGHT_DEPTH) {
@@ -13135,6 +13208,7 @@ async function attemptRefreshBestEffort(reportRoot: string): Promise<void> {
 export async function deleteProjectReports(
   reportRoot: string,
   projectId: string,
+  dependencies: DeleteProjectDependencies = {},
 ): Promise<ProjectDeletionResult> {
   assertSafeProjectId(projectId);
   const paths = new ArtifactPaths(reportRoot);
@@ -13206,7 +13280,11 @@ export async function deleteProjectReports(
     }
 
     try {
-      await fs.rm(projectDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      if (dependencies.removeDirectory) {
+        await dependencies.removeDirectory(projectDir);
+      } else {
+        await fs.rm(projectDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      }
     } catch (removalError) {
       await attemptRefreshBestEffort(reportRoot).catch(() => undefined);
       throw new ProjectDeletionError(500, 'REMOVAL_FAILED', `failed to remove project directory: ${removalError instanceof Error ? removalError.message : String(removalError)}`);
@@ -13216,7 +13294,11 @@ export async function deleteProjectReports(
       const postDiscovery = await discoverRunManifests(reportRoot);
       if (postDiscovery.incomplete) throw new Error('manifest discovery incomplete after deletion');
       const aggregate = buildAggregateIndex({ discovery: postDiscovery, warnings: postDiscovery.warnings });
-      await writeAggregateDataPair(reportRoot, aggregate);
+      if (dependencies.publishAggregate) {
+        await dependencies.publishAggregate(reportRoot, aggregate);
+      } else {
+        await writeAggregateDataPair(reportRoot, aggregate);
+      }
     } catch (publishError) {
       let recoveryNote = '';
       try {
@@ -137612,6 +137694,199 @@ test.describe('Control Report Management Page & Deletion E2E (Phase 03)', () => 
       await lock.release();
     }
   });
+
+  test('enforces independent pagination boundaries (20 runs unpaginated vs 21 runs paginated) and escape key dialog dismissal', async ({ page }) => {
+    // Project with exactly 20 runs
+    for (let i = 1; i <= 20; i++) {
+      createProjectRunFiles(reportRoot, 'project-twenty', `run-${String(i).padStart(2, '0')}`);
+    }
+    const twentyRuns = Array.from({ length: 20 }, (_, idx) => ({
+      runId: `run-${String(20 - idx).padStart(2, '0')}`,
+      state: 'success' as const,
+      jobId: '10',
+      branch: 'main',
+      manifestPath: `project-twenty/run-${String(20 - idx).padStart(2, '0')}/manifest.json`,
+      reportPath: `project-twenty/run-${String(20 - idx).padStart(2, '0')}/index.html`,
+      warnings: [],
+    }));
+
+    // Project with exactly 21 runs
+    for (let i = 1; i <= 21; i++) {
+      createProjectRunFiles(reportRoot, 'project-twenty-one', `run-${String(i).padStart(2, '0')}`);
+    }
+    const twentyOneRuns = Array.from({ length: 21 }, (_, idx) => ({
+      runId: `run-${String(21 - idx).padStart(2, '0')}`,
+      state: 'success' as const,
+      jobId: '20',
+      branch: 'main',
+      manifestPath: `project-twenty-one/run-${String(21 - idx).padStart(2, '0')}/manifest.json`,
+      reportPath: `project-twenty-one/run-${String(21 - idx).padStart(2, '0')}/index.html`,
+      warnings: [],
+    }));
+
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'project-twenty',
+        name: 'Project Twenty',
+        state: 'success',
+        reportPath: 'project-twenty/run-20/index.html',
+        runs: twentyRuns,
+        warnings: [],
+      },
+      {
+        projectId: 'project-twenty-one',
+        name: 'Project Twenty One',
+        state: 'success',
+        reportPath: 'project-twenty-one/run-21/index.html',
+        runs: twentyOneRuns,
+        warnings: [],
+      },
+    ]);
+
+    await page.goto(`${serverUrl}reports/index.html`);
+
+    const cardTwenty = page.locator('.project-card', { has: page.locator('#project-project-twenty') });
+    await expect(cardTwenty.locator('tbody tr')).toHaveCount(20);
+    // Exactly 20 runs: pagination controls are NOT displayed
+    expect(await cardTwenty.locator('.pagination').count()).toBe(0);
+
+    const cardTwentyOne = page.locator('.project-card', { has: page.locator('#project-project-twenty-one') });
+    await expect(cardTwentyOne.locator('tbody tr')).toHaveCount(20);
+    // Exactly 21 runs: pagination is displayed (Page 1 of 2)
+    await expect(cardTwentyOne.locator('.pagination')).toBeVisible();
+    await expect(cardTwentyOne.locator('.pagination')).toContainText('Page 1 of 2');
+
+    // Navigate to page 2 of Twenty One
+    await cardTwentyOne.getByRole('button', { name: 'Next page for Project Twenty One' }).click();
+    await expect(cardTwentyOne.locator('tbody tr')).toHaveCount(1);
+    await expect(cardTwentyOne.locator('.pagination')).toContainText('Page 2 of 2');
+
+    // Sibling project Twenty is completely unchanged
+    await expect(cardTwenty.locator('tbody tr')).toHaveCount(20);
+    expect(await cardTwenty.locator('.pagination').count()).toBe(0);
+
+    // Open delete dialog and press Escape key to dismiss
+    await cardTwenty.locator('#delete-project-project-twenty-btn').click();
+    const dialog = page.locator('#delete-reports-dialog');
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // Both projects remain visible and disk files untouched
+    await expect(page.locator('#project-project-twenty')).toBeVisible();
+    await expect(page.locator('#project-project-twenty-one')).toBeVisible();
+    expect(fs.existsSync(path.join(reportRoot, 'project-twenty'))).toBe(true);
+  });
+
+  test('final project deletion transitions UI to empty state and updates published disk files', async ({ page }) => {
+    createProjectRunFiles(reportRoot, 'sole-project', 'run-01');
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'sole-project',
+        name: 'Sole Project',
+        state: 'success',
+        reportPath: 'sole-project/run-01/index.html',
+        runs: [{
+          runId: 'run-01',
+          state: 'success',
+          jobId: '1',
+          branch: 'main',
+          manifestPath: 'sole-project/run-01/manifest.json',
+          reportPath: 'sole-project/run-01/index.html',
+          warnings: [],
+        }],
+        warnings: [],
+      },
+    ]);
+
+    await page.goto(`${serverUrl}reports/index.html`);
+    await expect(page.locator('#project-sole-project')).toBeVisible();
+
+    // Delete the sole remaining project
+    await page.locator('#delete-project-sole-project-btn').click();
+    const dialog = page.locator('#delete-reports-dialog');
+    await expect(dialog).toBeVisible();
+    await page.locator('#confirm-delete-btn').click();
+
+    await expect(dialog).toBeHidden();
+    const banner = page.locator('#report-feedback-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('Successfully deleted');
+
+    // UI transitions to empty state
+    await expect(page.locator('#project-sole-project')).toBeHidden();
+    await expect(page.getByText('No retained project reports were recorded.')).toBeVisible();
+
+    // On-disk files are updated
+    expect(fs.existsSync(path.join(reportRoot, 'sole-project'))).toBe(false);
+    const aggData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8'));
+    expect(aggData.projects).toEqual([]);
+    expect(aggData.schemaVersion).toBe(3);
+
+    const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
+    expect(indexHtml).toContain(AGGREGATE_REPORT_MARKER);
+    expect(indexHtml).toContain('0 retained project(s)');
+  });
+
+  test('handles 500 error during deletion and displays error feedback in dialog', async ({ page }) => {
+    createProjectRunFiles(reportRoot, 'error-proj', 'run-01');
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'error-proj',
+        name: 'Error Project',
+        state: 'success',
+        reportPath: 'error-proj/run-01/index.html',
+        runs: [{
+          runId: 'run-01',
+          state: 'success',
+          jobId: '1',
+          branch: 'main',
+          manifestPath: 'error-proj/run-01/manifest.json',
+          reportPath: 'error-proj/run-01/index.html',
+          warnings: [],
+        }],
+        warnings: [],
+      },
+    ]);
+
+    // Intercept DELETE request and return 500
+    await page.route('**/api/reports/projects/error-proj', async (route) => {
+      if (route.request().method() === 'DELETE') {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: false,
+            error: {
+              code: 'REMOVAL_FAILED',
+              message: 'Simulated filesystem removal failure on server',
+            },
+          }),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await page.goto(`${serverUrl}reports/index.html`);
+    await expect(page.locator('#project-error-proj')).toBeVisible();
+
+    await page.locator('#delete-project-error-proj-btn').click();
+    const dialog = page.locator('#delete-reports-dialog');
+    await expect(dialog).toBeVisible();
+    await page.locator('#confirm-delete-btn').click();
+
+    // Dialog remains open with 500 error message
+    const errorMsg = page.locator('#delete-error-message');
+    await expect(errorMsg).toBeVisible();
+    await expect(errorMsg).toContainText('Simulated filesystem removal failure on server');
+
+    // Cancel button closes dialog and project remains
+    await page.locator('#cancel-delete-btn').click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('#project-error-proj')).toBeVisible();
+  });
 });
 </file>
 
@@ -138834,7 +139109,7 @@ import { expect, test } from '@playwright/test';
 import type { DiscoveredRunManifest, ManifestDiscoveryResult, ProjectRunManifest } from '../../src/artifacts/artifact-manifest.js';
 import type { ProjectOutcome } from '../../src/project/project-types.js';
 import { buildAggregateIndex } from '../../src/artifacts/aggregate-index-builder.js';
-import { isValidAggregateResult } from '../../src/artifacts/result-validation.js';
+import { isValidAggregateResult, MAX_AGGREGATE_PROJECTS } from '../../src/artifacts/result-validation.js';
 
 function fakeDiscoveredManifest(options: {
   projectId: string;
@@ -139176,6 +139451,154 @@ test.describe('buildAggregateIndex', () => {
     expect(run.warnings[1]?.length).toBeLessThanOrEqual(500);
     expect(result.warnings).toContain('caller warning');
     expect(result.warnings).toContain('initial diagnostic warning');
+  });
+
+  test('enforces deterministic newest-first ordering across many runs and tie-breaks by runId descending', () => {
+    const runs = Array.from({ length: 60 }, (_, idx) => {
+      const padded = String(idx).padStart(3, '0');
+      return fakeDiscoveredManifest({
+        projectId: 'multi-run-svc',
+        runId: `run-${padded}`,
+        observedAt: idx % 2 === 0 ? '2026-09-24T10:00:00.000Z' : '2026-09-24T12:00:00.000Z',
+      });
+    });
+
+    const discovery: ManifestDiscoveryResult = {
+      manifests: runs,
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const result = buildAggregateIndex({
+      discovery,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    const project = result.projects[0]!;
+    expect(project.runs).toHaveLength(60);
+    // First run should be the newest timestamp with highest runId
+    expect(project.runs[0]?.runId).toBe('run-059');
+    expect(project.runId).toBe('run-059');
+
+    // Verify descending order throughout
+    for (let i = 1; i < project.runs.length; i++) {
+      const prev = project.runs[i - 1]!;
+      const curr = project.runs[i]!;
+      // Either prev is newer, or same observedAt and prev runId > curr runId
+      const prevTime = runs.find((r) => r.manifest.run.runId === prev.runId)!.manifest.run.observedAt;
+      const currTime = runs.find((r) => r.manifest.run.runId === curr.runId)!.manifest.run.observedAt;
+      if (prevTime === currTime) {
+        expect(prev.runId.localeCompare(curr.runId)).toBeGreaterThan(0);
+      } else {
+        expect(prevTime.localeCompare(currTime)).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  test('throws when discovery contains 51 projects, exceeding the 50-project boundary', () => {
+    const manifests = Array.from({ length: MAX_AGGREGATE_PROJECTS + 1 }, (_, idx) => {
+      const pid = `svc-${String(idx).padStart(3, '0')}`;
+      return fakeDiscoveredManifest({
+        projectId: pid,
+        runId: `run-${pid}`,
+        observedAt: '2026-09-24T10:00:00.000Z',
+      });
+    });
+
+    const discovery: ManifestDiscoveryResult = {
+      manifests,
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    expect(() =>
+      buildAggregateIndex({
+        discovery,
+        generatedAt: '2026-09-24T12:00:00.000Z',
+      })
+    ).toThrow(/aggregate result schema is invalid/i);
+  });
+  test('combines historical-only, multi-run active, and configured run-less outcome without fake links', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'historical-svc',
+          runId: 'hist-run-1',
+          observedAt: '2026-09-24T08:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'active-multi-svc',
+          runId: 'act-run-1',
+          observedAt: '2026-09-24T09:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'active-multi-svc',
+          runId: 'act-run-2',
+          observedAt: '2026-09-24T11:00:00.000Z',
+        }),
+      ],
+      warnings: ['excluded 1 malformed manifest'],
+      ignoredIncompatibleCount: 1,
+      incomplete: false,
+    };
+
+    const outcomes: ProjectOutcome[] = [
+      {
+        projectId: 'configured-runless-svc',
+        name: 'Configured Run-less Service',
+        state: 'failed',
+        runId: 'unwritten-run-id',
+        error: 'Failed during preflight before report allocation',
+        warnings: ['preflight error'],
+      },
+      {
+        projectId: 'active-multi-svc',
+        name: 'Active Multi Service',
+        state: 'success',
+        runId: 'act-run-2',
+        warnings: [],
+      },
+    ];
+
+    const result = buildAggregateIndex({
+      discovery,
+      outcomes,
+      warnings: ['runner warning'],
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    // Order: active outcomes first in order, then historical-only
+    expect(result.projects.map((p) => p.projectId)).toEqual([
+      'configured-runless-svc',
+      'active-multi-svc',
+      'historical-svc',
+    ]);
+
+    // Run-less outcome has no reportPath and empty runs
+    const runless = result.projects.find((p) => p.projectId === 'configured-runless-svc')!;
+    expect(runless.reportPath).toBeUndefined();
+    expect(runless.runs).toEqual([]);
+    expect(runless.warnings).toContain('preflight error');
+
+    // Active multi-run service has newest run first
+    const multi = result.projects.find((p) => p.projectId === 'active-multi-svc')!;
+    expect(multi.runId).toBe('act-run-2');
+    expect(multi.reportPath).toBe('active-multi-svc/act-run-2/index.html');
+    expect(multi.runs.map((r) => r.runId)).toEqual(['act-run-2', 'act-run-1']);
+
+    // Historical-only project is retained
+    const hist = result.projects.find((p) => p.projectId === 'historical-svc')!;
+    expect(hist.runId).toBe('hist-run-1');
+    expect(hist.reportPath).toBe('historical-svc/hist-run-1/index.html');
+    expect(hist.runs.map((r) => r.runId)).toEqual(['hist-run-1']);
+
+    // Warnings preserved
+    expect(result.warnings).toContain('excluded 1 malformed manifest');
+    expect(result.warnings).toContain('runner warning');
   });
 });
 </file>
@@ -143254,7 +143677,7 @@ import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import { createReportServer } from '../../src/reporting/report-server.js';
-import { AGGREGATE_REPORT_MARKER } from '../../src/reporting/report-server-constants.js';
+import { AGGREGATE_REPORT_MARKER, REPORT_CSP } from '../../src/reporting/report-server-constants.js';
 import { deleteProjectReports } from '../../src/artifacts/report-project-deletion.js';
 import { acquireReportRootLock } from '../../src/artifacts/report-root-lock-owner.js';
 
@@ -143382,6 +143805,36 @@ test.describe('Control Reports DELETE API', () => {
     const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
     expect(indexHtml).toContain(AGGREGATE_REPORT_MARKER);
     expect(indexHtml).not.toContain('target-proj');
+  });
+
+  test('deleting the final remaining project publishes valid schema v3 empty aggregate and empty message index.html', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'sole-project', 'run-01');
+
+    // Initial state: sole-project exists and aggregate contains it
+    const initRes = await request.delete(`${serverUrl}api/reports/projects/sole-project`, {
+      headers: validHeaders(),
+    });
+
+    expect(initRes.status()).toBe(200);
+    const body = await initRes.json();
+    expect(body).toEqual({
+      success: true,
+      projectId: 'sole-project',
+      deletedRunsCount: 1,
+    });
+
+    expect(fs.existsSync(path.join(reportRoot, 'sole-project'))).toBe(false);
+
+    // Assert aggregate-data.json is valid schema v3 with projects: []
+    const aggData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8'));
+    expect(aggData.schemaVersion).toBe(3);
+    expect(aggData.projects).toEqual([]);
+
+    // Assert index.html contains empty state and AGGREGATE_REPORT_MARKER
+    const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
+    expect(indexHtml).toContain(AGGREGATE_REPORT_MARKER);
+    expect(indexHtml).toContain('0 retained project(s)');
+    expect(indexHtml).toContain('No retained project reports were recorded.');
   });
 
   test('accepts empty JSON body with Content-Type application/json', async ({ request }) => {
@@ -143547,6 +144000,86 @@ test.describe('Control Reports DELETE API', () => {
     }
   });
 
+  test('preserves prefix-sibling projects byte-for-byte when deleting target-proj', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'service-x', 'run-01');
+    createValidRunFiles(reportRoot, 'service-x-extended', 'run-01');
+    createValidRunFiles(reportRoot, 'service-x2', 'run-01');
+
+    const res = await request.delete(`${serverUrl}api/reports/projects/service-x`, {
+      headers: validHeaders(),
+    });
+    expect(res.status()).toBe(200);
+
+    expect(fs.existsSync(path.join(reportRoot, 'service-x'))).toBe(false);
+    expect(fs.existsSync(path.join(reportRoot, 'service-x-extended', 'run-01', 'manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(reportRoot, 'service-x2', 'run-01', 'manifest.json'))).toBe(true);
+
+    const aggData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8'));
+    expect(aggData.projects.map((p: { projectId: string }) => p.projectId).sort()).toEqual([
+      'service-x-extended',
+      'service-x2',
+    ]);
+  });
+
+  test('repeated delete of same project returns 404 PROJECT_NOT_FOUND without mutating other state', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'repeat-proj', 'run-01');
+
+    const firstRes = await request.delete(`${serverUrl}api/reports/projects/repeat-proj`, {
+      headers: validHeaders(),
+    });
+    expect(firstRes.status()).toBe(200);
+    expect(fs.existsSync(path.join(reportRoot, 'repeat-proj'))).toBe(false);
+
+    const secondRes = await request.delete(`${serverUrl}api/reports/projects/repeat-proj`, {
+      headers: validHeaders(),
+    });
+    expect(secondRes.status()).toBe(404);
+    const body = await secondRes.json();
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+  });
+
+  test('rejects deletion with 500 when project contains symbolic link, preserving target', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'symlink-api-proj', 'run-01');
+    const secretFile = path.join(reportRoot, 'canary-secret.txt');
+    fs.writeFileSync(secretFile, 'secret-data', 'utf8');
+    try {
+      fs.symlinkSync(secretFile, path.join(reportRoot, 'symlink-api-proj', 'link-to-canary'));
+    } catch {
+      return;
+    }
+
+    const res = await request.delete(`${serverUrl}api/reports/projects/symlink-api-proj`, {
+      headers: validHeaders(),
+    });
+    expect(res.status()).toBe(500);
+    const body = await res.json();
+    expect(body.error.code).toBe('UNSAFE_PROJECT_DIRECTORY');
+
+    expect(fs.existsSync(path.join(reportRoot, 'symlink-api-proj'))).toBe(true);
+    expect(fs.existsSync(secretFile)).toBe(true);
+    expect(fs.readFileSync(secretFile, 'utf8')).toBe('secret-data');
+  });
+
+  test('competing DELETE requests against same root return 409 without leaking internal lock paths', async ({ request }) => {
+    createValidRunFiles(reportRoot, 'race-a', 'run-01');
+    createValidRunFiles(reportRoot, 'race-b', 'run-01');
+
+    const lock = await acquireReportRootLock(reportRoot);
+    try {
+      const res = await request.delete(`${serverUrl}api/reports/projects/race-a`, {
+        headers: validHeaders(),
+      });
+      expect(res.status()).toBe(409);
+      const body = await res.json();
+      expect(body.error.code).toBe('REPORT_ROOT_LOCKED');
+      expect(body.error.message).toBe('report root is locked by another operation');
+      expect(JSON.stringify(body)).not.toContain('.report-root-lock');
+      expect(JSON.stringify(body)).not.toContain(reportRoot);
+    } finally {
+      await lock.release();
+    }
+  });
+
   test('direct deleteProjectReports rejects symbolic links inside project directory', async () => {
     createValidRunFiles(reportRoot, 'symlink-proj', 'run-01');
     const secretFile = path.join(reportRoot, 'secret.txt');
@@ -143579,7 +144112,55 @@ test.describe('Control Reports DELETE API', () => {
     expect(fs.existsSync(path.join(reportRoot, 'deep-proj'))).toBe(true);
   });
 
-  test('report-only server mode does not permit DELETE /api/reports/projects', async () => {
+  test('handles removal failure: throws REMOVAL_FAILED, releases lock, and preserves surviving projects', async () => {
+    createValidRunFiles(reportRoot, 'fail-removal-proj', 'run-01');
+    createValidRunFiles(reportRoot, 'survivor-proj', 'run-01');
+
+    await expect(
+      deleteProjectReports(reportRoot, 'fail-removal-proj', {
+        removeDirectory: async () => {
+          throw new Error('injected filesystem removal failure');
+        },
+      }),
+    ).rejects.toThrow(/failed to remove project directory: injected filesystem removal failure/u);
+
+    // Verify report root lock was released even after removal failure
+    const lock = await acquireReportRootLock(reportRoot);
+    await lock.release();
+
+    // Sibling project is untouched
+    expect(fs.existsSync(path.join(reportRoot, 'survivor-proj', 'run-01', 'manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(reportRoot, 'fail-removal-proj', 'run-01', 'manifest.json'))).toBe(true);
+
+    // Normal deletion now succeeds
+    const result = await deleteProjectReports(reportRoot, 'fail-removal-proj');
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(path.join(reportRoot, 'fail-removal-proj'))).toBe(false);
+  });
+
+  test('handles publication refresh failure: throws REFRESH_FAILED, releases lock, without restoring deleted files', async () => {
+    createValidRunFiles(reportRoot, 'fail-pub-proj', 'run-01');
+    createValidRunFiles(reportRoot, 'survivor-2-proj', 'run-01');
+
+    await expect(
+      deleteProjectReports(reportRoot, 'fail-pub-proj', {
+        publishAggregate: async () => {
+          throw new Error('injected publication failure');
+        },
+      }),
+    ).rejects.toThrow(/project deleted but index refresh failed: injected publication failure/u);
+
+    // Lock was released!
+    const lock = await acquireReportRootLock(reportRoot);
+    await lock.release();
+
+    // Files are deleted, not resurrected
+    expect(fs.existsSync(path.join(reportRoot, 'fail-pub-proj'))).toBe(false);
+    // Surviving files remain intact
+    expect(fs.existsSync(path.join(reportRoot, 'survivor-2-proj', 'run-01', 'manifest.json'))).toBe(true);
+  });
+
+  test('report-only server serves reports via GET/HEAD with REPORT_CSP and rejects DELETE and mutations', async () => {
     createValidRunFiles(reportRoot, 'ro-proj', 'run-01');
     const reportServer = await createReportServer(reportRoot, {
       mode: 'report',
@@ -143587,11 +144168,37 @@ test.describe('Control Reports DELETE API', () => {
       port: 0,
     });
     try {
-      const res = await fetch(`${reportServer.url}api/reports/projects/ro-proj`, {
-        method: 'DELETE',
-      });
-      expect(res.status).toBe(405);
-      expect(fs.existsSync(path.join(reportRoot, 'ro-proj'))).toBe(true);
+      // GET serves static saved index with REPORT_CSP at root in report mode
+      const getIndex = await fetch(`${reportServer.url}index.html`);
+      expect(getIndex.status).toBe(200);
+      expect(getIndex.headers.get('content-security-policy')).toBe(REPORT_CSP);
+      const getIndexText = await getIndex.text();
+      expect(getIndexText).toContain(AGGREGATE_REPORT_MARKER);
+      expect(getIndexText).not.toContain('<script type="module"');
+
+      // HEAD serves headers without body
+      const headIndex = await fetch(`${reportServer.url}index.html`, { method: 'HEAD' });
+      expect(headIndex.status).toBe(200);
+      expect(headIndex.headers.get('content-security-policy')).toBe(REPORT_CSP);
+
+      // GET serves retained run report
+      const getRun = await fetch(`${reportServer.url}ro-proj/run-01/index.html`);
+      expect(getRun.status).toBe(200);
+
+      // DELETE on /api/reports/projects/ro-proj cannot mutate anything (returns 404 or 405)
+      const delApi = await fetch(`${reportServer.url}api/reports/projects/ro-proj`, { method: 'DELETE' });
+      expect([404, 405]).toContain(delApi.status);
+
+      // DELETE on static report path is rejected with 405
+      const delStatic = await fetch(`${reportServer.url}index.html`, { method: 'DELETE' });
+      expect(delStatic.status).toBe(405);
+
+      const delRun = await fetch(`${reportServer.url}ro-proj/run-01/index.html`, { method: 'DELETE' });
+      expect(delRun.status).toBe(405);
+      // All files on disk remain untouched
+      expect(fs.existsSync(path.join(reportRoot, 'ro-proj', 'run-01', 'manifest.json'))).toBe(true);
+      expect(fs.existsSync(path.join(reportRoot, 'index.html'))).toBe(true);
+      expect(fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8')).toBe(getIndexText);
     } finally {
       await reportServer.close();
     }
@@ -146082,6 +146689,7 @@ import { runConfiguredProjects } from '../../src/runner.js';
 
 import { discoverRunManifests } from '../../src/artifacts/aggregate-manifest-reader.js';
 import { writeAggregateDataPair } from '../../src/artifacts/aggregate-report-publisher.js';
+import { recoverAggregatePublication } from '../../src/artifacts/aggregate-publication-recovery.js';
 import {
   isValidAggregateResult,
   MAX_AGGREGATE_PROJECTS,
@@ -146265,6 +146873,103 @@ test.describe('Persistent aggregate validation and boundary limits', () => {
     }
   });
 
+  test('writeAggregateDataPair rejects malformed nonempty project row and rolls back both outputs', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-malformed-row-'));
+    try {
+      const initialAggregate: AggregateReportResult = {
+        schemaVersion: 3,
+        generatedAt: '2026-09-24T10:00:00.000Z',
+        projects: [
+          {
+            projectId: 'valid-project',
+            name: 'Valid Project',
+            state: 'success',
+            runId: 'run-1',
+            reportPath: 'valid-project/run-1/index.html',
+            runs: [
+              {
+                runId: 'run-1',
+                state: 'success',
+                manifestPath: 'valid-project/run-1/manifest.json',
+                reportPath: 'valid-project/run-1/index.html',
+                warnings: [],
+              },
+            ],
+            warnings: [],
+          },
+        ],
+        warnings: [],
+      };
+
+      await writeAggregateDataPair(root, initialAggregate);
+      const initialData = fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8');
+      const initialReport = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+
+      const malformedAggregate = {
+        ...initialAggregate,
+        projects: [
+          {
+            ...initialAggregate.projects[0]!,
+            state: 'not-a-valid-state',
+          },
+        ],
+      } as unknown as AggregateReportResult;
+
+      await expect(writeAggregateDataPair(root, malformedAggregate)).rejects.toThrow(
+        /aggregate result schema is invalid/i
+      );
+
+      expect(fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8')).toBe(initialData);
+      expect(fs.readFileSync(path.join(root, 'index.html'), 'utf8')).toBe(initialReport);
+
+      const leftoverFiles = fs.readdirSync(root).filter((f) => f.startsWith('.') && (f.includes('tmp') || f.includes('bak') || f.includes('aggregate')));
+      expect(leftoverFiles).toEqual([]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('recoverAggregatePublication restores backup files and unlinks journal and temporary files', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-journal-recovery-'));
+    try {
+      const journalName = '.aggregate-publication-0000000000000001.json';
+      const backupDataName = '.bak-aggregate-data-0000000000000002';
+      const backupReportName = '.bak-aggregate-report-0000000000000003';
+      const stagedDataName = '.tmp-0000000000000004';
+      const stagedReportName = '.tmp-aggregate-0000000000000005.html';
+
+      fs.writeFileSync(path.join(root, 'aggregate-data.json'), 'corrupted-data', 'utf8');
+      fs.writeFileSync(path.join(root, 'index.html'), 'corrupted-report', 'utf8');
+      fs.writeFileSync(path.join(root, backupDataName), 'original-data', 'utf8');
+      fs.writeFileSync(path.join(root, backupReportName), 'original-report', 'utf8');
+      fs.writeFileSync(path.join(root, stagedDataName), 'staged-data', 'utf8');
+      fs.writeFileSync(path.join(root, stagedReportName), 'staged-report', 'utf8');
+
+      fs.writeFileSync(path.join(root, journalName), JSON.stringify({
+        schemaVersion: 1,
+        committed: false,
+        hadData: true,
+        hadReport: true,
+        stagedData: stagedDataName,
+        stagedReport: stagedReportName,
+        backupData: backupDataName,
+        backupReport: backupReportName,
+      }), 'utf8');
+
+      await recoverAggregatePublication(root);
+
+      expect(fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8')).toBe('original-data');
+      expect(fs.readFileSync(path.join(root, 'index.html'), 'utf8')).toBe('original-report');
+      expect(fs.existsSync(path.join(root, backupDataName))).toBe(false);
+      expect(fs.existsSync(path.join(root, backupReportName))).toBe(false);
+      expect(fs.existsSync(path.join(root, stagedDataName))).toBe(false);
+      expect(fs.existsSync(path.join(root, stagedReportName))).toBe(false);
+      expect(fs.existsSync(path.join(root, journalName))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test('runner persists historical projects in aggregate-data.json and index.html across distinct configuration runs', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-persist-'));
     try {
@@ -146361,6 +147066,200 @@ test.describe('Persistent aggregate validation and boundary limits', () => {
       expect(secondReport).toContain('2 retained project(s)');
       expect(secondReport).toContain('Project B');
       expect(secondReport).toContain('Project A');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('cross-config runs retain historical projects, exclude malformed manifests, preserve canaries, and avoid fake links', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-cross-config-canary-'));
+    try {
+      const reportRoot = path.join(root, 'reports');
+      const stagingRoot = path.join(root, 'staging');
+      const assetsDir = path.join(reportRoot, 'assets');
+      fs.mkdirSync(assetsDir, { recursive: true });
+      fs.mkdirSync(stagingRoot, { recursive: true });
+
+      // Canaries: shared assets, staging, config
+      const assetCanary = path.join(assetsDir, 'canary.css');
+      fs.writeFileSync(assetCanary, '/* asset canary */', 'utf8');
+      const stagingCanary = path.join(stagingRoot, 'staging-lease.canary');
+      fs.writeFileSync(stagingCanary, 'staging lease canary', 'utf8');
+
+      // Pre-existing historical project with 2 runs
+      const histDir1 = path.join(reportRoot, 'hist-service', 'run-h1');
+      const histDir2 = path.join(reportRoot, 'hist-service', 'run-h2');
+      fs.mkdirSync(histDir1, { recursive: true });
+      fs.mkdirSync(histDir2, { recursive: true });
+      fs.writeFileSync(path.join(histDir1, 'manifest.json'), JSON.stringify({
+        kind: 'project-run', schemaVersion: 3,
+        project: { id: 'hist-service', name: 'Historical Service' },
+        run: { runId: 'run-h1', observedAt: '2026-09-24T07:00:00.000Z' },
+        state: 'failed',
+        artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
+        warnings: [],
+        diagnostic: 'hist run 1 failed',
+      }));
+      fs.writeFileSync(path.join(histDir1, 'data.json'), JSON.stringify({
+        schemaVersion: 3, project: { id: 'hist-service', name: 'Historical Service' },
+        run: { runId: 'run-h1', observedAt: '2026-09-24T07:00:00.000Z' }, state: 'failed', diagnostic: 'hist run 1 failed', warnings: [],
+      }));
+      fs.writeFileSync(path.join(histDir1, 'index.html'), '<html><body>hist h1</body></html>');
+
+      fs.writeFileSync(path.join(histDir2, 'manifest.json'), JSON.stringify({
+        kind: 'project-run', schemaVersion: 3,
+        project: { id: 'hist-service', name: 'Historical Service' },
+        run: { runId: 'run-h2', observedAt: '2026-09-24T08:00:00.000Z' },
+        state: 'failed',
+        artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
+        warnings: [],
+        diagnostic: 'hist run 2 failed',
+      }));
+      fs.writeFileSync(path.join(histDir2, 'data.json'), JSON.stringify({
+        schemaVersion: 3, project: { id: 'hist-service', name: 'Historical Service' },
+        run: { runId: 'run-h2', observedAt: '2026-09-24T08:00:00.000Z' }, state: 'failed', diagnostic: 'hist run 2 failed', warnings: [],
+      }));
+      fs.writeFileSync(path.join(histDir2, 'index.html'), '<html><body>hist h2</body></html>');
+      // Malformed manifest directory in report root
+      const malformedDir = path.join(reportRoot, 'malformed-service', 'run-bad');
+      fs.mkdirSync(malformedDir, { recursive: true });
+      fs.writeFileSync(path.join(malformedDir, 'manifest.json'), '{ invalid json @@', 'utf8');
+
+      const environment = {
+        A_USER: 'u-a', A_PASS: 'p-a',
+        B_USER: 'u-b', B_PASS: 'p-b',
+        C_USER: 'u-c', C_PASS: 'p-c',
+      };
+
+      const configFile = path.join(root, 'projects.json');
+      fs.writeFileSync(configFile, JSON.stringify({
+        schemaVersion: 1,
+        defaults: { artifactDir: reportRoot, timeoutMs: 5000 },
+        projects: [
+          { id: 'valid-alpha', name: 'Valid Alpha', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/alpha/', credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASS' } },
+          { id: 'valid-beta', name: 'Valid Beta', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/beta/', credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASS' } },
+          { id: 'runless-gamma', name: 'Runless Gamma', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/gamma/', credentials: { usernameVariable: 'C_USER', passwordVariable: 'C_PASS' } },
+        ],
+      }), { mode: 0o600 });
+
+      const configCanary = fs.readFileSync(configFile, 'utf8');
+      const allConfigs = loadProjectConfig(configFile, environment);
+      const configAlpha = allConfigs[0]!;
+      const configBeta = allConfigs[1]!;
+      const configRunless = allConfigs[2]!;
+
+      const fakeBrowser = {
+        newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
+        close: async () => undefined,
+      } as unknown as Browser;
+
+      // Run A: executes valid-alpha with 2 runs
+      for (const runId of ['run-a1', 'run-a2']) {
+        const observedAt = runId === 'run-a1' ? '2026-09-24T09:00:00.000Z' : '2026-09-24T09:30:00.000Z';
+        await runConfiguredProjects([configAlpha], {
+          launchBrowser: async () => fakeBrowser,
+          executeProject: async (project) => {
+            const dir = path.join(reportRoot, project.id, runId);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+              kind: 'project-run', schemaVersion: 3,
+              project: { id: project.id, name: project.name },
+              run: { runId, observedAt },
+              state: 'failed',
+              artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
+              warnings: [],
+              diagnostic: 'alpha failed',
+            }));
+            fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({
+              schemaVersion: 3, project: { id: project.id, name: project.name },
+              run: { runId, observedAt }, state: 'failed', diagnostic: 'alpha failed', warnings: [],
+            }));
+            fs.writeFileSync(path.join(dir, 'index.html'), `<html><body>${runId}</body></html>`);
+            return { projectId: project.id, name: project.name, state: 'failed', runId, warnings: [] };
+          },
+        });
+      }
+
+      // Run B: disjoint execution with valid-beta (succeeds) and runless-gamma (fails before manifest write)
+      await runConfiguredProjects([configBeta, configRunless], {
+        launchBrowser: async () => fakeBrowser,
+        executeProject: async (project) => {
+          if (project.id === 'runless-gamma') {
+            return {
+              projectId: project.id,
+              name: project.name,
+              state: 'failed',
+              runId: 'unwritten-run-gamma',
+              error: 'Failed prior to manifest writing',
+              warnings: ['Preflight credential check failed'],
+            };
+          }
+          const dir = path.join(reportRoot, project.id, 'run-b1');
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+            kind: 'project-run', schemaVersion: 3,
+            project: { id: project.id, name: project.name },
+            run: { runId: 'run-b1', observedAt: '2026-09-24T10:00:00.000Z' },
+            state: 'failed',
+            artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
+            warnings: [],
+            diagnostic: 'beta failed',
+          }));
+          fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({
+            schemaVersion: 3, project: { id: project.id, name: project.name },
+            run: { runId: 'run-b1', observedAt: '2026-09-24T10:00:00.000Z' }, state: 'failed', diagnostic: 'beta failed', warnings: [],
+          }));
+          fs.writeFileSync(path.join(dir, 'index.html'), '<html><body>b1</body></html>');
+          return { projectId: project.id, name: project.name, state: 'failed', runId: 'run-b1', warnings: [] };
+        },
+      });
+
+      // Read aggregate-data.json
+      const aggData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8')) as AggregateReportResult;
+      expect(isValidAggregateResult(aggData)).toBe(true);
+
+      // Projects order: active outcomes first in config order (beta, runless-gamma), then historical (hist-service, valid-alpha)
+      expect(aggData.projects.map((p) => p.projectId)).toEqual([
+        'valid-beta',
+        'runless-gamma',
+        'hist-service',
+        'valid-alpha',
+      ]);
+
+      // Malformed manifest was excluded and did not appear as a project
+      expect(aggData.projects.find((p) => p.projectId === 'malformed-service')).toBeUndefined();
+      // Discovery warning recorded in aggregate
+      expect(aggData.warnings.some((w) => w.includes('malformed') || w.includes('incompatible') || w.length > 0)).toBe(true);
+
+      // Runless project has no fake reportPath link
+      const runlessProject = aggData.projects.find((p) => p.projectId === 'runless-gamma')!;
+      expect(runlessProject.reportPath).toBeUndefined();
+      expect(runlessProject.runs).toEqual([]);
+      expect(runlessProject.state).toBe('failed');
+
+      // Valid alpha has 2 runs, newest first (run-a2 then run-a1)
+      const alphaProject = aggData.projects.find((p) => p.projectId === 'valid-alpha')!;
+      expect(alphaProject.runId).toBe('run-a2');
+      expect(alphaProject.runs.map((r) => r.runId)).toEqual(['run-a2', 'run-a1']);
+      expect(alphaProject.reportPath).toBe('valid-alpha/run-a2/index.html');
+
+      // Historical service has 2 runs, newest first (run-h2 then run-h1)
+      const histProject = aggData.projects.find((p) => p.projectId === 'hist-service')!;
+      expect(histProject.runId).toBe('run-h2');
+      expect(histProject.runs.map((r) => r.runId)).toEqual(['run-h2', 'run-h1']);
+
+      // Check published HTML
+      const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
+      expect(indexHtml).toContain('Valid Beta');
+      expect(indexHtml).toContain('Runless Gamma');
+      expect(indexHtml).toContain('Historical Service');
+      expect(indexHtml).toContain('Valid Alpha');
+      expect(indexHtml).not.toContain('malformed-service');
+
+      // Check canaries: untouched!
+      expect(fs.readFileSync(assetCanary, 'utf8')).toBe('/* asset canary */');
+      expect(fs.readFileSync(stagingCanary, 'utf8')).toBe('staging lease canary');
+      expect(fs.readFileSync(configFile, 'utf8')).toBe(configCanary);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

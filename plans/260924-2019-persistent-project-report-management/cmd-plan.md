@@ -1,13 +1,13 @@
 # Implementation phase tracker
 
-Plan: [Persistent project report management](./plan.md). Date: 2026-09-24. Total: 16h. Status: in progress; 9h complete (56%; 2 of 4 phases DONE).
+Plan: [Persistent project report management](./plan.md). Date: 2026-09-24. Total: 16h. Status: complete; 16h complete (100%; 4 of 4 phases DONE).
 
 | Phase | Status | Progress | Effort | Dependency |
 | --- | --- | --- | --- | --- |
 | [01 — Persistent aggregate index builder](./phase-01-persistent-aggregate-index-builder.md) | DONE · 2026-09-24 | 100% | 4h | Existing manifest discovery/publisher |
 | [02 — Control reports DELETE API](./phase-02-control-reports-delete-api.md) | DONE · 2026-09-24 | 100% | 5h | Phase 01 builder; shared report-root lock |
-| [03 — Report management page navigation/deletion](./phase-03-control-ui-navigation-and-deletion.md) | Pending | 0% | 3h | Phase 02 HTTP contract; Phase 01 index JSON |
-| [04 — Verification and caller migration](./phase-04-verification-and-caller-migration.md) | Pending | 0% | 4h | Integrated phases 01–03 |
+| [03 — Report management page navigation/deletion](./phase-03-control-ui-navigation-and-deletion.md) | DONE · 2026-09-24 | 100% | 3h | Phase 02 HTTP contract; Phase 01 index JSON |
+| [04 — Verification and caller migration](./phase-04-verification-and-caller-migration.md) | DONE · 2026-09-25 | 100% | 4h | Integrated phases 01–03 |
 
 ## Acceptance gate
 

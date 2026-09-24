@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { ArtifactPaths } from './artifact-paths.js';
 import type { ReportRootLock } from './report-root-lock-owner.js';
+import type { AggregateReportResult } from '../result-types.js';
 import { discoverRunManifests } from './aggregate-manifest-reader.js';
 import { buildAggregateIndex } from './aggregate-index-builder.js';
 import { writeAggregateDataPair } from './aggregate-report-publisher.js';
@@ -17,14 +18,15 @@ export const MAX_PREFLIGHT_BYTES = 256 * 1_048_576;
 const RESERVED_PROJECT_IDS = new Set(['assets', '.report-root-lock']);
 
 export class ProjectDeletionError extends Error {
-  public constructor(
-    public readonly status: number,
-    public readonly code: string,
-    message: string,
-  ) {
+  public constructor(public readonly status: number, public readonly code: string, message: string) {
     super(message);
     this.name = 'ProjectDeletionError';
   }
+}
+
+export interface DeleteProjectDependencies {
+  readonly removeDirectory?: (target: string) => Promise<void>;
+  readonly publishAggregate?: (reportRoot: string, aggregate: AggregateReportResult) => Promise<string>;
 }
 
 export interface ProjectDeletionResult {
@@ -39,11 +41,7 @@ export function assertSafeProjectId(id: string): void {
     throw new ProjectDeletionError(400, 'INVALID_PROJECT_ID', 'project id is a reserved name');
   }
 }
-
-interface PreflightBudget {
-  entries: number;
-  bytes: number;
-}
+interface PreflightBudget { entries: number; bytes: number; }
 
 async function preflightTree(currentDir: string, depth: number, budget: PreflightBudget): Promise<void> {
   if (depth > MAX_PREFLIGHT_DEPTH) {
@@ -92,6 +90,7 @@ async function attemptRefreshBestEffort(reportRoot: string): Promise<void> {
 export async function deleteProjectReports(
   reportRoot: string,
   projectId: string,
+  dependencies: DeleteProjectDependencies = {},
 ): Promise<ProjectDeletionResult> {
   assertSafeProjectId(projectId);
   const paths = new ArtifactPaths(reportRoot);
@@ -163,7 +162,11 @@ export async function deleteProjectReports(
     }
 
     try {
-      await fs.rm(projectDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      if (dependencies.removeDirectory) {
+        await dependencies.removeDirectory(projectDir);
+      } else {
+        await fs.rm(projectDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      }
     } catch (removalError) {
       await attemptRefreshBestEffort(reportRoot).catch(() => undefined);
       throw new ProjectDeletionError(500, 'REMOVAL_FAILED', `failed to remove project directory: ${removalError instanceof Error ? removalError.message : String(removalError)}`);
@@ -173,7 +176,11 @@ export async function deleteProjectReports(
       const postDiscovery = await discoverRunManifests(reportRoot);
       if (postDiscovery.incomplete) throw new Error('manifest discovery incomplete after deletion');
       const aggregate = buildAggregateIndex({ discovery: postDiscovery, warnings: postDiscovery.warnings });
-      await writeAggregateDataPair(reportRoot, aggregate);
+      if (dependencies.publishAggregate) {
+        await dependencies.publishAggregate(reportRoot, aggregate);
+      } else {
+        await writeAggregateDataPair(reportRoot, aggregate);
+      }
     } catch (publishError) {
       let recoveryNote = '';
       try {

@@ -2,8 +2,9 @@
 
 This summary reflects the refreshed `repomix-output.xml` and checked-in
 source/configuration. It includes Stage View completion monitoring, persistent
-project history, guarded Control API deletion, and Phase 03 report-management
-page navigation and deletion. Fixtures use local inputs; no live Jenkins run is claimed.
+project history, guarded Control API deletion, and Phase 04 report-management
+verification and caller migration. Fixtures use local inputs; no live Jenkins
+run is claimed.
 
 ## Repository profile
 
@@ -86,6 +87,16 @@ page navigation and deletion. Fixtures use local inputs; no live Jenkins run is 
   outcomes and validated history. Incomplete discovery blocks publication;
   aggregate data allows zero projects, up to 5,050 project rows, and staged
   JSON/HTML files up to 16 MiB each.
+- Project-report deletion preflights the canonical target under the shared
+  report-root lock: symlinks and non-file entries fail closed, with limits of
+  32 levels, 4,096 entries, and 256 MiB. It removes the whole selected subtree,
+  counts validated runs, and republishes surviving history; failed refresh
+  attempts recovery without claiming deleted files were restored.
+- Phase 04 verification (2026-09-25): `npm run test:unit` 443/443,
+  `npm run test:control` 34/34, and `npm run test:report` 5/5 (482 passed).
+  Coverage includes aggregate retention/bounds, DELETE security and failure
+  recovery, the read-only report boundary, and Chromium/WebKit management UX.
+  No code-coverage metrics were collected.
 - Repomix compaction regenerated at `repomix-output.xml`; repository ignore
   rules remain in effect.
 
@@ -429,7 +440,7 @@ set `Cache-Control: no-store`.
 | `src/reporting/report-server-control-secrets-api.ts` | Modular `/api/secrets` GET/PUT/DELETE handler, presence-map construction, bounded input, and store operations. |
 | `src/reporting/report-server-control-api.ts` | Config/run handlers and re-export facade for the secrets handler. |
 | `src/reporting/report-server-control-reports-api.ts` | Guarded project-report DELETE endpoint and request validation. |
-| `tests/unit/control-reports-delete-api.spec.ts` | Project deletion response, security/body gates, lock contention, filesystem preflight, and aggregate refresh. |
+| `tests/unit/control-reports-delete-api.spec.ts` | Project deletion security/body gates, lock and prefix safety, filesystem preflight, empty aggregate, and injected removal/publication failure handling. |
 | `src/reporting/report-server-control.ts` | Host preflight, control and built-asset routing, and `ControlRouterContext` dependencies. |
 | `src/reporting/report-server-control-page.ts` | Asset loader: reads built HTML, CSS, and JS from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches buffers. |
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
@@ -525,8 +536,10 @@ Report-management route behavior is covered by
 `tests/unit/control-assets-routing.spec.ts`; browser flows are covered by
 `tests/e2e/control-report-management.spec.ts` and run in Chromium and WebKit via
 `npm run test:control`. Scenarios include navigation/back, empty and
-history-only inventories, per-project pagination, cancellation, successful
-deletion with sibling preservation, and lock-conflict feedback.
+history-only inventories, independent 20/21-run pagination, cancellation and
+Escape dismissal, deletion with sibling preservation, final-project empty
+state, and 409/500 feedback. Assertions compare on-disk project and aggregate
+state.
 
 The Active Config Persistence & Form Builder Phase 04 also covers active-config
 resolution (valid URL > stored filename > first available), stale/empty
