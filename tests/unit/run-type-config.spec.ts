@@ -4,6 +4,7 @@ import {
   assertProjectConfigDocument,
   normalizeProjectConfigDocument,
   selectAutoBuildProject,
+  selectAutoBuildProjects,
   selectReportProjects,
 } from '../../src/config.js';
 import type { ProjectConfigDefaults, ProjectConfigDocumentV1 } from '../../src/config/config-types.js';
@@ -117,6 +118,37 @@ test('selectReportProjects fails when no enabled report projects exist', () => {
   };
   const normalized = normalizeProjectConfigDocument(doc, mockSecrets);
   expect(() => selectReportProjects(normalized)).toThrow(/no enabled report projects found in configuration/u);
+});
+
+test('selectAutoBuildProjects filters out disabled and report projects, preserving order and freezing result', () => {
+  const doc: ProjectConfigDocumentV1 = {
+    schemaVersion: 1,
+    defaults: defaultOptions,
+    projects: [
+      { id: 'report-1', name: 'Report 1', loginUrl: 'https://jenkins.example/jenkins/login', jobUrl: 'https://jenkins.example/jenkins/job/report-1/', runType: 'report', enabled: true },
+      { id: 'build-1', name: 'Build 1', loginUrl: 'https://jenkins.example/jenkins/login', jobUrl: 'https://jenkins.example/jenkins/job/build-1/', runType: 'auto-build', enabled: true },
+      { id: 'build-disabled', name: 'Build Disabled', loginUrl: 'https://jenkins.example/jenkins/login', jobUrl: 'https://jenkins.example/jenkins/job/build-disabled/', runType: 'auto-build', enabled: false },
+      { id: 'report-2', name: 'Report 2', loginUrl: 'https://jenkins.example/jenkins/login', jobUrl: 'https://jenkins.example/jenkins/job/report-2/', runType: 'report', enabled: true },
+      { id: 'build-2', name: 'Build 2', loginUrl: 'https://jenkins.example/jenkins/login', jobUrl: 'https://jenkins.example/jenkins/job/build-2/', runType: 'auto-build', enabled: true },
+    ],
+  };
+  const normalized = normalizeProjectConfigDocument(doc, mockSecrets);
+  const selected = selectAutoBuildProjects(normalized);
+  expect(selected.map((p) => p.id)).toEqual(['build-1', 'build-2']);
+  expect(Object.isFrozen(selected)).toBe(true);
+});
+
+test('selectAutoBuildProjects fails when no enabled auto-build projects exist', () => {
+  const doc: ProjectConfigDocumentV1 = {
+    schemaVersion: 1,
+    defaults: defaultOptions,
+    projects: [
+      { id: 'report-enabled', name: 'Report Enabled', loginUrl: 'https://jenkins.example/jenkins/login', jobUrl: 'https://jenkins.example/jenkins/job/report-enabled/', runType: 'report', enabled: true },
+      { id: 'build-disabled', name: 'Build Disabled', loginUrl: 'https://jenkins.example/jenkins/login', jobUrl: 'https://jenkins.example/jenkins/job/build-disabled/', runType: 'auto-build', enabled: false },
+    ],
+  };
+  const normalized = normalizeProjectConfigDocument(doc, mockSecrets);
+  expect(() => selectAutoBuildProjects(normalized)).toThrow(/no enabled auto-build projects found in configuration/u);
 });
 
 test('selectAutoBuildProject selects matching enabled auto-build project', () => {

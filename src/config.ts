@@ -21,6 +21,7 @@ export {
 export type { LoadedProjectConfigDocument } from './config/project-config-loader.js';
 export {
   selectAutoBuildProject,
+  selectAutoBuildProjects,
   selectReportProjects,
 } from './config/project-run-selection.js';
 export {

@@ -11,6 +11,16 @@ export function selectReportProjects(
   return Object.freeze(selected);
 }
 
+export function selectAutoBuildProjects(
+  projects: readonly NormalizedProjectConfig[],
+): readonly NormalizedProjectConfig[] {
+  const selected = projects.filter((project) => project.enabled && project.runType === 'auto-build');
+  if (selected.length === 0) {
+    throw new ConfigError(['no enabled auto-build projects found in configuration']);
+  }
+  return Object.freeze(selected);
+}
+
 export function selectAutoBuildProject(
   projects: readonly NormalizedProjectConfig[],
   projectId: string,

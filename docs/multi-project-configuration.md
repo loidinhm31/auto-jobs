@@ -70,13 +70,15 @@ normalizing the document:
 
 | Helper | Selection contract |
 | --- | --- |
-| `selectReportProjects(projects)` | Returns a frozen list of enabled projects whose normalized `runType` is `report`; disabled and `auto-build` entries are excluded. Throws a configuration error when none remain. |
+| `selectReportProjects(projects)` | Returns a frozen, configuration-ordered list of enabled normalized `report` projects; excludes disabled and `auto-build` entries and throws a configuration error when none remain. |
+| `selectAutoBuildProjects(projects)` | Returns a frozen, configuration-ordered list of enabled normalized `auto-build` projects; excludes disabled and `report` entries and throws a configuration error when none remain. |
 | `selectAutoBuildProject(projects, projectId)` | Matches one project by exact, non-empty `id`; returns it only when enabled and normalized as `auto-build`. Missing, disabled, and `report` projects are rejected. |
 
-Both helpers are exported from `src/config.ts` and are side-effect free. They
-do not rewrite a project's mode, infer a target from `jobUrl`, or submit a
-Jenkins request. Callers must choose one helper and one executor; report
-collection and the auto-build side effect remain separate.
+All three helpers are exported from `src/config.ts` and are side-effect free.
+The list selectors only identify eligible projects; they do not run or queue
+builds. None rewrites a project's mode, infers a target from `jobUrl`, or
+submits a Jenkins request. Report collection and auto-build execution remain
+separate.
 
 ## Selector configuration
 

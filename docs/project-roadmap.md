@@ -4,6 +4,20 @@ Last updated: 2026-09-24
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
 
+## Control Page Parallel Auto-Build
+
+Plan: [Control Page Parallel Auto-Build](../plans/260924-1158-control-page-parallel-auto-build/plan.md)
+
+**Overall status:** In progress · **18%** (2 of 11 planned hours; 1 of 4 phases DONE).
+
+| Phase | Status | Progress | Effort | Completed | Evidence/detail |
+|---|---|---:|---:|---|---|
+| 01. Config and run selection | **DONE** | **100%** | 2h | 2026-09-24 | Added/exported ordered, immutable `selectAutoBuildProjects` while preserving targeted selection. Focused spec 18/18; full unit suite 389/389; review 10/10, no critical findings ([test report](../plans/reports/tester-260924-1245-phase-01-config-and-run-selection.md), [review](../plans/reports/code-review-260924-1247-phase-01-config-run-selection.md)). |
+| 02. Parallel executor and API | Pending | 0% | 4h | — | Optional-ID API, bounded build pool, ordered per-project outcomes. |
+| 03. Control Page UI | Pending | 0% | 3h | — | Two immediate action buttons, shared Workers selector, multi-result view. |
+| 04. Testing and verification | Pending | 0% | 2h | — | Focused behavioral proof, browser surface, integrated verification. |
+
+
 ## Jenkins Stage View Build Monitoring & Status Tracking
 
 Plan: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
@@ -131,6 +145,8 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Completed Jenkins Stage View Build Monitoring & Status Tracking at 100% across five DONE phases on 2026-09-24T03:00:00+07:00 ([plan](../plans/260924-0218-stage-view-build-monitoring/plan.md)).
 - Added configurable build-completion waiting, live Stage View transitions in Control Dashboard logs, and terminal build/stage results; the optional `ConfigProjectEditor` toggle remains deferred, with configuration available through project JSON and the confirmation modal.
 - Verification recorded in the [code review](../plans/reports/code-review-260924-0254-jenkins-stage-view.md): typecheck/build passed, unit 379/379, control 18/18, template auto-build 1/1, and template integration 11/11. Review passed with no critical issues; two warnings and three suggestions remain documented.
+- Completed Phase 01 (Config and run selection) of Control Page Parallel Auto-Build on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-01-config-and-run-selection.md)); added and exported the ordered, immutable all-enabled auto-build selector while preserving targeted selection.
+- Phase 01 verification: focused selector spec passed 18/18; tester report records 389/389 unit tests passing. Code review scored 10/10 with no critical findings ([test report](../plans/reports/tester-260924-1245-phase-01-config-and-run-selection.md); [review](../plans/reports/code-review-260924-1247-phase-01-config-run-selection.md)). Tester noted a non-fatal `EBUSY` report-asset copy diagnostic; its cause remains unresolved.
 
 ### 0.1.0 (development) — 2026-09-23
 

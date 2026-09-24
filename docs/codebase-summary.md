@@ -78,7 +78,7 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
 | --- | --- |
 | `scripts/run-report.mjs` | Builds the report launcher and invokes the report CLI. |
 | `src/cli.ts` | Parses the explicit `--config` path and reports project outcomes. |
-| `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and mode-selection helpers. |
+| `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and `selectReportProjects`, `selectAutoBuildProjects`, and `selectAutoBuildProject`. |
 | `src/runner.ts` | Saved-count report dispatch, bounded multi-project execution, and aggregate publication. |
 | `src/project/report-worker-pool.ts` | Fixed in-process loops with indexed outcomes and per-project failure isolation. |
 | `src/project/auto-build-runner.ts` | Explicit one-project auto-build API with optional Stage View wait and rich build outcome. |
@@ -128,11 +128,14 @@ is `true`. It applies to auto-build only; the report flow ignores it.
 
 `RunType` is the project-only union `'report' | 'auto-build'`. Missing input
 normalizes to `'report'`; it is not present in `ProjectConfigDefaults` and is
-not read from an environment variable. `selectReportProjects` returns only
-enabled normalized report projects and fails when none exist.
-`selectAutoBuildProject` requires an exact non-empty project ID and returns one
-enabled normalized auto-build project; missing, disabled, or report projects
-fail closed. Both helpers are pure selection boundaries.
+not read from an environment variable. `selectReportProjects` returns a frozen,
+configuration-ordered list of enabled normalized report projects and fails if
+none remain. `selectAutoBuildProjects` returns a frozen, configuration-ordered
+list of enabled normalized auto-build projects and fails if none remain.
+The targeted `selectAutoBuildProject` requires an exact, non-empty project ID
+and returns one enabled normalized auto-build project; missing, disabled, or
+report projects fail closed. All three helpers are pure selection boundaries,
+exported from `src/config.ts`.
 
 Selectors can be supplied at `defaults.selectors` and overridden at
 `projects[*].selectors`. The complete normalized set is `authLandmark`,

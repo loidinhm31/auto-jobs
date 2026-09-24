@@ -85,13 +85,14 @@ flowchart LR
   `runType`, credential references, source origins, selectors, and bounded
   runtime settings through the browser-safe shared `assertProjectConfigDocument`
   boundary. Normalization defaults an omitted `runType` to `report`.
-- `src/config/project-run-selection.ts` owns the explicit
-  `selectReportProjects` and `selectAutoBuildProject` boundaries. Selection is
-  pure and has no browser or Jenkins side effect.
+- `src/config/project-run-selection.ts` owns `selectReportProjects`,
+  `selectAutoBuildProjects`, and `selectAutoBuildProject`. The list selectors
+  return frozen, configuration-ordered enabled projects for their mode and
+  fail if none remain; all selection is side-effect free.
 - `src/config-selectors.ts` owns selector parsing and immutable defaults,
   including the build link and submit-button selectors.
-- `src/config.ts` exposes the loader, normalized contracts, `RunType`, and
-  selection helpers from the public configuration surface.
+- `src/config.ts` exposes the loader, normalized contracts, `RunType`, and all
+  three selection helpers through the public configuration surface.
 - `src/browser-launcher.ts` centralizes browser choice and environment-driven
   launch options (`PLAYWRIGHT_EXECUTABLE_PATH`, headless flags, and action
   delay) shared by report and auto-build callers.
