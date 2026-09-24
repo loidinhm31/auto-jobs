@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
+import { injectCameraRecorderHud } from './stage-view-hud.js';
 import {
   calculateRunDurationMs,
   estimateBuildTimeoutMs,
@@ -32,6 +33,7 @@ export {
   estimateBuildTimeoutMs,
   formatDurationHuman,
   getLatestStageViewRun,
+  injectCameraRecorderHud,
   parseJenkinsDurationMs,
   parseRunRow,
   parseStageViewStatus,
@@ -54,6 +56,11 @@ export async function waitForStageViewCompletion(
     const stageViewLocator = page.locator('#pipeline-box');
     const waitTimeout = Math.max(1_000, Math.min(deadline.remainingMs(), 60_000));
     await stageViewLocator.waitFor({ state: 'visible', timeout: waitTimeout });
+    await injectCameraRecorderHud(page, {
+      lastDurationMs: options.lastDurationMs,
+      timeoutMs: options.timeoutMs,
+      status: 'CONNECTED',
+    });
   } catch (error) {
     return {
       completed: false,
@@ -111,11 +118,26 @@ export async function waitForStageViewCompletion(
       const st = targetRun.status;
       if (st === 'SUCCESS' || st === 'FAILED' || st === 'UNSTABLE' || st === 'ABORTED') {
         onProgress?.(`[Stage View] Build ${targetRun.buildNumber} finished with result: ${st}`);
+        await injectCameraRecorderHud(page, {
+          lastDurationMs: options.lastDurationMs,
+          timeoutMs: options.timeoutMs,
+          status: st,
+          buildNumber: targetRun.buildNumber,
+        });
         return {
           completed: true,
           run: targetRun,
         };
       }
+
+      const activeStage = targetRun.stages.find((s) => s.status === 'in-progress') ?? targetRun.stages.at(-1);
+      await injectCameraRecorderHud(page, {
+        lastDurationMs: options.lastDurationMs,
+        timeoutMs: options.timeoutMs,
+        status: targetRun.status,
+        buildNumber: targetRun.buildNumber,
+        stageName: activeStage?.name,
+      });
     } else {
       const elapsedSec = Math.round((Date.now() - startTime) / 1000);
       if (!hasLoggedQueueWait) {
@@ -125,6 +147,11 @@ export async function waitForStageViewCompletion(
         lastQueueLogTime = Date.now();
         onProgress?.(`[Stage View] Build queued in Jenkins... waiting for run to appear (${elapsedSec}s elapsed)`);
       }
+      await injectCameraRecorderHud(page, {
+        lastDurationMs: options.lastDurationMs,
+        timeoutMs: options.timeoutMs,
+        status: 'QUEUED',
+      });
     }
 
     const remaining = deadline.remainingMs();

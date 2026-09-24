@@ -17,16 +17,19 @@ export function BuildConfirmDialog({
   onCancel,
 }: BuildConfirmDialogProps) {
   const [waitForCompletion, setWaitForCompletion] = useState<boolean>(true);
-  const [waitTimeoutMinutes, setWaitTimeoutMinutes] = useState<number>(15);
+  const [waitTimeoutMinutes, setWaitTimeoutMinutes] = useState<string>('');
 
   useEffect(() => {
     setWaitForCompletion(project?.waitForCompletion !== false);
-    setWaitTimeoutMinutes(project?.waitTimeoutMs ? Math.round(project.waitTimeoutMs / 60000) : 15);
+    setWaitTimeoutMinutes(project?.waitTimeoutMs ? String(Math.round(project.waitTimeoutMs / 60000)) : '');
   }, [project]);
 
   const handleConfirm = () => {
     if (project?.id) {
-      const waitTimeoutMs = waitForCompletion && waitTimeoutMinutes > 0 ? waitTimeoutMinutes * 60 * 1000 : undefined;
+      const trimmed = waitTimeoutMinutes.trim();
+      const parsed = parseInt(trimmed, 10);
+      const waitTimeoutMs =
+        waitForCompletion && !isNaN(parsed) && parsed > 0 ? parsed * 60 * 1000 : undefined;
       void onConfirm(project.id, waitForCompletion, waitTimeoutMs);
     }
   };
@@ -85,13 +88,11 @@ export function BuildConfirmDialog({
                 min={1}
                 max={120}
                 value={waitTimeoutMinutes}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  setWaitTimeoutMinutes(isNaN(val) ? 15 : val);
-                }}
-                className="w-20 px-2 py-1 border border-slate-300 rounded text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Auto (15m)"
+                onChange={(e) => setWaitTimeoutMinutes(e.target.value)}
+                className="w-28 px-2 py-1 border border-slate-300 rounded text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
-              <span className="text-xs text-slate-400">(auto-detects from prior build if left blank)</span>
+              <span className="text-xs text-slate-500">(auto-detects from prior build if left blank)</span>
             </div>
           )}
           <div className="dialog-actions">

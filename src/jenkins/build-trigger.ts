@@ -12,6 +12,7 @@ import {
   estimateBuildTimeoutMs,
   formatDurationHuman,
   getLatestStageViewRun,
+  injectCameraRecorderHud,
   waitForStageViewCompletion,
 } from './stage-view.js';
 import type { StageViewStage } from './stage-view-types.js';
@@ -51,6 +52,7 @@ export async function triggerParameterizedBuild(
   deadline.requireRemaining();
   const waitForCompletion = options.waitForCompletion === true;
   let previousRunId: number | undefined;
+  let previousRunDurationMs: number | undefined;
   let estimatedTimeoutMs: number | undefined;
   if (waitForCompletion) {
     try {
@@ -61,12 +63,19 @@ export async function triggerParameterizedBuild(
       } else {
         const estimate = await estimateBuildTimeoutMs(page, latest);
         estimatedTimeoutMs = estimate.timeoutMs;
+        previousRunDurationMs = estimate.estimatedDurationMs;
         if (estimate.estimatedDurationMs > 0) {
           options.onProgress?.(
             `[Stage View] Previous build took ${formatDurationHuman(estimate.estimatedDurationMs)}. Calculated build timeout: ${formatDurationHuman(estimatedTimeoutMs)} (including 50% buffer + 3m queue buffer).`,
           );
         }
       }
+      await injectCameraRecorderHud(page, {
+        lastDurationMs: previousRunDurationMs,
+        timeoutMs: estimatedTimeoutMs,
+        buildNumber: latest?.buildNumber,
+        status: 'INITIALIZING',
+      });
     } catch {
       // Continue if initial Stage View read is unready
     }
@@ -155,9 +164,10 @@ export async function triggerParameterizedBuild(
       }
 
       const stageViewResult = await waitForStageViewCompletion(page, previousRunId, buildDeadline, {
+        lastDurationMs: previousRunDurationMs,
+        timeoutMs: effectiveWaitTimeoutMs,
         onProgress: options.onProgress,
       });
-
       if (stageViewResult.completed && stageViewResult.run) {
         const run = stageViewResult.run;
         const isSuccess = run.status === 'SUCCESS';

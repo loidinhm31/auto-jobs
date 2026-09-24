@@ -216,6 +216,9 @@ test.describe('Control Page Dashboard E2E', () => {
     const waitCheckbox = page.locator('#checkbox-wait-for-completion');
     await expect(waitCheckbox).toBeVisible();
     await expect(waitCheckbox).toBeChecked();
+    const waitTimeoutInput = page.locator('#input-wait-timeout-minutes');
+    await expect(waitTimeoutInput).toBeVisible();
+    await expect(waitTimeoutInput).toHaveAttribute('placeholder', /Auto/i);
     // Confirm build
     await page.locator('#btn-confirm-build').click();
     await expect(dialog).not.toBeVisible();

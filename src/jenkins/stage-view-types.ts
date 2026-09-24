@@ -19,6 +19,8 @@ export interface StageViewRun {
 export interface WaitForStageViewOptions {
   readonly pollIntervalMs?: number;
   readonly reloadIntervalMs?: number;
+  readonly lastDurationMs?: number | undefined;
+  readonly timeoutMs?: number | undefined;
   readonly onProgress?: ((message: string) => void) | undefined;
 }
 

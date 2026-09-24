@@ -189,9 +189,16 @@ test.describe('stage-view parsing and status evaluation', () => {
       const result = await waitForStageViewCompletion(page, 21, new WorkflowDeadline(5_000), {
         pollIntervalMs: 200,
         reloadIntervalMs: 500,
+        lastDurationMs: 488_000,
+        timeoutMs: 900_000,
         onProgress: (msg) => progressLogs.push(msg),
       });
 
+      const hud = page.locator('#auto-jobs-camera-hud');
+      await expect(hud).toBeVisible();
+      await expect(hud).toContainText('LAST BUILD:');
+      await expect(hud).toContainText('TIMEOUT BUDGET:');
+      await expect(hud).toContainText('REC');
       expect(result.completed).toBe(true);
       expect(result.run?.runId).toBe(22);
       expect(result.run?.status).toBe('SUCCESS');
