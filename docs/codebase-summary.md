@@ -2,8 +2,8 @@
 
 This summary reflects the refreshed `repomix-output.xml` and checked-in
 source/configuration. It includes Stage View completion monitoring, persistent
-project history, and guarded Control API deletion of project reports. Fixtures
-use local inputs; no live Jenkins run is claimed.
+project history, guarded Control API deletion, and Phase 03 report-management
+page navigation and deletion. Fixtures use local inputs; no live Jenkins run is claimed.
 
 ## Repository profile
 
@@ -35,9 +35,12 @@ use local inputs; no live Jenkins run is claimed.
 - Phase 05 addition: focused SecretStore lifecycle coverage, expanded secrets
   API operation coverage, and Chromium/WebKit Control UI E2E verification for
   dynamic credential persistence, injected execution, and zero leakage.
-- Control report deletion addition: a guarded loopback
+- Control report management: guarded loopback
   `DELETE /api/reports/projects/:projectId` removes one project subtree under
-  the report-root lock and rebuilds the aggregate from surviving manifests.
+  the report-root lock and rebuilds surviving aggregates. Dashboard navigation
+  opens a control-only React history page over the published aggregate, with
+  independent 20-run pagination and confirmed deletion; persisted report HTML
+  stays static and read-only.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
   testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
@@ -114,10 +117,14 @@ use local inputs; no live Jenkins run is claimed.
 | `src/reporting/report-server-control-security.ts` | Enforces control security headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
 | `src/reporting/report-server-control-api.ts` | Owns config/run handlers; omitted auto-build `projectId` selects a batch; re-exports the modular secrets handler. |
 | `src/reporting/control-page/types/index.ts` | Defines optional `RunTriggerRequest.projectId`, `AutoBuildProjectResult.exitCode`, and `RunResult.buildProjects`. |
-| `src/reporting/report-server-control.ts` | Validates Host, dispatches control routes, and carries router context. |
+| `src/reporting/report-server-control.ts` | Validates Host, serves the control Dashboard and exact `/reports/index.html` GET/HEAD shell before static report routing, and carries router context. |
 | `src/reporting/report-server-control-page.ts` | Loads Vite-built HTML, CSS, and JS assets from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches assets. |
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
 | `src/reporting/control-page/` | Control Dashboard frontend sources (types, utils, headless hooks, components, styles) bundled via Vite into `.runner-build/reporting/control-page/`. |
+| `src/reporting/control-page/App.tsx`, `src/reporting/control-page/components/organisms/HeaderBar.tsx` | Select the Dashboard or report-management view by pathname and provide Reports navigation. |
+| `src/reporting/control-page/pages/ReportManagementPage.tsx` | Loads and classifies the published aggregate independently of active configuration. |
+| `src/reporting/control-page/hooks/use-delete-reports.ts` | Sends CSRF-aware project deletion requests and refreshes report inventory after outcomes. |
+| `src/reporting/control-page/components/organisms/ProjectReportHistoryCard.tsx`, `src/reporting/control-page/components/molecules/project-runs-table.tsx`, `src/reporting/control-page/components/organisms/DeleteReportsConfirmationDialog.tsx` | Compose per-project history, 20-run pagination, and confirmation-gated deletion. |
 | `vite.control.config.ts` | Vite configuration for Control Dashboard: React plugin, Tailwind CSS, single-bundle outputs, and CSP-compliant asset emission. |
 
 Useful package scripts include `typecheck`, `build` (compiles TypeScript, bundles the Vite control dashboard into `.runner-build/reporting/control-page/`, and stages report assets), `test:unit`,
@@ -513,6 +520,13 @@ the default and selectable counts, raw-JSON synchronization, dirty/run gating,
 save and reload persistence, configuration switching, report/auto-build POST
 payloads without `workerCount`, and `422 INVALID_WORKER_COUNT` for crafted
 requests.
+
+Report-management route behavior is covered by
+`tests/unit/control-assets-routing.spec.ts`; browser flows are covered by
+`tests/e2e/control-report-management.spec.ts` and run in Chromium and WebKit via
+`npm run test:control`. Scenarios include navigation/back, empty and
+history-only inventories, per-project pagination, cancellation, successful
+deletion with sibling preservation, and lock-conflict feedback.
 
 The Active Config Persistence & Form Builder Phase 04 also covers active-config
 resolution (valid URL > stored filename > first available), stale/empty

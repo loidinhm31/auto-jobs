@@ -21,7 +21,7 @@ Keep `reports/index.html` and `reports/aggregate-data.json` as a persistent inde
 | --- | --- | --- | --- | --- |
 | [01: Persistent aggregate index builder](./phase-01-persistent-aggregate-index-builder.md) | Merge validated history with active outcomes; migrate runner | Done · 2026-09-24 | 100% | 4h |
 | [02: Guarded control reports DELETE API](./phase-02-control-reports-delete-api.md) | **DONE** · 2026-09-24 | 100% | 5h |
-| [03: Report management page navigation and deletion](./phase-03-control-ui-navigation-and-deletion.md) | Dashboard link; interactive project inventory and confirmed deletion on report page | Pending | 0% | 3h |
+| [03: Report management page navigation and deletion](./phase-03-control-ui-navigation-and-deletion.md) | **DONE** · 2026-09-24 | 100% | 3h |
 | [04: Verification and caller migration](./phase-04-verification-and-caller-migration.md) | Prove security, persistence, concurrency, failure recovery, browsers and callers | Pending | 0% | 4h |
 
 ## Dependencies
@@ -45,7 +45,7 @@ Keep `reports/index.html` and `reports/aggregate-data.json` as a persistent inde
 ### Action items
 
 - [x] Phase 01: explicitly signal incomplete discovery and enforce the published pair's static serving size limit before replacing it.
-- [ ] Phase 03: implement independent 20-run pagination with latest-first ordering and stable page transitions after deletion/reload.
+- [x] Phase 03: implement independent 20-run pagination with latest-first ordering and stable page transitions after deletion/reload.
 - [ ] Phase 04: prove the static/read-only index remains used, management route differs only in control mode, and the per-project pager shows all available runs without truncation.
 
 ## Unresolved questions

@@ -18,10 +18,11 @@ verification:
 - **Project report deletion:** guarded loopback
   `DELETE /api/reports/projects/:projectId` uses the report-root lock;
   contention returns `409` and the aggregate rebuilds from survivors.
-- **Control UI:** edit schema-v1 settings and manage credentials. The action bar
-  exposes all-enabled report/build actions and one shared saved Workers
-  selector; builds start immediately without a per-card button or confirmation
-  dialog. Results show ordered project outcomes or the legacy scalar fallback.
+- **Control UI:** The Dashboard edits schema-v1 settings and credentials and
+  exposes all-enabled report/build actions with one saved Workers selector.
+  Its `/reports/index.html` React view lists retained history, independently
+  pages 20 runs per project, and offers confirmed whole-project deletion; the
+  persisted report HTML remains static and scriptless.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
@@ -59,8 +60,10 @@ flowchart TB
   Jenkins[Jenkins controller] --> ReportSources[Snyk / SonarQube publisher pages]
   Executor --> Jenkins
   Executor --> ReportRoot[Canonical report root]
-  ReportRoot --> ReadOnlyServer[Read-only report server / reports index]
-  Control -. direct navigation /reports/index.html .-> ReadOnlyServer
+  ReportRoot --> StaticReports[GET/HEAD report artifacts + offline index]
+  Control --> ManagementUI[CSRF-bearing /reports/index.html shell]
+  ManagementUI -->|GET aggregate and local report links| StaticReports
+  ManagementUI -. CSRF DELETE .-> ReportsApi
   Templates[Checked-in offline fixtures] -. exact synthetic URL routes, tests only .-> Executor
 ```
 

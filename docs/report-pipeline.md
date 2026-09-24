@@ -109,6 +109,12 @@ aggregate refresh, preservation of sibling projects/assets/config, request and
 ID validation, missing validated runs, 409 lock contention, and symlink/depth
 preflight failures.
 
+The Control report-management page at `/reports/index.html` reads the published
+aggregate and invokes this API only after confirmation; the persisted
+`reports/index.html` remains a static snapshot. See [architecture](./architecture.md)
+for the UI and route distinction and [release gates](./release-gates.md) for
+navigation, pagination, and deletion coverage.
+
 ## Focused contracts
 
 - `tests/unit/aggregate-index-builder.spec.ts` covers empty indexes, incomplete

@@ -2,10 +2,10 @@
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, persistent aggregate history,
-bounded execution, Control Page results, offline build fixtures, and dynamic
-credentials.<br>
-**Current milestone:** Persistent Aggregate Index Builder — Phase 01
-implementation (2026-09-24).<br>
+bounded execution, Control Page actions and report management, offline build
+fixtures, and dynamic credentials.<br>
+**Current milestone:** Persistent project report management — Phase 03:
+report-management page navigation and deletion (complete; 2026-09-24).<br>
 **Prior completed milestone:** Control Page Parallel Auto-Build — complete,
 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
 passed; review approved 9.3/10.
@@ -310,6 +310,28 @@ and failure semantics are validated before side effects.
   removal. If post-removal refresh fails, attempt recovery and report the
   completed deletion separately from the index-refresh failure.
 
+### FR-13: Control report-management page
+
+- Add same-tab **Reports** navigation from the Control Dashboard to
+  `/reports/index.html` and a return link to `/`; in control mode, exact
+  `GET`/`HEAD` serves the CSRF-bearing React shell with `CONTROL_CSP`, while
+  report-only mode and all other report routes keep their existing behavior.
+- Read all retained projects from `/reports/aggregate-data.json`, independent
+  of active configuration; show safe local report links and history-only
+  projects. A missing index or valid `projects: []` displays an empty state;
+  schema-invalid data is flagged as corrupt, while parse/fetch failures show
+  the load error.
+- Paginate each project's newest-first runs independently by 20. Disable
+  deletion when a project has no retained runs.
+- Require an accessible labeled permanent-deletion confirmation; cancel leaves
+  disk/UI unchanged, and pending state prevents duplicate submission.
+- Send a bodyless CSRF-bearing `DELETE /api/reports/projects/:projectId` through
+  the shared control API client. Refresh inventory on success or `404`, show
+  retry guidance on `409`, and surface other errors without promising rollback.
+- Keep mutation controls/tokens out of persisted `reports/index.html`;
+  `serve:report` stays read-only. Cover route security and navigation,
+  pagination, and deletion in unit and Chromium/WebKit E2E tests.
+
 ## Non-functional requirements
 
 | Area | Requirement |
@@ -504,6 +526,7 @@ require the environment variables named by project configuration.
 | Local secret persistence | `src/reporting/report-server-secret-store.ts`, `src/reporting/report-server-constants.ts` | [architecture](./architecture.md), [multi-project configuration](./multi-project-configuration.md), [code standards](./code-standards.md) |
 | Control secrets API and security gates | `src/reporting/report-server-control-secrets-api.ts`, `src/reporting/report-server-control-api.ts`, `src/reporting/report-server-control-security.ts`, `src/reporting/report-server-control.ts` | [system architecture](./system-architecture.md), [architecture](./architecture.md), [code standards](./code-standards.md) |
 | Control UI credential management | `src/reporting/control-page/` (React application: `App.tsx`, `components/`, `hooks/`) | [system architecture](./system-architecture.md), [codebase summary](./codebase-summary.md) |
+| Control report-management navigation and deletion | `src/reporting/control-page/pages/ReportManagementPage.tsx`, `src/reporting/control-page/hooks/use-delete-reports.ts`, `src/reporting/report-server-control.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |
@@ -536,6 +559,10 @@ report CLI still has no production auto-build command.
 - Completed Phase 03 Control Page UI refactor: shared saved Workers selector,
   all-enabled report/build actions, no per-card build control or confirmation
   dialog, and ordered per-project result rows with scalar fallback.
+- Documented Phase 03 Control report management: navigation to retained
+  history, independent 20-run pagination, and confirmation-gated project
+  deletion; persisted report HTML remains static and read-only.
+
 - Focused `control-atomic-components.spec.ts` passed 25/25.
 - Completed Phase 04 Testing and verification on 2026-09-24; `npm run test:release` passed 439/439, typecheck/build passed, and code review approved 9.3/10 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
 

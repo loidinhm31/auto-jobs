@@ -7,7 +7,7 @@
 
 ## Overview
 
-- **Date:** 2026-09-24. **Description:** Navigate from dashboard to an interactive report management page at `/reports/index.html` in control mode; allow confirmed deletion of any retained project on that page. **Priority:** P2. **Implementation status:** pending. **Review status:** not reviewed.
+- **Date:** 2026-09-24. **Description:** Navigate from dashboard to an interactive report management page at `/reports/index.html` in control mode; allow confirmed deletion of any retained project on that page. **Priority:** P2. **Implementation status:** DONE · 2026-09-24. **Review status:** approved (9.5/10).
 
 ## Key Insights
 
@@ -63,10 +63,10 @@
 
 ## Todo list
 
-- [ ] Add control-only report management route and exact React path selection.
-- [ ] Add dashboard Reports link and management back link; render full validated inventory.
-- [ ] Add per-project danger action, accessible confirmation and guarded DELETE flow.
-- [ ] Page historical run lists independently by 20, including last/empty page transitions; refresh surviving history and verify read-only modes stay intact.
+- [x] Add control-only report management route and exact React path selection.
+- [x] Add dashboard Reports link and management back link; render full validated inventory.
+- [x] Add per-project danger action, accessible confirmation and guarded DELETE flow.
+- [x] Page historical run lists independently by 20, including last/empty page transitions; refresh surviving history and verify read-only modes stay intact.
 
 ## Success Criteria
 

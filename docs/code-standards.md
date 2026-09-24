@@ -39,7 +39,12 @@ it is not a replacement for schema or security validation.
 | `src/reporting/report-server-control-api.ts` | Config/run handlers and the API facade; keep secrets and project-report handlers in their dedicated modules. |
 | `src/reporting/report-server-control-reports-api.ts` | Guarded `DELETE /api/reports/projects/:projectId` route and request validation. |
 | `src/artifacts/report-project-deletion.ts` | Canonical-path and tree preflight, root-lock coordination, subtree removal, and aggregate refresh. |
-| `src/reporting/report-server-control.ts` | Loopback control routing, Host preflight, and `ControlRouterContext` dependencies. |
+| `src/reporting/report-server-control.ts` | Loopback routing, Host preflight, and exact `/reports/index.html` GET/HEAD control-shell handling before static report routing. |
+| `src/reporting/control-page/App.tsx`, `src/reporting/control-page/components/organisms/HeaderBar.tsx` | Select Dashboard vs report-management view by pathname and link to `/reports/index.html`. |
+| `src/reporting/control-page/pages/ReportManagementPage.tsx` | Load and classify the published aggregate independently of active project configuration. |
+| `src/reporting/control-page/hooks/use-delete-reports.ts` | Use the shared CSRF-aware client for project deletion and refresh/error feedback. |
+| `src/reporting/control-page/components/organisms/ProjectReportHistoryCard.tsx`, `src/reporting/control-page/components/molecules/project-runs-table.tsx`, `src/reporting/control-page/components/organisms/DeleteReportsConfirmationDialog.tsx` | Compose project history, per-project pagination, and confirmation-gated deletion. |
+| `tests/e2e/control-report-management.spec.ts` | Browser-level navigation, retained-history, pagination, and deletion workflows. |
 | `src/reporting/report-server-run-manager.ts` | Single-active control-run lifecycle and optional `SecretStore` dependency carried into execution. |
 | `src/reporting/report-server-run-executor.ts` | Per-run SecretStore snapshot, environment merge, mode dispatch, and control-output redaction. |
 | `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
@@ -263,6 +268,12 @@ Tests must defend observable behavior and fail on plausible regressions:
   server; cover unsafe IDs, mutation gates, empty-body rules, 404, 409 lock
   contention, symlink/depth preflight, sibling/assets preservation, and the
   aggregate rebuild in `tests/unit/control-reports-delete-api.spec.ts`.
+- For the Control report-management UI, `tests/unit/control-assets-routing.spec.ts`
+  covers the control-only GET/HEAD shell and the report-mode static route.
+  `tests/e2e/control-report-management.spec.ts` runs in Chromium and WebKit;
+  cover navigation/back, empty and history-only inventories, per-project
+  pagination, cancellation, deletion with sibling preservation, and 409
+  conflict feedback.
 - For the dynamic-credential browser flow, `tests/e2e/control-page.spec.ts`
   must run against isolated temporary roots in Chromium and WebKit. Cover
   accessible modal state, key discovery, Missing/Configured transitions,

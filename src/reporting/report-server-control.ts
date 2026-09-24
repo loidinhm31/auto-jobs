@@ -66,6 +66,28 @@ export async function handleControlRequest(
     return;
   }
 
+  if (pathname === '/reports/index.html') {
+    if (method !== 'GET' && method !== 'HEAD') {
+      response.setHeader('allow', 'GET, HEAD');
+      writeControlSecurityHeaders(response);
+      response.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' });
+      response.end('method not allowed\n');
+      return;
+    }
+    writeControlSecurityHeaders(response);
+    const html = await renderControlPageHtml(context.csrfToken);
+    response.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'content-length': Buffer.byteLength(html),
+    });
+    if (method === 'HEAD') {
+      response.end();
+    } else {
+      response.end(html);
+    }
+    return;
+  }
+
   if (method === 'GET' && pathname === '/assets/control-page.css') {
     writeControlSecurityHeaders(response);
     const css = await getControlCss();

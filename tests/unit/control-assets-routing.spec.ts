@@ -12,7 +12,7 @@ import {
   _resetControlAssetsCache,
 } from '../../src/reporting/report-server-control-page.js';
 import { createReportServer } from '../../src/reporting/report-server.js';
-import { CONTROL_CSP } from '../../src/reporting/report-server-constants.js';
+import { CONTROL_CSP, REPORT_CSP, AGGREGATE_REPORT_MARKER } from '../../src/reporting/report-server-constants.js';
 
 test.describe('Control Page Asset Routing & Build Output (Phase 01)', () => {
   test.beforeEach(() => {
@@ -110,6 +110,76 @@ test.describe('Control Page Asset Routing & Build Output (Phase 01)', () => {
       expect(jsResponse.headers()['content-type']).toContain('application/javascript');
       expect(jsResponse.headers()['content-security-policy']).toBe(CONTROL_CSP);
       expect(jsResponse.headers()['cache-control']).toBe('no-store');
+    } finally {
+      await server.close();
+      fs.rmSync(configRoot, { recursive: true, force: true });
+      fs.rmSync(reportRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('control server serves /reports/index.html with control security headers and CSRF token on GET and HEAD', async ({ page }) => {
+    const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-test-config-'));
+    const reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'control-test-report-'));
+    fs.writeFileSync(
+      path.join(configRoot, 'default.json'),
+      JSON.stringify({ schemaVersion: 1, defaults: { artifactDir: reportRoot }, projects: [] }),
+      'utf8',
+    );
+
+    const server = await createReportServer(reportRoot, {
+      mode: 'control',
+      configRoot,
+      host: '127.0.0.1',
+      port: 0,
+    });
+
+    try {
+      // 1. GET /reports/index.html
+      const getRes = await page.request.get(`${server.url}reports/index.html`);
+      expect(getRes.status()).toBe(200);
+      expect(getRes.headers()['content-type']).toContain('text/html');
+      expect(getRes.headers()['content-security-policy']).toBe(CONTROL_CSP);
+      expect(getRes.headers()['cache-control']).toBe('no-store');
+      const getHtml = await getRes.text();
+      expect(getHtml).toContain('<meta name="csrf-token" content="');
+      expect(getHtml).not.toContain('__CSRF_TOKEN_PLACEHOLDER__');
+      const reportedLength = parseInt(getRes.headers()['content-length'] ?? '0', 10);
+      expect(reportedLength).toBe(Buffer.byteLength(getHtml));
+
+      // 2. HEAD /reports/index.html
+      const headRes = await page.request.head(`${server.url}reports/index.html`);
+      expect(headRes.status()).toBe(200);
+      expect(headRes.headers()['content-type']).toContain('text/html');
+      expect(headRes.headers()['content-security-policy']).toBe(CONTROL_CSP);
+      expect(headRes.headers()['content-length']).toBe(String(reportedLength));
+      const headBody = await headRes.text();
+      expect(headBody).toBe('');
+
+      // 3. POST /reports/index.html returns 405 Method Not Allowed
+      const postRes = await page.request.post(`${server.url}reports/index.html`);
+      expect(postRes.status()).toBe(405);
+      expect(postRes.headers()['allow']).toBe('GET, HEAD');
+
+      fs.writeFileSync(
+        path.join(reportRoot, 'index.html'),
+        `<!doctype html><html><head>${AGGREGATE_REPORT_MARKER}<title>Static</title></head><body>Static Index</body></html>`,
+        'utf8',
+      );
+      const reportModeServer = await createReportServer(reportRoot, {
+        mode: 'report',
+        host: '127.0.0.1',
+        port: 0,
+      });
+      try {
+        const reportRes = await page.request.get(`${reportModeServer.url}index.html`);
+        expect(reportRes.status()).toBe(200);
+        expect(reportRes.headers()['content-security-policy']).toBe(REPORT_CSP);
+        const reportBody = await reportRes.text();
+        expect(reportBody).toContain('Static Index');
+        expect(reportBody).not.toContain('<meta name="csrf-token"');
+      } finally {
+        await reportModeServer.close();
+      }
     } finally {
       await server.close();
       fs.rmSync(configRoot, { recursive: true, force: true });

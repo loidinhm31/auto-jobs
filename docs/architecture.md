@@ -2,10 +2,11 @@
 
 This document covers schema-v1 configuration, report and Jenkins auto-build
 workflows, Stage View monitoring, the loopback Control Page and control API,
-local SecretStore, credential UI, and deterministic verification boundaries.
-The report command remains report-only. Control `POST /api/run` accepts either
-one selected auto-build project or all enabled auto-build projects when
-`projectId` is omitted; mode is never inferred from URL, selector, CLI, or env.
+local SecretStore, credential UI, persistent report management, and deterministic
+verification boundaries. The report command remains report-only. Control
+`POST /api/run` accepts either one selected auto-build project or all enabled
+auto-build projects when `projectId` is omitted; mode is never inferred from URL,
+selector, CLI, or env.
 
 With wait enabled, each build returns an in-memory outcome carrying identity,
 terminal result, and stage details when available.
@@ -125,8 +126,9 @@ flowchart LR
   canonical report root.
 - `src/reporting/report-server-control-reports-api.ts` handles the guarded
   `DELETE /api/reports/projects/:projectId` control endpoint.
-- `src/reporting/report-server-control.ts` validates Host, dispatches control
-  routes and built assets, and carries router dependencies.
+- `src/reporting/report-server-control.ts` validates Host, serves the Control
+  Dashboard and exact report-management shell ahead of static routing, and
+  dispatches APIs/assets with router dependencies.
 - `src/reporting/control-page/` contains the Control Dashboard frontend sources:
   server data contracts (`types/index.ts`), shared UI component prop interfaces
   (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
@@ -160,7 +162,7 @@ flowchart LR
   [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx),
   [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx)),
   layout templates ([`components/templates/DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)),
-  pages ([`pages/DashboardPage.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx)),
+  pages ([`pages/DashboardPage.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx) and [`pages/ReportManagementPage.tsx`](../src/reporting/control-page/pages/ReportManagementPage.tsx)),
   error boundary ([`components/ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)),
   and application markup (`index.html`, [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), `main.tsx`, [`styles/globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css)),
   bundled by `vite.control.config.ts` into `.runner-build/reporting/control-page/` with
@@ -531,21 +533,25 @@ succeeded but refresh still fails, the API returns `500 REFRESH_FAILED` and
 reports that the project was deleted and the index may need recovery.
 
 #### UI confirmation and navigation
-The Control Dashboard links to `/reports/index.html`. In control mode, this
-exact URL serves a CSRF-bearing React report-management view with a list of
-retained validated projects, historical report links, and an explicit
-per-project **Delete Reports** action with a confirmation dialog. Each project
-pages its historical runs independently, 20 per page, using the published
-`aggregate-data.json`; pagination limits rendered rows but not discovery,
-network response size, or retention. The view refreshes after mutation; its
-buttons do not infer deletion eligibility from the active configuration.
-The persisted `reports/index.html` remains a static, scriptless snapshot
-of the same history for offline reading and `serve:report`. It is required
-by read-only report-root validation and CLI/offline consumption. Control mode
-serves this one route with `CONTROL_CSP`; all run artifact routes and
-report-only mode retain `REPORT_CSP` and GET/HEAD-only handling. At the
-existing 5,000-manifest discovery or 16 MiB static-serving boundary, warn
-and refuse incomplete inventory/deletion rather than silently dropping runs.
+The Dashboard **Reports** link navigates to `/reports/index.html`; the control
+router intercepts this exact `GET`/`HEAD` path before `/reports/` static dispatch
+and returns the CSRF-bearing Vite shell with `CONTROL_CSP` and no-store headers;
+HEAD has the HTML content length but no body; `App` renders `ReportManagementPage` for this pathname.
+The page fetches `/reports/aggregate-data.json` with `cache: 'no-store'` and
+renders all retained validated projects, independent of active configuration.
+A missing index or valid `projects: []` shows the empty state; a schema-invalid
+aggregate is flagged as corrupt, while parse/fetch failures show a load error.
+Safe local report links, warnings, and history remain available. Each project
+independently pages newest-first runs by 20; pagination limits rendered rows
+only. **Delete Reports** is disabled without runs and opens an accessible
+labeled Radix confirmation explaining whole-project permanent removal;
+cancellation makes no request.
+Confirmation uses the shared CSRF-aware client for a bodyless
+`DELETE /api/reports/projects/:projectId`; success refreshes inventory, `404`
+refreshes stale inventory, and `409` gives retry guidance; other failures are
+surfaced without implying rollback.
+The persisted `reports/index.html` remains static/scriptless. `serve:report`
+and immutable artifact routes remain GET/HEAD-only with report-serving CSP.
 
 #### Serving modes
 `serve:report` remains strictly read-only and unauthenticated (GET/HEAD only).

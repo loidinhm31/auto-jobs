@@ -2,11 +2,12 @@
 
 This project has deterministic local gates for native browsers, offline report
 fixtures, the Phase 3 build-page fixture, the Phase 01 SecretStore backend,
-the Phase 02 control secrets API/security boundary, the Phase 03 control
-run-environment boundary, the Phase 04 control UI credential dialog, and the
-Phase 05 dynamic-credential verification suite. The commands below are the
-current release contract; test counts are intentionally not hard-coded except
-where a dated verification snapshot is recorded for traceability.
+the Phase 02 control secrets API/security boundary, report-management routing
+and browser flows, the Phase 03 control run-environment boundary, the Phase 04
+control UI credential dialog, and the Phase 05 dynamic-credential verification
+suite. The commands below are the current release contract; test counts are
+intentionally not hard-coded except where a dated verification snapshot is
+recorded for traceability.
 
 ## Gate order
 
@@ -269,6 +270,18 @@ The suite checks guarded deletion, empty-body and invalid-input handling,
 project-not-found behavior, report-root-lock `409`, filesystem preflight, and
 aggregate refresh while preserving sibling projects, assets, and config. It
 uses isolated temporary roots and does not contact Jenkins or vendors.
+
+### Control report-management UI gate
+
+`npm run test:control` includes `tests/e2e/control-report-management.spec.ts`
+under Chromium and WebKit (`playwright.control.config.ts`). It covers dashboard
+navigation/back, missing-inventory empty state, history-only retained projects,
+per-project 20-run pagination, cancel/success side effects, sibling preservation,
+and lock-conflict feedback.
+
+`tests/unit/control-assets-routing.spec.ts` runs under `npm run test:unit` and
+checks the control-only `/reports/index.html` GET/HEAD CSRF shell, CSP and HEAD
+body boundary, plus the report-mode static-index route.
 
 ### Phase 01 control asset routing gate
 
