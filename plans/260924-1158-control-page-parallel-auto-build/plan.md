@@ -12,13 +12,15 @@ created: 2026-09-24
 # Control Page Parallel Auto-Build — implementation plan
 
 ## Overview
-One enabled/mode-selected project belongs to exactly one action: **Generate Reports (All Enabled)** selects enabled `report` projects; **Trigger Auto Build (All Enabled)** selects enabled `auto-build` projects and submits immediately, without a confirmation dialog. The existing schema-v1 top-level `reportWorkers` (default 1; integer 1–4) remains the persisted, ETag-protected setting for **both** actions; its dashboard label becomes **Workers**. Phase 01 is implemented; remaining phases cover executor/API, UI, and integration verification.
+One enabled/mode-selected project belongs to exactly one action: **Generate Reports (All Enabled)** selects enabled `report` projects; **Trigger Auto Build (All Enabled)** selects enabled `auto-build` projects and submits immediately, without a confirmation dialog. The existing schema-v1 top-level `reportWorkers` (default 1; integer 1–4) remains the persisted, ETag-protected setting for **both** actions; its dashboard label becomes **Workers**. Phases 01 and 02 are complete; remaining phases cover the UI and integration verification.
 
 ## Phases and progress
+Overall status: **In progress** · **55%** (6 of 11 planned hours; 2 of 4 phases DONE).
+
 | Phase | Status / progress | Effort | Depends on | Deliverable |
 | --- | --- | ---: | --- | --- |
 | [01 Config and run selection](./phase-01-config-and-run-selection.md) | **DONE** · 100% · 2026-09-24 | 2h | none | Shared saved-count contract; `selectAutoBuildProjects` and single-ID preservation |
-| [02 Parallel executor and API](./phase-02-parallel-auto-build-executor-and-api.md) | Pending · 0% | 4h | 01 | Optional-ID API, bounded build pool, ordered per-project outcomes |
+| [02 Parallel executor and API](./phase-02-parallel-auto-build-executor-and-api.md) | **DONE** · 100% · 2026-09-24 | 4h | 01 | Optional-ID API, bounded build pool, ordered per-project outcomes |
 | [03 Control Page UI](./phase-03-control-page-ui-refactor.md) | Pending · 0% | 3h | 02 result contract | Two immediate action buttons, shared Workers selector, dialog removal, multi-result view |
 | [04 Testing and verification](./phase-04-testing-and-verification.md) | Pending · 0% | 2h | 01–03 | Focused behavioral proof, browser surface, once-only integrated gate |
 

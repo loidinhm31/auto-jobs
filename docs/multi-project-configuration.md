@@ -7,8 +7,8 @@ callers use the normalized configuration; loopback control runs additionally
 overlay a per-run SecretStore snapshot before executor dispatch and expose the
 Phase 04 credential modal for presence-only local management. Phase 05 verifies
 the persistence, API, and browser contracts around that flow.
-The optional top-level `reportWorkers` setting controls the report batch in
-both file-mode CLI and Control Dashboard execution.
+The optional top-level `reportWorkers` controls report batches and also bounds
+Control API auto-build batches.
 
 The configuration contract is implemented in `src/config/` and consumed by
 `src/runner.ts` (report), `src/project/auto-build-runner.ts` (auto-build), or
@@ -41,12 +41,12 @@ Jenkins origin and base context. `baseUrl`, `jobPath`, `loginPath`,
 `triggerMode`, `buildNumber`, `captureFrom`, and other legacy structural keys
 are not accepted.
 
-`reportWorkers` is an optional top-level field for the whole report batch. It
-must be an integer from 1 through 4; omission means 1. It is not accepted under
-`defaults` or a project, and schema-v1 remains unchanged. `ConfigStore` validates
-the field on read/write, so it follows the existing document Save and ETag
-flow. The Dashboard selector edits this saved field; the Run control stays
-disabled until the document has been saved.
+`reportWorkers` is an optional top-level count for report batches and Control API
+auto-build batches. It accepts integers 1–4, defaults to 1, and is not valid
+under `defaults` or a project; schema-v1 remains unchanged. `ConfigStore` validates
+the setting on read/write, so it follows the saved-document and ETag flow.
+The Dashboard selector edits this saved value; the Run control stays disabled
+until the document has been saved.
 
 
 `enabled: false` retains an entry without executing it. Optional project and
@@ -396,13 +396,31 @@ valid raw-JSON Apply validates and updates that same document, while invalid
 JSON leaves the model unchanged. Save uses the existing `If-Match` ETag flow,
 and Generate Reports stays disabled until Save succeeds.
 
-A report `POST /api/run` contains only `configName`, `configEtag`, and `runType`;
-it never carries `workerCount`. A crafted request with its own `workerCount`
-gets `422 INVALID_WORKER_COUNT` before run admission. The executor verifies the
-ETag and passes the saved count only to report execution. Auto-build keeps its
-existing `projectId` request field and `{ runtimeEnvironment }` dependency; it
-does not receive a report worker count.
+A report `POST /api/run` carries `configName`, `configEtag`, and `runType`.
+Auto-build requests may omit `projectId` to select every enabled auto-build project or
+supply one ID to select a single project. Neither mode accepts a request-level
+`workerCount`; the API returns `422 INVALID_WORKER_COUNT`. After ETag validation,
+the saved count goes to report execution and bounds control auto-build workers.
 
+
+### Control auto-build batch API
+
+`POST /api/run` requires `configName`, `configEtag`, and
+`runType: 'auto-build'`; `projectId` is optional. Omission selects every enabled
+normalized auto-build project; a non-empty ID selects only that project. A
+blank/non-string ID returns `422 INVALID_PROJECT_ID`. Request-level
+`workerCount` returns `422 INVALID_WORKER_COUNT`.
+
+The saved `reportWorkers` setting (1–4, default 1) bounds concurrent projects;
+the pool runs at most `min(reportWorkers, selected projects)` and retains config
+order. A thrown project executor becomes `submission-unknown` with
+`exitCode: 1`; sibling builds continue.
+
+`POST` returns `202 { id, status }`; poll `GET /api/run?id=<id>`. The terminal
+record includes every project outcome in `result.buildProjects`, including for
+a single-project run. Run status is `succeeded` iff every outcome has
+`exitCode === 0`; otherwise it is `failed`. Single-project results also retain
+their scalar build summary fields.
 
 ### Explicit auto-build execution
 
@@ -427,11 +445,11 @@ The auto-build workflow opens the exact configured job, validates one visible
 result is one of `submitted`, `rejected`, `submission-unknown`, or
 `failed-before-submit`. It never changes parameters, searches jobs, polls a
 queue/build, retries after an observed POST, or writes report artifacts.
-For control-mode auto-build runs, the same runner receives the merged
-`runtimeEnvironment` from the control executor; direct integrations supply
-their own environment. The current report CLI has no auto-build command; a
-future control-plane caller must preserve these selection and confirmation
-boundaries.
+Control-mode auto-build uses the same runner through its bounded worker pool
+and supplies the merged `runtimeEnvironment`; direct integrations supply their
+own environment. The report CLI still has no auto-build command. The Control
+API supports one selected project or the enabled batch when `projectId` is
+omitted.
 
 The schema has no source switch, existing-build mode, job-page override, build
 identity, or polling environment inputs. These are intentionally absent from

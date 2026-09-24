@@ -208,23 +208,55 @@ test.describe('Control Run API', () => {
     const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
     const { etag } = await configRes.json();
 
-    // Both workerCount present and projectId missing -> must return INVALID_WORKER_COUNT
+    // Both workerCount present and invalid projectId -> must return INVALID_WORKER_COUNT
     const postResWithCount = await request.post(`${serverUrl}api/run`, {
       headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
-      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', workerCount: 2 },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', workerCount: 2, projectId: '' },
     });
     expect(postResWithCount.status()).toBe(422);
     const bodyWithCount = await postResWithCount.json();
     expect(bodyWithCount.error.code).toBe('INVALID_WORKER_COUNT');
 
-    // Omitted workerCount and projectId missing -> must return MISSING_PROJECT_ID
-    const postResWithoutCount = await request.post(`${serverUrl}api/run`, {
+    // Invalid projectId when provided (blank string) -> must return INVALID_PROJECT_ID
+    const postResInvalidId = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: '   ' },
+    });
+    expect(postResInvalidId.status()).toBe(422);
+    const bodyInvalidId = await postResInvalidId.json();
+    expect(bodyInvalidId.error.code).toBe('INVALID_PROJECT_ID');
+  });
+
+  test('POST /api/run accepts omitted projectId for auto-build and executes all enabled auto-build projects', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const postRes = await request.post(`${serverUrl}api/run`, {
       headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
       data: { configName: 'default.json', configEtag: etag, runType: 'auto-build' },
     });
-    expect(postResWithoutCount.status()).toBe(422);
-    const bodyWithoutCount = await postResWithoutCount.json();
-    expect(bodyWithoutCount.error.code).toBe('MISSING_PROJECT_ID');
+    expect(postRes.status()).toBe(202);
+    const body = await postRes.json();
+    expect(body.id).toBeDefined();
+    const run = await pollRun(request, serverUrl, body.id);
+    expect(run.status).toBe('succeeded');
+    expect(run.result?.buildProjects).toBeDefined();
+  });
+
+  test('POST /api/run rejects non-string or blank projectId for auto-build with 422 INVALID_PROJECT_ID', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const testValues = ['', '   ', 123, null, false, {}];
+    for (const val of testValues) {
+      const res = await request.post(`${serverUrl}api/run`, {
+        headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+        data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: val },
+      });
+      expect(res.status()).toBe(422);
+      const body = await res.json();
+      expect(body.error.code).toBe('INVALID_PROJECT_ID');
+    }
   });
 
   test('POST /api/run accepts optional waitForCompletion boolean', async ({ request }) => {

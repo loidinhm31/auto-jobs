@@ -102,18 +102,20 @@ and failure semantics are validated before side effects.
 - Treat `enabled: false` as an unconditional execution gate.
 - Validate selectors, source origins, paths, identities, timeouts, and
   credential-variable references before browser launch.
-- Accept optional top-level `reportWorkers` for the complete report batch:
-  integer 1–4, default 1, saved with the schema-v1 document through the
-  existing ConfigStore validation and ETag flow.
+- Accept optional top-level `reportWorkers` for report batches and Control API
+  auto-build batches; save the 1–4 worker bound (default 1) through existing
+  schema-v1 validation and ConfigStore ETag flow.
 
 ### FR-2: Mode selection
 
 - `selectReportProjects(projects)` returns only enabled normalized report
   projects and fails if none remain.
-- `selectAutoBuildProject(projects, projectId)` requires one exact non-empty ID,
-  an enabled project, and normalized `runType: 'auto-build'`.
-- Selection helpers are pure and cannot submit a request.
-- `runFromConfig` passes only report projects to the bounded report runner.
+- `selectAutoBuildProject(projects, projectId)` requires one exact non-empty ID
+  and resolves one enabled auto-build project.
+- `selectAutoBuildProjects(projects)` returns all enabled projects in that mode.
+- Control `POST /api/run` accepts optional `projectId`: supplied selects one;
+  omission selects all enabled auto-build projects.
+- Selection helpers are pure; `runFromConfig` remains report-only.
 
 ### FR-3: Report execution
 
@@ -126,8 +128,8 @@ and failure semantics are validated before side effects.
   `422 INVALID_WORKER_COUNT` before `startRun`.
 - Require the saved configuration ETag to match the request before execution;
   pass `reportWorkers ?? 1` from that matched document only to `reportExecutor`.
-- Keep auto-build on its existing dependency contract; it receives no report
-  worker count.
+- Keep the pool count out of `AutoBuildRunnerDependencies`; control mode uses
+  saved `reportWorkers` to bound a separate auto-build worker pool.
 - Preserve selected configuration order in outcomes and continue queued work
   after an individual project failure.
 - Authenticate through exact Jenkins login, open exact `jobUrl`, discover
@@ -147,18 +149,27 @@ and failure semantics are validated before side effects.
   `/build` action.
 - Arm request/response observers before clicking and click exactly once.
 - Reuse existing page defaults; do not inspect or modify hidden parameter values.
+- Control `POST /api/run` may omit `projectId` to run all enabled auto-build
+  projects; a supplied ID selects one.
+- Run control batches in a separate pool capped at `min(reportWorkers, project
+  count)`; preserve configuration order and continue after project failures.
 
 ### FR-5: Outcomes and side effects
 
-- Return only bounded safe fields: project identity, configured job URL,
-  validated build-page URL, timestamp, optional numeric status, safe diagnostic,
-  state, and exit code.
+- Return bounded safe fields: project identity, configured job URL, validated
+  build URL, time/status/diagnostic, state/exit code, and observed build number,
+  terminal result, and stage details.
 - Classify a matching response below HTTP 400 as `submitted`.
 - Classify a matching response at or above HTTP 400 as `rejected`.
 - Classify an observed matching POST without a determinate response as
   `submission-unknown`.
 - Map pre-POST failures to `failed-before-submit` in the auto-build runner.
 - Never retry after a matching POST or possible external side effect.
+- Store control outcomes in ordered `result.buildProjects`; the run succeeds
+  iff every `exitCode === 0`, else it fails. Single-project runs retain scalar
+  build summary fields.
+- A thrown worker error becomes `submission-unknown` with `exitCode: 1`;
+  siblings continue and unknown submissions are never retried.
 
 ### FR-6: Resource and secret handling
 
@@ -170,13 +181,14 @@ and failure semantics are validated before side effects.
   snapshot at execution start and construct `{ ...env, ...storedSecrets }`;
   stored values take precedence, and neither `process.env` nor the caller
   environment is mutated.
-- Normalize the project document against that merged environment and pass it
-  as `runtimeEnvironment` to the report or auto-build executor.
+- Normalize against the merged environment; pass `runtimeEnvironment` to the
+  report executor or auto-build worker pool.
 - Redact every non-empty stored value from control `addLog` messages, report
   warnings, caught errors/stacks, and auto-build `jobUrl`/`buildPageUrl` result
   fields. Clear mutable resolved credential copies during auto-build cleanup.
-- Do not persist auto-build artifacts, cookies, headers, bodies, crumbs, queue
-  IDs, build numbers, or response bodies.
+- Do not write auto-build report artifacts or persist raw request/browser data
+  (cookies, headers, bodies, crumbs, queue IDs, or response bodies); safe build
+  details may appear in in-memory control-run records.
 
 ### FR-7: Local SecretStore backend
 
@@ -359,8 +371,8 @@ and failure semantics are validated before side effects.
   `INVALID_WORKER_COUNT` before `startRun`.
 - [x] Execution requires the saved config ETag to match the request and derives
   the report `workerCount` from `reportWorkers ?? 1` in that matched document.
-- [x] Only the report executor receives the derived count; auto-build keeps its
-  existing dependency contract and receives no `workerCount`.
+- [x] Control auto-build uses the saved count to bound its worker pool; it is
+  not passed through per-project `AutoBuildRunnerDependencies`.
 - [x] `control-run-api.spec.ts` and `control-run-executor-secrets.spec.ts` cover
   request rejection, ETag-bound count forwarding, and auto-build isolation.
 

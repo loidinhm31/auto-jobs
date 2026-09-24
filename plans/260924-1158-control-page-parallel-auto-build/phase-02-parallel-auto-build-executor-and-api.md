@@ -5,7 +5,7 @@
 - Existing flow: `src/reporting/report-server-control-api.ts:69-163`; `src/reporting/report-server-run-manager.ts:14-67,80-172`; `src/reporting/report-server-run-executor.ts:10-126`; `src/project/report-worker-pool.ts:14-75`; `src/project/auto-build-runner.ts:11-58,65-135`; `src/config/report-worker-count.ts:1-21`; `src/reporting/control-page/types/index.ts:87-130`.
 
 ## Overview
-**Date:** 2026-09-24 · **Priority:** P2 · **Status:** pending · **Effort:** 4h · **Depends on:** phase 01. Accept omitted-ID auto-build POST and run selected projects with at most the saved worker count; expose ordered, redacted per-project outcomes.
+**Date:** 2026-09-24 · **Priority:** P2 · **Status:** DONE · **Progress:** 100% · **Completed:** 2026-09-24 · **Effort:** 4h · **Depends on:** phase 01. Accept omitted-ID auto-build POST and run selected projects with at most the saved worker count; expose ordered, redacted per-project outcomes.
 
 ## Key Insights
 - `handleRunApi` already performs Host/Origin/CSRF/content-type checks via `validateMutationRequest`, validates body and rejects any request-level `workerCount` at lines 76–101; only its lines 119–123 prohibit omitted `projectId`. `StartRunParams`/`ControlRunRecord.projectId` are already optional; no new request shape needed.
@@ -31,7 +31,7 @@
 | Modify | `src/reporting/report-server-run-manager.ts:21-55,116-163` | Add typed `buildProjects` result; keep one-active-run lifecycle, injection point and GET response. |
 | Create only if needed for <200-line modules | `src/project/auto-build-worker-pool.ts` | Small fixed-loop indexed scheduler using injectable existing `autoBuildExecutor`; no report browser/artifact imports or generic task framework. |
 | Verify unchanged | `src/project/auto-build-runner.ts:55-135`, `src/project/report-worker-pool.ts:26-75`, `src/config/report-worker-count.ts:1-21` | Preserve per-build safety/cleanup; reuse scheduling shape, shared numeric policy. |
-| Update in phase 04 | `tests/unit/control-run-api.spec.ts:9-48,107-228`, `tests/unit/control-run-executor-secrets.spec.ts:187-304`, `tests/unit/bounded-report-workers.spec.ts:76-165` | Extend API/executor proof; use report-pool barrier testing pattern, not its implementation. |
+| Verify/extend in this phase | `tests/unit/control-run-api.spec.ts`, `tests/unit/bounded-auto-build-workers.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts` | Cover API validation, bounded scheduling, failure isolation, result redaction and compatibility. |
 
 ## Implementation Steps
 1. In `handleRunApi`, leave `workerCount` rejection before project ID handling. For auto-build, inspect `Object.hasOwn(data, 'projectId')`: if present require a nonblank string; otherwise leave `projectId` undefined. Preserve report and targeted POST behavior, HTTP 202/409/422 semantics, guard conditions and existing wait option validation.
@@ -41,15 +41,15 @@
 5. Set terminal aggregate status from `every(outcome.exitCode === 0)`; persist `buildProjects`. Surface summary/log counts without reporting a mixed batch as success. Preserve report dispatch, ETag concurrency rejection, 409 one-active-run, and no report artifact publication on auto-build.
 
 ## Todo list
-- [ ] Allow only omitted or nonblank string `projectId` for build requests; preserve security and workerCount validation precedence.
-- [ ] Implement bounded, ordered, per-project-isolated build pool using existing runner and injected executor.
-- [ ] Add sanitized typed batch DTO plus one-project scalar compatibility and aggregate terminal status.
-- [ ] Verify ETag, zero-target, active-run and irreversible-side-effect boundaries before UI wiring.
+- [x] Allow only omitted or nonblank string `projectId` for build requests; preserve security and workerCount validation precedence.
+- [x] Implement bounded, ordered, per-project-isolated build pool using existing runner and injected executor.
+- [x] Add sanitized typed batch DTO plus one-project scalar compatibility and aggregate terminal status.
+- [x] Verify ETag, zero-target, active-run and irreversible-side-effect boundaries before UI wiring.
 
 ## Success Criteria
 - With 4 enabled builds and saved count 2, exactly two start before release; as one completes another starts; max active 2; each selected ID invoked once; returned `buildProjects` ordered as config, even when completion order differs.
 - Default/explicit 1 executes serially; count 4 never exceeds 4; report/disabled projects never submitted; empty selection/stale ETag starts no builds. One failed/unknown build yields `failed` aggregate but siblings complete; one-project legacy scalar fields remain observable.
-- Existing auth/CSRF/Host/Origin/content-type, 422 request override, 409 active-run and per-project wait/deadline tests remain meaningful; secrets do not appear in any GET result/log/stage/URL. Focused proof commands appear in phase 04.
+- Phase-specific proof is recorded below; the full project release gate and browser journey remain for phase 04.
 
 ## Risk Assessment
 - Jenkins submission may have succeeded before an injected executor throws: mark `submission-unknown`, **never retry** or claim failed-before-submit. Other workers settle normally.
@@ -58,6 +58,11 @@
 
 ## Security Considerations
 - Preserve loopback, exact Host/Origin/Fetch Metadata/CSRF/content-type protections in `validateMutationRequest`; no side-effectful pre-admission bypass. ETag and config normalization precede execution. Do not log secrets or accept request workerCount; redact all batch outcome fields and stage text. Each underlying runner must still enforce credential-free URL, allowed origin, exact Jenkins form/action and one guarded submission. Never auto-retry unknown submissions.
+
+## Completion record
+- DONE at 100% on 2026-09-24. Optional-ID API admission, saved-count bounded scheduling, ordered redacted outcomes, aggregate status and one-project compatibility delivered; all Phase 02 checklist items complete.
+- QA reported 398/398 unit tests and 18/18 control tests passing. Final review reports targeted worker/API/secret tests passing 7/7, 13/13 and 10/10, plus clean typecheck. The initial QA typecheck run reported five TS2550 errors; review records the ES2023-compatible helper and subsequent clean typecheck.
+- Review scored 9.5/10 with no critical issues or warnings; two optional hardening suggestions remain. See [QA report](../reports/tester-260924-1347-phase-02-parallel-auto-build-executor-and-api.md) and [code review](../reports/code-review-260924-1355-phase-02-parallel-auto-build.md).
 
 ## Next steps
 - Phase 03 consumes `buildProjects` and sends omitted-ID POST from the immediate action button. Phase 04 verifies deterministic concurrency/failure/security via injected executor before a fixture-backed browser journey.

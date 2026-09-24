@@ -1,14 +1,14 @@
 # Current architecture
 
-This document describes the implemented schema-v1 configuration, report and
-Jenkins auto-build workflows, Stage View completion monitoring, and the
-loopback Control Page. It covers the local SecretStore, guarded secrets API,
-credential-management UI, and deterministic verification boundaries. The
-report command remains report-only; auto-build is an explicit library boundary
-and is not inferred from URLs, selectors, CLI names, or environment.
+This document covers schema-v1 configuration, report and Jenkins auto-build
+workflows, Stage View monitoring, the loopback Control Page and control API,
+local SecretStore, credential UI, and deterministic verification boundaries.
+The report command remains report-only. Control `POST /api/run` accepts either
+one selected auto-build project or all enabled auto-build projects when
+`projectId` is omitted; mode is never inferred from URL, selector, CLI, or env.
 
-When enabled, auto-build waits for its new Stage View run and returns the build
-identity, terminal result, and stage details in its in-memory outcome.
+With wait enabled, each build returns an in-memory outcome carrying identity,
+terminal result, and stage details when available.
 
 The runner collects bounded Jenkins, Snyk, and SonarQube evidence and writes a
 static normalized vulnerability report. Runtime navigation uses the exact URLs
@@ -34,7 +34,7 @@ Project execution mode is independent of source mode:
 | Execution mode | Selection boundary | Side effect |
 | --- | --- | --- |
 | `report` | all enabled projects normalized as `report` | capture publisher evidence and publish immutable reports |
-| `auto-build` | one exact enabled project normalized as `auto-build` | submit one validated parameterized Jenkins form; do not capture reports |
+| `auto-build` | one exact enabled project or all enabled auto-build projects when `projectId` is omitted | submit validated parameterized Jenkins form(s); do not capture reports |
 
 `runType` is an explicit project-only discriminator. An omitted value
 normalizes to `report`; it is never inferred and does not itself trigger a
@@ -53,7 +53,7 @@ projects, and runs them through one browser process. A fixed worker pool uses
 one to four loops (default one), each with a fresh Playwright context and
 absolute capture deadline. Outcomes remain in configuration order even when
 completion order differs; a project failure does not stop its siblings.
-Auto-build owns its own one-project browser and context.
+Each auto-build project gets a dedicated browser and context.
 
 ```mermaid
 flowchart LR
@@ -66,14 +66,14 @@ flowchart LR
   Job --> Discover[Discover Snyk and SonarQube links]
   Discover --> Capture[Capture and normalize evidence]
   Capture --> Reports[Per-run reports and aggregate index]
-  Dispatch -- auto-build + exact projectId --> BuildRunner[Auto-build runner]
-  BuildRunner --> BuildBrowser[Dedicated browser/context]
+  Dispatch -- auto-build with optional projectId --> BuildSelect[Select one or all]
+  BuildSelect --> BuildPool[Bounded workers; saved reportWorkers]
+  BuildPool --> BuildBrowser[One browser/context per project]
   BuildBrowser --> BuildLogin[Exact Jenkins login]
   BuildLogin --> BuildJob[Exact Jenkins job page]
   BuildJob --> Trigger[Validate controls and submit once]
-  Trigger --> BuildResult[submitted / rejected / submission-unknown]
-  BuildResult -->|wait enabled and accepted| StageView[Observe new Stage View run]
-  StageView --> BuildDetails[build number / terminal result / stage breakdown]
+  Trigger --> BuildResult[Per-project outcome and optional Stage View details]
+  BuildResult --> Aggregate[buildProjects; succeeded iff every exitCode is zero]
   TestRoutes[Test-only exact URL routes] -. tests only .-> Browser
 ```
 
@@ -101,9 +101,9 @@ flowchart LR
   root lock through settlement and publication; `runFromConfig` uses saved count.
 - `src/project/project-workflow.ts` contains the direct report workflow and
   the separate login/job/trigger auto-build workflow.
-- `src/project/auto-build-runner.ts` owns one-project auto-build execution,
-  fresh context/page creation, absolute deadline handling, redacted outcomes,
-  and bounded resource cleanup. It does not allocate report artifacts.
+- `src/project/auto-build-worker-pool.ts` bounds project concurrency and stores
+  outcomes in configuration order; `src/project/auto-build-runner.ts` executes
+  each project with its own context, deadline, safe outcome, and bounded cleanup.
 - `src/jenkins/auth.ts` authenticates and opens the exact configured job page.
   `src/jenkins/url-identity.ts` validates exact job and `/build` action
   identities, including nested and repeatedly encoded `job/` segments.
@@ -169,20 +169,20 @@ flowchart LR
   `index.html`, and provides cached CSS and JS.
 - `scripts/copy-report-assets.mjs` stages `report.css` to
   `.runner-build/reporting/report.css` without overwriting Vite outputs.
-- `src/reporting/report-server-control-api.ts` remains the config/run handler
-  facade and re-exports `handleSecretsApi`; the implementation lives in
-  `report-server-control-secrets-api.ts`.
+- `src/reporting/report-server-control-api.ts` handles config/run APIs, including
+  `POST /api/run` auto-build selection (`projectId` omitted selects all enabled);
+  it rejects request-level `workerCount` and re-exports `handleSecretsApi`.
 - `src/reporting/report-server-control-secrets-api.ts` implements the
   presence-only `/api/secrets` GET/PUT/DELETE contract, bounded JSON parsing,
   key/value validation, and SecretStore updates.
 - `src/reporting/report-server-control-security.ts` centralizes control
   security headers plus Host, Origin, Fetch Metadata, timing-safe CSRF, and
   mutation content-type gates.
-- `src/reporting/report-server-run-manager.ts` owns the single-active-run
-  lifecycle and carries the optional `SecretStore` dependency into execution.
-- `src/reporting/report-server-run-executor.ts` snapshots stored secrets,
-  builds the per-run environment, dispatches report/auto-build executors, and
-  redacts control-run logs and result diagnostics.
+- `src/reporting/report-server-run-manager.ts` owns one active run and carries
+  optional `SecretStore`; `src/reporting/report-server-run-executor.ts` snapshots
+  secrets, selects one/all build projects, and runs the pool with saved
+  `reportWorkers`. It stores ordered `buildProjects` outcomes and redacts output;
+  batch status succeeds only when every outcome has `exitCode === 0`.
 - `src/templates/template-report-fixture.ts` is the public template facade; it
   re-exports the supported loader, response, route, types, and size-boundary API.
 - `src/templates/template-fixture-types.ts` defines the fixture, response, route
@@ -210,7 +210,8 @@ flowchart LR
 
 The root object has `schemaVersion: 1`, `projects`, optional `defaults`, and
 optional top-level `reportWorkers` (integer 1–4; omission defaults to 1). It
-sets concurrency for one report batch only; nested placements are rejected.
+sets concurrency for report batches and bounds Control API auto-build batches;
+nested placements are rejected.
 There must be one to 50 projects and at least one enabled entry. Each project
 requires a unique safe ID, display name, exact Jenkins `loginUrl` and `jobUrl`
 on the same canonical Jenkins origin and base context.
@@ -247,12 +248,13 @@ Selection happens on normalized projects:
 | --- | --- |
 | `selectReportProjects(projects)` | Returns a frozen list containing only enabled projects with `runType === 'report'`; disabled and auto-build entries never enter the report set. It fails when no enabled report project exists. |
 | `selectAutoBuildProject(projects, projectId)` | Requires an exact, non-empty project ID and returns one project only when it is enabled and `runType === 'auto-build'`; missing, disabled, and report projects fail closed. |
+| `selectAutoBuildProjects(projects)` | Returns a frozen, configuration-ordered list of enabled `auto-build` projects; fails when none remain. |
 
-The helpers are exported by `src/config.ts`. They do not rewrite modes,
-derive branch identity, or submit a Jenkins request. `runFromConfig` passes
-only `selectReportProjects(...)` to the report executor. The explicit
-`runAutoBuildProject(...)` boundary accepts one selected project and is the
-only Phase 2 path that reaches the Jenkins build trigger.
+The helpers are exported by `src/config.ts` and are side-effect free. Control
+`POST /api/run` uses `selectAutoBuildProject` when an ID is present and
+`selectAutoBuildProjects` when omitted, then routes each selected project through
+`executeAutoBuildWorkerPool` to `runAutoBuildProject`. `runFromConfig` still
+dispatches only `selectReportProjects(...)`.
 
 All selector fields are available under `defaults.selectors` and
 `projects[*].selectors`; project values override defaults. The normalized
@@ -602,12 +604,12 @@ project becomes failed/unallocated while its worker continues with queued work.
 All loops settle before browser close. The root lock remains held through
 workers, close, cleanup, manifest discovery, and aggregate publication.
 Duplicate direct-call project IDs fail before artifact or browser side effects.
-Auto-build behavior is unchanged.
+Control auto-build now uses the saved concurrency setting and ordered outcomes.
 
-`POST /api/run` rejects an own `workerCount` property with `422 INVALID_WORKER_COUNT` before `startRun`;
-execution requires the saved config ETag to match. Report mode passes
-`reportWorkers ?? 1` only to `reportExecutor`; auto-build keeps its existing
-dependencies and the single-active-run behavior is unchanged ([plan](../plans/260923-1402-parallel-report-workers/plan.md)).
+`POST /api/run` rejects request-level `workerCount` before admission; execution
+requires the saved ETag. The saved `reportWorkers` value (1–4, default 1) also
+bounds control auto-build workers; the single-active-run guard remains
+unchanged.
 
 
 ### Template Server (`npm run serve:templates`)
@@ -702,11 +704,11 @@ leaves the applied model unchanged.
 
 A dirty document disables Generate Reports. Save writes the document through
 `PUT /api/config` with the current `If-Match` ETag; successful Save updates the
-local ETag. A report `POST /api/run` contains exactly `configName`,
-`configEtag`, and `runType`—never `workerCount`. The API rejects any crafted
-request with its own `workerCount` as `422 INVALID_WORKER_COUNT`. The executor
-verifies the ETag and passes the saved count only to the report executor;
-auto-build receives no count.
+A report trigger carries config name/ETag/type; auto-build also accepts optional
+`projectId`: omitted selects all enabled build projects; a supplied ID selects one.
+Request `workerCount` is rejected; saved `reportWorkers` (1–4, default 1) bounds
+both report and control auto-build pools. Each auto-build result includes an
+ordered `buildProjects` array; the run succeeds only if every `exitCode === 0`.
 
 The UI and CLI share `assertProjectConfigDocument`. `runFromConfig` calls
 `loadProjectConfigWithDocument`, reading once and using the saved count with

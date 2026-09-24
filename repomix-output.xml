@@ -157,6 +157,7 @@ src/jenkins/stage-view-types.ts
 src/jenkins/stage-view.ts
 src/jenkins/url-identity.ts
 src/project/auto-build-runner.ts
+src/project/auto-build-worker-pool.ts
 src/project/project-capture.ts
 src/project/project-manifest.ts
 src/project/project-run-state.ts
@@ -296,6 +297,7 @@ tests/e2e/vendor-template-capture.spec.ts
 tests/unit/artifact-lifecycle.spec.ts
 tests/unit/artifact-paths.spec.ts
 tests/unit/auto-build-runner.spec.ts
+tests/unit/bounded-auto-build-workers.spec.ts
 tests/unit/bounded-report-workers.spec.ts
 tests/unit/contract-hardening.spec.ts
 tests/unit/control-assets-routing.spec.ts
@@ -631,13 +633,14 @@ flowchart LR
   `runType`, credential references, source origins, selectors, and bounded
   runtime settings through the browser-safe shared `assertProjectConfigDocument`
   boundary. Normalization defaults an omitted `runType` to `report`.
-- `src/config/project-run-selection.ts` owns the explicit
-  `selectReportProjects` and `selectAutoBuildProject` boundaries. Selection is
-  pure and has no browser or Jenkins side effect.
+- `src/config/project-run-selection.ts` owns `selectReportProjects`,
+  `selectAutoBuildProjects`, and `selectAutoBuildProject`. The list selectors
+  return frozen, configuration-ordered enabled projects for their mode and
+  fail if none remain; all selection is side-effect free.
 - `src/config-selectors.ts` owns selector parsing and immutable defaults,
   including the build link and submit-button selectors.
-- `src/config.ts` exposes the loader, normalized contracts, `RunType`, and
-  selection helpers from the public configuration surface.
+- `src/config.ts` exposes the loader, normalized contracts, `RunType`, and all
+  three selection helpers through the public configuration surface.
 - `src/browser-launcher.ts` centralizes browser choice and environment-driven
   launch options (`PLAYWRIGHT_EXECUTABLE_PATH`, headless flags, and action
   delay) shared by report and auto-build callers.
@@ -1720,7 +1723,7 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
 | --- | --- |
 | `scripts/run-report.mjs` | Builds the report launcher and invokes the report CLI. |
 | `src/cli.ts` | Parses the explicit `--config` path and reports project outcomes. |
-| `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and mode-selection helpers. |
+| `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and `selectReportProjects`, `selectAutoBuildProjects`, and `selectAutoBuildProject`. |
 | `src/runner.ts` | Saved-count report dispatch, bounded multi-project execution, and aggregate publication. |
 | `src/project/report-worker-pool.ts` | Fixed in-process loops with indexed outcomes and per-project failure isolation. |
 | `src/project/auto-build-runner.ts` | Explicit one-project auto-build API with optional Stage View wait and rich build outcome. |
@@ -1770,11 +1773,14 @@ is `true`. It applies to auto-build only; the report flow ignores it.
 
 `RunType` is the project-only union `'report' | 'auto-build'`. Missing input
 normalizes to `'report'`; it is not present in `ProjectConfigDefaults` and is
-not read from an environment variable. `selectReportProjects` returns only
-enabled normalized report projects and fails when none exist.
-`selectAutoBuildProject` requires an exact non-empty project ID and returns one
-enabled normalized auto-build project; missing, disabled, or report projects
-fail closed. Both helpers are pure selection boundaries.
+not read from an environment variable. `selectReportProjects` returns a frozen,
+configuration-ordered list of enabled normalized report projects and fails if
+none remain. `selectAutoBuildProjects` returns a frozen, configuration-ordered
+list of enabled normalized auto-build projects and fails if none remain.
+The targeted `selectAutoBuildProject` requires an exact, non-empty project ID
+and returns one enabled normalized auto-build project; missing, disabled, or
+report projects fail closed. All three helpers are pure selection boundaries,
+exported from `src/config.ts`.
 
 Selectors can be supplied at `defaults.selectors` and overridden at
 `projects[*].selectors`. The complete normalized set is `authLandmark`,
@@ -2253,13 +2259,15 @@ normalizing the document:
 
 | Helper | Selection contract |
 | --- | --- |
-| `selectReportProjects(projects)` | Returns a frozen list of enabled projects whose normalized `runType` is `report`; disabled and `auto-build` entries are excluded. Throws a configuration error when none remain. |
+| `selectReportProjects(projects)` | Returns a frozen, configuration-ordered list of enabled normalized `report` projects; excludes disabled and `auto-build` entries and throws a configuration error when none remain. |
+| `selectAutoBuildProjects(projects)` | Returns a frozen, configuration-ordered list of enabled normalized `auto-build` projects; excludes disabled and `report` entries and throws a configuration error when none remain. |
 | `selectAutoBuildProject(projects, projectId)` | Matches one project by exact, non-empty `id`; returns it only when enabled and normalized as `auto-build`. Missing, disabled, and `report` projects are rejected. |
 
-Both helpers are exported from `src/config.ts` and are side-effect free. They
-do not rewrite a project's mode, infer a target from `jobUrl`, or submit a
-Jenkins request. Callers must choose one helper and one executor; report
-collection and the auto-build side effect remain separate.
+All three helpers are exported from `src/config.ts` and are side-effect free.
+The list selectors only identify eligible projects; they do not run or queue
+builds. None rewrites a project's mode, infers a target from `jobUrl`, or
+submits a Jenkins request. Report collection and auto-build execution remain
+separate.
 
 ## Selector configuration
 
@@ -3163,6 +3171,20 @@ Last updated: 2026-09-24
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
 
+## Control Page Parallel Auto-Build
+
+Plan: [Control Page Parallel Auto-Build](../plans/260924-1158-control-page-parallel-auto-build/plan.md)
+
+**Overall status:** In progress · **18%** (2 of 11 planned hours; 1 of 4 phases DONE).
+
+| Phase | Status | Progress | Effort | Completed | Evidence/detail |
+|---|---|---:|---:|---|---|
+| 01. Config and run selection | **DONE** | **100%** | 2h | 2026-09-24 | Added/exported ordered, immutable `selectAutoBuildProjects` while preserving targeted selection. Focused spec 18/18; full unit suite 389/389; review 10/10, no critical findings ([test report](../plans/reports/tester-260924-1245-phase-01-config-and-run-selection.md), [review](../plans/reports/code-review-260924-1247-phase-01-config-run-selection.md)). |
+| 02. Parallel executor and API | Pending | 0% | 4h | — | Optional-ID API, bounded build pool, ordered per-project outcomes. |
+| 03. Control Page UI | Pending | 0% | 3h | — | Two immediate action buttons, shared Workers selector, multi-result view. |
+| 04. Testing and verification | Pending | 0% | 2h | — | Focused behavioral proof, browser surface, integrated verification. |
+
+
 ## Jenkins Stage View Build Monitoring & Status Tracking
 
 Plan: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
@@ -3290,6 +3312,8 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Completed Jenkins Stage View Build Monitoring & Status Tracking at 100% across five DONE phases on 2026-09-24T03:00:00+07:00 ([plan](../plans/260924-0218-stage-view-build-monitoring/plan.md)).
 - Added configurable build-completion waiting, live Stage View transitions in Control Dashboard logs, and terminal build/stage results; the optional `ConfigProjectEditor` toggle remains deferred, with configuration available through project JSON and the confirmation modal.
 - Verification recorded in the [code review](../plans/reports/code-review-260924-0254-jenkins-stage-view.md): typecheck/build passed, unit 379/379, control 18/18, template auto-build 1/1, and template integration 11/11. Review passed with no critical issues; two warnings and three suggestions remain documented.
+- Completed Phase 01 (Config and run selection) of Control Page Parallel Auto-Build on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-01-config-and-run-selection.md)); added and exported the ordered, immutable all-enabled auto-build selector while preserving targeted selection.
+- Phase 01 verification: focused selector spec passed 18/18; tester report records 389/389 unit tests passing. Code review scored 10/10 with no critical findings ([test report](../plans/reports/tester-260924-1245-phase-01-config-and-run-selection.md); [review](../plans/reports/code-review-260924-1247-phase-01-config-run-selection.md)). Tester noted a non-fatal `EBUSY` report-asset copy diagnostic; its cause remains unresolved.
 
 ### 0.1.0 (development) — 2026-09-23
 
@@ -8703,7 +8727,7 @@ Phase 04 scope note: the optional `ConfigProjectEditor` toggle remains deferred;
 - Current code: `src/config/config-types.ts:27-45,59-95`; `src/config/project-config-project-validation.ts:16-53,74-77,156-192`; `src/config/project-config-schema.ts:17-62`; `src/config/report-worker-count.ts:1-21`; `src/config/project-run-selection.ts:1-34`; `src/config.ts:15-30`; `src/reporting/control-page/hooks/config-document-transitions.ts:71-77`; `src/reporting/control-page/hooks/useConfigDocumentEditor.ts:49-85,134-158`.
 
 ## Overview
-**Date:** 2026-09-24 · **Priority:** P2 · **Status:** completed · **Effort:** 2h · **Depends on:** none. Establish the exact schema/selection contract and add pure all-enabled auto-build selection while retaining exact targeted selection.
+**Date:** 2026-09-24 · **Priority:** P2 · **Status:** DONE · **Completed:** 2026-09-24 · **Effort:** 2h · **Depends on:** none. Establish the exact schema/selection contract and add pure all-enabled auto-build selection while retaining exact targeted selection.
 
 ## Key Insights
 - Config already has per-project `runType` and independent `enabled`; `normalizeProjectConfigDocument` normalizes omitted mode to `report`. `ROOT_KEYS` already accepts top-level `reportWorkers` and validation uses `normalizeReportWorkerCount` (safe integer 1–4, default 1); avoid a second persisted field or schema bump.
@@ -8725,13 +8749,13 @@ Phase 04 scope note: the optional `ConfigProjectEditor` toggle remains deferred;
 | Modify | `src/config.ts:22-25` | Export `selectAutoBuildProjects` from existing facade. |
 | Verify unchanged | `src/config/config-types.ts:27-95`, `src/config/project-config-project-validation.ts:16-53,74-77,156-192`, `src/config/project-config-schema.ts:17-62`, `src/config/report-worker-count.ts:1-21` | Already enforce mode, enabled and shared worker schema. |
 | Verify unchanged | `src/reporting/control-page/hooks/config-document-transitions.ts:71-77`, `src/reporting/control-page/hooks/useConfigDocumentEditor.ts:134-158` | Saved editor transition remains source of truth. |
-| Update in phase 04 | `tests/unit/run-type-config.spec.ts:94-152` | Add meaningful ordered/empty-mode selection contract; retain targeted cases. |
+| Added in Phase 01 | `tests/unit/run-type-config.spec.ts:94-152` | Added meaningful ordered/empty-mode selection contract; retained targeted cases. |
 
 ## Implementation Steps
 1. Add the selector to `project-run-selection.ts` with existing `filter`/`ConfigError`/`Object.freeze` conventions. Do not mutate normalized projects or expand selection to disabled/report projects. Export in `src/config.ts`.
 2. In consumer design for phase 02, branch on **presence** of a validated projectId: exact one with existing selector vs omitted means all via new selector. Reject explicitly supplied `projectId: null`, `''`, whitespace or non-string in API before admission; do not accept them as omission.
 3. Keep `ProjectConfigDocumentV1.reportWorkers`, schema version 1, defaults, UI editor transition, and CLI `runFromConfig` unchanged. Document the UI label change as a presentation-only change in phase 03.
-4. Focused proof in phase 04: normalized interleaved report/build entries with disabled build ⇒ ordered enabled builds only; no enabled build ⇒ deterministic `ConfigError`; targeted invalid ID continues to fail. Check no configuration or browser side effects.
+4. Focused proof added and run in Phase 01: normalized interleaved report/build entries with disabled build ⇒ ordered enabled builds only; no enabled build ⇒ deterministic `ConfigError`; targeted invalid ID continues to fail. No configuration or browser side effects.
 
 ## Todo list
 - [x] Add and export `selectAutoBuildProjects` with exact filtering, order and empty error.
@@ -8741,7 +8765,7 @@ Phase 04 scope note: the optional `ConfigProjectEditor` toggle remains deferred;
 ## Success Criteria
 - Selected IDs equal enabled auto-build IDs in document order; returned array immutable; report/disabled projects never selected; empty selection fails before a Jenkins call.
 - Old documents missing `reportWorkers` still validate and imply 1; valid 1–4 saved values feed both modes after the ETag contract; targeted helper still rejects missing/disabled/wrong mode.
-- Run focused selector test after implementation: `node scripts/run-playwright.mjs playwright test tests/unit/run-type-config.spec.ts --config=playwright.unit.config.ts` (not during planning).
+- Verification on 2026-09-24: focused selector spec passed 18/18 (see [test report](../reports/tester-260924-1245-phase-01-config-and-run-selection.md)).
 
 ## Risk Assessment
 - Treating `projectId: ''` as omission risks triggering every build: explicit presence/type/trim validation in API, then phase-02 selection.
@@ -8752,7 +8776,7 @@ Phase 04 scope note: the optional `ConfigProjectEditor` toggle remains deferred;
 - Selection must remain pure, fail closed on invalid IDs and mode mismatch, and never log or serialize credentials. Existing schema checks configured URLs and SecretStore names; runtime URL/origin/form checks remain in `runAutoBuildProject`/Jenkins workflow, not in this selector.
 
 ## Next steps
-- Phase 01 complete and verified by unit tests. Proceeding to Phase 02: wire omitted-ID API semantics and the bounded build pool.
+- Phase 01 DONE on 2026-09-24; focused selector spec passed 18/18 and the full unit suite passed 389/389 (see [test report](../reports/tester-260924-1245-phase-01-config-and-run-selection.md)). Proceeding to Phase 02: wire omitted-ID API semantics and the bounded build pool.
 </file>
 
 <file path="plans/260924-1158-control-page-parallel-auto-build/phase-02-parallel-auto-build-executor-and-api.md">
@@ -8763,7 +8787,7 @@ Phase 04 scope note: the optional `ConfigProjectEditor` toggle remains deferred;
 - Existing flow: `src/reporting/report-server-control-api.ts:69-163`; `src/reporting/report-server-run-manager.ts:14-67,80-172`; `src/reporting/report-server-run-executor.ts:10-126`; `src/project/report-worker-pool.ts:14-75`; `src/project/auto-build-runner.ts:11-58,65-135`; `src/config/report-worker-count.ts:1-21`; `src/reporting/control-page/types/index.ts:87-130`.
 
 ## Overview
-**Date:** 2026-09-24 · **Priority:** P2 · **Status:** pending · **Effort:** 4h · **Depends on:** phase 01. Accept omitted-ID auto-build POST and run selected projects with at most the saved worker count; expose ordered, redacted per-project outcomes.
+**Date:** 2026-09-24 · **Priority:** P2 · **Status:** complete · **Effort:** 4h · **Depends on:** phase 01. Accept omitted-ID auto-build POST and run selected projects with at most the saved worker count; expose ordered, redacted per-project outcomes.
 
 ## Key Insights
 - `handleRunApi` already performs Host/Origin/CSRF/content-type checks via `validateMutationRequest`, validates body and rejects any request-level `workerCount` at lines 76–101; only its lines 119–123 prohibit omitted `projectId`. `StartRunParams`/`ControlRunRecord.projectId` are already optional; no new request shape needed.
@@ -8799,10 +8823,10 @@ Phase 04 scope note: the optional `ConfigProjectEditor` toggle remains deferred;
 5. Set terminal aggregate status from `every(outcome.exitCode === 0)`; persist `buildProjects`. Surface summary/log counts without reporting a mixed batch as success. Preserve report dispatch, ETag concurrency rejection, 409 one-active-run, and no report artifact publication on auto-build.
 
 ## Todo list
-- [ ] Allow only omitted or nonblank string `projectId` for build requests; preserve security and workerCount validation precedence.
-- [ ] Implement bounded, ordered, per-project-isolated build pool using existing runner and injected executor.
-- [ ] Add sanitized typed batch DTO plus one-project scalar compatibility and aggregate terminal status.
-- [ ] Verify ETag, zero-target, active-run and irreversible-side-effect boundaries before UI wiring.
+- [x] Allow only omitted or nonblank string `projectId` for build requests; preserve security and workerCount validation precedence.
+- [x] Implement bounded, ordered, per-project-isolated build pool using existing runner and injected executor.
+- [x] Add sanitized typed batch DTO plus one-project scalar compatibility and aggregate terminal status.
+- [x] Verify ETag, zero-target, active-run and irreversible-side-effect boundaries before UI wiring.
 
 ## Success Criteria
 - With 4 enabled builds and saved count 2, exactly two start before release; as one completes another starts; max active 2; each selected ID invoked once; returned `buildProjects` ordered as config, even when completion order differs.
@@ -8969,7 +8993,7 @@ If the worker-pool case is placed in an existing file, omit the non-created file
 ---
 title: "Control Page Parallel Auto-Build"
 description: "Use one saved worker setting for bounded report and auto-build batches, with immediate dashboard actions and per-project results."
-status: pending
+status: in-progress
 priority: P2
 effort: 11h
 branch: main
@@ -8980,13 +9004,13 @@ created: 2026-09-24
 # Control Page Parallel Auto-Build — implementation plan
 
 ## Overview
-One enabled/mode-selected project belongs to exactly one action: **Generate Reports (All Enabled)** selects enabled `report` projects; **Trigger Auto Build (All Enabled)** selects enabled `auto-build` projects and submits immediately, without a confirmation dialog. The existing schema-v1 top-level `reportWorkers` (default 1; integer 1–4) remains the persisted, ETag-protected setting for **both** actions; its dashboard label becomes **Workers**. This is a plan, not implemented behavior.
+One enabled/mode-selected project belongs to exactly one action: **Generate Reports (All Enabled)** selects enabled `report` projects; **Trigger Auto Build (All Enabled)** selects enabled `auto-build` projects and submits immediately, without a confirmation dialog. The existing schema-v1 top-level `reportWorkers` (default 1; integer 1–4) remains the persisted, ETag-protected setting for **both** actions; its dashboard label becomes **Workers**. Phase 01 is implemented; remaining phases cover executor/API, UI, and integration verification.
 
 ## Phases and progress
 | Phase | Status / progress | Effort | Depends on | Deliverable |
 | --- | --- | ---: | --- | --- |
-| [01 Config and run selection](./phase-01-config-and-run-selection.md) | Completed · 100% | 2h | none | Shared saved-count contract; `selectAutoBuildProjects` and single-ID preservation |
-| [02 Parallel executor and API](./phase-02-parallel-auto-build-executor-and-api.md) | Pending · 0% | 4h | 01 | Optional-ID API, bounded build pool, ordered per-project outcomes |
+| [01 Config and run selection](./phase-01-config-and-run-selection.md) | **DONE** · 100% · 2026-09-24 | 2h | none | Shared saved-count contract; `selectAutoBuildProjects` and single-ID preservation |
+| [02 Parallel executor and API](./phase-02-parallel-auto-build-executor-and-api.md) | **DONE** · 100% · 2026-09-24 | 4h | 01 | Optional-ID API, bounded build pool, ordered per-project outcomes |
 | [03 Control Page UI](./phase-03-control-page-ui-refactor.md) | Pending · 0% | 3h | 02 result contract | Two immediate action buttons, shared Workers selector, dialog removal, multi-result view |
 | [04 Testing and verification](./phase-04-testing-and-verification.md) | Pending · 0% | 2h | 01–03 | Focused behavioral proof, browser surface, once-only integrated gate |
 
@@ -16272,6 +16296,99 @@ export async function runAutoBuildProject(
 }
 </file>
 
+<file path="src/project/auto-build-worker-pool.ts">
+import type { NormalizedProjectConfig } from '../config/config-types.js';
+import type { AutoBuildRunOutcome, AutoBuildRunnerDependencies } from './auto-build-runner.js';
+import { runAutoBuildProject } from './auto-build-runner.js';
+
+export type AutoBuildProjectExecutor = (
+  project: NormalizedProjectConfig,
+  deps?: AutoBuildRunnerDependencies,
+) => Promise<AutoBuildRunOutcome>;
+
+export interface AutoBuildWorkerPoolOptions {
+  readonly projects: readonly NormalizedProjectConfig[];
+  readonly workerCount: number;
+  readonly runtimeEnvironment?: NodeJS.ProcessEnv | undefined;
+  readonly waitForCompletion?: boolean | undefined;
+  readonly waitTimeoutMs?: number | undefined;
+  readonly onProgress?: ((projectId: string, message: string) => void) | undefined;
+  readonly executeProject?: AutoBuildProjectExecutor | undefined;
+}
+
+export async function executeAutoBuildWorkerPool(
+  options: AutoBuildWorkerPoolOptions,
+): Promise<readonly AutoBuildRunOutcome[]> {
+  const { projects, workerCount } = options;
+  if (projects.length === 0) {
+    return Object.freeze([]);
+  }
+
+  const safeWorkerCount = Number.isSafeInteger(workerCount) ? Math.max(1, workerCount) : 1;
+  const loopCount = Math.max(1, Math.min(safeWorkerCount, projects.length));
+  const outcomes: AutoBuildRunOutcome[] = new Array(projects.length);
+  let nextIndex = 0;
+
+  const execute = options.executeProject ?? runAutoBuildProject;
+
+  const workerLoop = async (): Promise<void> => {
+    while (true) {
+      if (nextIndex >= projects.length) return;
+      const index = nextIndex;
+      nextIndex += 1;
+      const project = projects[index];
+      if (project === undefined) return;
+
+      const shouldWait = options.waitForCompletion ?? project.waitForCompletion;
+      const effectiveWaitTimeoutMs = options.waitTimeoutMs ?? project.waitTimeoutMs;
+
+      const deps: AutoBuildRunnerDependencies = {
+        ...(options.runtimeEnvironment === undefined
+          ? {}
+          : { runtimeEnvironment: options.runtimeEnvironment }),
+        ...(shouldWait === undefined ? {} : { waitForCompletion: shouldWait }),
+        ...(effectiveWaitTimeoutMs === undefined ? {} : { waitTimeoutMs: effectiveWaitTimeoutMs }),
+        ...(options.onProgress === undefined
+          ? {}
+          : {
+              onProgress: (message: string) => {
+                try {
+                  options.onProgress?.(project.id, message);
+                } catch {
+                  // isolate progress callback errors from worker loop
+                }
+              },
+            }),
+      };
+
+      try {
+        outcomes[index] = await execute(project, deps);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        outcomes[index] = {
+          projectId: project.id,
+          projectName: project.name,
+          state: 'submission-unknown',
+          jobUrl: project.jobUrl,
+          exitCode: 1,
+          error: errorMsg,
+        };
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: loopCount }, () => workerLoop()));
+
+  for (let index = 0; index < projects.length; index += 1) {
+    if (outcomes[index] === undefined) {
+      throw new Error(`Auto-build worker pool failed to populate outcome slot ${index}`);
+    }
+  }
+
+  return Object.freeze(outcomes);
+}
+</file>
+
 <file path="src/project/project-capture.ts">
 import type { Page } from '@playwright/test';
 
@@ -21646,6 +21763,21 @@ export interface RunStageResult {
   readonly duration?: string;
 }
 
+export interface AutoBuildProjectResult {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly state: string;
+  readonly jobUrl: string;
+  readonly buildPageUrl?: string | undefined;
+  readonly buildNumber?: string | undefined;
+  readonly buildResult?: string | undefined;
+  readonly stages?: readonly RunStageResult[] | undefined;
+  readonly submittedAt?: string | undefined;
+  readonly responseStatus?: number | undefined;
+  readonly error?: string | undefined;
+  readonly exitCode: 0 | 1;
+}
+
 export interface RunResult {
   reportUrl?: string;
   buildState?: string;
@@ -21655,6 +21787,7 @@ export interface RunResult {
   jobUrl?: string;
   buildPageUrl?: string;
   error?: string;
+  buildProjects?: readonly AutoBuildProjectResult[];
   [key: string]: unknown;
 }
 
@@ -22690,10 +22823,17 @@ export async function handleRunApi(
       return;
     }
     const waitTimeoutMs = typeof data['waitTimeoutMs'] === 'number' ? data['waitTimeoutMs'] : undefined;
-    const projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
-    if (runType === 'auto-build' && (projectId === undefined || projectId.trim().length === 0)) {
-      sendError(response, 422, 'MISSING_PROJECT_ID', 'projectId is required for auto-build');
-      return;
+    let projectId: string | undefined;
+    if (runType === 'auto-build') {
+      if (Object.hasOwn(data, 'projectId')) {
+        if (typeof data['projectId'] !== 'string' || data['projectId'].trim().length === 0) {
+          sendError(response, 422, 'INVALID_PROJECT_ID', 'projectId must be a non-empty string when provided');
+          return;
+        }
+        projectId = data['projectId'].trim();
+      }
+    } else {
+      projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
     }
 
     try {
@@ -23695,9 +23835,46 @@ import * as path from 'node:path';
 import { redactText } from '../config-errors.js';
 import type { ConfigStore } from './report-server-config-store.js';
 import { normalizeProjectConfigDocument } from '../config/project-config-loader.js';
-import { selectAutoBuildProject, selectReportProjects } from '../config/project-run-selection.js';
+import {
+  selectAutoBuildProject,
+  selectAutoBuildProjects,
+  selectReportProjects,
+} from '../config/project-run-selection.js';
+import { normalizeReportWorkerCount } from '../config/report-worker-count.js';
+import { executeAutoBuildWorkerPool } from '../project/auto-build-worker-pool.js';
+import { runAutoBuildProject, type AutoBuildRunOutcome } from '../project/auto-build-runner.js';
+import type { StageViewStage } from '../jenkins/stage-view-types.js';
 import { localReportHref } from './report-links.js';
 import type { ControlRunRecord, RunManagerOptions } from './report-server-run-manager.js';
+
+function sanitizeStage(stage: StageViewStage, secretValues: readonly string[]): StageViewStage {
+  return {
+    index: stage.index,
+    name: redactText(stage.name, secretValues),
+    status: redactText(stage.status, secretValues),
+    duration: stage.duration ? redactText(stage.duration, secretValues) : undefined,
+  };
+}
+
+function sanitizeAutoBuildOutcome(
+  outcome: AutoBuildRunOutcome,
+  secretValues: readonly string[],
+): AutoBuildRunOutcome {
+  return {
+    projectId: outcome.projectId,
+    projectName: redactText(outcome.projectName, secretValues),
+    state: outcome.state,
+    jobUrl: redactText(outcome.jobUrl, secretValues),
+    buildPageUrl: outcome.buildPageUrl ? redactText(outcome.buildPageUrl, secretValues) : undefined,
+    buildNumber: outcome.buildNumber ? redactText(outcome.buildNumber, secretValues) : undefined,
+    buildResult: outcome.buildResult ? redactText(outcome.buildResult, secretValues) : undefined,
+    stages: outcome.stages?.map((stage) => sanitizeStage(stage, secretValues)),
+    submittedAt: outcome.submittedAt,
+    responseStatus: outcome.responseStatus,
+    error: outcome.error ? redactText(outcome.error, secretValues) : undefined,
+    exitCode: outcome.exitCode,
+  };
+}
 
 export async function executeControlRun(
   record: ControlRunRecord,
@@ -23764,47 +23941,72 @@ export async function executeControlRun(
       };
       safeAddLog(`Report run finished with status: ${record.status}`);
     } else {
-      if (!record.projectId) {
-        throw new Error('projectId is required for auto-build run');
+      const buildProjects =
+        record.projectId === undefined
+          ? selectAutoBuildProjects(normalized)
+          : [selectAutoBuildProject(normalized, record.projectId)];
+
+      const isSingle = buildProjects.length === 1;
+      if (isSingle) {
+        const buildProject = buildProjects[0]!;
+        const shouldWait = record.waitForCompletion ?? buildProject.waitForCompletion;
+        const effectiveWaitTimeoutMs = record.waitTimeoutMs ?? buildProject.waitTimeoutMs;
+        safeAddLog(
+          `Executing auto-build for project '${buildProject.id}' (${buildProject.jobUrl}) [waitForCompletion: ${shouldWait}${effectiveWaitTimeoutMs ? `, waitTimeoutMs: ${effectiveWaitTimeoutMs}` : ''}]`,
+        );
+      } else {
+        safeAddLog(`Executing auto-build for ${buildProjects.length} project(s)`);
       }
-      if (!autoBuildExecutor) {
-        throw new Error('autoBuildExecutor is required for auto-build run');
-      }
-      const buildProject = selectAutoBuildProject(normalized, record.projectId);
-      const shouldWait = record.waitForCompletion ?? buildProject.waitForCompletion;
-      const effectiveWaitTimeoutMs = record.waitTimeoutMs ?? buildProject.waitTimeoutMs;
-      safeAddLog(
-        `Executing auto-build for project '${buildProject.id}' (${buildProject.jobUrl}) [waitForCompletion: ${shouldWait}${effectiveWaitTimeoutMs ? `, waitTimeoutMs: ${effectiveWaitTimeoutMs}` : ''}]`,
-      );
-      const outcome = await autoBuildExecutor(buildProject, {
+
+      const workerCount = normalizeReportWorkerCount(configEntry.document.reportWorkers);
+      const buildExecutor = autoBuildExecutor ?? runAutoBuildProject;
+
+      const rawOutcomes = await executeAutoBuildWorkerPool({
+        projects: buildProjects,
+        workerCount,
         runtimeEnvironment: runEnv,
-        waitForCompletion: shouldWait,
-        waitTimeoutMs: effectiveWaitTimeoutMs,
-        onProgress: (msg) => safeAddLog(msg),
+        waitForCompletion: record.waitForCompletion,
+        waitTimeoutMs: record.waitTimeoutMs,
+        onProgress: (projectId, msg) => {
+          const prefix = isSingle ? '' : `[${projectId}] `;
+          safeAddLog(`${prefix}${msg}`);
+        },
+        executeProject: buildExecutor,
       });
 
-      if (outcome.state === 'succeeded' || outcome.state === 'submitted') {
-        record.status = 'succeeded';
-      } else if (outcome.state === 'submission-unknown') {
-        record.status = 'submission-unknown';
-      } else {
-        record.status = 'failed';
-      }
-
-      record.result = {
-        buildState: outcome.state,
-        buildNumber: outcome.buildNumber,
-        buildResult: outcome.buildResult,
-        stages: outcome.stages,
-        jobUrl: outcome.jobUrl ? redactText(outcome.jobUrl, secretValues) : outcome.jobUrl,
-        buildPageUrl: outcome.buildPageUrl ? redactText(outcome.buildPageUrl, secretValues) : outcome.buildPageUrl,
-        submittedAt: outcome.submittedAt,
-        responseStatus: outcome.responseStatus,
-        error: outcome.error ? redactText(outcome.error, secretValues) : undefined,
-      };
-      safeAddLog(
-        `Auto-build run finished with state: ${outcome.state}${outcome.buildResult ? ` (${outcome.buildResult})` : ''}`,
+      const sanitizedOutcomes = rawOutcomes.map((outcome) =>
+        sanitizeAutoBuildOutcome(outcome, secretValues),
       );
+
+      const allSucceeded = sanitizedOutcomes.every((o) => o.exitCode === 0);
+      record.status = allSucceeded ? 'succeeded' : 'failed';
+
+      if (isSingle) {
+        const single = sanitizedOutcomes[0]!;
+        record.result = {
+          buildProjects: sanitizedOutcomes,
+          buildState: single.state,
+          buildNumber: single.buildNumber,
+          buildResult: single.buildResult,
+          stages: single.stages,
+          jobUrl: single.jobUrl,
+          buildPageUrl: single.buildPageUrl,
+          submittedAt: single.submittedAt,
+          responseStatus: single.responseStatus,
+          error: single.error,
+        };
+        safeAddLog(
+          `Auto-build run finished with state: ${single.state}${single.buildResult ? ` (${single.buildResult})` : ''}`,
+        );
+      } else {
+        record.result = {
+          buildProjects: sanitizedOutcomes,
+          error: allSucceeded ? undefined : 'one or more projects reported failures',
+        };
+        safeAddLog(
+          `Auto-build run finished with status: ${record.status} (${sanitizedOutcomes.filter((o) => o.exitCode === 0).length}/${sanitizedOutcomes.length} succeeded)`,
+        );
+      }
     }
   } catch (err) {
     const rawMessage = err instanceof Error ? err.message : String(err);
@@ -23864,6 +24066,7 @@ export interface ControlRunRecord {
     readonly responseStatus?: number | undefined;
     readonly warnings?: readonly string[] | undefined;
     readonly error?: string | undefined;
+    readonly buildProjects?: readonly AutoBuildRunOutcome[] | undefined;
   } | undefined;
 }
 
@@ -136687,6 +136890,475 @@ test('runs auto-build workflow with waitForCompletion: false override in depende
 });
 </file>
 
+<file path="tests/unit/bounded-auto-build-workers.spec.ts">
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { expect, test } from '@playwright/test';
+
+import type { NormalizedProjectConfig } from '../../src/config/config-types.js';
+import { DEFAULT_SELECTORS } from '../../src/config-selectors.js';
+import { executeAutoBuildWorkerPool } from '../../src/project/auto-build-worker-pool.js';
+import { executeControlRun } from '../../src/reporting/report-server-run-executor.js';
+import { createConfigStore } from '../../src/reporting/report-server-config-store.js';
+import { createSecretStore } from '../../src/reporting/report-server-secret-store.js';
+import type { ControlRunRecord, RunManagerOptions } from '../../src/reporting/report-server-run-manager.js';
+
+function withResolvers<T = void>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function delay(ms: number): Promise<void> {
+  const { promise, resolve } = withResolvers<void>();
+  setTimeout(resolve, ms);
+  return promise;
+}
+
+function sampleBuildProject(
+  id: string,
+  overrides?: Partial<NormalizedProjectConfig>,
+): NormalizedProjectConfig {
+  return {
+    schemaVersion: 1,
+    id,
+    name: `Build Project ${id}`,
+    runType: 'auto-build',
+    enabled: true,
+    loginUrl: 'https://jenkins.example/login',
+    jobUrl: `https://jenkins.example/job/${id}/`,
+    timeoutMs: 10_000,
+    browser: 'chromium',
+    artifactDir: '/tmp/reports',
+    selectors: DEFAULT_SELECTORS,
+    credentialVariables: {
+      usernameVariable: 'A_USER',
+      passwordVariable: 'A_PASSWORD',
+    },
+    sourceOrigins: {
+      jenkins: 'https://jenkins.example',
+      snyk: [],
+      sonarqube: [],
+    },
+    sources: {
+      snyk: { allowedOrigins: [] },
+      sonarqube: { allowedOrigins: [] },
+    },
+    ...overrides,
+  };
+}
+function createBuildConfig(
+  artifactDir: string,
+  projects: Array<{
+    id: string;
+    name?: string;
+    runType?: 'report' | 'auto-build';
+    enabled?: boolean;
+    jobUrl?: string;
+  }>,
+  reportWorkers = 1,
+) {
+  return {
+    schemaVersion: 1,
+    reportWorkers,
+    defaults: { artifactDir },
+    projects: projects.map((p) => ({
+      id: p.id,
+      name: p.name ?? `Build ${p.id}`,
+      runType: p.runType ?? 'auto-build',
+      enabled: p.enabled ?? true,
+      loginUrl: 'https://jenkins.example.com/login',
+      jobUrl: p.jobUrl ?? `https://jenkins.example.com/job/${p.id}/`,
+      credentials: {
+        usernameVariable: 'A_USER',
+        passwordVariable: 'A_PASSWORD',
+      },
+    })),
+  };
+}
+
+function createMockRecord(
+  id: string,
+  etag: string,
+  runType: 'auto-build' | 'report',
+  projectId?: string,
+): ControlRunRecord {
+  return {
+    id,
+    configName: 'default.json',
+    configEtag: etag,
+    runType,
+    projectId,
+    status: 'queued',
+    queuedAt: new Date().toISOString(),
+    logs: [],
+  };
+}
+
+test.describe('Bounded Auto-Build Worker Pool & Execution', () => {
+  test('deterministic 4-project barrier with workerCount: 2 enforces concurrency bound and preserves outcome order', async () => {
+    const projects = ['b1', 'b2', 'b3', 'b4'].map((id) => sampleBuildProject(id));
+
+    let active = 0;
+    let maxActive = 0;
+    const started: string[] = [];
+    const completed: string[] = [];
+
+    const { promise: barrierB1, resolve: resolveB1 } = withResolvers<void>();
+    const { promise: barrierB2, resolve: resolveB2 } = withResolvers<void>();
+    const { promise: barrierB3, resolve: resolveB3 } = withResolvers<void>();
+    const { promise: barrierB4, resolve: resolveB4 } = withResolvers<void>();
+
+    const runPromise = executeAutoBuildWorkerPool({
+      projects,
+      workerCount: 2,
+      executeProject: async (project) => {
+        active += 1;
+        if (active > maxActive) maxActive = active;
+        started.push(project.id);
+
+        if (project.id === 'b1') {
+          await barrierB1;
+        } else if (project.id === 'b2') {
+          await barrierB2;
+        } else if (project.id === 'b3') {
+          await barrierB3;
+        } else if (project.id === 'b4') {
+          await barrierB4;
+        }
+
+        completed.push(project.id);
+        active -= 1;
+        return {
+          projectId: project.id,
+          projectName: project.name,
+          state: 'submitted',
+          jobUrl: project.jobUrl,
+          exitCode: 0,
+        };
+      },
+    });
+
+    // Wait until b1 and b2 have both started
+    while (started.length < 2) {
+      await delay(10);
+    }
+    expect(started).toEqual(['b1', 'b2']);
+    expect(active).toBe(2);
+
+    // Release b2 first; b3 should start while b1 remains blocked
+    resolveB2();
+    while (started.length < 3) {
+      await delay(10);
+    }
+    expect(started).toEqual(['b1', 'b2', 'b3']);
+    expect(active).toBe(2);
+
+    // Release b1 next; b4 should start while b3 is still blocked
+    resolveB1();
+    while (started.length < 4) {
+      await delay(10);
+    }
+    expect(started).toEqual(['b1', 'b2', 'b3', 'b4']);
+    expect(active).toBe(2);
+
+    // Release b4, then b3
+    resolveB4();
+    while (completed.length < 3) {
+      await delay(10);
+    }
+    resolveB3();
+
+    const outcomes = await runPromise;
+    expect(maxActive).toBe(2);
+    // Completion order was b2, b1, b4, b3
+    expect(completed).toEqual(['b2', 'b1', 'b4', 'b3']);
+    // But outcomes MUST be ordered by configuration index
+    expect(outcomes.map((o) => o.projectId)).toEqual(['b1', 'b2', 'b3', 'b4']);
+  });
+
+  test('workerCount: 1 runs projects strictly sequentially', async () => {
+    const projects = ['b1', 'b2'].map((id) => sampleBuildProject(id));
+    let active = 0;
+    let maxActive = 0;
+
+    const outcomes = await executeAutoBuildWorkerPool({
+      projects,
+      workerCount: 1,
+      executeProject: async (project) => {
+        active += 1;
+        if (active > maxActive) maxActive = active;
+        await delay(20);
+        active -= 1;
+        return {
+          projectId: project.id,
+          projectName: project.name,
+          state: 'submitted',
+          jobUrl: project.jobUrl,
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(maxActive).toBe(1);
+    expect(outcomes.length).toBe(2);
+  });
+
+  test('isolates thrown executor error to submission-unknown outcome and continues siblings', async () => {
+    const projects = ['b1', 'b2', 'b3'].map((id) => sampleBuildProject(id));
+    const executed: string[] = [];
+
+    const outcomes = await executeAutoBuildWorkerPool({
+      projects,
+      workerCount: 2,
+      executeProject: async (project) => {
+        executed.push(project.id);
+        if (project.id === 'b2') {
+          throw new Error('Unexpected network failure during submit');
+        }
+        return {
+          projectId: project.id,
+          projectName: project.name,
+          state: 'submitted',
+          jobUrl: project.jobUrl,
+          exitCode: 0,
+        };
+      },
+    });
+
+    expect(executed).toEqual(['b1', 'b2', 'b3']);
+    expect(outcomes).toHaveLength(3);
+    expect(outcomes[0]!.state).toBe('submitted');
+    expect(outcomes[0]!.exitCode).toBe(0);
+
+    expect(outcomes[1]!.projectId).toBe('b2');
+    expect(outcomes[1]!.state).toBe('submission-unknown');
+    expect(outcomes[1]!.exitCode).toBe(1);
+    expect(outcomes[1]!.error).toBe('Unexpected network failure during submit');
+
+    expect(outcomes[2]!.state).toBe('submitted');
+    expect(outcomes[2]!.exitCode).toBe(0);
+  });
+
+  test('executeControlRun with omitted projectId runs all enabled auto-build projects with saved worker bound', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'control-autobuild-'));
+    try {
+      const configRoot = path.join(root, 'config');
+      fs.mkdirSync(configRoot, { recursive: true });
+
+      const configData = createBuildConfig(root, [
+        { id: 'build-1' },
+        { id: 'build-2' },
+        { id: 'build-3' },
+        { id: 'build-disabled', enabled: false },
+        { id: 'report-only', runType: 'report' },
+      ], 2);
+      fs.writeFileSync(path.join(configRoot, 'default.json'), JSON.stringify(configData), 'utf8');
+
+      const configStore = await createConfigStore(configRoot);
+      const entry = await configStore.readConfig('default.json');
+
+      const invokedProjects: string[] = [];
+      const options: RunManagerOptions = {
+        configStore,
+        reportRoot: root,
+        env: {},
+        autoBuildExecutor: async (project) => {
+          invokedProjects.push(project.id);
+          return {
+            projectId: project.id,
+            projectName: project.name,
+            state: 'submitted',
+            jobUrl: project.jobUrl,
+            exitCode: 0,
+          };
+        },
+      };
+
+      const record = createMockRecord('run-bulk-autobuild', entry.etag, 'auto-build');
+      await executeControlRun(record, options, () => {});
+
+      expect(record.status).toBe('succeeded');
+      // Only enabled auto-build projects invoked
+      expect(invokedProjects).toEqual(['build-1', 'build-2', 'build-3']);
+      expect(record.result?.buildProjects).toHaveLength(3);
+      expect(record.result?.buildProjects?.map((p) => p.projectId)).toEqual(['build-1', 'build-2', 'build-3']);
+      // Multi-project run does not populate single-project scalar status
+      expect(record.result?.buildState).toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('executeControlRun sets failed status if any project in batch fails', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'control-autobuild-fail-'));
+    try {
+      const configRoot = path.join(root, 'config');
+      fs.mkdirSync(configRoot, { recursive: true });
+
+      const configData = createBuildConfig(root, [
+        { id: 'build-ok' },
+        { id: 'build-failed' },
+      ], 2);
+      fs.writeFileSync(path.join(configRoot, 'default.json'), JSON.stringify(configData), 'utf8');
+
+      const configStore = await createConfigStore(configRoot);
+      const entry = await configStore.readConfig('default.json');
+
+      const options: RunManagerOptions = {
+        configStore,
+        reportRoot: root,
+        env: {},
+        autoBuildExecutor: async (project) => {
+          if (project.id === 'build-failed') {
+            return {
+              projectId: project.id,
+              projectName: project.name,
+              state: 'failed',
+              jobUrl: project.jobUrl,
+              exitCode: 1,
+              error: 'Build trigger failed',
+            };
+          }
+          return {
+            projectId: project.id,
+            projectName: project.name,
+            state: 'submitted',
+            jobUrl: project.jobUrl,
+            exitCode: 0,
+          };
+        },
+      };
+
+      const record = createMockRecord('run-batch-fail', entry.etag, 'auto-build');
+      await executeControlRun(record, options, () => {});
+
+      expect(record.status).toBe('failed');
+      expect(record.result?.buildProjects).toHaveLength(2);
+      expect(record.result?.error).toBe('one or more projects reported failures');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('executeControlRun preserves single-project scalar fields and redacts secrets', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'control-autobuild-single-'));
+    try {
+      const configRoot = path.join(root, 'config');
+      fs.mkdirSync(configRoot, { recursive: true });
+
+      const secretStore = await createSecretStore(configRoot);
+      await secretStore.putSecrets({ MY_SECRET_TOKEN: 'super-secret-pass-123' });
+
+      const configData = createBuildConfig(root, [
+        { id: 'build-secret' },
+      ], 1);
+      fs.writeFileSync(path.join(configRoot, 'default.json'), JSON.stringify(configData), 'utf8');
+
+      const configStore = await createConfigStore(configRoot);
+      const entry = await configStore.readConfig('default.json');
+
+      const logs: string[] = [];
+      const options: RunManagerOptions = {
+        configStore,
+        secretStore,
+        reportRoot: root,
+        env: {},
+        autoBuildExecutor: async (project) => ({
+          projectId: project.id,
+          projectName: `Project ${project.id} with super-secret-pass-123`,
+          state: 'succeeded',
+          jobUrl: `${project.jobUrl}?path=super-secret-pass-123`,
+          buildPageUrl: `${project.jobUrl}42/super-secret-pass-123`,
+          buildNumber: '#42',
+          buildResult: 'SUCCESS',
+          stages: [
+            { index: 1, name: 'Build super-secret-pass-123', status: 'SUCCESS', duration: '12s super-secret-pass-123' },
+          ],
+          exitCode: 0,
+        }),
+      };
+
+      const record = createMockRecord('run-single-secret', entry.etag, 'auto-build', 'build-secret');
+      await executeControlRun(record, options, (msg) => logs.push(msg));
+
+      expect(record.status).toBe('succeeded');
+      // Scalar fields populated for single project
+      expect(record.result?.buildState).toBe('succeeded');
+      expect(record.result?.buildNumber).toBe('#42');
+      expect(record.result?.buildResult).toBe('SUCCESS');
+      expect(record.result?.buildProjects).toHaveLength(1);
+
+      // Verify secret redaction
+      const outcome = record.result?.buildProjects?.[0];
+      expect(outcome?.projectName).not.toContain('super-secret-pass-123');
+      expect(outcome?.projectName).toContain('[REDACTED]');
+      expect(outcome?.jobUrl).not.toContain('super-secret-pass-123');
+      expect(outcome?.jobUrl).toContain('[REDACTED]');
+      expect(outcome?.buildPageUrl).not.toContain('super-secret-pass-123');
+      expect(outcome?.buildPageUrl).toContain('[REDACTED]');
+
+      const stage = outcome?.stages?.[0];
+      expect(stage?.name).toContain('[REDACTED]');
+      expect(stage?.duration).toContain('[REDACTED]');
+
+      // Logs must also be redacted
+      for (const log of logs) {
+        expect(log).not.toContain('super-secret-pass-123');
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('executeControlRun fails if no enabled auto-build projects exist', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'control-autobuild-empty-'));
+    try {
+      const configRoot = path.join(root, 'config');
+      fs.mkdirSync(configRoot, { recursive: true });
+
+      const configData = createBuildConfig(root, [
+        { id: 'report-only', runType: 'report' },
+      ], 1);
+      fs.writeFileSync(path.join(configRoot, 'default.json'), JSON.stringify(configData), 'utf8');
+
+      const configStore = await createConfigStore(configRoot);
+      const entry = await configStore.readConfig('default.json');
+
+      const options: RunManagerOptions = {
+        configStore,
+        reportRoot: root,
+        env: {},
+        autoBuildExecutor: async (project) => ({
+          projectId: project.id,
+          projectName: project.name,
+          state: 'submitted',
+          jobUrl: project.jobUrl,
+          exitCode: 0,
+        }),
+      };
+
+      const record = createMockRecord('run-empty-autobuild', entry.etag, 'auto-build');
+      await expect(executeControlRun(record, options, () => {})).rejects.toThrow(
+        'no enabled auto-build projects found in configuration',
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+</file>
+
 <file path="tests/unit/bounded-report-workers.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -139609,23 +140281,55 @@ test.describe('Control Run API', () => {
     const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
     const { etag } = await configRes.json();
 
-    // Both workerCount present and projectId missing -> must return INVALID_WORKER_COUNT
+    // Both workerCount present and invalid projectId -> must return INVALID_WORKER_COUNT
     const postResWithCount = await request.post(`${serverUrl}api/run`, {
       headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
-      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', workerCount: 2 },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', workerCount: 2, projectId: '' },
     });
     expect(postResWithCount.status()).toBe(422);
     const bodyWithCount = await postResWithCount.json();
     expect(bodyWithCount.error.code).toBe('INVALID_WORKER_COUNT');
 
-    // Omitted workerCount and projectId missing -> must return MISSING_PROJECT_ID
-    const postResWithoutCount = await request.post(`${serverUrl}api/run`, {
+    // Invalid projectId when provided (blank string) -> must return INVALID_PROJECT_ID
+    const postResInvalidId = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: '   ' },
+    });
+    expect(postResInvalidId.status()).toBe(422);
+    const bodyInvalidId = await postResInvalidId.json();
+    expect(bodyInvalidId.error.code).toBe('INVALID_PROJECT_ID');
+  });
+
+  test('POST /api/run accepts omitted projectId for auto-build and executes all enabled auto-build projects', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const postRes = await request.post(`${serverUrl}api/run`, {
       headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
       data: { configName: 'default.json', configEtag: etag, runType: 'auto-build' },
     });
-    expect(postResWithoutCount.status()).toBe(422);
-    const bodyWithoutCount = await postResWithoutCount.json();
-    expect(bodyWithoutCount.error.code).toBe('MISSING_PROJECT_ID');
+    expect(postRes.status()).toBe(202);
+    const body = await postRes.json();
+    expect(body.id).toBeDefined();
+    const run = await pollRun(request, serverUrl, body.id);
+    expect(run.status).toBe('succeeded');
+    expect(run.result?.buildProjects).toBeDefined();
+  });
+
+  test('POST /api/run rejects non-string or blank projectId for auto-build with 422 INVALID_PROJECT_ID', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const testValues = ['', '   ', 123, null, false, {}];
+    for (const val of testValues) {
+      const res = await request.post(`${serverUrl}api/run`, {
+        headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+        data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: val },
+      });
+      expect(res.status()).toBe(422);
+      const body = await res.json();
+      expect(body.error.code).toBe('INVALID_PROJECT_ID');
+    }
   });
 
   test('POST /api/run accepts optional waitForCompletion boolean', async ({ request }) => {

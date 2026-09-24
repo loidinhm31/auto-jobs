@@ -43,6 +43,7 @@ export interface ControlRunRecord {
     readonly responseStatus?: number | undefined;
     readonly warnings?: readonly string[] | undefined;
     readonly error?: string | undefined;
+    readonly buildProjects?: readonly AutoBuildRunOutcome[] | undefined;
   } | undefined;
 }
 

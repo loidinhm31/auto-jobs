@@ -84,6 +84,21 @@ export interface RunStageResult {
   readonly duration?: string;
 }
 
+export interface AutoBuildProjectResult {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly state: string;
+  readonly jobUrl: string;
+  readonly buildPageUrl?: string | undefined;
+  readonly buildNumber?: string | undefined;
+  readonly buildResult?: string | undefined;
+  readonly stages?: readonly RunStageResult[] | undefined;
+  readonly submittedAt?: string | undefined;
+  readonly responseStatus?: number | undefined;
+  readonly error?: string | undefined;
+  readonly exitCode: 0 | 1;
+}
+
 export interface RunResult {
   reportUrl?: string;
   buildState?: string;
@@ -93,6 +108,7 @@ export interface RunResult {
   jobUrl?: string;
   buildPageUrl?: string;
   error?: string;
+  buildProjects?: readonly AutoBuildProjectResult[];
   [key: string]: unknown;
 }
 

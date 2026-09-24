@@ -336,16 +336,18 @@ Run the focused API and executor contracts:
 ```sh
 node scripts/run-playwright.mjs playwright test \
   tests/unit/control-run-api.spec.ts \
+  tests/unit/bounded-auto-build-workers.spec.ts \
   tests/unit/control-run-executor-secrets.spec.ts \
   --config=playwright.unit.config.ts
 ```
 
-The API suite verifies that a request-level `workerCount` is rejected for
-report and auto-build requests with `422 INVALID_WORKER_COUNT` before
-`startRun`. Executor coverage verifies the default count, saved counts from the
-ETag-matched config, rejection of a stale ETag, and that auto-build receives no
-report worker count. These tests use local control/config fixtures and injected
-executors; they do not contact Jenkins or vendor services.
+The API suite covers omitted-ID selection, invalid project IDs, and rejection of
+request-level `workerCount` with `422 INVALID_WORKER_COUNT` before `startRun`.
+The pool suite verifies the worker bound, configuration-order outcomes,
+per-project error isolation, and saved-count integration for omitted-ID
+selection. Executor coverage checks the saved report count and stale ETag;
+per-project auto-build dependencies remain free of a pool count. All tests use
+local fixtures and injected executors; they do not contact Jenkins or vendors.
 
 ## Phase 03 run-executor environment gate
 

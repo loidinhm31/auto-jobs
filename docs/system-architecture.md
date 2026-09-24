@@ -7,9 +7,9 @@ verification:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
-- **Auto-build:** validate and submit one Jenkins form; optionally wait for the
-  new Stage View run and return a safe in-memory result with build number,
-  terminal status, and stage details. It does not publish reports.
+- **Auto-build:** run one selected or all enabled Jenkins projects through a
+  bounded pool; optionally wait for new Stage View runs and return safe in-memory
+  outcomes with build and stage details. It does not publish reports.
 - **Offline fixture:** load the checked-in nine-file corpus and fulfill only
   exact synthetic URLs for deterministic report and auto-build tests.
 - **SecretStore and secrets API:** persist validated local credential values
@@ -76,12 +76,11 @@ is mutated. It normalizes the configuration and passes the new object as
 
 ## Control-run environment flow
 
-A report `POST /api/run` carries only `configName`, `configEtag`, and `runType`;
-an auto-build request additionally carries its existing `projectId`. Neither
-mode sends `workerCount` or secret values. The API rejects any own
-`workerCount` property with `422 INVALID_WORKER_COUNT` before `startRun`. The
-run manager accepts one active run and dispatches asynchronously; the executor
-then:
+A report `POST /api/run` requires `configName`, `configEtag`, and `runType`;
+auto-build accepts an optional `projectId`. No request carries `workerCount`
+or secret values; the API rejects `workerCount` with `422 INVALID_WORKER_COUNT`
+before `startRun`. The run manager admits one active run and dispatches
+asynchronously; the executor then:
 
 | Stage | Contract |
 | --- | --- |
@@ -90,8 +89,13 @@ then:
 | ETag check | Read the saved config and require its ETag to match `configEtag` before using the document. |
 | Normalize | Validate and normalize the matched config against the merged environment, so credential-variable references resolve from stored values when present. |
 | Report dispatch | Pass selected report projects and `{ runtimeEnvironment, workerCount: configEntry.document.reportWorkers ?? 1 }` to `reportExecutor` only. |
-| Auto-build dispatch | Call `autoBuildExecutor` with its existing `{ runtimeEnvironment }` dependency; do not pass a report worker count. |
+| Auto-build dispatch | Optional `projectId`: select one project if supplied, otherwise all enabled auto-build projects. Run `executeAutoBuildWorkerPool` with saved `reportWorkers ?? 1` and merged environment. |
 | Redact | Use every non-empty stored value to redact control logs, report warnings, caught errors/stacks, and auto-build URL result fields before recording them. |
+
+An auto-build run returns `result.buildProjects` in configuration order, even
+for one selected project. Run status is `succeeded` only when every outcome has
+`exitCode === 0`; otherwise it is `failed`. Worker exceptions become
+`submission-unknown` outcomes with exit code 1, while siblings continue.
 
 `DashboardPage` binds the `ExecutionSection` selector beside Generate Reports
 to the active document's `updateReportWorkers` transition. A selection updates
@@ -124,13 +128,13 @@ defaults or environment configuration. `enabled: false` always wins.
 | Caller boundary | Input | Executor | Output/side effect |
 | --- | --- | --- | --- |
 | `selectReportProjects(projects)` | normalized config | `runFromConfig` → `runConfiguredProjects` | bounded report outcomes and aggregate artifacts |
-| `selectAutoBuildProject(projects, projectId)` | normalized config plus exact ID | `runAutoBuildProject` | one build outcome; no report artifacts |
+| Control auto-build `POST /api/run` | Optional ID and saved document | Config selection plus bounded worker pool | Ordered `buildProjects` outcomes; no report artifacts |
 
-`selectReportProjects` returns all enabled report projects and fails when none
-remain. `selectAutoBuildProject` returns exactly one enabled auto-build project
-or fails closed for an empty/unknown ID, disabled project, or report project.
-Neither helper performs I/O. `src/cli.ts` exposes only the report path through
-`npm run report`, so a mixed configuration cannot trigger a build accidentally.
+`selectReportProjects` returns all enabled report projects; `selectAutoBuildProjects`
+returns all enabled auto-build projects. `selectAutoBuildProject` resolves one
+exact enabled project or fails closed for an empty/unknown ID, disabled project,
+or report project. Selectors are pure. The control API uses the list selector
+when `projectId` is omitted; `src/cli.ts` remains report-only.
 
 ## Report data flow
 
@@ -162,24 +166,29 @@ failures. Each project receives a fresh context and deadline in one browser.
 The report-root lock spans recovery, worker settlement, browser close, cleanup,
 manifest discovery, and aggregate publication. Direct `workerCount` values are
 validated before artifact initialization or browser launch. Control report runs
-use the saved count from the ETag-matched document; auto-build remains outside
-the report worker pool.
+use the saved count from the ETag-matched document. Auto-build uses a separate
+pool with the same bound; it remains outside the report worker pool.
 
 ## Auto-build data flow
 
 ```mermaid
 sequenceDiagram
   participant Caller
+  participant Control as Run manager/executor
   participant Select as Config selection
+  participant Pool as Auto-build worker pool
   participant Runner as Auto-build runner
   participant Browser as Playwright browser/context
   participant Jenkins
   participant Trigger as Build trigger
 
-  Caller->>Select: selectAutoBuildProject(projects, projectId)
-  Select-->>Caller: one enabled auto-build project
-  Caller->>Runner: runAutoBuildProject(project)
-  Runner->>Browser: launch browser, new context/page
+  Caller->>Control: POST /api/run (optional projectId)
+  Control-->>Caller: 202 { id, status }
+  Control->>Select: resolve one ID or all enabled auto-build projects
+  Select-->>Control: selected project(s) in configuration order
+  Control->>Pool: executeAutoBuildWorkerPool(projects, saved reportWorkers)
+  Pool->>Runner: run projects concurrently up to saved worker bound
+  Runner->>Browser: launch fresh browser/context per project
   Runner->>Jenkins: submit login at exact loginUrl
   Jenkins-->>Runner: authenticated page
   Runner->>Jenkins: open exact jobUrl
@@ -192,13 +201,17 @@ sequenceDiagram
   alt accepted response and waiting enabled
     Trigger->>Jenkins: return to jobUrl and poll Stage View
     Jenkins-->>Trigger: build number, terminal result, stage status/duration
-    Trigger-->>Runner: succeeded / failed / timeout with build details
+    Trigger-->>Runner: project outcome and exitCode
   else waiting disabled, rejected, or indeterminate
-    Trigger-->>Runner: submitted / rejected / submission-unknown
+    Trigger-->>Runner: project outcome and exitCode
   end
   Runner->>Browser: bounded context/browser cleanup
-  Runner-->>Caller: sanitized in-memory outcome
-```
+  Runner-->>Pool: sanitized project outcome
+  Pool-->>Control: configuration-ordered buildProjects
+  Control->>Control: status succeeds iff every exitCode is zero
+  Caller->>Control: GET /api/run?id=<id>
+  Control-->>Caller: terminal run with result.buildProjects
+  ```
 
 The runner does not use `ArtifactPaths`, report capture, Jenkins queue or
 build-number APIs, cancellation, or retries. With waiting enabled, it polls

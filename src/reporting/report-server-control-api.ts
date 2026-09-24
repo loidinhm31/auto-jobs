@@ -116,10 +116,17 @@ export async function handleRunApi(
       return;
     }
     const waitTimeoutMs = typeof data['waitTimeoutMs'] === 'number' ? data['waitTimeoutMs'] : undefined;
-    const projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
-    if (runType === 'auto-build' && (projectId === undefined || projectId.trim().length === 0)) {
-      sendError(response, 422, 'MISSING_PROJECT_ID', 'projectId is required for auto-build');
-      return;
+    let projectId: string | undefined;
+    if (runType === 'auto-build') {
+      if (Object.hasOwn(data, 'projectId')) {
+        if (typeof data['projectId'] !== 'string' || data['projectId'].trim().length === 0) {
+          sendError(response, 422, 'INVALID_PROJECT_ID', 'projectId must be a non-empty string when provided');
+          return;
+        }
+        projectId = data['projectId'].trim();
+      }
+    } else {
+      projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
     }
 
     try {

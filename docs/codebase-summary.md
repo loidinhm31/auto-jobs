@@ -60,8 +60,8 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
   1–4, default 1), one-read direct CLI loading, and a fixed in-process report
   pool with indexed outcomes and per-project failure isolation.
 - Bounded-report Phase 02: reject request-level `workerCount` with
-  `422 INVALID_WORKER_COUNT`; after ETag verification, report execution reads
-  the saved count only. Auto-build receives no report worker count.
+  `422 INVALID_WORKER_COUNT`; after ETag verification, reports use the saved count.
+  Control auto-build uses it as its pool bound, not a per-project dependency.
 - Bounded-report Phase 03: the Dashboard selector edits that saved document
   through shared editor state; dirty/raw-JSON state requires Save before
   report execution. Report POSTs send no `workerCount`; UI and CLI share schema
@@ -69,6 +69,10 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
 - Stage View completion monitoring: optional auto-build wait (default `true`),
   run and stage parsing, live progress logs, and build-number/result/stage data
   for the Control Page.
+- Phase 02 parallel auto-build API: omitted `projectId` selects all enabled
+  auto-build projects; a supplied ID selects one. The bounded pool uses saved
+  `reportWorkers` (1–4, default 1), preserves config order, and returns a
+  `buildProjects` array; run status succeeds only if every outcome has `exitCode === 0`.
 - Repomix inventory refreshed for this summary; ignored and binary files remain
   outside the compaction.
 
@@ -82,6 +86,7 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
 | `src/runner.ts` | Saved-count report dispatch, bounded multi-project execution, and aggregate publication. |
 | `src/project/report-worker-pool.ts` | Fixed in-process loops with indexed outcomes and per-project failure isolation. |
 | `src/project/auto-build-runner.ts` | Explicit one-project auto-build API with optional Stage View wait and rich build outcome. |
+| `src/project/auto-build-worker-pool.ts` | Bounded concurrent project loops with configuration-ordered outcomes and per-project failure isolation. |
 | `src/jenkins/build-trigger.ts` | Exact build-page/form validation, one guarded POST, and optional completion wait. |
 | `src/jenkins/stage-view.ts` | Detects a newly triggered run and observes it to terminal status under the workflow deadline. |
 | `src/jenkins/stage-view-parser.ts` | Parses the Stage View run rows, stage statuses, names, and durations. |
@@ -93,10 +98,11 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
 | `src/templates/template-fixture-routes.ts` | Installs exact default-deny browser routes. |
 | `src/reporting/report-server-secret-store.ts` | Validates and atomically persists local secrets; persistence only. |
 | `src/reporting/report-server-run-manager.ts` | Owns the single-active control-run lifecycle and carries the optional `SecretStore` dependency. |
-| `src/reporting/report-server-run-executor.ts` | Reads one SecretStore snapshot, merges `runEnv`, dispatches the selected executor, and redacts control-run output. |
+| `src/reporting/report-server-run-executor.ts` | Reads one SecretStore snapshot, merges `runEnv`, dispatches report or bounded auto-build pools, stores outcomes, and redacts control-run output. |
 | `src/reporting/report-server-control-secrets-api.ts` | Handles presence-only `/api/secrets` GET/PUT/DELETE requests and SecretStore updates. |
 | `src/reporting/report-server-control-security.ts` | Enforces control security headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
-| `src/reporting/report-server-control-api.ts` | Owns config/run handlers and re-exports the modular secrets handler. |
+| `src/reporting/report-server-control-api.ts` | Owns config/run handlers; omitted auto-build `projectId` selects a batch; re-exports the modular secrets handler. |
+| `src/reporting/control-page/types/index.ts` | Defines optional `RunTriggerRequest.projectId`, `AutoBuildProjectResult.exitCode`, and `RunResult.buildProjects`. |
 | `src/reporting/report-server-control.ts` | Validates Host, dispatches control routes, and carries router context. |
 | `src/reporting/report-server-control-page.ts` | Loads Vite-built HTML, CSS, and JS assets from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches assets. |
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
@@ -111,9 +117,9 @@ Useful package scripts include `typecheck`, `build` (compiles TypeScript, bundle
 ## Configuration and run contracts
 
 Configuration is one schema-v1 JSON document passed through `--config`. The
-optional top-level `reportWorkers` accepts integers 1–4 (default 1) for the
-whole report batch. The loader validates before browser launch and exposes the
-validated document with normalized projects through
+optional top-level `reportWorkers` (1–4, default 1) bounds report batches and
+control auto-build batches. The loader validates before browser launch and
+exposes the validated document with normalized projects through
 `loadProjectConfigWithDocument`; `loadProjectConfig` retains its normalized-
 array contract. The browser editor uses the same `assertProjectConfigDocument`
 schema boundary.
@@ -221,17 +227,22 @@ const runEnv = { ...env, ...storedSecrets };
 ```
 
 The executor normalizes the project document against `runEnv`, then passes
-`runtimeEnvironment: runEnv` to `runConfiguredProjects` or
-`runAutoBuildProject`. The base environment object and `process.env` are not
-mutated. A later `/api/secrets` update affects a later run, not a snapshot
-already in progress.
+`runtimeEnvironment: runEnv` to `runConfiguredProjects` or the bounded
+auto-build pool, which invokes `runAutoBuildProject` for each project. The
+caller environment and `process.env` are unchanged. SecretStore updates affect
+later runs, not a snapshot already in progress.
+
+For auto-build, omitted `projectId` selects all enabled auto-build projects; a supplied ID
+selects one. The bounded pool stores configuration-ordered outcomes in
+`result.buildProjects`, including for one-project runs. The run succeeds only
+when every outcome has `exitCode === 0`; thrown project errors become
+`submission-unknown` outcomes with `exitCode: 1`, and siblings continue.
 
 The report trigger body contains `configName`, `configEtag`, and `runType`;
-auto-build also carries its existing `projectId`. Neither contains
-`workerCount`. The API rejects a crafted request with its own `workerCount`
-property as `422 INVALID_WORKER_COUNT` before `startRun`. The executor checks
-the saved ETag and passes `reportWorkers ?? 1` only to the report executor;
-auto-build retains its `{ runtimeEnvironment }` dependency without a count.
+auto-build may also carry `projectId`. Both modes reject request-level
+`workerCount` with `422 INVALID_WORKER_COUNT`. The ETag-matched saved
+`reportWorkers ?? 1` is passed to report execution and bounds the auto-build
+worker pool; neither mode accepts a worker-count override from the request.
 
 Every non-empty stored value is included in the control redaction set. The
 executor redacts `addLog` messages, report warnings, caught error messages and
@@ -424,7 +435,8 @@ set `Cache-Control: no-store`.
 | `tests/unit/control-secrets-api.spec.ts` | HTTP endpoint operations: presence maps, filtering, single/batch patch, deletion, persistence, and no plaintext response. |
 | `tests/unit/control-secrets-security.spec.ts` | API redaction, Host/Origin/Fetch Metadata/CSRF/content-type gates, input validation, methods, and missing-store behavior. |
 | `tests/unit/control-run-executor-fixture.ts` | Shared isolated config, record, result, and completion helpers for run-executor tests. |
-| `tests/unit/control-run-api.spec.ts` | Verifies request-level `workerCount` rejection with 422 before manager admission. |
+| `tests/unit/control-run-api.spec.ts` | Verifies omitted `projectId` request acceptance and request-level `workerCount`/invalid-ID rejection. |
+| `tests/unit/bounded-auto-build-workers.spec.ts` | Verifies concurrency bounds, configuration-order outcomes, sibling failure isolation, saved-count pool dispatch, and aggregate status. |
 | `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, ETag-checked report worker count, and auto-build isolation. |
 | `tests/unit/control-hooks-and-types.spec.ts` | Hook/API lifecycles, active-config persistence, and document-level report-worker transition coverage. |
 | `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts and `ExecutionSection` report-worker selector options and disabled states. |
