@@ -139,11 +139,60 @@ export async function getLatestStageViewRun(
   stageNames?: readonly string[],
 ): Promise<StageViewRun | undefined> {
   const rows = page.locator('#pipeline-box table.jobsTable tbody tr.job');
+  try {
+    await rows.first().waitFor({ state: 'attached', timeout: 3_000 });
+  } catch {
+    // Fall through if not attached within 3s
+  }
   const count = await rows.count();
   if (count === 0) return undefined;
 
   const resolvedStageNames = stageNames ?? (await readStageNames(page));
   return parseRunRow(rows.first(), resolvedStageNames);
+}
+
+export async function detectFallbackLastRunId(page: Page): Promise<number | undefined> {
+  try {
+    const props = page.locator('#properties');
+    if ((await props.count()) > 0) {
+      const nextStr = await props.first().getAttribute('page-next-build');
+      if (nextStr && !isNaN(Number(nextStr))) {
+        const next = Number(nextStr);
+        if (next > 1) return next - 1;
+      }
+    }
+  } catch {
+    // Continue
+  }
+
+  try {
+    const captionLink = page.locator('.jenkins-build-caption a').first();
+    if ((await captionLink.count()) > 0) {
+      const href = (await captionLink.getAttribute('href')) ?? '';
+      const match = /\/(\d+)\/?$/u.exec(href);
+      if (match && match[1]) {
+        return Number(match[1]);
+      }
+    }
+  } catch {
+    // Continue
+  }
+
+  try {
+    const historyLinks = page.locator('#jenkins-build-history a.app-builds-container__item__inner__link');
+    const count = await historyLinks.count();
+    if (count > 0) {
+      const text = (await historyLinks.first().innerText()).trim();
+      const match = /#(\d+)/u.exec(text);
+      if (match && match[1]) {
+        return Number(match[1]);
+      }
+    }
+  } catch {
+    // Continue
+  }
+
+  return undefined;
 }
 
 export function evaluateRunCompletion(run: StageViewRun): {
@@ -224,7 +273,7 @@ export async function estimateBuildTimeoutMs(
   page: Page,
   latestRun?: StageViewRun | undefined,
   defaultTimeoutMs = 900_000,
-): Promise<{ timeoutMs: number; source: 'last-build' | 'average-totals' | 'default'; estimatedDurationMs: number }> {
+): Promise<{ timeoutMs: number; source: 'last-build' | 'average-totals' | 'build-history' | 'default'; estimatedDurationMs: number }> {
   if (latestRun !== undefined && (latestRun.status === 'SUCCESS' || latestRun.status === 'FAILED')) {
     const durationMs = calculateRunDurationMs(latestRun);
     if (durationMs > 0) {
@@ -248,6 +297,25 @@ export async function estimateBuildTimeoutMs(
     }
   } catch {
     // Continue to fallback
+  }
+
+  try {
+    const tookLocator = page.locator('#jenkins-build-history [title*="Took"], #jenkins-build-history [tooltip*="Took"]');
+    const tookCount = await tookLocator.count();
+    for (let i = 0; i < tookCount; i += 1) {
+      const el = tookLocator.nth(i);
+      const titleAttr = (await el.getAttribute('title')) || (await el.getAttribute('tooltip')) || '';
+      const match = /Took\s+([^\r\n"']+)/i.exec(titleAttr);
+      if (match && match[1]) {
+        const durationMs = parseJenkinsDurationMs(match[1]);
+        if (durationMs > 0) {
+          const timeoutMs = Math.max(300_000, Math.round(durationMs * 1.5) + 180_000);
+          return { timeoutMs, source: 'build-history', estimatedDurationMs: durationMs };
+        }
+      }
+    }
+  } catch {
+    // Continue
   }
 
   return { timeoutMs: defaultTimeoutMs, source: 'default', estimatedDurationMs: 0 };

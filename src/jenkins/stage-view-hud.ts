@@ -7,6 +7,7 @@ export interface CameraHudOptions {
   readonly buildNumber?: string | undefined;
   readonly status?: string | undefined;
   readonly stageName?: string | undefined;
+  readonly startTimeMs?: number | undefined;
 }
 
 export async function injectCameraRecorderHud(
@@ -26,8 +27,10 @@ export async function injectCameraRecorderHud(
     const buildText = options.buildNumber ? ` ${options.buildNumber}` : '';
     const stageText = options.stageName ? ` | Stage: ${options.stageName}` : '';
 
+    const baseStart = options.startTimeMs ?? Date.now();
+
     await page.evaluate(
-      ({ lastDuration, timeout, status, build, stage }) => {
+      ({ lastDuration, timeout, status, build, stage, baseStart }) => {
         let hud = document.getElementById('auto-jobs-camera-hud');
         if (!hud) {
           hud = document.createElement('div');
@@ -81,12 +84,21 @@ export async function injectCameraRecorderHud(
           }
 
           document.body.appendChild(hud);
-          (window as unknown as Record<string, unknown>)['__autoJobsHudStart'] = Date.now();
         }
 
-        const startTime =
-          ((window as unknown as Record<string, unknown>)['__autoJobsHudStart'] as number) || Date.now();
-        const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+        if (!(window as unknown as Record<string, unknown>)['__autoJobsHudTimer']) {
+          (window as unknown as Record<string, unknown>)['__autoJobsHudTimer'] = setInterval(() => {
+            const el = document.getElementById('auto-jobs-camera-hud-elapsed');
+            if (el) {
+              const sec = Math.max(0, Math.floor((Date.now() - baseStart) / 1000));
+              const m = String(Math.floor(sec / 60)).padStart(2, '0');
+              const s = String(sec % 60).padStart(2, '0');
+              el.textContent = `${m}:${s}`;
+            }
+          }, 1000);
+        }
+
+        const elapsedSec = Math.max(0, Math.floor((Date.now() - baseStart) / 1000));
         const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
         const ss = String(elapsedSec % 60).padStart(2, '0');
 
@@ -99,7 +111,7 @@ export async function injectCameraRecorderHud(
           <span style="color:#94a3b8;">|</span>
           <span><strong>TIMEOUT BUDGET:</strong> <span style="color:#fbbf24;">${timeout}</span></span>
           <span style="color:#94a3b8;">|</span>
-          <span><strong>ELAPSED:</strong> <span style="color:#a3e635;">${mm}:${ss}</span></span>
+          <span><strong>ELAPSED:</strong> <span id="auto-jobs-camera-hud-elapsed" style="color:#a3e635;">${mm}:${ss}</span></span>
           <span style="color:#94a3b8;">|</span>
           <span><strong>STATUS:</strong> <span style="color:#f1f5f9;font-weight:600;">${status}${build}${stage}</span></span>
         `;
@@ -110,6 +122,7 @@ export async function injectCameraRecorderHud(
         status: statusText,
         build: buildText,
         stage: stageText,
+        baseStart,
       },
     );
   } catch {

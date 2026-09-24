@@ -3,6 +3,7 @@ import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import { injectCameraRecorderHud } from './stage-view-hud.js';
 import {
   calculateRunDurationMs,
+  detectFallbackLastRunId,
   estimateBuildTimeoutMs,
   evaluateRunCompletion,
   formatDurationHuman,
@@ -31,6 +32,7 @@ export type {
 };
 export {
   calculateRunDurationMs,
+  detectFallbackLastRunId,
   estimateBuildTimeoutMs,
   evaluateRunCompletion,
   formatDurationHuman,
@@ -48,6 +50,7 @@ export async function waitForStageViewCompletion(
   deadline: WorkflowDeadline,
   options: WaitForStageViewOptions = {},
 ): Promise<StageViewCompletionResult> {
+  const startTime = options.startTimeMs ?? Date.now();
   const pollIntervalMs = options.pollIntervalMs ?? 2_000;
   const reloadIntervalMs = options.reloadIntervalMs ?? 10_000;
   const onProgress = options.onProgress;
@@ -62,6 +65,7 @@ export async function waitForStageViewCompletion(
       lastDurationMs: options.lastDurationMs,
       timeoutMs: options.timeoutMs,
       status: 'CONNECTED',
+      startTimeMs: startTime,
     });
   } catch (error) {
     return {
@@ -72,7 +76,7 @@ export async function waitForStageViewCompletion(
 
   const stageNames = await readStageNames(page);
   let targetRun: StageViewRun | undefined;
-  const startTime = Date.now();
+
   let lastReloadTime = Date.now();
   let lastQueueLogTime = Date.now();
   let hasLoggedQueueWait = false;
@@ -125,6 +129,7 @@ export async function waitForStageViewCompletion(
           timeoutMs: options.timeoutMs,
           status: completion.finalStatus,
           buildNumber: targetRun.buildNumber,
+          startTimeMs: startTime,
         });
         return {
           completed: true,
@@ -142,6 +147,7 @@ export async function waitForStageViewCompletion(
         status: targetRun.status,
         buildNumber: targetRun.buildNumber,
         stageName: activeStage?.name,
+        startTimeMs: startTime,
       });
     } else {
       const elapsedSec = Math.round((Date.now() - startTime) / 1000);
@@ -156,6 +162,7 @@ export async function waitForStageViewCompletion(
         lastDurationMs: options.lastDurationMs,
         timeoutMs: options.timeoutMs,
         status: 'QUEUED',
+        startTimeMs: startTime,
       });
     }
 

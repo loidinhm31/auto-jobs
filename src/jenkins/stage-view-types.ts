@@ -21,6 +21,7 @@ export interface WaitForStageViewOptions {
   readonly reloadIntervalMs?: number;
   readonly lastDurationMs?: number | undefined;
   readonly timeoutMs?: number | undefined;
+  readonly startTimeMs?: number | undefined;
   readonly onProgress?: ((message: string) => void) | undefined;
 }
 
