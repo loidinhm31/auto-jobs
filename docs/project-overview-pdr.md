@@ -3,8 +3,7 @@
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, bounded execution, Control Page
 execution/results, offline build fixtures, and dynamic credentials.<br>
-**Current milestone:** Control Page Parallel Auto-Build — Phase 03 UI complete;
-Phase 04 testing/verification pending (2026-09-24).<br>
+**Current milestone:** Control Page Parallel Auto-Build — **complete**, 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build passed; review approved 9.3/10.<br>
 **Prior completed milestone:** Phase 02 Parallel Auto-Build Executor and API —
 DONE (2026-09-24)
 
@@ -474,12 +473,14 @@ require the environment variables named by project configuration.
 
 Dynamic-credentials Phases 01–05 remain complete through the local store,
 guarded presence API, per-run environment injection/redaction, Control UI
-credential workflow, and unit/API/Playwright verification. The current Control
-Page Parallel Auto-Build plan has completed Phase 03 UI; Phase 04 testing and
-verification remains. Preserve server-side configuration and security checks,
-saved worker-count/ETag boundaries, explicit all-enabled build intent, safe
-outcome mapping, and no process-global credential mutation. The report CLI
-still has no production auto-build command.
+credential workflow, and unit/API/Playwright verification. Control Page
+Parallel Auto-Build is also complete (4/4 phases, 11/11h; 2026-09-24):
+`npm run test:release` passed 439/439; typecheck/build passed; review approved
+9.3/10. Its E2E now verifies the immediate batch action and absence of obsolete
+build-confirmation/per-card controls. Preserve server-side configuration and
+security checks, saved worker-count/ETag boundaries, explicit all-enabled build
+intent, safe outcome mapping, and no process-global credential mutation. The
+report CLI still has no production auto-build command.
 
 ## Changelog
 
@@ -488,8 +489,8 @@ still has no production auto-build command.
 - Completed Phase 03 Control Page UI refactor: shared saved Workers selector,
   all-enabled report/build actions, no per-card build control or confirmation
   dialog, and ordered per-project result rows with scalar fallback.
-- Focused `control-atomic-components.spec.ts` passed 25/25; the full browser
-  journey remains in Phase 04.
+- Focused `control-atomic-components.spec.ts` passed 25/25.
+- Completed Phase 04 Testing and verification on 2026-09-24; `npm run test:release` passed 439/439, typecheck/build passed, and code review approved 9.3/10 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
 
 ### 0.1.0 (development) — 2026-09-03
 

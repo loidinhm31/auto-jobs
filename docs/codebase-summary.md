@@ -75,8 +75,8 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
   build actions plus one shared saved Workers selector. Per-card build buttons
   and the confirmation flow are removed; `RunResultBox` renders ordered
   `BuildProjectOutcomeRow` results with scalar fallback for older records.
-- Repomix inventory refreshed for this summary; ignored and binary files remain
-  outside the compaction.
+- Phase 04 auto-build verification (2026-09-24): E2E replaced obsolete build-confirmation/per-card interactions with absent-control checks and immediate batch action, shared `#select-workers`, saved/dirty gating, and request assertions without `projectId`/`workerCount`. `npm run test:release` passed 439/439 (unit 399, template E2E 13, control E2E 20, report 5, WebKit 2); typecheck/build passed; review approved 9.3/10.
+- Repomix inventory refreshed: 295 files packed to `repomix-output.xml`; ignored/binary files remain excluded and two credential-like fixture test files were omitted by its security scan.
 
 ## Entry points and scripts
 

@@ -221,13 +221,34 @@ test.describe('Run Executor Environment Injection & Secret Redaction', () => {
     expect(capturedDeps?.workerCount).toBe(4);
   });
 
-  test('auto-build run does not pass workerCount even when document has reportWorkers: 4', async () => {
+  test('auto-build run applies saved reportWorkers to pool execution and preserves redaction with no reportUrl', async () => {
     const configStore = await createConfigStore(configRoot);
-    const configWithWorkers = { ...createValidConfig(reportRoot), reportWorkers: 4 };
+    const multiBuildConfig = {
+      ...createValidConfig(reportRoot),
+      reportWorkers: 2,
+      projects: [
+        {
+          id: 'build-proj-1',
+          name: 'Build Project 1',
+          runType: 'auto-build' as const,
+          enabled: true,
+          loginUrl: 'https://jenkins.example.com/login',
+          jobUrl: 'https://jenkins.example.com/job/build-proj-1/',
+        },
+        {
+          id: 'build-proj-2',
+          name: 'Build Project 2',
+          runType: 'auto-build' as const,
+          enabled: true,
+          loginUrl: 'https://jenkins.example.com/login',
+          jobUrl: 'https://jenkins.example.com/job/build-proj-2/',
+        },
+      ],
+    };
     const initialEntry = await configStore.readConfig('default.json');
-    const updatedEntry = await configStore.writeConfig('default.json', configWithWorkers, initialEntry.etag);
+    const updatedEntry = await configStore.writeConfig('default.json', multiBuildConfig, initialEntry.etag);
 
-    let capturedBuildDeps: Record<string, unknown> | undefined;
+    const executedProjectIds: string[] = [];
     let reportCalled = false;
     const options: RunManagerOptions = {
       configStore,
@@ -237,19 +258,27 @@ test.describe('Run Executor Environment Injection & Secret Redaction', () => {
         reportCalled = true;
         return createMockReportResult(reportRoot);
       },
-      autoBuildExecutor: async (project, deps) => {
-        capturedBuildDeps = deps as Record<string, unknown>;
-        return { projectId: project.id, projectName: project.name, state: 'submitted', jobUrl: project.jobUrl, exitCode: 0 };
+      autoBuildExecutor: async (project) => {
+        executedProjectIds.push(project.id);
+        return {
+          projectId: project.id,
+          projectName: project.name,
+          state: 'submitted',
+          jobUrl: project.jobUrl,
+          exitCode: 0,
+        };
       },
     };
 
-    const record = createMockRecord('run-build-workers', updatedEntry.etag, 'auto-build', 'build-proj');
+    const record = createMockRecord('run-build-batch', updatedEntry.etag, 'auto-build');
     await executeControlRun(record, options, () => {});
 
     expect(record.status).toBe('succeeded');
     expect(reportCalled).toBe(false);
-    expect(capturedBuildDeps?.['workerCount']).toBeUndefined();
-    expect(record.result?.buildState).toBe('submitted');
+    expect(executedProjectIds).toEqual(['build-proj-1', 'build-proj-2']);
+    expect(record.result?.buildProjects).toHaveLength(2);
+    expect(record.result?.buildProjects?.[0]?.projectId).toBe('build-proj-1');
+    expect(record.result?.buildProjects?.[1]?.projectId).toBe('build-proj-2');
     expect(record.result?.reportUrl).toBeUndefined();
   });
 

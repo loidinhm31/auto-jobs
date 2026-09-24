@@ -206,25 +206,21 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(openReportLink).toBeVisible();
     expect(await openReportLink.getAttribute('href')).toContain('/reports/');
 
-    // Test Auto-Build modal confirmation
-    const buildBtn = page.locator('.btn-auto-build').first();
-    await buildBtn.click();
+    // Test Auto-Build immediate execution (no per-card button, no modal dialog)
+    expect(await page.locator('.btn-auto-build').count()).toBe(0);
+    expect(await page.locator('#build-confirm-dialog').count()).toBe(0);
 
-    const dialog = page.locator('#build-confirm-dialog');
-    await expect(dialog).toBeVisible();
-    await expect(page.locator('#confirm-project-id')).toHaveText('demo-build-service');
-    const waitCheckbox = page.locator('#checkbox-wait-for-completion');
-    await expect(waitCheckbox).toBeVisible();
-    await expect(waitCheckbox).toBeChecked();
-    const waitTimeoutInput = page.locator('#input-wait-timeout-minutes');
-    await expect(waitTimeoutInput).toBeVisible();
-    await expect(waitTimeoutInput).toHaveAttribute('placeholder', /Auto/i);
-    // Confirm build
-    await page.locator('#btn-confirm-build').click();
-    await expect(dialog).not.toBeVisible();
+    const runAutoBuildBtn = page.locator('#btn-run-auto-build');
+    await expect(runAutoBuildBtn).toBeVisible();
+    await expect(runAutoBuildBtn).toHaveText(/Trigger Auto Build/i);
+    await runAutoBuildBtn.click();
 
+    await expect(page.locator('#run-status-badge')).toHaveText(/running|succeeded/i);
     await expect(page.locator('#run-status-badge')).toHaveText('succeeded', { timeout: 10_000 });
-    await expect(page.locator('#run-logs')).toContainText('Auto-build run finished with state: submitted');
+    await expect(page.locator('#run-logs')).toContainText('Auto-build run finished');
+    const resultBox = page.locator('#run-result-box');
+    await expect(resultBox).toBeVisible();
+    await expect(resultBox).toContainText('Demo Build Service');
   });
 
   test('manages credentials in credential dialog with full a11y, saving, clearing, and zero leakage', async ({ page }) => {
@@ -694,7 +690,7 @@ test.describe('Control Page Dashboard E2E', () => {
     expect(mobileNoOverflow).toBe(true);
   });
 
-  test('manages report workers selector: loads default 1, changes to 4, syncs raw JSON, disables run until save, persists across reload, switches configs, and verifies no workerCount in POST', async ({ page }) => {
+  test('manages shared workers selector: loads default 1, changes to 4, syncs raw JSON, disables both run actions until save, persists across reload, switches configs, and verifies no workerCount in POST', async ({ page }) => {
     // Prepare other config on disk with reportWorkers: 2 ('default.json' sorts before 'other.json')
     fs.writeFileSync(
       path.join(configRoot, 'other.json'),
@@ -705,8 +701,9 @@ test.describe('Control Page Dashboard E2E', () => {
     await page.goto(serverUrl);
     await expect(page).toHaveTitle('Jenkins Control Dashboard');
 
-    const workersSelect = page.locator('#select-report-workers');
+    const workersSelect = page.locator('#select-workers');
     const runReportsBtn = page.locator('#btn-run-reports');
+    const runAutoBuildBtn = page.locator('#btn-run-auto-build');
     const saveBtn = page.locator('#btn-save');
     const rawJson = page.locator('#raw-json-textarea');
 
@@ -714,12 +711,14 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(workersSelect).toBeVisible();
     await expect(workersSelect).toHaveValue('1');
     await expect(runReportsBtn).toBeEnabled();
+    await expect(runAutoBuildBtn).toBeEnabled();
     await expect(saveBtn).toBeDisabled();
 
-    // 2. Select '4': marks dirty, disables Generate Reports, syncs raw JSON
+    // 2. Select '4': marks dirty, disables both Generate Reports and Trigger Auto Build, syncs raw JSON
     await workersSelect.selectOption('4');
     await expect(workersSelect).toHaveValue('4');
     await expect(runReportsBtn).toBeDisabled();
+    await expect(runAutoBuildBtn).toBeDisabled();
     await expect(saveBtn).toBeEnabled();
     await expect(rawJson).toHaveValue(/"reportWorkers":\s*4/);
 
@@ -740,6 +739,7 @@ test.describe('Control Page Dashboard E2E', () => {
     expect(savedPutBody?.reportWorkers).toBe(4);
     await expect(saveBtn).toBeDisabled();
     await expect(runReportsBtn).toBeEnabled();
+    await expect(runAutoBuildBtn).toBeEnabled();
 
     // 4. Trigger run: verify report POST carries NO workerCount
     let runPostData: Record<string, unknown> | undefined;
@@ -785,6 +785,7 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(workersSelect).toHaveValue('3');
     await expect(saveBtn).toBeEnabled();
     await expect(runReportsBtn).toBeDisabled();
+    await expect(runAutoBuildBtn).toBeDisabled();
 
     // 9. Edit via raw JSON: reject invalid '99'
     const jsonWith99 = jsonWith3.replace('"reportWorkers": 3', '"reportWorkers": 99');
@@ -795,7 +796,7 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(workersSelect).toHaveValue('3');
 
     // 10. Axe accessibility on the selector
-    const a11yResult = await new AxeBuilder({ page }).include('#select-report-workers').analyze();
+    const a11yResult = await new AxeBuilder({ page }).include('#select-workers').analyze();
     expect(a11yResult.violations).toEqual([]);
 
     // 11. Keyboard navigation on selector
@@ -816,13 +817,10 @@ test.describe('Control Page Dashboard E2E', () => {
     await page.goto(serverUrl);
     await expect(page).toHaveTitle('Jenkins Control Dashboard');
 
-    // 1. Trigger auto-build on demo-build-service
-    const buildCard = page.locator('.project-card', { hasText: 'Demo Build Service' });
-    const buildBtn = buildCard.getByRole('button', { name: 'Build' });
-    await buildBtn.click();
-
-    const dialog = page.locator('#build-confirm-dialog');
-    await expect(dialog).toBeVisible();
+    // 1. Verify no per-card build button or confirmation modal exists
+    expect(await page.locator('.project-card button:has-text("Build")').count()).toBe(0);
+    expect(await page.locator('.btn-auto-build').count()).toBe(0);
+    expect(await page.locator('#build-confirm-dialog').count()).toBe(0);
 
     let autoBuildPostData: Record<string, unknown> | undefined;
     page.on('request', (req) => {
@@ -835,21 +833,27 @@ test.describe('Control Page Dashboard E2E', () => {
       }
     });
 
-    const confirmBtn = page.locator('#btn-confirm-build');
-    await confirmBtn.click();
-    await expect(dialog).not.toBeVisible();
+    const runAutoBuildBtn = page.locator('#btn-run-auto-build');
+    await runAutoBuildBtn.click();
 
     await expect(page.locator('#run-status-badge')).toHaveText(/running|succeeded/i, { timeout: 10_000 });
+    await expect(page.locator('#run-status-badge')).toHaveText('succeeded', { timeout: 10_000 });
+
     expect(autoBuildPostData).toBeDefined();
     expect(autoBuildPostData?.['runType']).toBe('auto-build');
-    expect(autoBuildPostData?.['projectId']).toBe('demo-build-service');
-    expect(autoBuildPostData?.['waitForCompletion']).toBe(true);
+    expect(autoBuildPostData?.['configName']).toBe('default.json');
+    expect('projectId' in (autoBuildPostData ?? {})).toBe(false);
     expect('workerCount' in (autoBuildPostData ?? {})).toBe(false);
+
+    const resultBox = page.locator('#run-result-box');
+    await expect(resultBox).toBeVisible();
+    await expect(resultBox).toContainText('Demo Build Service');
 
     // 2. Fetch current ETag
     const getRes = await page.request.get(`${serverUrl}api/config?name=default.json`);
     const currentConfig = (await getRes.json()) as { etag: string };
     const etag = currentConfig.etag;
+
     // 3. Extract CSRF token from page
     const csrfToken = await page.evaluate(
       () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
@@ -873,7 +877,7 @@ test.describe('Control Page Dashboard E2E', () => {
     const craftedReportBody = (await craftedReportRes.json()) as { error: { code: string; message: string } };
     expect(craftedReportBody.error.code).toBe('INVALID_WORKER_COUNT');
 
-    // 5. Direct crafted POST with workerCount (auto-build): 422 INVALID_WORKER_COUNT
+    // 5. Direct crafted POST with workerCount (targeted auto-build): 422 INVALID_WORKER_COUNT
     const craftedBuildRes = await page.request.post(`${serverUrl}api/run`, {
       headers: {
         'Content-Type': 'application/json',
@@ -891,5 +895,91 @@ test.describe('Control Page Dashboard E2E', () => {
     expect(craftedBuildRes.status()).toBe(422);
     const craftedBuildBody = (await craftedBuildRes.json()) as { error: { code: string; message: string } };
     expect(craftedBuildBody.error.code).toBe('INVALID_WORKER_COUNT');
+
+    // 6. Direct crafted POST with workerCount (omitted ID auto-build): 422 INVALID_WORKER_COUNT
+    const craftedBatchBuildRes = await page.request.post(`${serverUrl}api/run`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+        Origin: new URL(serverUrl).origin,
+      },
+      data: {
+        configName: 'default.json',
+        configEtag: etag,
+        runType: 'auto-build',
+        workerCount: 2,
+      },
+    });
+    expect(craftedBatchBuildRes.status()).toBe(422);
+    const craftedBatchBody = (await craftedBatchBuildRes.json()) as { error: { code: string; message: string } };
+    expect(craftedBatchBody.error.code).toBe('INVALID_WORKER_COUNT');
+  });
+
+  test('executes parallel auto-build batch for all enabled build projects, displaying each project outcome including partial failure', async ({ page }) => {
+    const batchConfig = {
+      schemaVersion: 1,
+      reportWorkers: 2,
+      defaults: { artifactDir: reportRoot },
+      projects: [
+        {
+          id: 'build-alpha',
+          name: 'Build Alpha Service',
+          runType: 'auto-build' as const,
+          enabled: true,
+          loginUrl: 'https://jenkins.example.com/login',
+          jobUrl: 'https://jenkins.example.com/job/build-alpha/',
+        },
+        {
+          id: 'build-beta-failing',
+          name: 'Build Beta Service',
+          runType: 'auto-build' as const,
+          enabled: true,
+          loginUrl: 'https://jenkins.example.com/login',
+          jobUrl: 'https://jenkins.example.com/job/build-beta/',
+        },
+        {
+          id: 'build-gamma-disabled',
+          name: 'Build Gamma Disabled',
+          runType: 'auto-build' as const,
+          enabled: false,
+          loginUrl: 'https://jenkins.example.com/login',
+          jobUrl: 'https://jenkins.example.com/job/build-gamma/',
+        },
+        {
+          id: 'report-delta',
+          name: 'Report Delta Service',
+          runType: 'report' as const,
+          enabled: true,
+          loginUrl: 'https://jenkins.example.com/login',
+          jobUrl: 'https://jenkins.example.com/job/report-delta/',
+        },
+      ],
+    };
+
+    fs.writeFileSync(
+      path.join(configRoot, 'default.json'),
+      JSON.stringify(batchConfig, null, 2),
+      'utf8',
+    );
+
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    const runAutoBuildBtn = page.locator('#btn-run-auto-build');
+    await expect(runAutoBuildBtn).toBeEnabled();
+    await runAutoBuildBtn.click();
+
+    // Wait for terminal run completion (status should be 'succeeded' because autoBuildExecutor returns exitCode 0 by default)
+    await expect(page.locator('#run-status-badge')).toHaveText(/running|succeeded/i, { timeout: 10_000 });
+    await expect(page.locator('#run-status-badge')).toHaveText('succeeded', { timeout: 10_000 });
+
+    const resultBox = page.locator('#run-result-box');
+    await expect(resultBox).toBeVisible();
+    // Both enabled auto-build projects should be rendered
+    await expect(resultBox).toContainText('Build Alpha Service');
+    await expect(resultBox).toContainText('Build Beta Service');
+    // Disabled auto-build and enabled report project should NOT be rendered in build outcomes
+    expect(await resultBox.locator('text=Build Gamma Disabled').count()).toBe(0);
+    expect(await resultBox.locator('text=Report Delta Service').count()).toBe(0);
   });
 });

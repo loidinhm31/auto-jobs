@@ -105,11 +105,12 @@ Compiler settings in `tsconfig.json` are the source of truth:
   environment setting.
 - Treat `enabled: false` as an unconditional execution gate.
 - Select after normalization: `selectReportProjects` returns enabled report
-  projects; `selectAutoBuildProject` returns one exact enabled auto-build
-  project or throws a configuration error.
+  projects; `selectAutoBuildProjects` returns all enabled auto-build projects;
+  `selectAutoBuildProject` returns one exact enabled auto-build project or throws
+  a configuration error.
 - Keep selection helpers pure. `runFromConfig` must pass only report projects
   to the report runner; an auto-build caller must invoke
-  `runAutoBuildProject` explicitly.
+  `runAutoBuildProject` or `executeAutoBuildWorkerPool` explicitly.
 - Preserve one configured `jobUrl` as the sole Jenkins job/branch identity.
   Do not add a second branch field or derive a target from UI text.
 
@@ -202,8 +203,9 @@ Compiler settings in `tsconfig.json` are the source of truth:
 - Treat `workerCount` as unsupported in `POST /api/run`: reject any own property
   with `422 INVALID_WORKER_COUNT` before `RunManager.startRun`.
 - Before control-run dispatch, require the current saved config ETag to match
-  the request. Derive the report count from that document and pass it only to
-  the report executor; preserve auto-build's existing dependency contract.
+  the request. The matched document's `reportWorkers` (1–4, default 1) drives
+  both report executor concurrency and the auto-build worker-pool bound;
+  single-project auto-build remains bounded by its one selected project.
 - Collect all non-empty snapshot values for redaction. Redact `addLog`
   messages, report warnings, caught error messages/stacks, and auto-build
   `jobUrl`/`buildPageUrl` result fields before the control record is persisted.

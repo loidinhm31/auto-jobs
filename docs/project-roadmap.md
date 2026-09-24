@@ -8,14 +8,14 @@ Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](..
 
 Plan: [Control Page Parallel Auto-Build](../plans/260924-1158-control-page-parallel-auto-build/plan.md)
 
-**Overall status:** In progress · **82%** (9 of 11 planned hours; 3 of 4 phases DONE).
+**Overall status:** Complete · **100%** (11 of 11 planned hours; 4 of 4 phases DONE; completed 2026-09-24).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
-|---|---|---:|---:|---|---|
+|---|---|---:|---:|---:|---|
 | 01. Config and run selection | **DONE** | **100%** | 2h | 2026-09-24 | Added/exported ordered, immutable `selectAutoBuildProjects` while preserving targeted selection. Focused spec 18/18; full unit suite 389/389; review 10/10, no critical findings ([test report](../plans/reports/tester-260924-1245-phase-01-config-and-run-selection.md), [review](../plans/reports/code-review-260924-1247-phase-01-config-run-selection.md)). |
 | 02. Parallel executor and API | **DONE** | **100%** | 4h | 2026-09-24 | Optional-ID API, saved-count bounded build pool, ordered redacted outcomes, exit-code aggregate and single-project compatibility. QA: 398/398 unit and 18/18 control tests; review: 30/30 focused tests, typecheck 0 errors, 9.5/10 ([test report](../plans/reports/tester-260924-1347-phase-02-parallel-auto-build-executor-and-api.md), [review](../plans/reports/code-review-260924-1355-phase-02-parallel-auto-build.md)). |
-| 03. Control Page UI | **DONE** | **100%** | 3h | 2026-09-24 | Immediate all-enabled actions, shared Workers selector, and multi-project result display. Review: 9.2/10, 399/399 unit tests; typecheck/build passed. Review noted active-run button guard, now reflected in current DashboardPage state; Phase 04 still owns integrated browser verification ([review](../plans/reports/code-review-260924-1459-phase-03-control-page-ui-refactor.md)). |
-| 04. Testing and verification | Pending | 0% | 2h | — | Focused behavioral proof, browser surface, integrated verification. |
+| 03. Control Page UI | **DONE** | **100%** | 3h | 2026-09-24 | Immediate all-enabled actions, shared Workers selector, and multi-project result display. Review: 9.2/10, 399/399 unit tests; typecheck/build passed. Active-run guard confirmed in current DashboardPage ([review](../plans/reports/code-review-260924-1459-phase-03-control-page-ui-refactor.md)). |
+| 04. Testing and verification | **DONE** | **100%** | 2h | 2026-09-24 | E2E and secret-executor coverage finalized. Release gate: 439/439 passed (unit 399, template E2E 13, control E2E 20, report 5, WebKit 2); typecheck/build passed. Review 9.3/10, no critical issues ([test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)). |
 
 
 ## Jenkins Stage View Build Monitoring & Status Tracking
@@ -118,7 +118,7 @@ Delivered Atomic Design atoms and molecules with exact DOM/CSS fidelity:
 Delivered organisms, dialogs, layout templates, error boundary, and root dashboard assembly:
 
 - Implemented organisms: `HeaderBar`, `ProjectCard`, `ProjectsGrid`, `RawJsonSection`, `ExecutionSection`, `RunStatusCard`.
-- Implemented accessible dialogs: `BuildConfirmDialog`, `CredentialsDialog`, `BrowserSettingsDialog`.
+- Implemented accessible credentials and browser-settings dialogs; the then-existing build-confirmation dialog was removed during Control Page Parallel Auto-Build Phase 03.
 - Created robust `ErrorBoundary` for graceful UI failure isolation.
 - Assembled top-level `DashboardPage` and `App.tsx` mounted via `main.tsx`.
 
@@ -148,7 +148,7 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Completed Phase 02 (Parallel executor and API) of Control Page Parallel Auto-Build on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-02-parallel-auto-build-executor-and-api.md)); added optional-ID all-enabled execution, a saved-count bounded worker pool, ordered sanitized outcomes, aggregate status and single-project scalar compatibility.
 - Phase 02 evidence: QA recorded 398/398 unit and 18/18 control tests passing; code review recorded 30/30 focused tests and a clean typecheck, scored 9.5/10 with no critical issues or warnings ([test report](../plans/reports/tester-260924-1347-phase-02-parallel-auto-build-executor-and-api.md); [review](../plans/reports/code-review-260924-1355-phase-02-parallel-auto-build.md)). QA's initial typecheck report had five TS2550 diagnostics; the final review records the ES2023-compatible helper and a subsequent clean typecheck.
 - Completed Phase 03 (Control Page UI) on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-03-control-page-ui-refactor.md)); delivered immediate all-enabled actions, the shared Workers selector and ordered multi-project results.
-- Phase 03 evidence: code review scored 9.2/10; its report records 399/399 unit tests plus successful typecheck/build. The review flagged active-run disabling; current `DashboardPage` blocks actions while queued/running as well as triggering. Phase 04 integrated browser verification remains pending ([review](../plans/reports/code-review-260924-1459-phase-03-control-page-ui-refactor.md)).
+- Completed Phase 04 (Testing and verification) and Control Page Parallel Auto-Build at 100% on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [overall plan](../plans/260924-1158-control-page-parallel-auto-build/plan.md)). Release gate passed 439/439; typecheck/build passed; review approved at 9.3/10 with no critical issues ([test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
 
 ### 0.1.0 (development) — 2026-09-23
 

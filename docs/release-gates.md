@@ -435,14 +435,23 @@ npm run test:control
 ```
 
 `npm run test:control` runs `tests/e2e/control-page.spec.ts` in Chromium and
-WebKit. The 2026-09-23 browser run passed 18/18, but predates the Phase 03
-Control Page refactor and is historical evidence only. The current E2E spec
-still asserts removed `.btn-auto-build`/`#build-confirm-dialog` controls and
-the former `#select-report-workers` ID; Phase 04 must replace those assertions
-before the new action bar is browser-verified. The focused component spec above
-covers current action labels/IDs, worker options, multi-project results, and
-scalar fallback. Control scenarios use temporary configs and injected executors;
-they do not contact Jenkins or vendor services.
+WebKit. The 2026-09-24 Phase 04 browser suite passed 20/20. Its old
+build-confirmation and per-card build interactions have been replaced: E2E
+asserts those controls are absent and exercises the immediate all-enabled action,
+shared `#select-workers`, save/dirty gating, and a batch POST without
+`projectId` or `workerCount`. Control scenarios use temporary configs and
+injected executors; they do not contact Jenkins or vendor services.
+
+### Phase 04 Parallel Auto-Build verification snapshot
+
+| Command/scope | Result |
+| --- | --- |
+| `npm run test:release` | **439/439 passed**: unit 399, template E2E 13, control E2E 20, report 5, WebKit 2 |
+| `npm run typecheck` | Passed; 0 TypeScript errors |
+| `npm run build` | Passed |
+| Code review | Approved, 9.3/10 |
+
+Evidence: [test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md) · [code review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md).
 
 The 2026-09-03 Phase 05 verification snapshot recorded:
 
