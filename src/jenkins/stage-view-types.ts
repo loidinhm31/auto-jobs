@@ -1,6 +1,6 @@
 export type StageViewTerminalStatus = 'SUCCESS' | 'FAILED' | 'UNSTABLE' | 'ABORTED';
 
-export type StageViewStatus = StageViewTerminalStatus | 'in-progress' | 'NOT_EXECUTED' | 'unknown';
+export type StageViewStatus = StageViewTerminalStatus | 'in-progress' | 'pending' | 'NOT_EXECUTED' | 'unknown';
 
 export interface StageViewStage {
   readonly index: number;

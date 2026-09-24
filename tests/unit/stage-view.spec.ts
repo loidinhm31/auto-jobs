@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 
 import {
   calculateRunDurationMs,
+  detectFallbackLastRunId,
   estimateBuildTimeoutMs,
   evaluateRunCompletion,
   formatDurationHuman,
@@ -41,6 +42,10 @@ test.describe('stage-view parsing and status evaluation', () => {
     expect(parseStageViewStatus('job UNSTABLE')).toBe('UNSTABLE');
     expect(parseStageViewStatus('job ABORTED')).toBe('ABORTED');
     expect(parseStageViewStatus('job in-progress-run')).toBe('in-progress');
+    expect(parseStageViewStatus('stage-cell IN_PROGRESS')).toBe('in-progress');
+    expect(parseStageViewStatus('stage-cell PENDING_START')).toBe('pending');
+    expect(parseStageViewStatus('stage-cell PAUSED_PENDING_INPUT')).toBe('in-progress');
+    expect(parseStageViewStatus('stage-cell NOT_EXECUTED')).toBe('NOT_EXECUTED');
     expect(parseStageViewStatus('job progress-bar-animated')).toBe('in-progress');
     expect(parseStageViewStatus('job unknown-class')).toBe('unknown');
   });
@@ -118,6 +123,33 @@ test.describe('stage-view parsing and status evaluation', () => {
       ],
     };
     expect(evaluateRunCompletion(inProgressStageRun)).toEqual({
+      completed: false,
+    });
+    const firstStageOnlySuccessRun = {
+      runId: 22,
+      buildNumber: '#22',
+      status: 'unknown' as const,
+      stages: [
+        { index: 0, name: 'Checkout', status: 'SUCCESS' },
+        { index: 1, name: 'Build', status: 'pending' },
+        { index: 2, name: 'Deploy', status: 'NOT_EXECUTED' },
+      ],
+    };
+    expect(evaluateRunCompletion(firstStageOnlySuccessRun)).toEqual({
+      completed: false,
+    });
+
+    const rowInProgressRun = {
+      runId: 22,
+      buildNumber: '#22',
+      status: 'in-progress' as const,
+      stages: [
+        { index: 0, name: 'Checkout', status: 'SUCCESS' },
+        { index: 1, name: 'Build', status: 'SUCCESS' },
+        { index: 2, name: 'Deploy', status: 'SUCCESS' },
+      ],
+    };
+    expect(evaluateRunCompletion(rowInProgressRun)).toEqual({
       completed: false,
     });
   });

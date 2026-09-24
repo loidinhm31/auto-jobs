@@ -11,8 +11,15 @@ const STATUS_TOKENS: Record<string, StageViewStatus> = {
   FAILED: 'FAILED',
   UNSTABLE: 'UNSTABLE',
   ABORTED: 'ABORTED',
-  'in-progress-run': 'in-progress',
-  'in-progress': 'in-progress',
+  IN_PROGRESS: 'in-progress',
+  'IN-PROGRESS': 'in-progress',
+  'IN-PROGRESS-RUN': 'in-progress',
+  IN_PROGRESS_RUN: 'in-progress',
+  PENDING_START: 'pending',
+  'PENDING-START': 'pending',
+  PAUSED_PENDING_INPUT: 'in-progress',
+  NOT_EXECUTED: 'NOT_EXECUTED',
+  'NOT-EXECUTED': 'NOT_EXECUTED',
 };
 
 export function parseStageViewStatus(classAttr?: string | undefined): StageViewStatus {
@@ -20,12 +27,21 @@ export function parseStageViewStatus(classAttr?: string | undefined): StageViewS
   const parts = classAttr.split(/\s+/u);
   for (const part of parts) {
     const upper = part.toUpperCase();
-    const matched = STATUS_TOKENS[upper] || STATUS_TOKENS[part];
+    const matched = STATUS_TOKENS[upper];
     if (matched) return matched;
   }
   const lower = classAttr.toLowerCase();
-  if (lower.includes('progress-bar') || lower.includes('in-progress') || lower.includes('running')) {
+  if (
+    lower.includes('progress-bar') ||
+    lower.includes('in-progress') ||
+    lower.includes('in_progress') ||
+    lower.includes('running') ||
+    lower.includes('paused')
+  ) {
     return 'in-progress';
+  }
+  if (lower.includes('pending')) {
+    return 'pending';
   }
   if (lower.includes('success') || lower.includes('passed')) return 'SUCCESS';
   if (lower.includes('failed') || lower.includes('failure') || lower.includes('error')) return 'FAILED';
@@ -111,10 +127,6 @@ export async function parseRunRow(
       if ((await durationLocator.count()) > 0) {
         duration = (await durationLocator.first().innerText()).trim();
       }
-      if (cellStatus === 'unknown' && duration && duration.length > 0 && !duration.startsWith('0m')) {
-        cellStatus = 'SUCCESS';
-      }
-
       stages.push({
         index: c,
         name: stageNames[c] ?? `Stage ${c + 1}`,
@@ -140,7 +152,7 @@ export async function getLatestStageViewRun(
 ): Promise<StageViewRun | undefined> {
   const rows = page.locator('#pipeline-box table.jobsTable tbody tr.job');
   try {
-    await rows.first().waitFor({ state: 'attached', timeout: 3_000 });
+    await rows.first().waitFor({ state: 'attached', timeout: 5_000 });
   } catch {
     // Fall through if not attached within 3s
   }
@@ -199,35 +211,46 @@ export function evaluateRunCompletion(run: StageViewRun): {
   readonly completed: boolean;
   readonly finalStatus?: StageViewTerminalStatus | undefined;
 } {
+  if (run.status === 'in-progress') {
+    return { completed: false };
+  }
+
   const rowStatus = run.status.toUpperCase();
   if (rowStatus === 'SUCCESS' || rowStatus === 'FAILED' || rowStatus === 'UNSTABLE' || rowStatus === 'ABORTED') {
     return { completed: true, finalStatus: rowStatus as StageViewTerminalStatus };
   }
 
-  if (run.status === 'in-progress') {
-    return { completed: false };
-  }
-
   if (run.stages.length > 0) {
-    const hasInProgress = run.stages.some((s) => s.status === 'in-progress');
-    if (hasInProgress) {
+    const hasActiveStage = run.stages.some(
+      (s) => s.status === 'in-progress' || s.status === 'pending',
+    );
+    if (hasActiveStage) {
       return { completed: false };
     }
 
-    const executed = run.stages.filter((s) => s.status !== 'NOT_EXECUTED' && s.status !== 'unknown');
-    if (executed.length > 0) {
-      if (executed.some((s) => s.status === 'FAILED')) {
-        return { completed: true, finalStatus: 'FAILED' };
-      }
-      if (executed.some((s) => s.status === 'UNSTABLE')) {
-        return { completed: true, finalStatus: 'UNSTABLE' };
-      }
-      if (executed.some((s) => s.status === 'ABORTED')) {
-        return { completed: true, finalStatus: 'ABORTED' };
-      }
-      if (executed.every((s) => s.status === 'SUCCESS')) {
-        return { completed: true, finalStatus: 'SUCCESS' };
-      }
+    const executed = run.stages.filter(
+      (s) => s.status !== 'NOT_EXECUTED' && s.status !== 'unknown' && s.status !== 'pending',
+    );
+    if (executed.length === 0) {
+      return { completed: false };
+    }
+
+    if (executed.some((s) => s.status === 'FAILED')) {
+      return { completed: true, finalStatus: 'FAILED' };
+    }
+    if (executed.some((s) => s.status === 'UNSTABLE')) {
+      return { completed: true, finalStatus: 'UNSTABLE' };
+    }
+    if (executed.some((s) => s.status === 'ABORTED')) {
+      return { completed: true, finalStatus: 'ABORTED' };
+    }
+
+    const lastStage = run.stages.at(-1);
+    const lastStageSuccess = lastStage !== undefined && lastStage.status === 'SUCCESS';
+    const allExecutedSuccess = executed.every((s) => s.status === 'SUCCESS');
+
+    if (allExecutedSuccess && (lastStageSuccess || executed.length === run.stages.length)) {
+      return { completed: true, finalStatus: 'SUCCESS' };
     }
   }
 
