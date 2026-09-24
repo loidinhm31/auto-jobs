@@ -255,6 +255,21 @@ npm run test:control
 ```
 which exercises config reading/atomic saving, validation errors, report and auto-build execution contracts, and WCAG A/AA accessibility scanning in Chromium and WebKit.
 
+### Control project-report deletion gate
+
+Run the focused control-only DELETE API contract:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-reports-delete-api.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The suite checks guarded deletion, empty-body and invalid-input handling,
+project-not-found behavior, report-root-lock `409`, filesystem preflight, and
+aggregate refresh while preserving sibling projects, assets, and config. It
+uses isolated temporary roots and does not contact Jenkins or vendors.
+
 ### Phase 01 control asset routing gate
 
 Run the focused control asset pipeline and routing contract:

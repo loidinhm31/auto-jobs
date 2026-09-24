@@ -1,9 +1,9 @@
 # Codebase summary
 
 This summary reflects the refreshed `repomix-output.xml` and checked-in
-source/configuration. It includes Stage View completion monitoring and
-persistent project history in the static aggregate report. Deterministic
-fixtures use local inputs; no live Jenkins run is claimed.
+source/configuration. It includes Stage View completion monitoring, persistent
+project history, and guarded Control API deletion of project reports. Fixtures
+use local inputs; no live Jenkins run is claimed.
 
 ## Repository profile
 
@@ -35,6 +35,9 @@ fixtures use local inputs; no live Jenkins run is claimed.
 - Phase 05 addition: focused SecretStore lifecycle coverage, expanded secrets
   API operation coverage, and Chromium/WebKit Control UI E2E verification for
   dynamic credential persistence, injected execution, and zero leakage.
+- Control report deletion addition: a guarded loopback
+  `DELETE /api/reports/projects/:projectId` removes one project subtree under
+  the report-root lock and rebuilds the aggregate from surviving manifests.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
   testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
@@ -411,12 +414,15 @@ set `Cache-Control: no-store`.
 | `src/project/auto-build-runner.ts` | One-project auto-build lifecycle, redaction, and cleanup. |
 | `src/project/project-runner.ts` | Report run state, capture, failure artifacts, and report outcomes. |
 | `src/artifacts/` | Run identities, staging leases, publication, manifest discovery, cleanup, and aggregate recovery. |
+| `src/artifacts/report-project-deletion.ts` | Safe project subtree deletion, bounded filesystem preflight, report-root lock handling, and aggregate rebuild. |
 | `src/reporting/` | HTML rendering, report links, view models, static serving, and control API routing. |
 | `src/reporting/report-server-secret-store.ts` | Canonical fixed-file secret persistence, validation, frozen snapshots, atomic writes, in-memory locking, and deletion. |
 | `src/reporting/report-server-constants.ts` | Shared report/control limits plus `SECRETS_FILE_NAME`, `MAX_SECRET_FILE_BYTES`, and control body limits. |
 | `src/reporting/report-server-control-security.ts` | Security headers and Host/Origin/Fetch Metadata/timing-safe CSRF/content-type validation. |
 | `src/reporting/report-server-control-secrets-api.ts` | Modular `/api/secrets` GET/PUT/DELETE handler, presence-map construction, bounded input, and store operations. |
 | `src/reporting/report-server-control-api.ts` | Config/run handlers and re-export facade for the secrets handler. |
+| `src/reporting/report-server-control-reports-api.ts` | Guarded project-report DELETE endpoint and request validation. |
+| `tests/unit/control-reports-delete-api.spec.ts` | Project deletion response, security/body gates, lock contention, filesystem preflight, and aggregate refresh. |
 | `src/reporting/report-server-control.ts` | Host preflight, control and built-asset routing, and `ControlRouterContext` dependencies. |
 | `src/reporting/report-server-control-page.ts` | Asset loader: reads built HTML, CSS, and JS from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches buffers. |
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
@@ -478,6 +484,12 @@ input limit of 50 projects. Aggregate validation also caps total retained runs
 at 5,000. Before publication, the publisher checks both staged JSON and HTML
 against the 16 MiB static-file limit and preserves the previous pair on
 oversize rejection.
+
+The control-only `DELETE /api/reports/projects/:projectId` operation removes the
+whole target subtree only after complete validated-manifest discovery. It
+returns 409 on report-root lock contention, then rebuilds both aggregate files
+from surviving manifests. If refresh fails after removal, the API reports the
+deletion and attempted recovery separately from the index failure.
 
 Focused coverage lives in `tests/unit/aggregate-index-builder.spec.ts` and
 `tests/unit/persistent-aggregate-bounds.spec.ts`.

@@ -8,12 +8,12 @@ Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](..
 
 Plan: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
 
-**Overall status:** In progress · **25%** (4 of 16 planned hours; 1 of 4 phases DONE).
+**Overall status:** In progress · **56%** (9 of 16 planned hours; 2 of 4 phases DONE).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
 |---|---|---:|---:|---|---|
 | 01. Persistent aggregate index builder | **DONE** | **100%** | 4h | 2026-09-24 | Merged validated retained history with active outcomes; incomplete discovery and oversized publication fail closed. Review 10/10; targeted tests 13/13, unit suite 415/415, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md), [review](../plans/reports/code-review-260924-2121-phase-01-persistent-aggregate-index-builder.md)). |
-| 02. Guarded control reports DELETE API | Pending | 0% | 5h | — | Lock, safely remove one project tree, republish index |
+| 02. Guarded control reports DELETE API | **DONE** | **100%** | 5h | 2026-09-24 | Added locked, fail-closed whole-project report deletion and aggregate-pair refresh. Review 10/10; 14 focused API tests, 429 unit tests, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-02-control-reports-delete-api.md), [test report](../plans/reports/tester-260924-2222-phase-02-control-reports-delete-api.md), [review](../plans/reports/code-review-260924-2226-phase-02-control-reports-delete-api.md)). |
 | 03. Report management page navigation and deletion | Pending | 0% | 3h | — | Dashboard link, inventory, pagination, confirmed deletion |
 | 04. Verification and caller migration | Pending | 0% | 4h | — | End-to-end security, persistence, concurrency, recovery, browser and caller verification |
 
@@ -163,6 +163,7 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Completed Phase 03 (Control Page UI) on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-03-control-page-ui-refactor.md)); delivered immediate all-enabled actions, the shared Workers selector and ordered multi-project results.
 - Completed Phase 04 (Testing and verification) and Control Page Parallel Auto-Build at 100% on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [overall plan](../plans/260924-1158-control-page-parallel-auto-build/plan.md)). Release gate passed 439/439; typecheck/build passed; review approved at 9.3/10 with no critical issues ([test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
 - Completed Phase 01 (Persistent aggregate index builder) on 2026-09-24; retained validated report history across configuration changes and added fail-closed discovery/publication bounds. Review approved 10/10; targeted specs passed 13/13, unit suite 415/415, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md), [review](../plans/reports/code-review-260924-2121-phase-01-persistent-aggregate-index-builder.md)).
+- Completed Phase 02 (Guarded Control reports DELETE API) on 2026-09-24; added locked, fail-closed deletion of one retained project's reports and aggregate index refresh. Review approved 10/10; 14 focused tests, all 429 unit tests, and typecheck passed ([phase](../plans/260924-2019-persistent-project-report-management/phase-02-control-reports-delete-api.md), [test report](../plans/reports/tester-260924-2222-phase-02-control-reports-delete-api.md), [review](../plans/reports/code-review-260924-2226-phase-02-control-reports-delete-api.md)).
 
 ### 0.1.0 (development) — 2026-09-23
 

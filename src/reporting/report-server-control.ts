@@ -13,6 +13,7 @@ import type { SecretStore } from './report-server-secret-store.js';
 import type { RunManager } from './report-server-run-manager.js';
 import { getControlCss, getControlJs, renderControlPageHtml } from './report-server-control-page.js';
 import { handleConfigApi, handleRunApi, handleSecretsApi } from './report-server-control-api.js';
+import { handleControlReportsApi } from './report-server-control-reports-api.js';
 
 export interface ControlRouterContext {
   readonly configStore: ConfigStore;
@@ -142,6 +143,11 @@ async function handleApiRequest(
 
   if (pathname === '/api/secrets') {
     await handleSecretsApi(context, searchParams, method, request, response);
+    return;
+  }
+
+  if (pathname === '/api/reports' || pathname.startsWith('/api/reports/')) {
+    await handleControlReportsApi(context, pathname, method, request, response);
     return;
   }
 

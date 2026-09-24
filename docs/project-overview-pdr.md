@@ -297,6 +297,19 @@ and failure semantics are validated before side effects.
   optional build number/link, stages, and errors. Keep the report link and
   scalar fallback for older single-project records.
 
+### FR-12: Control API project-report deletion
+
+- Expose `DELETE /api/reports/projects/:projectId` only in loopback control
+  mode; validate Host/Origin/Fetch Metadata/CSRF gates and apply the body rules.
+- Validate one safe project ID, acquire the report-root lock without waiting,
+  and refuse deletion when discovery is incomplete or no validated runs exist.
+- Delete only that project's report subtree, count validated runs, preserve
+  configuration, siblings, and shared assets, and return 409 on live lock
+  contention.
+- Rebuild both aggregate files from complete surviving manifest history after
+  removal. If post-removal refresh fails, attempt recovery and report the
+  completed deletion separately from the index-refresh failure.
+
 ## Non-functional requirements
 
 | Area | Requirement |

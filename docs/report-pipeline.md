@@ -81,6 +81,34 @@ or replacing the existing pair. If either file is oversized, publication fails
 and the prior published files remain intact. Successful publication uses the
 existing journal/backup/rollback recovery path.
 
+## Control API project deletion
+
+Control mode routes `DELETE /api/reports/projects/:projectId` through
+`src/reporting/report-server-control-reports-api.ts` to
+`src/artifacts/report-project-deletion.ts`. The HTTP security, body, and status
+contract is documented in [architecture](./architecture.md).
+
+`deleteProjectReports()` revalidates the safe ID and canonical report root,
+acquires the shared report-root lock without waiting, then requires complete
+manifest discovery and at least one validated run for the target. It preflights
+the project directory before removal: symlinks and non-file/non-directory
+entries fail closed; the tree is bounded to 32 levels, 4,096 entries, and
+256 MiB. Removal covers the whole project subtree, including unvalidated files,
+while `deletedRunsCount` counts only validated manifests.
+
+After removal, the service rediscovers surviving manifests and calls
+`buildAggregateIndex()` without current outcomes, then republishes
+`aggregate-data.json` and `index.html` together through `writeAggregateDataPair`.
+The aggregate therefore retains only surviving validated history; an empty
+project list is allowed. Incomplete discovery prevents removal before mutation;
+if refresh fails after removal, best-effort recovery runs and the API reports
+that the project is deleted even though the index may require recovery.
+
+`tests/unit/control-reports-delete-api.spec.ts` covers successful removal,
+aggregate refresh, preservation of sibling projects/assets/config, request and
+ID validation, missing validated runs, 409 lock contention, and symlink/depth
+preflight failures.
+
 ## Focused contracts
 
 - `tests/unit/aggregate-index-builder.spec.ts` covers empty indexes, incomplete

@@ -7,7 +7,8 @@
 
 ## Overview
 
-- **Date:** 2026-09-24. **Description:** Add loopback-only `DELETE /api/reports/projects/:projectId` with preflight security, shared root lock, guarded subtree removal, and root index refresh. **Priority:** P2. **Implementation status:** pending. **Review status:** not reviewed.
+- **Date:** 2026-09-24. **Description:** Add loopback-only `DELETE /api/reports/projects/:projectId` with preflight security, shared root lock, guarded subtree removal, and root index refresh. **Priority:** P2. **Implementation status:** DONE (100%; completed 2026-09-24). **Review status:** approved.
+- **Verification:** 14 focused API tests and 429 unit tests passed; TypeScript typecheck reported 0 errors. See [test report](../reports/tester-260924-2222-phase-02-control-reports-delete-api.md) and [10/10 review](../reports/code-review-260924-2226-phase-02-control-reports-delete-api.md).
 
 ## Key Insights
 
@@ -63,10 +64,10 @@
 
 ## Todo list
 
-- [ ] Wire exact DELETE route, method/CSRF/body guards, stable JSON/error contract.
-- [ ] Implement locked canonical path/symlink preflight and project-only removal.
-- [ ] Rebuild pair using shared builder/publisher under same lock.
-- [ ] Handle contention, 404, partial failure and bounded diagnostics; test protected neighbors.
+- [x] Wire exact DELETE route, method/CSRF/body guards, stable JSON/error contract.
+- [x] Implement locked canonical path/symlink preflight and project-only removal.
+- [x] Rebuild pair using shared builder/publisher under same lock.
+- [x] Handle contention, 404, partial failure and bounded diagnostics; test protected neighbors.
 
 ## Success Criteria
 

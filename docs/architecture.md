@@ -117,15 +117,16 @@ flowchart LR
 - `src/reports/snyk/` and `src/reports/sonarqube/` validate allowed links,
   handle SonarQube login redirects when required, capture bounded visible
   evidence, and normalize source-specific results.
-- `src/artifacts/` creates immutable report paths, validates and discovers
-  manifests, builds the persistent aggregate index, and manages staging,
-  recovery, and bounded cleanup.
+- `src/artifacts/` owns immutable report identities, bounded manifest discovery,
+  aggregate-index construction/publication/recovery, staging, and cleanup.
+- `src/artifacts/report-project-deletion.ts` safely removes a project subtree
+  under the report-root lock and rebuilds the aggregate from surviving runs.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
-- `src/reporting/report-server-control.ts` validates the Host header for every
-  control request, dispatches API paths, routes built control assets
-  (`/`, `/assets/control-page.css`, `/assets/control-page.js`), and carries the optional
-  `ControlRouterContext.secretStore` dependency.
+- `src/reporting/report-server-control-reports-api.ts` handles the guarded
+  `DELETE /api/reports/projects/:projectId` control endpoint.
+- `src/reporting/report-server-control.ts` validates Host, dispatches control
+  routes and built assets, and carries router dependencies.
 - `src/reporting/control-page/` contains the Control Dashboard frontend sources:
   server data contracts (`types/index.ts`), shared UI component prop interfaces
   (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
@@ -477,35 +478,57 @@ dashboard (`127.0.0.1:4173`). It exposes:
 Control mode exposes an explicit per-project report deletion endpoint:
 `DELETE /api/reports/projects/:projectId`.
 
-#### Deletion semantics
-The operation removes the specified project's entire `reports/<projectId>/`
-subtree after safety preflight, including invalid or unvalidated files alongside
-validated run artifacts. The reported run count includes only validated runs.
-It does not delete or modify project configuration in `config/*.json`, and
-leaves all other project directories, active staging runs, and shared assets
-(`reports/assets/`) untouched.
+#### HTTP contract
+`DELETE /api/reports/projects/:projectId` is available only in loopback control
+mode; `serve:report` remains GET/HEAD-only. The router checks Host before
+dispatch. Mutation requests also require same-origin `Origin`, accepted
+`Sec-Fetch-*` metadata, the CSRF token, and JSON content type when a body is
+present. A request may be bodyless or carry an empty JSON object; JSON parsing
+uses the shared 1 MiB body limit.
 
-#### Concurrency and locking
-Deletion acquires the canonical report-root lock (`.report-root-lock`) via
-`ArtifactPaths.acquireReportRootLock()` before inspecting or deleting filesystem
-entries. This serializes deletion against concurrent report runners, CLI
-executions, and other control mutations. Lock contention or timeout returns 409
-Conflict.
+Errors use `{ "error": { "code": "...", "message": "..." } }`.
 
-#### Filesystem safety and path traversal protection
-The requested `projectId` is validated against `SAFE_ID` (`/^[a-z0-9][a-z0-9-_]{0,80}$/u`),
-rejecting path separators, null bytes, parent traversal (`..`), and reserved
-names (`assets`, `.report-root-lock`, `.tmp*`, `.bak*`). The resolved target path
-must reside strictly within the canonical report root. The target is inspected
-with `fs.lstat` to verify it is a real directory and not a symlink; nested
-symlinks are refused rather than traversed.
+| Outcome | Status and contract |
+| --- | --- |
+| Deleted | `200` with `{ success: true, projectId, deletedRunsCount }`. |
+| Invalid ID or malformed/non-empty JSON object | `400`; `INVALID_PROJECT_ID` or `INVALID_BODY`. |
+| Host or mutation security gate fails | `403`; `FORBIDDEN_HOST` or `FORBIDDEN_MUTATION`. |
+| Method other than DELETE | `405 METHOD_NOT_ALLOWED` and `Allow: DELETE`. |
+| No validated retained runs for the project | `404 PROJECT_NOT_FOUND`; the directory is not removed. |
+| Live/unsafe report-root lock prevents acquisition | `409 REPORT_ROOT_LOCKED`; no project data is removed. |
+| Oversized body or unsupported body content type | `413` or `415`. |
+| Incomplete discovery, unsafe tree, filesystem, or index failure | `500`; deletion is refused before removal when possible. |
 
-#### Atomic index rebuild and recovery
-Following successful subtree removal, remaining validated manifests are
-rediscovered and the root `reports/aggregate-data.json` and `reports/index.html`
-are rebuilt and published using `writeAggregateDataPair` with two-phase staging,
-backup, and journal rollback. If deletion encounters a partial failure, the
-index is refreshed from remaining valid manifests and diagnostics are recorded.
+#### Deletion semantics and filesystem safety
+`projectId` must match `SAFE_ID` (`/^[a-z0-9][a-z0-9-_]{0,80}$/u`) and occupy
+one path segment. The handler decodes it once and rejects encoded separators,
+null bytes, double-encoded paths, traversal, `assets`, and dot-prefixed names.
+The service verifies the real target directory is a direct child of the
+canonical report root and refuses symlinks or non-file/non-directory entries.
+The bounded preflight limits the tree to 32 directory levels, 4,096 entries,
+and 256 MiB.
+
+The service requires complete manifest discovery and at least one validated
+run before deleting the entire `reports/<projectId>/` subtree, including
+unvalidated files. `deletedRunsCount` counts validated runs only. Project
+configuration, sibling project directories, and shared `reports/assets/`
+remain untouched.
+
+#### Locking and aggregate rebuild
+`deleteProjectReports()` acquires the canonical `.report-root-lock` through
+`ArtifactPaths.acquireReportRootLock({ waitMs: 0 })` before recovery, discovery,
+or filesystem changes. This serializes deletion with report operations using
+the same lock; a live or unsafe lock returns `409 REPORT_ROOT_LOCKED` without
+waiting.
+
+After removal, the service rediscovers manifests and refuses to publish from
+incomplete discovery. It calls `buildAggregateIndex` without current outcomes,
+so `aggregate-data.json` and `index.html` contain only surviving validated
+history; an empty project list is valid. `writeAggregateDataPair` stages and
+publishes the pair with its journal/backup rollback and file-size checks.
+Removal or refresh failures trigger a best-effort recovery/rebuild. If removal
+succeeded but refresh still fails, the API returns `500 REFRESH_FAILED` and
+reports that the project was deleted and the index may need recovery.
 
 #### UI confirmation and navigation
 The Control Dashboard links to `/reports/index.html`. In control mode, this

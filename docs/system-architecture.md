@@ -15,6 +15,9 @@ verification:
 - **SecretStore and secrets API:** persist validated local credential values
   outside project JSON and expose only boolean presence through guarded
   `/api/secrets` operations.
+- **Project report deletion:** guarded loopback
+  `DELETE /api/reports/projects/:projectId` uses the report-root lock;
+  contention returns `409` and the aggregate rebuilds from survivors.
 - **Control UI:** edit schema-v1 settings and manage credentials. The action bar
   exposes all-enabled report/build actions and one shared saved Workers
   selector; builds start immediately without a per-card button or confirmation
@@ -23,8 +26,8 @@ verification:
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
   driven.
-- **Verification:** isolated contracts and Chromium/WebKit Control UI scenarios
-  cover credentials and auto-build behavior without contacting Jenkins.
+- **Verification:** isolated contracts cover report deletion, credentials, and
+  auto-build; Chromium/WebKit Control UI scenarios run without Jenkins.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [multi-project configuration](./multi-project-configuration.md)
@@ -41,8 +44,9 @@ flowchart TB
   SecretStore --> SecretsApi[Loopback /api/secrets]
   Control[Loopback control server] --> SecretsApi
   SecretsApi -. presence-only status; guarded PUT/DELETE .-> SecretStore
-  Control --> ReportsApi[Loopback /api/reports/projects/:id]
-  ReportsApi -. guarded DELETE; lock report-root .-> ReportRoot
+  Control --> ReportsApi[Loopback DELETE /api/reports/projects/:projectId]
+  ReportsApi --> DeleteReports[Safe project removal + aggregate rebuild]
+  DeleteReports -. guarded mutation; report-root lock .-> ReportRoot
   Control --> RunManager[Control run manager]
   RunManager --> ControlExecutor[Control run executor]
   ConfigFile --> Loader[Validate and normalize]
@@ -65,11 +69,11 @@ launch, credentials, and network I/O begin only after a caller has selected an
 executor. Direct report and auto-build callers pass their environment to the
 selected runner. In control mode, `createReportServer` creates both
 `ConfigStore` and `SecretStore` from the configured `configRoot`; the latter
-fixes its target to `secrets.local.json` under that canonical directory. The
-loopback control router validates `Host` before dispatching every request, and
-the secrets API returns only boolean presence data. Mutations additionally
-require an accepted `Origin`, `Sec-Fetch-*` metadata, CSRF token, and JSON
-content type.
+fixes its target to `secrets.local.json` under that canonical directory.
+The loopback control router validates `Host` before dispatch. The secrets API
+returns only boolean presence data; project-report deletion is control-only.
+Mutation handlers require same-origin `Origin` and CSRF and reject unsupported
+`Sec-Fetch-*` values; any supplied JSON body must use the JSON content type.
 
 `createRunManager` carries the optional `SecretStore` dependency into
 `executeControlRun`. At execution start, the control executor reads one
