@@ -105,6 +105,17 @@ export async function handleRunApi(
     }
     const waitForCompletion =
       typeof data['waitForCompletion'] === 'boolean' ? data['waitForCompletion'] : undefined;
+    if (
+      Object.hasOwn(data, 'waitTimeoutMs') &&
+      (typeof data['waitTimeoutMs'] !== 'number' ||
+        !Number.isSafeInteger(data['waitTimeoutMs']) ||
+        data['waitTimeoutMs'] <= 0 ||
+        data['waitTimeoutMs'] > 7_200_000)
+    ) {
+      sendError(response, 422, 'INVALID_WAIT_TIMEOUT', 'waitTimeoutMs must be a positive integer <= 7200000');
+      return;
+    }
+    const waitTimeoutMs = typeof data['waitTimeoutMs'] === 'number' ? data['waitTimeoutMs'] : undefined;
     const projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
     if (runType === 'auto-build' && (projectId === undefined || projectId.trim().length === 0)) {
       sendError(response, 422, 'MISSING_PROJECT_ID', 'projectId is required for auto-build');
@@ -118,6 +129,7 @@ export async function handleRunApi(
         runType: runType as 'report' | 'auto-build',
         projectId,
         waitForCompletion,
+        waitTimeoutMs,
       });
       sendJson(response, 202, { id: record.id, status: record.status });
     } catch (err) {

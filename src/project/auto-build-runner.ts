@@ -42,11 +42,13 @@ export interface AutoBuildRunnerDependencies {
     deadline: WorkflowDeadline,
     options?: {
       readonly waitForCompletion?: boolean | undefined;
+      readonly waitTimeoutMs?: number | undefined;
       readonly onProgress?: ((message: string) => void) | undefined;
     } | undefined,
   ) => Promise<AutoBuildWorkflowResult>;
   readonly configureContext?: (context: BrowserContext) => Promise<void>;
   readonly waitForCompletion?: boolean | undefined;
+  readonly waitTimeoutMs?: number | undefined;
   readonly onProgress?: ((message: string) => void) | undefined;
 }
 
@@ -85,6 +87,7 @@ export async function runAutoBuildProject(
     const workflow = dependencies.executeWorkflow ?? executeJenkinsAutoBuildWorkflow;
     const result = await workflow(page, project, secrets, deadline, {
       waitForCompletion: dependencies.waitForCompletion ?? project.waitForCompletion,
+      waitTimeoutMs: dependencies.waitTimeoutMs ?? project.waitTimeoutMs,
       onProgress: dependencies.onProgress,
     });
 

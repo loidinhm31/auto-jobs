@@ -27,6 +27,7 @@ export const PROJECT_KEYS: Record<string, true> = {
   jobUrl: true,
   runType: true,
   waitForCompletion: true,
+  waitTimeoutMs: true,
   enabled: true,
   timeoutMs: true,
   browser: true,
@@ -41,6 +42,7 @@ export const PROJECT_KEYS: Record<string, true> = {
 
 export const DEFAULT_KEYS: Record<string, true> = {
   waitForCompletion: true,
+  waitTimeoutMs: true,
   timeoutMs: true,
   browser: true,
   artifactDir: true,
@@ -134,6 +136,9 @@ export function validateSourceOriginPolicies(value: unknown, fieldName: string, 
 export function validateCommonOptions(value: Record<string, unknown>, fieldName: string, issues: string[]): void {
   if (value.waitForCompletion !== undefined && typeof value.waitForCompletion !== 'boolean') {
     issues.push(`${fieldName}.waitForCompletion must be boolean`);
+  }
+  if (value.waitTimeoutMs !== undefined) {
+    boundedNumber(value.waitTimeoutMs, `${fieldName}.waitTimeoutMs`, 10_000, 7_200_000, issues);
   }
   if (value.timeoutMs !== undefined) {
     boundedNumber(value.timeoutMs, `${fieldName}.timeoutMs`, PROJECT_CONFIG_LIMITS.minTimeoutMs, PROJECT_CONFIG_LIMITS.maxTimeoutMs, issues);

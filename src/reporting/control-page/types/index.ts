@@ -20,6 +20,7 @@ export interface ProjectConfigInput {
   jobUrl: string;
   runType?: RunType;
   waitForCompletion?: boolean;
+  waitTimeoutMs?: number;
   enabled?: boolean;
   timeoutMs?: number;
   browser?: BrowserName;
@@ -121,6 +122,7 @@ export interface RunTriggerRequest {
   runType: RunType;
   projectId?: string;
   waitForCompletion?: boolean;
+  waitTimeoutMs?: number;
 }
 
 export interface RunTriggerResponse {

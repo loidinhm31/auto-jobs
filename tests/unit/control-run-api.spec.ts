@@ -265,4 +265,34 @@ test.describe('Control Run API', () => {
       message: 'waitForCompletion must be boolean',
     });
   });
+
+  test('POST /api/run accepts optional waitTimeoutMs positive integer', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const res = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: 'build-proj', waitForCompletion: true, waitTimeoutMs: 600_000 },
+    });
+    expect(res.status()).toBe(202);
+    const body = await res.json();
+    const run = await pollRun(request, serverUrl, body.id);
+    expect(run.status).toBe('succeeded');
+  });
+
+  test('POST /api/run rejects non-integer or out-of-bounds waitTimeoutMs with 422 INVALID_WAIT_TIMEOUT', async ({ request }) => {
+    const configRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const { etag } = await configRes.json();
+
+    const res = await request.post(`${serverUrl}api/run`, {
+      headers: { 'x-csrf-token': csrfToken, origin, 'content-type': 'application/json' },
+      data: { configName: 'default.json', configEtag: etag, runType: 'auto-build', projectId: 'build-proj', waitTimeoutMs: -1 },
+    });
+    expect(res.status()).toBe(422);
+    const body = await res.json();
+    expect(body.error).toEqual({
+      code: 'INVALID_WAIT_TIMEOUT',
+      message: 'waitTimeoutMs must be a positive integer <= 7200000',
+    });
+  });
 });

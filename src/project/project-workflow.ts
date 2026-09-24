@@ -87,8 +87,10 @@ export async function executeJenkinsAutoBuildWorkflow(
   await submitJenkinsLogin(page, config, deadline);
   await openJenkinsJob(page, config, deadline);
   const shouldWait = options.waitForCompletion ?? project.waitForCompletion ?? true;
+  const waitTimeoutMs = options.waitTimeoutMs ?? project.waitTimeoutMs;
   return triggerParameterizedBuild(page, config, deadline, {
     ...options,
     waitForCompletion: shouldWait,
+    waitTimeoutMs,
   });
 }

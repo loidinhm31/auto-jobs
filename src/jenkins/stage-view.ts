@@ -1,7 +1,11 @@
 import type { Page } from '@playwright/test';
 import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import {
+  calculateRunDurationMs,
+  estimateBuildTimeoutMs,
+  formatDurationHuman,
   getLatestStageViewRun,
+  parseJenkinsDurationMs,
   parseRunRow,
   parseStageViewStatus,
   readStageNames,
@@ -23,7 +27,16 @@ export type {
   StageViewTerminalStatus,
   WaitForStageViewOptions,
 };
-export { getLatestStageViewRun, parseRunRow, parseStageViewStatus, readStageNames };
+export {
+  calculateRunDurationMs,
+  estimateBuildTimeoutMs,
+  formatDurationHuman,
+  getLatestStageViewRun,
+  parseJenkinsDurationMs,
+  parseRunRow,
+  parseStageViewStatus,
+  readStageNames,
+};
 
 export async function waitForStageViewCompletion(
   page: Page,
@@ -39,7 +52,7 @@ export async function waitForStageViewCompletion(
 
   try {
     const stageViewLocator = page.locator('#pipeline-box');
-    const waitTimeout = Math.max(1_000, Math.min(deadline.remainingMs(), 15_000));
+    const waitTimeout = Math.max(1_000, Math.min(deadline.remainingMs(), 60_000));
     await stageViewLocator.waitFor({ state: 'visible', timeout: waitTimeout });
   } catch (error) {
     return {
@@ -50,7 +63,9 @@ export async function waitForStageViewCompletion(
 
   const stageNames = await readStageNames(page);
   let targetRun: StageViewRun | undefined;
+  const startTime = Date.now();
   let lastReloadTime = Date.now();
+  let lastQueueLogTime = Date.now();
   let hasLoggedQueueWait = false;
   const loggedStageStates = new Map<number, string>();
 
@@ -101,9 +116,15 @@ export async function waitForStageViewCompletion(
           run: targetRun,
         };
       }
-    } else if (!hasLoggedQueueWait) {
-      hasLoggedQueueWait = true;
-      onProgress?.('[Stage View] Waiting for newly triggered build to appear in Stage View table...');
+    } else {
+      const elapsedSec = Math.round((Date.now() - startTime) / 1000);
+      if (!hasLoggedQueueWait) {
+        hasLoggedQueueWait = true;
+        onProgress?.('[Stage View] Build is queued in Jenkins... waiting for run to appear in Stage View table...');
+      } else if (Date.now() - lastQueueLogTime >= 10_000) {
+        lastQueueLogTime = Date.now();
+        onProgress?.(`[Stage View] Build queued in Jenkins... waiting for run to appear (${elapsedSec}s elapsed)`);
+      }
     }
 
     const remaining = deadline.remainingMs();

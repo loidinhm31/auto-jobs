@@ -80,12 +80,14 @@ export async function executeControlRun(
       }
       const buildProject = selectAutoBuildProject(normalized, record.projectId);
       const shouldWait = record.waitForCompletion ?? buildProject.waitForCompletion;
+      const effectiveWaitTimeoutMs = record.waitTimeoutMs ?? buildProject.waitTimeoutMs;
       safeAddLog(
-        `Executing auto-build for project '${buildProject.id}' (${buildProject.jobUrl}) [waitForCompletion: ${shouldWait}]`,
+        `Executing auto-build for project '${buildProject.id}' (${buildProject.jobUrl}) [waitForCompletion: ${shouldWait}${effectiveWaitTimeoutMs ? `, waitTimeoutMs: ${effectiveWaitTimeoutMs}` : ''}]`,
       );
       const outcome = await autoBuildExecutor(buildProject, {
         runtimeEnvironment: runEnv,
         waitForCompletion: shouldWait,
+        waitTimeoutMs: effectiveWaitTimeoutMs,
         onProgress: (msg) => safeAddLog(msg),
       });
 

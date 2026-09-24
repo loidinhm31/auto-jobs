@@ -25,6 +25,7 @@ export interface ControlRunRecord {
   readonly runType: 'report' | 'auto-build';
   readonly projectId?: string | undefined;
   readonly waitForCompletion?: boolean | undefined;
+  readonly waitTimeoutMs?: number | undefined;
   status: RunStatus;
   readonly queuedAt: string;
   startedAt?: string | undefined;
@@ -62,6 +63,7 @@ export interface StartRunParams {
   readonly runType: 'report' | 'auto-build';
   readonly projectId?: string | undefined;
   readonly waitForCompletion?: boolean | undefined;
+  readonly waitTimeoutMs?: number | undefined;
 }
 
 export interface RunManager {
@@ -144,6 +146,7 @@ export function createRunManager(options: RunManagerOptions): RunManager {
       runType: params.runType,
       projectId: params.projectId,
       waitForCompletion: params.waitForCompletion,
+      waitTimeoutMs: params.waitTimeoutMs,
       status: 'queued',
       queuedAt: clock().toISOString(),
       logs: [],

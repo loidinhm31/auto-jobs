@@ -1,6 +1,6 @@
 import type { Page, Request, Response } from '@playwright/test';
 
-import type { WorkflowDeadline } from '../workflow/workflow-deadline.js';
+import { WorkflowDeadline } from '../workflow/workflow-deadline.js';
 import {
   locateAndValidateBuildFormAndButton,
   locateAndValidateBuildParametersLink,
@@ -8,7 +8,12 @@ import {
 import { formatJenkinsFailure, JenkinsFlowError } from './errors.js';
 import type { JenkinsRunnerConfig } from './runner-config.js';
 import { isExactJenkinsJobActionUrl, isExactJobUrl, validateJenkinsJobActionUrl } from './url-identity.js';
-import { getLatestStageViewRun, waitForStageViewCompletion } from './stage-view.js';
+import {
+  estimateBuildTimeoutMs,
+  formatDurationHuman,
+  getLatestStageViewRun,
+  waitForStageViewCompletion,
+} from './stage-view.js';
 import type { StageViewStage } from './stage-view-types.js';
 
 export type JenkinsBuildTriggerState =
@@ -21,6 +26,7 @@ export type JenkinsBuildTriggerState =
 
 export interface TriggerParameterizedBuildOptions {
   readonly waitForCompletion?: boolean | undefined;
+  readonly waitTimeoutMs?: number | undefined;
   readonly onProgress?: ((message: string) => void) | undefined;
 }
 
@@ -45,10 +51,22 @@ export async function triggerParameterizedBuild(
   deadline.requireRemaining();
   const waitForCompletion = options.waitForCompletion === true;
   let previousRunId: number | undefined;
+  let estimatedTimeoutMs: number | undefined;
   if (waitForCompletion) {
     try {
       const latest = await getLatestStageViewRun(page);
       previousRunId = latest?.runId;
+      if (options.waitTimeoutMs !== undefined && options.waitTimeoutMs > 0) {
+        estimatedTimeoutMs = options.waitTimeoutMs;
+      } else {
+        const estimate = await estimateBuildTimeoutMs(page, latest);
+        estimatedTimeoutMs = estimate.timeoutMs;
+        if (estimate.estimatedDurationMs > 0) {
+          options.onProgress?.(
+            `[Stage View] Previous build took ${formatDurationHuman(estimate.estimatedDurationMs)}. Calculated build timeout: ${formatDurationHuman(estimatedTimeoutMs)} (including 50% buffer + 3m queue buffer).`,
+          );
+        }
+      }
     } catch {
       // Continue if initial Stage View read is unready
     }
@@ -118,10 +136,15 @@ export async function triggerParameterizedBuild(
         };
       }
 
-      options.onProgress?.(`[Auto-Build] Build form submitted (HTTP ${status}). Following redirect to job page...`);
+      const effectiveWaitTimeoutMs = options.waitTimeoutMs ?? estimatedTimeoutMs ?? 900_000;
+      const buildDeadline = new WorkflowDeadline(effectiveWaitTimeoutMs);
+
+      options.onProgress?.(
+        `[Auto-Build] Build form submitted (HTTP ${status}). Following redirect to job page (monitoring timeout: ${formatDurationHuman(effectiveWaitTimeoutMs)})...`,
+      );
       try {
         await page.waitForURL((url) => isExactJobUrl(url.toString(), config.jobUrl), {
-          timeout: Math.max(1_000, Math.min(deadline.remainingMs(), config.timeoutMs)),
+          timeout: Math.max(1_000, Math.min(buildDeadline.remainingMs(), 30_000)),
         });
       } catch {
         try {
@@ -131,7 +154,7 @@ export async function triggerParameterizedBuild(
         }
       }
 
-      const stageViewResult = await waitForStageViewCompletion(page, previousRunId, deadline, {
+      const stageViewResult = await waitForStageViewCompletion(page, previousRunId, buildDeadline, {
         onProgress: options.onProgress,
       });
 

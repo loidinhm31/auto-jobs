@@ -186,3 +186,27 @@ test('rejects non-boolean waitForCompletion in project and defaults', () => {
     /config\.defaults\.waitForCompletion must be boolean/u,
   );
 });
+
+test('accepts valid waitTimeoutMs in project and defaults', () => {
+  const [project] = normalizeProjectConfigDocument(baseDocument({ waitTimeoutMs: 600_000 }), mockSecrets);
+  expect(project?.waitTimeoutMs).toBe(600_000);
+
+  const docWithDefaults = {
+    ...baseDocument(),
+    defaults: { ...defaultOptions, waitTimeoutMs: 900_000 },
+  };
+  const [projectInherited] = normalizeProjectConfigDocument(docWithDefaults, mockSecrets);
+  expect(projectInherited?.waitTimeoutMs).toBe(900_000);
+});
+
+test('rejects invalid or out-of-bounds waitTimeoutMs in project and defaults', () => {
+  expect(() => assertProjectConfigDocument(baseDocument({ waitTimeoutMs: 5_000 }))).toThrow(
+    /projects\[0\]\.waitTimeoutMs must be an integer from 10000 to 7200000/u,
+  );
+  expect(() => assertProjectConfigDocument(baseDocument({ waitTimeoutMs: 10_000_000 }))).toThrow(
+    /projects\[0\]\.waitTimeoutMs must be an integer from 10000 to 7200000/u,
+  );
+  expect(() => assertProjectConfigDocument(baseDocument({ waitTimeoutMs: '300000' }))).toThrow(
+    /projects\[0\]\.waitTimeoutMs must be an integer/u,
+  );
+});

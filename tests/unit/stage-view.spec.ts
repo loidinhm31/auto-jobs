@@ -3,7 +3,11 @@ import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
 
 import {
+  calculateRunDurationMs,
+  estimateBuildTimeoutMs,
+  formatDurationHuman,
   getLatestStageViewRun,
+  parseJenkinsDurationMs,
   parseStageViewStatus,
   readStageNames,
   waitForStageViewCompletion,
@@ -38,6 +42,37 @@ test.describe('stage-view parsing and status evaluation', () => {
     expect(parseStageViewStatus('job in-progress-run')).toBe('in-progress');
     expect(parseStageViewStatus('job progress-bar-animated')).toBe('in-progress');
     expect(parseStageViewStatus('job unknown-class')).toBe('unknown');
+  });
+
+  test('parseJenkinsDurationMs correctly parses varied duration string formats', () => {
+    expect(parseJenkinsDurationMs('8s')).toBe(8_000);
+    expect(parseJenkinsDurationMs('1min 19s')).toBe(79_000);
+    expect(parseJenkinsDurationMs('~9min 38s')).toBe(578_000);
+    expect(parseJenkinsDurationMs('1h 20min 15s')).toBe(4_815_000);
+    expect(parseJenkinsDurationMs('977ms')).toBe(977);
+    expect(parseJenkinsDurationMs('0ms')).toBe(0);
+    expect(parseJenkinsDurationMs('')).toBe(0);
+    expect(parseJenkinsDurationMs(undefined)).toBe(0);
+  });
+
+  test('formatDurationHuman formats milliseconds into human-readable strings', () => {
+    expect(formatDurationHuman(8_000)).toBe('8s');
+    expect(formatDurationHuman(79_000)).toBe('1m 19s');
+    expect(formatDurationHuman(4_815_000)).toBe('1h 20m');
+  });
+
+  test('calculateRunDurationMs sums stage durations across all stages', () => {
+    const mockRun = {
+      runId: 21,
+      buildNumber: '#21',
+      status: 'SUCCESS' as const,
+      stages: [
+        { index: 0, name: 'Checkout', status: 'SUCCESS', duration: '8s' },
+        { index: 1, name: 'Build', status: 'SUCCESS', duration: '1min 19s' },
+        { index: 2, name: 'Test', status: 'SUCCESS', duration: '54s' },
+      ],
+    };
+    expect(calculateRunDurationMs(mockRun)).toBe(8_000 + 79_000 + 54_000);
   });
 
   const SAMPLE_STAGE_VIEW_HTML = `<!doctype html>
@@ -118,6 +153,11 @@ test.describe('stage-view parsing and status evaluation', () => {
         status: 'SUCCESS',
         duration: '1min 19s',
       });
+
+      const estimate = await estimateBuildTimeoutMs(page, latestRun);
+      expect(estimate.source).toBe('last-build');
+      expect(estimate.estimatedDurationMs).toBe(8_000 + 79_000 + 54_000);
+      expect(estimate.timeoutMs).toBe(Math.max(300_000, Math.round(estimate.estimatedDurationMs * 1.5) + 180_000));
     } finally {
       await close(server);
     }

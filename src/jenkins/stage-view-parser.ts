@@ -117,3 +117,71 @@ export async function getLatestStageViewRun(
   const resolvedStageNames = stageNames ?? (await readStageNames(page));
   return parseRunRow(rows.first(), resolvedStageNames);
 }
+
+export function parseJenkinsDurationMs(str?: string | undefined): number {
+  if (!str) return 0;
+  let totalMs = 0;
+  const clean = str.trim().toLowerCase().replace(/^~/, '').trim();
+  const msMatch = clean.match(/(\d+)\s*ms/);
+  if (msMatch && msMatch[1]) totalMs += parseInt(msMatch[1], 10);
+  const sMatch = clean.match(/(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?(?![a-z])/);
+  if (sMatch && sMatch[1]) totalMs += Math.round(parseFloat(sMatch[1]) * 1000);
+  const mMatch = clean.match(/(\d+)\s*m(?:in(?:utes?)?)?(?![a-z])/);
+  if (mMatch && mMatch[1]) totalMs += parseInt(mMatch[1], 10) * 60 * 1000;
+  const hMatch = clean.match(/(\d+)\s*h(?:ours?)?(?![a-z])/);
+  if (hMatch && hMatch[1]) totalMs += parseInt(hMatch[1], 10) * 3600 * 1000;
+  return totalMs;
+}
+
+export function formatDurationHuman(ms: number): string {
+  const totalSec = Math.round(ms / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
+
+export function calculateRunDurationMs(run: StageViewRun): number {
+  let totalMs = 0;
+  for (const stage of run.stages) {
+    if (stage.duration) {
+      totalMs += parseJenkinsDurationMs(stage.duration);
+    }
+  }
+  return totalMs;
+}
+
+export async function estimateBuildTimeoutMs(
+  page: Page,
+  latestRun?: StageViewRun | undefined,
+  defaultTimeoutMs = 900_000,
+): Promise<{ timeoutMs: number; source: 'last-build' | 'average-totals' | 'default'; estimatedDurationMs: number }> {
+  if (latestRun !== undefined && (latestRun.status === 'SUCCESS' || latestRun.status === 'FAILED')) {
+    const durationMs = calculateRunDurationMs(latestRun);
+    if (durationMs > 0) {
+      const timeoutMs = Math.max(300_000, Math.round(durationMs * 1.5) + 180_000);
+      return { timeoutMs, source: 'last-build', estimatedDurationMs: durationMs };
+    }
+  }
+
+  try {
+    const totalsTextLocator = page.locator('#pipeline-box .totals td.stage-start .cell-color');
+    if ((await totalsTextLocator.count()) > 0) {
+      const text = await totalsTextLocator.first().innerText();
+      const match = /full\s*run\s*time:\s*~?([^)<]+)/i.exec(text);
+      if (match && match[1]) {
+        const durationMs = parseJenkinsDurationMs(match[1]);
+        if (durationMs > 0) {
+          const timeoutMs = Math.max(300_000, Math.round(durationMs * 1.5) + 180_000);
+          return { timeoutMs, source: 'average-totals', estimatedDurationMs: durationMs };
+        }
+      }
+    }
+  } catch {
+    // Continue to fallback
+  }
+
+  return { timeoutMs: defaultTimeoutMs, source: 'default', estimatedDurationMs: 0 };
+}
