@@ -1,5 +1,10 @@
 import type { Locator, Page } from '@playwright/test';
-import type { StageViewRun, StageViewStage, StageViewStatus } from './stage-view-types.js';
+import type {
+  StageViewRun,
+  StageViewStage,
+  StageViewStatus,
+  StageViewTerminalStatus,
+} from './stage-view-types.js';
 
 const STATUS_TOKENS: Record<string, StageViewStatus> = {
   SUCCESS: 'SUCCESS',
@@ -10,14 +15,24 @@ const STATUS_TOKENS: Record<string, StageViewStatus> = {
   'in-progress': 'in-progress',
 };
 
-export function parseStageViewStatus(classAttr: string): StageViewStatus {
+export function parseStageViewStatus(classAttr?: string | undefined): StageViewStatus {
+  if (!classAttr) return 'unknown';
   const parts = classAttr.split(/\s+/u);
   for (const part of parts) {
-    const matched = STATUS_TOKENS[part];
+    const upper = part.toUpperCase();
+    const matched = STATUS_TOKENS[upper] || STATUS_TOKENS[part];
     if (matched) return matched;
   }
-  if (classAttr.includes('progress-bar')) {
+  const lower = classAttr.toLowerCase();
+  if (lower.includes('progress-bar') || lower.includes('in-progress') || lower.includes('running')) {
     return 'in-progress';
+  }
+  if (lower.includes('success') || lower.includes('passed')) return 'SUCCESS';
+  if (lower.includes('failed') || lower.includes('failure') || lower.includes('error')) return 'FAILED';
+  if (lower.includes('unstable')) return 'UNSTABLE';
+  if (lower.includes('aborted') || lower.includes('cancelled')) return 'ABORTED';
+  if (lower.includes('not_executed') || lower.includes('not-executed') || lower.includes('skipped')) {
+    return 'NOT_EXECUTED';
   }
   return 'unknown';
 }
@@ -80,11 +95,24 @@ export async function parseRunRow(
     for (let c = 0; c < cellCount; c += 1) {
       const cell = stageCells.nth(c);
       const cellClass = (await cell.getAttribute('class')) ?? '';
-      const cellStatus = parseStageViewStatus(cellClass);
+      let cellStatus = parseStageViewStatus(cellClass);
+      if (cellStatus === 'unknown') {
+        const popover = cell.locator('.stage-actions-popover');
+        if ((await popover.count()) > 0) {
+          const caption = (await popover.first().getAttribute('caption')) ?? '';
+          const parsedCaption = parseStageViewStatus(caption);
+          if (parsedCaption !== 'unknown') {
+            cellStatus = parsedCaption;
+          }
+        }
+      }
       let duration: string | undefined;
       const durationLocator = cell.locator('.duration');
       if ((await durationLocator.count()) > 0) {
         duration = (await durationLocator.first().innerText()).trim();
+      }
+      if (cellStatus === 'unknown' && duration && duration.length > 0 && !duration.startsWith('0m')) {
+        cellStatus = 'SUCCESS';
       }
 
       stages.push({
@@ -116,6 +144,45 @@ export async function getLatestStageViewRun(
 
   const resolvedStageNames = stageNames ?? (await readStageNames(page));
   return parseRunRow(rows.first(), resolvedStageNames);
+}
+
+export function evaluateRunCompletion(run: StageViewRun): {
+  readonly completed: boolean;
+  readonly finalStatus?: StageViewTerminalStatus | undefined;
+} {
+  const rowStatus = run.status.toUpperCase();
+  if (rowStatus === 'SUCCESS' || rowStatus === 'FAILED' || rowStatus === 'UNSTABLE' || rowStatus === 'ABORTED') {
+    return { completed: true, finalStatus: rowStatus as StageViewTerminalStatus };
+  }
+
+  if (run.status === 'in-progress') {
+    return { completed: false };
+  }
+
+  if (run.stages.length > 0) {
+    const hasInProgress = run.stages.some((s) => s.status === 'in-progress');
+    if (hasInProgress) {
+      return { completed: false };
+    }
+
+    const executed = run.stages.filter((s) => s.status !== 'NOT_EXECUTED' && s.status !== 'unknown');
+    if (executed.length > 0) {
+      if (executed.some((s) => s.status === 'FAILED')) {
+        return { completed: true, finalStatus: 'FAILED' };
+      }
+      if (executed.some((s) => s.status === 'UNSTABLE')) {
+        return { completed: true, finalStatus: 'UNSTABLE' };
+      }
+      if (executed.some((s) => s.status === 'ABORTED')) {
+        return { completed: true, finalStatus: 'ABORTED' };
+      }
+      if (executed.every((s) => s.status === 'SUCCESS')) {
+        return { completed: true, finalStatus: 'SUCCESS' };
+      }
+    }
+  }
+
+  return { completed: false };
 }
 
 export function parseJenkinsDurationMs(str?: string | undefined): number {

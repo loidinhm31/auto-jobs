@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 import {
   calculateRunDurationMs,
   estimateBuildTimeoutMs,
+  evaluateRunCompletion,
   formatDurationHuman,
   getLatestStageViewRun,
   parseJenkinsDurationMs,
@@ -73,6 +74,52 @@ test.describe('stage-view parsing and status evaluation', () => {
       ],
     };
     expect(calculateRunDurationMs(mockRun)).toBe(8_000 + 79_000 + 54_000);
+  });
+
+  test('evaluateRunCompletion detects completion from individual stages even if row class is unknown', () => {
+    const completedStagesRun = {
+      runId: 22,
+      buildNumber: '#22',
+      status: 'unknown' as const,
+      stages: [
+        { index: 0, name: 'Checkout', status: 'SUCCESS' },
+        { index: 1, name: 'Build', status: 'SUCCESS' },
+        { index: 2, name: 'Deploy', status: 'SUCCESS' },
+      ],
+    };
+    expect(evaluateRunCompletion(completedStagesRun)).toEqual({
+      completed: true,
+      finalStatus: 'SUCCESS',
+    });
+
+    const failedStageRun = {
+      runId: 22,
+      buildNumber: '#22',
+      status: 'unknown' as const,
+      stages: [
+        { index: 0, name: 'Checkout', status: 'SUCCESS' },
+        { index: 1, name: 'Build', status: 'FAILED' },
+        { index: 2, name: 'Deploy', status: 'NOT_EXECUTED' },
+      ],
+    };
+    expect(evaluateRunCompletion(failedStageRun)).toEqual({
+      completed: true,
+      finalStatus: 'FAILED',
+    });
+
+    const inProgressStageRun = {
+      runId: 22,
+      buildNumber: '#22',
+      status: 'unknown' as const,
+      stages: [
+        { index: 0, name: 'Checkout', status: 'SUCCESS' },
+        { index: 1, name: 'Build', status: 'in-progress' },
+        { index: 2, name: 'Deploy', status: 'NOT_EXECUTED' },
+      ],
+    };
+    expect(evaluateRunCompletion(inProgressStageRun)).toEqual({
+      completed: false,
+    });
   });
 
   const SAMPLE_STAGE_VIEW_HTML = `<!doctype html>

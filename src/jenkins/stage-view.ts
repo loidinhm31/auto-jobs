@@ -4,6 +4,7 @@ import { injectCameraRecorderHud } from './stage-view-hud.js';
 import {
   calculateRunDurationMs,
   estimateBuildTimeoutMs,
+  evaluateRunCompletion,
   formatDurationHuman,
   getLatestStageViewRun,
   parseJenkinsDurationMs,
@@ -31,6 +32,7 @@ export type {
 export {
   calculateRunDurationMs,
   estimateBuildTimeoutMs,
+  evaluateRunCompletion,
   formatDurationHuman,
   getLatestStageViewRun,
   injectCameraRecorderHud,
@@ -115,18 +117,21 @@ export async function waitForStageViewCompletion(
         }
       }
 
-      const st = targetRun.status;
-      if (st === 'SUCCESS' || st === 'FAILED' || st === 'UNSTABLE' || st === 'ABORTED') {
-        onProgress?.(`[Stage View] Build ${targetRun.buildNumber} finished with result: ${st}`);
+      const completion = evaluateRunCompletion(targetRun);
+      if (completion.completed && completion.finalStatus) {
+        onProgress?.(`[Stage View] Build ${targetRun.buildNumber} finished with result: ${completion.finalStatus}`);
         await injectCameraRecorderHud(page, {
           lastDurationMs: options.lastDurationMs,
           timeoutMs: options.timeoutMs,
-          status: st,
+          status: completion.finalStatus,
           buildNumber: targetRun.buildNumber,
         });
         return {
           completed: true,
-          run: targetRun,
+          run: {
+            ...targetRun,
+            status: completion.finalStatus,
+          },
         };
       }
 
@@ -164,6 +169,11 @@ export async function waitForStageViewCompletion(
       try {
         await page.reload({ waitUntil: 'domcontentloaded' });
         lastReloadTime = Date.now();
+        await page
+          .locator('#pipeline-box table.jobsTable tr.job')
+          .first()
+          .waitFor({ state: 'attached', timeout: 5_000 })
+          .catch(() => undefined);
       } catch {
         // Retry next poll on reload failure
       }
