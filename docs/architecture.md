@@ -16,9 +16,9 @@ in the project configuration. Tests may fulfill those exact URLs with
 test-only Playwright routes; unmatched network requests are blocked.
 
 See [system architecture](./system-architecture.md) for the component view,
-[multi-project configuration](./multi-project-configuration.md) for the
-field-level contract, and [release gates](./release-gates.md) for commands and
-validation boundaries.
+[report pipeline](./report-pipeline.md) for fixtures and aggregate persistence,
+[multi-project configuration](./multi-project-configuration.md) for field
+contracts, and [release gates](./release-gates.md) for validation commands.
 
 ## Scope and operating modes
 
@@ -117,8 +117,9 @@ flowchart LR
 - `src/reports/snyk/` and `src/reports/sonarqube/` validate allowed links,
   handle SonarQube login redirects when required, capture bounded visible
   evidence, and normalize source-specific results.
-- `src/artifacts/` creates immutable report paths, writes validated files,
-  manages staging leases and aggregate recovery, and performs bounded cleanup.
+- `src/artifacts/` creates immutable report paths, validates and discovers
+  manifests, builds the persistent aggregate index, and manages staging,
+  recovery, and bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
 - `src/reporting/report-server-control.ts` validates the Host header for every
@@ -387,46 +388,6 @@ destinations from saved canonical pages, and fulfills only exact synthetic URLs.
 Fixture paths are canonical, traversal- and symlink-safe, size-bounded, and
 never read from runtime project JSON.
 
-## Phase 3 template fixture and route contract
-
-`loadTemplateReportFixture(env, origin?)` resolves the checked-in template root
-(or the optional `TEMPLATES_DIR` override), reads nine bounded files, and fails
-before browser startup when a saved identity or DOM contract drifts. The
-per-file limit is 4 MiB and the cumulative fixture limit remains 16 MiB.
-
-Build identity is derived, never hand-constructed:
-
-1. `extractSidePanelBuildLink` requires exactly one `Build with Parameters`
-   anchor in the saved Jenkins `#side-panel`, then validates its approved
-   origin, same-job `/build` path, and optional `delay=0sec` query.
-2. `validateBuildTemplate` requires one canonical URL matching that discovered
-   build page, one `POST` form with the same exact `/build` action, one
-   `#bottom-sticker`, and one `Build` submit button with all required Jenkins
-   class tokens.
-3. The loader rewrites only the selected job anchor and validated build form
-   action to the synthetic fixture origin; unrelated saved links remain untouched.
-
-The route sequence is:
-
-```text
-GET loginUrl -> POST loginActionUrl -> GET jobUrl -> GET buildPageUrl
--> POST buildActionUrl -> 303 Location: jobUrl -> GET jobUrl
-```
-
-`templateResponse` matches all nine fixture URLs exactly, including query and
-fragment identity. `installTemplateReportRoutes` permits only `GET`/`HEAD` for
-those responses plus the exact Jenkins login actions, the same-origin
-SonarQube `/sessions/new` authentication path, and exact build-action `POST`.
-The build `POST` returns `303` with only the exact job URL; form data is neither
-read nor reflected. Every other method or URL aborts, and the recorder retains
-at most 32 sanitized method/origin/path misses. Report mode never follows the
-build anchor, so its request sequence remains report-only.
-
-The focused unit and E2E contracts are
-`tests/unit/template-build-fixture.spec.ts` and
-`tests/e2e/template-auto-build.spec.ts`; they prove fixture drift rejection,
-exact build redirect, one build `POST`, and no Snyk/SonarQube capture in
-auto-build mode.
 
 ## Per-project workflow
 
@@ -472,56 +433,8 @@ per-project rows with scalar fallback for older records.
 Every configured, discovered, redirected, and final URL in either path must be
 credential-free HTTP(S) and inside its allowed canonical origin. Context and
 browser cleanup is bounded and best-effort.
-
-## Evidence capture and result contract
-
-After authentication, capture starts from the exact configured Jenkins job
-page. Every configured, discovered, redirected, and final URL must be
-credential-free HTTP(S) and inside its allowed canonical origin.
-
-The Snyk adapter selects one exact report link and one unambiguous summary JSON
-link from the validated Jenkins job page. The SonarQube adapter follows one
-validated dashboard sequence: Home (authenticating through the SonarQube login
-page using the project's configured Jenkins credentials if redirected),
-Overall with `codeScope=overall`, then Issues for the same project identity.
-Tests fulfill these exact browser URLs from the checked-in template files;
-runtime opens them normally.
-
-Visible findings are normalized, deduplicated, ordered, and capped. Missing or
-malformed evidence, mismatched counts, disallowed links, and screenshot
-failures remain warnings or incomplete source state; they are never fabricated
-as success. Overall contributes provenance evidence, while Issues extraction is
-limited to bounded Type and Severity facets.
-
-The result and manifest record the validated Jenkins job page, capture
-timestamp, source navigation, normalized evidence, warnings, and artifacts.
-They do not fabricate trigger, queue, build-number override, or terminal
-evidence. A project is `success` only when both configured source captures are
-found with no warnings; a completed workflow with incomplete evidence is
-`partial`; workflow or persistence failure is `failed`.
-
-## Artifact lifecycle
-
-Every project attempt receives an immutable run ID and is staged, validated,
-and published under the configured report root:
-
-```text
-reports/
-├── index.html
-├── aggregate-data.json
-├── assets/report.css
-└── <project-id>/<run-id>/
-    ├── index.html
-    ├── data.json
-    ├── manifest.json
-    └── requested screenshots
-```
-
-Project and run IDs are validated before becoming path segments. Failure
-artifacts use the same project/run identity without fabricating a Jenkins build
-folder or status. Persistence is best-effort; the aggregate still records the
-outcome when possible. Playwright test traces under `test-results/` are test
-evidence, not vendor report evidence.
+Report fixtures, evidence normalization, immutable artifacts, and aggregate
+index discovery/publication are detailed in [report pipeline](./report-pipeline.md).
 
 ## Locking, cleanup, and server modes
 
@@ -554,7 +467,67 @@ dashboard (`127.0.0.1:4173`). It exposes:
 - Run status and live logs (`GET /api/run`);
 - Local immutable report links (`GET /reports/...`); and
 - Presence-only credential status and guarded updates/deletes under
-  `GET`/`PUT`/`DELETE /api/secrets`.
+  `GET`/`PUT`/`DELETE /api/secrets`;
+- Direct navigation from the dashboard header to the persistent report index
+  (`GET /reports/index.html`); and
+- Safe per-project report deletion under `DELETE /api/reports/projects/:projectId`.
+
+### Persistent report management and per-project deletion
+
+Control mode exposes an explicit per-project report deletion endpoint:
+`DELETE /api/reports/projects/:projectId`.
+
+#### Deletion semantics
+The operation removes the specified project's entire `reports/<projectId>/`
+subtree after safety preflight, including invalid or unvalidated files alongside
+validated run artifacts. The reported run count includes only validated runs.
+It does not delete or modify project configuration in `config/*.json`, and
+leaves all other project directories, active staging runs, and shared assets
+(`reports/assets/`) untouched.
+
+#### Concurrency and locking
+Deletion acquires the canonical report-root lock (`.report-root-lock`) via
+`ArtifactPaths.acquireReportRootLock()` before inspecting or deleting filesystem
+entries. This serializes deletion against concurrent report runners, CLI
+executions, and other control mutations. Lock contention or timeout returns 409
+Conflict.
+
+#### Filesystem safety and path traversal protection
+The requested `projectId` is validated against `SAFE_ID` (`/^[a-z0-9][a-z0-9-_]{0,80}$/u`),
+rejecting path separators, null bytes, parent traversal (`..`), and reserved
+names (`assets`, `.report-root-lock`, `.tmp*`, `.bak*`). The resolved target path
+must reside strictly within the canonical report root. The target is inspected
+with `fs.lstat` to verify it is a real directory and not a symlink; nested
+symlinks are refused rather than traversed.
+
+#### Atomic index rebuild and recovery
+Following successful subtree removal, remaining validated manifests are
+rediscovered and the root `reports/aggregate-data.json` and `reports/index.html`
+are rebuilt and published using `writeAggregateDataPair` with two-phase staging,
+backup, and journal rollback. If deletion encounters a partial failure, the
+index is refreshed from remaining valid manifests and diagnostics are recorded.
+
+#### UI confirmation and navigation
+The Control Dashboard links to `/reports/index.html`. In control mode, this
+exact URL serves a CSRF-bearing React report-management view with a list of
+retained validated projects, historical report links, and an explicit
+per-project **Delete Reports** action with a confirmation dialog. Each project
+pages its historical runs independently, 20 per page, using the published
+`aggregate-data.json`; pagination limits rendered rows but not discovery,
+network response size, or retention. The view refreshes after mutation; its
+buttons do not infer deletion eligibility from the active configuration.
+The persisted `reports/index.html` remains a static, scriptless snapshot
+of the same history for offline reading and `serve:report`. It is required
+by read-only report-root validation and CLI/offline consumption. Control mode
+serves this one route with `CONTROL_CSP`; all run artifact routes and
+report-only mode retain `REPORT_CSP` and GET/HEAD-only handling. At the
+existing 5,000-manifest discovery or 16 MiB static-serving boundary, warn
+and refuse incomplete inventory/deletion rather than silently dropping runs.
+
+#### Serving modes
+`serve:report` remains strictly read-only and unauthenticated (GET/HEAD only).
+All deletion operations are restricted to the same-origin, CSRF-gated loopback
+Control Server API. Immutable run links for remaining projects remain unchanged.
 
 Control mode initializes `SecretStore` against the configured `configRoot`.
 The secrets endpoint reads and writes only the fixed `secrets.local.json`

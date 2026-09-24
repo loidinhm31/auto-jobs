@@ -236,8 +236,7 @@ export async function discoverRunManifests(
   };
   const inspectLegacyContainer = async (container: string): Promise<void> => {
     for (const runId of await safeDirectories(container, budget, noteIncompatible)) {
-      if (artifactBudget.exhausted) return;
-      if (inspected >= maximum) { warnings.push('manifest discovery limit reached'); return; }
+      if (artifactBudget.exhausted || budget.exhausted || inspected >= maximum) return;
       const read = await readManifestIfPresent(path.join(container, runId, 'manifest.json'), artifactBudget);
       if (artifactBudget.exhausted) return;
       if (!read.present) continue;
@@ -247,13 +246,12 @@ export async function discoverRunManifests(
   };
 
   for (const projectId of await safeDirectories(root, budget, noteIncompatible)) {
-    if (artifactBudget.exhausted) break;
+    if (artifactBudget.exhausted || budget.exhausted || inspected >= maximum) break;
     if (INTERNAL_DIRECTORIES.has(projectId)) continue;
     if (!SAFE_ID.test(projectId)) { pushDiagnostic(warnings, 'ignored unsafe project artifact directory'); continue; }
     const projectDirectory = path.join(root, projectId);
     for (const runId of await safeDirectories(projectDirectory, budget, noteIncompatible)) {
-      if (artifactBudget.exhausted) break;
-      if (inspected >= maximum) { warnings.push('manifest discovery limit reached'); return { manifests, warnings, ignoredIncompatibleCount }; }
+      if (artifactBudget.exhausted || budget.exhausted || inspected >= maximum) break;
       const directory = path.join(projectDirectory, runId);
       const manifestPath = path.join(directory, 'manifest.json');
       const read = await readManifestIfPresent(manifestPath, artifactBudget);
@@ -293,6 +291,7 @@ export async function discoverRunManifests(
       }
     }
   }
+  if (inspected >= maximum) pushDiagnostic(warnings, 'manifest discovery limit reached');
   if (artifactBudget.exhausted) pushDiagnostic(warnings, 'historical artifact discovery budget reached');
   if (budget.exhausted) pushDiagnostic(warnings, 'artifact directory discovery limit reached');
   if (ignoredIncompatibleCount > 0) {
@@ -305,5 +304,6 @@ export async function discoverRunManifests(
     const projectOrder = left.manifest.project.id.localeCompare(right.manifest.project.id);
     return projectOrder !== 0 ? projectOrder : left.manifest.run.runId.localeCompare(right.manifest.run.runId);
   });
-  return { manifests, warnings, ignoredIncompatibleCount };
+  const incomplete = budget.exhausted || artifactBudget.exhausted || inspected >= maximum;
+  return { manifests, warnings, ignoredIncompatibleCount, incomplete };
 }

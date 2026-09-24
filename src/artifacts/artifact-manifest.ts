@@ -47,4 +47,5 @@ export interface ManifestDiscoveryResult {
   readonly manifests: readonly DiscoveredRunManifest[];
   readonly warnings: readonly string[];
   readonly ignoredIncompatibleCount: number;
+  readonly incomplete: boolean;
 }

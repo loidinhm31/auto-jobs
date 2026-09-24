@@ -36,6 +36,11 @@ at least one enabled project. Each project requires:
 - an exact absolute HTTP(S) `loginUrl`; and
 - an exact absolute HTTP(S) `jobUrl`.
 
+This 1–50 input limit is separate from the persistent aggregate index, which
+can retain up to 5,050 project rows across current outcomes and historical
+manifests. See the [report pipeline](./report-pipeline.md) for discovery and
+publication bounds.
+
 `loginUrl` and `jobUrl` must be credential-free, fragment-free, and on the same
 Jenkins origin and base context. `baseUrl`, `jobPath`, `loginPath`,
 `triggerMode`, `buildNumber`, `captureFrom`, and other legacy structural keys

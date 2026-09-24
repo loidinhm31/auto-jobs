@@ -55,6 +55,7 @@ docs/multi-project-configuration.md
 docs/project-overview-pdr.md
 docs/project-roadmap.md
 docs/release-gates.md
+docs/report-pipeline.md
 docs/system-architecture.md
 package.json
 plans/260903-1251-serve-control-dynamic-credentials/cmd-plan.md
@@ -102,6 +103,14 @@ plans/260924-1158-control-page-parallel-auto-build/phase-02-parallel-auto-build-
 plans/260924-1158-control-page-parallel-auto-build/phase-03-control-page-ui-refactor.md
 plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md
 plans/260924-1158-control-page-parallel-auto-build/plan.md
+plans/260924-2019-persistent-project-report-management/cmd-plan.md
+plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md
+plans/260924-2019-persistent-project-report-management/phase-02-control-reports-delete-api.md
+plans/260924-2019-persistent-project-report-management/phase-03-control-ui-navigation-and-deletion.md
+plans/260924-2019-persistent-project-report-management/phase-04-verification-and-caller-migration.md
+plans/260924-2019-persistent-project-report-management/plan.md
+plans/260924-2019-persistent-project-report-management/research/researcher-01-report.md
+plans/260924-2019-persistent-project-report-management/research/researcher-02-report.md
 playwright.config.ts
 playwright.control.config.ts
 playwright.template.config.ts
@@ -114,6 +123,7 @@ scripts/report-runtime.mjs
 scripts/run-playwright.mjs
 scripts/run-report.mjs
 scripts/run-template-report.mjs
+src/artifacts/aggregate-index-builder.ts
 src/artifacts/aggregate-manifest-reader.ts
 src/artifacts/aggregate-publication-recovery.ts
 src/artifacts/aggregate-report-publisher.ts
@@ -294,6 +304,7 @@ tests/e2e/template-auto-build.spec.ts
 tests/e2e/template-navigation.spec.ts
 tests/e2e/template-server-integration.spec.ts
 tests/e2e/vendor-template-capture.spec.ts
+tests/unit/aggregate-index-builder.spec.ts
 tests/unit/artifact-lifecycle.spec.ts
 tests/unit/artifact-paths.spec.ts
 tests/unit/auto-build-runner.spec.ts
@@ -315,6 +326,7 @@ tests/unit/immutable-run-history.spec.ts
 tests/unit/jenkins-build-trigger.spec.ts
 tests/unit/jenkins-phase-02.spec.ts
 tests/unit/launch-arguments.spec.ts
+tests/unit/persistent-aggregate-bounds.spec.ts
 tests/unit/project-config.spec.ts
 tests/unit/project-run-state.spec.ts
 tests/unit/report-root-lock-owner.spec.ts
@@ -564,9 +576,9 @@ in the project configuration. Tests may fulfill those exact URLs with
 test-only Playwright routes; unmatched network requests are blocked.
 
 See [system architecture](./system-architecture.md) for the component view,
-[multi-project configuration](./multi-project-configuration.md) for the
-field-level contract, and [release gates](./release-gates.md) for commands and
-validation boundaries.
+[report pipeline](./report-pipeline.md) for fixtures and aggregate persistence,
+[multi-project configuration](./multi-project-configuration.md) for field
+contracts, and [release gates](./release-gates.md) for validation commands.
 
 ## Scope and operating modes
 
@@ -665,8 +677,9 @@ flowchart LR
 - `src/reports/snyk/` and `src/reports/sonarqube/` validate allowed links,
   handle SonarQube login redirects when required, capture bounded visible
   evidence, and normalize source-specific results.
-- `src/artifacts/` creates immutable report paths, writes validated files,
-  manages staging leases and aggregate recovery, and performs bounded cleanup.
+- `src/artifacts/` creates immutable report paths, validates and discovers
+  manifests, builds the persistent aggregate index, and manages staging,
+  recovery, and bounded cleanup.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
 - `src/reporting/report-server-control.ts` validates the Host header for every
@@ -935,46 +948,6 @@ destinations from saved canonical pages, and fulfills only exact synthetic URLs.
 Fixture paths are canonical, traversal- and symlink-safe, size-bounded, and
 never read from runtime project JSON.
 
-## Phase 3 template fixture and route contract
-
-`loadTemplateReportFixture(env, origin?)` resolves the checked-in template root
-(or the optional `TEMPLATES_DIR` override), reads nine bounded files, and fails
-before browser startup when a saved identity or DOM contract drifts. The
-per-file limit is 4 MiB and the cumulative fixture limit remains 16 MiB.
-
-Build identity is derived, never hand-constructed:
-
-1. `extractSidePanelBuildLink` requires exactly one `Build with Parameters`
-   anchor in the saved Jenkins `#side-panel`, then validates its approved
-   origin, same-job `/build` path, and optional `delay=0sec` query.
-2. `validateBuildTemplate` requires one canonical URL matching that discovered
-   build page, one `POST` form with the same exact `/build` action, one
-   `#bottom-sticker`, and one `Build` submit button with all required Jenkins
-   class tokens.
-3. The loader rewrites only the selected job anchor and validated build form
-   action to the synthetic fixture origin; unrelated saved links remain untouched.
-
-The route sequence is:
-
-```text
-GET loginUrl -> POST loginActionUrl -> GET jobUrl -> GET buildPageUrl
--> POST buildActionUrl -> 303 Location: jobUrl -> GET jobUrl
-```
-
-`templateResponse` matches all nine fixture URLs exactly, including query and
-fragment identity. `installTemplateReportRoutes` permits only `GET`/`HEAD` for
-those responses plus the exact Jenkins login actions, the same-origin
-SonarQube `/sessions/new` authentication path, and exact build-action `POST`.
-The build `POST` returns `303` with only the exact job URL; form data is neither
-read nor reflected. Every other method or URL aborts, and the recorder retains
-at most 32 sanitized method/origin/path misses. Report mode never follows the
-build anchor, so its request sequence remains report-only.
-
-The focused unit and E2E contracts are
-`tests/unit/template-build-fixture.spec.ts` and
-`tests/e2e/template-auto-build.spec.ts`; they prove fixture drift rejection,
-exact build redirect, one build `POST`, and no Snyk/SonarQube capture in
-auto-build mode.
 
 ## Per-project workflow
 
@@ -1020,56 +993,8 @@ per-project rows with scalar fallback for older records.
 Every configured, discovered, redirected, and final URL in either path must be
 credential-free HTTP(S) and inside its allowed canonical origin. Context and
 browser cleanup is bounded and best-effort.
-
-## Evidence capture and result contract
-
-After authentication, capture starts from the exact configured Jenkins job
-page. Every configured, discovered, redirected, and final URL must be
-credential-free HTTP(S) and inside its allowed canonical origin.
-
-The Snyk adapter selects one exact report link and one unambiguous summary JSON
-link from the validated Jenkins job page. The SonarQube adapter follows one
-validated dashboard sequence: Home (authenticating through the SonarQube login
-page using the project's configured Jenkins credentials if redirected),
-Overall with `codeScope=overall`, then Issues for the same project identity.
-Tests fulfill these exact browser URLs from the checked-in template files;
-runtime opens them normally.
-
-Visible findings are normalized, deduplicated, ordered, and capped. Missing or
-malformed evidence, mismatched counts, disallowed links, and screenshot
-failures remain warnings or incomplete source state; they are never fabricated
-as success. Overall contributes provenance evidence, while Issues extraction is
-limited to bounded Type and Severity facets.
-
-The result and manifest record the validated Jenkins job page, capture
-timestamp, source navigation, normalized evidence, warnings, and artifacts.
-They do not fabricate trigger, queue, build-number override, or terminal
-evidence. A project is `success` only when both configured source captures are
-found with no warnings; a completed workflow with incomplete evidence is
-`partial`; workflow or persistence failure is `failed`.
-
-## Artifact lifecycle
-
-Every project attempt receives an immutable run ID and is staged, validated,
-and published under the configured report root:
-
-```text
-reports/
-├── index.html
-├── aggregate-data.json
-├── assets/report.css
-└── <project-id>/<run-id>/
-    ├── index.html
-    ├── data.json
-    ├── manifest.json
-    └── requested screenshots
-```
-
-Project and run IDs are validated before becoming path segments. Failure
-artifacts use the same project/run identity without fabricating a Jenkins build
-folder or status. Persistence is best-effort; the aggregate still records the
-outcome when possible. Playwright test traces under `test-results/` are test
-evidence, not vendor report evidence.
+Report fixtures, evidence normalization, immutable artifacts, and aggregate
+index discovery/publication are detailed in [report pipeline](./report-pipeline.md).
 
 ## Locking, cleanup, and server modes
 
@@ -1102,7 +1027,67 @@ dashboard (`127.0.0.1:4173`). It exposes:
 - Run status and live logs (`GET /api/run`);
 - Local immutable report links (`GET /reports/...`); and
 - Presence-only credential status and guarded updates/deletes under
-  `GET`/`PUT`/`DELETE /api/secrets`.
+  `GET`/`PUT`/`DELETE /api/secrets`;
+- Direct navigation from the dashboard header to the persistent report index
+  (`GET /reports/index.html`); and
+- Safe per-project report deletion under `DELETE /api/reports/projects/:projectId`.
+
+### Persistent report management and per-project deletion
+
+Control mode exposes an explicit per-project report deletion endpoint:
+`DELETE /api/reports/projects/:projectId`.
+
+#### Deletion semantics
+The operation removes the specified project's entire `reports/<projectId>/`
+subtree after safety preflight, including invalid or unvalidated files alongside
+validated run artifacts. The reported run count includes only validated runs.
+It does not delete or modify project configuration in `config/*.json`, and
+leaves all other project directories, active staging runs, and shared assets
+(`reports/assets/`) untouched.
+
+#### Concurrency and locking
+Deletion acquires the canonical report-root lock (`.report-root-lock`) via
+`ArtifactPaths.acquireReportRootLock()` before inspecting or deleting filesystem
+entries. This serializes deletion against concurrent report runners, CLI
+executions, and other control mutations. Lock contention or timeout returns 409
+Conflict.
+
+#### Filesystem safety and path traversal protection
+The requested `projectId` is validated against `SAFE_ID` (`/^[a-z0-9][a-z0-9-_]{0,80}$/u`),
+rejecting path separators, null bytes, parent traversal (`..`), and reserved
+names (`assets`, `.report-root-lock`, `.tmp*`, `.bak*`). The resolved target path
+must reside strictly within the canonical report root. The target is inspected
+with `fs.lstat` to verify it is a real directory and not a symlink; nested
+symlinks are refused rather than traversed.
+
+#### Atomic index rebuild and recovery
+Following successful subtree removal, remaining validated manifests are
+rediscovered and the root `reports/aggregate-data.json` and `reports/index.html`
+are rebuilt and published using `writeAggregateDataPair` with two-phase staging,
+backup, and journal rollback. If deletion encounters a partial failure, the
+index is refreshed from remaining valid manifests and diagnostics are recorded.
+
+#### UI confirmation and navigation
+The Control Dashboard links to `/reports/index.html`. In control mode, this
+exact URL serves a CSRF-bearing React report-management view with a list of
+retained validated projects, historical report links, and an explicit
+per-project **Delete Reports** action with a confirmation dialog. Each project
+pages its historical runs independently, 20 per page, using the published
+`aggregate-data.json`; pagination limits rendered rows but not discovery,
+network response size, or retention. The view refreshes after mutation; its
+buttons do not infer deletion eligibility from the active configuration.
+The persisted `reports/index.html` remains a static, scriptless snapshot
+of the same history for offline reading and `serve:report`. It is required
+by read-only report-root validation and CLI/offline consumption. Control mode
+serves this one route with `CONTROL_CSP`; all run artifact routes and
+report-only mode retain `REPORT_CSP` and GET/HEAD-only handling. At the
+existing 5,000-manifest discovery or 16 MiB static-serving boundary, warn
+and refuse incomplete inventory/deletion rather than silently dropping runs.
+
+#### Serving modes
+`serve:report` remains strictly read-only and unauthenticated (GET/HEAD only).
+All deletion operations are restricted to the same-origin, CSRF-gated loopback
+Control Server API. Immutable run links for remaining projects remain unchanged.
 
 Control mode initializes `SecretStore` against the configured `configRoot`.
 The secrets endpoint reads and writes only the fixed `secrets.local.json`
@@ -1376,7 +1361,7 @@ it is not a replacement for schema or security validation.
 | `src/jenkins/` | Jenkins authentication, exact URL identity, scoped locators, and guarded build submission. |
 | `src/project/` | Report and auto-build workflow orchestration, run state, outcomes, and capture. |
 | `src/workflow/` | Shared absolute deadlines, hard cleanup timeouts, and diagnostic helpers. |
-| `src/artifacts/` | Immutable report identity, staging/publication, manifest discovery, and bounded cleanup. |
+| `src/artifacts/` | Immutable report identity, bounded manifest discovery, persistent aggregate-index building/publication/recovery, staging, and cleanup. |
 | `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
 | `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
 | `src/reporting/` | Static report rendering, links, read-only report serving, and control-plane routing. |
@@ -1550,8 +1535,9 @@ Compiler settings in `tsconfig.json` are the source of truth:
 - Treat `workerCount` as unsupported in `POST /api/run`: reject any own property
   with `422 INVALID_WORKER_COUNT` before `RunManager.startRun`.
 - Before control-run dispatch, require the current saved config ETag to match
-  the request. Derive the report count from that document and pass it only to
-  the report executor; preserve auto-build's existing dependency contract.
+  the request. The matched document's `reportWorkers` (1–4, default 1) drives
+  both report executor concurrency and the auto-build worker-pool bound;
+  single-project auto-build remains bounded by its one selected project.
 - Collect all non-empty snapshot values for redaction. Redact `addLog`
   messages, report warnings, caught error messages/stacks, and auto-build
   `jobUrl`/`buildPageUrl` result fields before the control record is persisted.
@@ -1618,8 +1604,9 @@ Tests must defend observable behavior and fail on plausible regressions:
   method/classes, one POST, response classification, unknown-after-POST, no
   retry, mode/enabled gates, secret redaction, and resource cleanup.
 - For report execution, assert project order, fresh contexts, failure
-  continuation, artifact identity, aggregate publication, and that auto-build
-  projects are excluded.
+  continuation, artifact identity, historical aggregate retention, and
+  auto-build exclusion. Cover incomplete discovery rejection, the valid empty
+  index, project/run limits, and staged data/HTML size boundaries.
 - Keep fixture routes exact and default-deny. Do not treat a checked-in HTML
   snapshot as evidence of a live vendor or Jenkins run.
 - Avoid tests that only inspect implementation text or incidental defaults;
@@ -1647,10 +1634,10 @@ Before opening a change, verify:
 <file path="docs/codebase-summary.md">
 # Codebase summary
 
-This summary is based on a fresh Repomix compaction (`repomix-output.xml`) and
-the checked-in source/configuration, including Stage View completion monitoring
-and its Control Page wait toggle. The form builder and raw JSON view share the
-saved document state. Tests use local fixtures; no live Jenkins run is claimed.
+This summary reflects the refreshed `repomix-output.xml` and checked-in
+source/configuration. It includes Stage View completion monitoring and
+persistent project history in the static aggregate report. Deterministic
+fixtures use local inputs; no live Jenkins run is claimed.
 
 ## Repository profile
 
@@ -1722,8 +1709,13 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
   build actions plus one shared saved Workers selector. Per-card build buttons
   and the confirmation flow are removed; `RunResultBox` renders ordered
   `BuildProjectOutcomeRow` results with scalar fallback for older records.
-- Repomix inventory refreshed for this summary; ignored and binary files remain
-  outside the compaction.
+- Phase 04 auto-build verification (2026-09-24): E2E replaced obsolete build-confirmation/per-card interactions with absent-control checks and immediate batch action, shared `#select-workers`, saved/dirty gating, and request assertions without `projectId`/`workerCount`. `npm run test:release` passed 439/439 (unit 399, template E2E 13, control E2E 20, report 5, WebKit 2); typecheck/build passed; review approved 9.3/10.
+- Persistent aggregate index builder: pure projection of current report
+  outcomes and validated history. Incomplete discovery blocks publication;
+  aggregate data allows zero projects, up to 5,050 project rows, and staged
+  JSON/HTML files up to 16 MiB each.
+- Repomix compaction regenerated at `repomix-output.xml`; repository ignore
+  rules remain in effect.
 
 ## Entry points and scripts
 
@@ -1733,6 +1725,7 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
 | `src/cli.ts` | Parses the explicit `--config` path and reports project outcomes. |
 | `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and `selectReportProjects`, `selectAutoBuildProjects`, and `selectAutoBuildProject`. |
 | `src/runner.ts` | Saved-count report dispatch, bounded multi-project execution, and aggregate publication. |
+| `src/artifacts/aggregate-index-builder.ts` | Builds the validated aggregate from current outcomes and retained manifests without file I/O. |
 | `src/project/report-worker-pool.ts` | Fixed in-process loops with indexed outcomes and per-project failure isolation. |
 | `src/project/auto-build-runner.ts` | Explicit one-project auto-build API with optional Stage View wait and rich build outcome. |
 | `src/project/auto-build-worker-pool.ts` | Bounded concurrent project loops with configuration-ordered outcomes and per-project failure isolation. |
@@ -2109,6 +2102,20 @@ Report roots contain `index.html`, `aggregate-data.json`, CSS assets, and
 these report artifacts. Test-runner traces and reports in `test-results/` or
 `playwright-report/` are test evidence, not vendor evidence.
 
+The pure `buildAggregateIndex` builder keeps current outcomes in configuration
+order and retains history-only projects. The manifest reader sets
+`ManifestDiscoveryResult.incomplete` when its manifest or directory/artifact
+budgets are reached; the builder rejects incomplete discovery and the runner
+skips aggregate publication. The schema-v3 aggregate accepts `projects: []` for
+zero-project index and up to 5,050 project rows, separate from the schema-v1
+input limit of 50 projects. Aggregate validation also caps total retained runs
+at 5,000. Before publication, the publisher checks both staged JSON and HTML
+against the 16 MiB static-file limit and preserves the previous pair on
+oversize rejection.
+
+Focused coverage lives in `tests/unit/aggregate-index-builder.spec.ts` and
+`tests/unit/persistent-aggregate-bounds.spec.ts`.
+
 The deterministic release sequence is documented in
 [release gates](./release-gates.md). Template tests fulfill exact URLs from
 checked-in files with default-deny routes and do not contact Jenkins or vendor
@@ -2240,6 +2247,11 @@ at least one enabled project. Each project requires:
 - a display `name`;
 - an exact absolute HTTP(S) `loginUrl`; and
 - an exact absolute HTTP(S) `jobUrl`.
+
+This 1–50 input limit is separate from the persistent aggregate index, which
+can retain up to 5,050 project rows across current outcomes and historical
+manifests. See the [report pipeline](./report-pipeline.md) for discovery and
+publication bounds.
 
 `loginUrl` and `jobUrl` must be credential-free, fragment-free, and on the same
 Jenkins origin and base context. `baseUrl`, `jobPath`, `loginPath`,
@@ -2739,12 +2751,14 @@ claim that a live Jenkins or browser execution has been run.
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
-**Document scope:** schema-v1 report capture, bounded execution, Control Page
-execution/results, offline build fixtures, and dynamic credentials.<br>
-**Current milestone:** Control Page Parallel Auto-Build — Phase 03 UI complete;
-Phase 04 testing/verification pending (2026-09-24).<br>
-**Prior completed milestone:** Phase 02 Parallel Auto-Build Executor and API —
-DONE (2026-09-24)
+**Document scope:** schema-v1 report capture, persistent aggregate history,
+bounded execution, Control Page results, offline build fixtures, and dynamic
+credentials.<br>
+**Current milestone:** Persistent Aggregate Index Builder — Phase 01
+implementation (2026-09-24).<br>
+**Prior completed milestone:** Control Page Parallel Auto-Build — complete,
+100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
+passed; review approved 9.3/10.
 
 ## Product summary
 
@@ -2756,6 +2770,10 @@ target; the loopback Control Page can trigger all enabled `auto-build` projects
 in a bounded batch. Both paths return sanitized in-memory outcomes without
 collecting reports or writing artifacts. Offline Jenkins fixtures make report
 and build journeys deterministic without a live controller.
+
+The root aggregate is rebuilt from validated schema-v3 manifests and current
+report outcomes so history-only projects survive configuration changes. An
+incomplete inventory blocks replacing the last complete index.
 
 Phase 01 adds a local `SecretStore` persistence seam for the control plane.
 It stores validated environment-style key/value pairs in the git-ignored
@@ -2876,6 +2894,14 @@ and failure semantics are validated before side effects.
 - Hold the report-root lock through worker settlement, browser close, final
   cleanup, manifest discovery, and aggregate publication.
 - Stage, validate, and publish immutable per-run artifacts and an aggregate.
+- Rebuild the persistent root index from validated schema-v3 manifests and
+  current outcomes; retain history-only projects across configuration changes.
+- Refuse to replace the index when `ManifestDiscoveryResult.incomplete` is true;
+  allow an empty `projects` array when both history and outcomes are empty.
+- Keep aggregate bounds distinct from input configuration: up to 5,050 project
+  rows and 5,000 total retained runs, while schema-v1 input remains 1–50 projects.
+- Check staged aggregate JSON and HTML independently against the 16 MiB static
+  file limit before replacing the prior pair.
 
 ### FR-4: Auto-build execution
 
@@ -3033,6 +3059,20 @@ and failure semantics are validated before side effects.
 | Determinism | Unit and fixture tests use injected dependencies or exact default-deny routes. |
 | Maintainability | Keep one responsibility per module, strict TypeScript, and production files below 200 lines when changed. |
 | Documentation | Keep each Markdown file below 800 lines and link only verified paths. |
+
+## Persistent aggregate index acceptance criteria
+
+- [x] `buildAggregateIndex` combines complete discovery and current outcomes
+  without file I/O, preserves current outcome order, and retains history-only
+  projects.
+- [x] Incomplete discovery is rejected; empty discovery and no outcomes produce
+  a valid aggregate with `projects: []`.
+- [x] Aggregate validation allows up to 5,050 project rows and 5,000 total run
+  entries without changing the 1–50 schema-v1 input limit.
+- [x] The publisher rejects either staged file above 16 MiB before replacing
+  the existing aggregate pair.
+- [x] Focused coverage exists in `aggregate-index-builder.spec.ts` and
+  `persistent-aggregate-bounds.spec.ts`.
 
 ## Phase 01 acceptance criteria
 
@@ -3195,6 +3235,7 @@ require the environment variables named by project configuration.
 | --- | --- | --- |
 | Schema and mode selection | `src/config/`, `src/config.ts` | [multi-project configuration](./multi-project-configuration.md) |
 | Report runner | `src/runner.ts`, `src/project/project-runner.ts` | [architecture](./architecture.md) |
+| Persistent aggregate index | `src/artifacts/aggregate-index-builder.ts`, `aggregate-manifest-reader.ts`, `aggregate-report-publisher.ts`, `result-validation.ts` | [report pipeline](./report-pipeline.md) |
 | Jenkins identity and trigger | `src/jenkins/url-identity.ts`, `src/jenkins/build-trigger*.ts` | [system architecture](./system-architecture.md) |
 | Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
 | Local secret persistence | `src/reporting/report-server-secret-store.ts`, `src/reporting/report-server-constants.ts` | [architecture](./architecture.md), [multi-project configuration](./multi-project-configuration.md), [code standards](./code-standards.md) |
@@ -3212,22 +3253,28 @@ require the environment variables named by project configuration.
 
 Dynamic-credentials Phases 01–05 remain complete through the local store,
 guarded presence API, per-run environment injection/redaction, Control UI
-credential workflow, and unit/API/Playwright verification. The current Control
-Page Parallel Auto-Build plan has completed Phase 03 UI; Phase 04 testing and
-verification remains. Preserve server-side configuration and security checks,
-saved worker-count/ETag boundaries, explicit all-enabled build intent, safe
-outcome mapping, and no process-global credential mutation. The report CLI
-still has no production auto-build command.
+credential workflow, and unit/API/Playwright verification. Control Page
+Parallel Auto-Build is also complete (4/4 phases, 11/11h; 2026-09-24):
+`npm run test:release` passed 439/439; typecheck/build passed; review approved
+9.3/10. Its E2E now verifies the immediate batch action and absence of obsolete
+build-confirmation/per-card controls. Preserve server-side configuration and
+security checks, saved worker-count/ETag boundaries, explicit all-enabled build
+intent, safe outcome mapping, and no process-global credential mutation. The
+report CLI still has no production auto-build command.
 
 ## Changelog
 
 ### 0.1.0 (development) — 2026-09-24
 
+- Added the persistent aggregate-index builder: validated history and current
+  outcomes share one index; incomplete discovery cannot replace it; the index
+  supports zero projects, 5,050 project rows, and 16 MiB staged-file limits.
+
 - Completed Phase 03 Control Page UI refactor: shared saved Workers selector,
   all-enabled report/build actions, no per-card build control or confirmation
   dialog, and ordered per-project result rows with scalar fallback.
-- Focused `control-atomic-components.spec.ts` passed 25/25; the full browser
-  journey remains in Phase 04.
+- Focused `control-atomic-components.spec.ts` passed 25/25.
+- Completed Phase 04 Testing and verification on 2026-09-24; `npm run test:release` passed 439/439, typecheck/build passed, and code review approved 9.3/10 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
 
 ### 0.1.0 (development) — 2026-09-03
 
@@ -3248,6 +3295,19 @@ still has no production auto-build command.
 Last updated: 2026-09-24  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
+
+## Persistent project report management
+
+Plan: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
+
+**Overall status:** In progress · **25%** (4 of 16 planned hours; 1 of 4 phases DONE).
+
+| Phase | Status | Progress | Effort | Completed | Evidence/detail |
+|---|---|---:|---:|---|---|
+| 01. Persistent aggregate index builder | **DONE** | **100%** | 4h | 2026-09-24 | Merged validated retained history with active outcomes; incomplete discovery and oversized publication fail closed. Review 10/10; targeted tests 13/13, unit suite 415/415, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md), [review](../plans/reports/code-review-260924-2121-phase-01-persistent-aggregate-index-builder.md)). |
+| 02. Guarded control reports DELETE API | Pending | 0% | 5h | — | Lock, safely remove one project tree, republish index |
+| 03. Report management page navigation and deletion | Pending | 0% | 3h | — | Dashboard link, inventory, pagination, confirmed deletion |
+| 04. Verification and caller migration | Pending | 0% | 4h | — | End-to-end security, persistence, concurrency, recovery, browser and caller verification |
 
 ## Control Page Parallel Auto-Build
 
@@ -3363,7 +3423,7 @@ Delivered Atomic Design atoms and molecules with exact DOM/CSS fidelity:
 Delivered organisms, dialogs, layout templates, error boundary, and root dashboard assembly:
 
 - Implemented organisms: `HeaderBar`, `ProjectCard`, `ProjectsGrid`, `RawJsonSection`, `ExecutionSection`, `RunStatusCard`.
-- Implemented accessible dialogs: `BuildConfirmDialog`, `CredentialsDialog`, `BrowserSettingsDialog`.
+- Implemented accessible credentials and browser-settings dialogs; the then-existing build-confirmation dialog was removed during Control Page Parallel Auto-Build Phase 03.
 - Created robust `ErrorBoundary` for graceful UI failure isolation.
 - Assembled top-level `DashboardPage` and `App.tsx` mounted via `main.tsx`.
 
@@ -3394,6 +3454,7 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Phase 02 evidence: QA recorded 398/398 unit and 18/18 control tests passing; code review recorded 30/30 focused tests and a clean typecheck, scored 9.5/10 with no critical issues or warnings ([test report](../plans/reports/tester-260924-1347-phase-02-parallel-auto-build-executor-and-api.md); [review](../plans/reports/code-review-260924-1355-phase-02-parallel-auto-build.md)). QA's initial typecheck report had five TS2550 diagnostics; the final review records the ES2023-compatible helper and a subsequent clean typecheck.
 - Completed Phase 03 (Control Page UI) on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-03-control-page-ui-refactor.md)); delivered immediate all-enabled actions, the shared Workers selector and ordered multi-project results.
 - Completed Phase 04 (Testing and verification) and Control Page Parallel Auto-Build at 100% on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [overall plan](../plans/260924-1158-control-page-parallel-auto-build/plan.md)). Release gate passed 439/439; typecheck/build passed; review approved at 9.3/10 with no critical issues ([test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
+- Completed Phase 01 (Persistent aggregate index builder) on 2026-09-24; retained validated report history across configuration changes and added fail-closed discovery/publication bounds. Review approved 10/10; targeted specs passed 13/13, unit suite 415/415, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md), [review](../plans/reports/code-review-260924-2121-phase-01-persistent-aggregate-index-builder.md)).
 
 ### 0.1.0 (development) — 2026-09-23
 
@@ -3881,14 +3942,23 @@ npm run test:control
 ```
 
 `npm run test:control` runs `tests/e2e/control-page.spec.ts` in Chromium and
-WebKit. The 2026-09-23 browser run passed 18/18, but predates the Phase 03
-Control Page refactor and is historical evidence only. The current E2E spec
-still asserts removed `.btn-auto-build`/`#build-confirm-dialog` controls and
-the former `#select-report-workers` ID; Phase 04 must replace those assertions
-before the new action bar is browser-verified. The focused component spec above
-covers current action labels/IDs, worker options, multi-project results, and
-scalar fallback. Control scenarios use temporary configs and injected executors;
-they do not contact Jenkins or vendor services.
+WebKit. The 2026-09-24 Phase 04 browser suite passed 20/20. Its old
+build-confirmation and per-card build interactions have been replaced: E2E
+asserts those controls are absent and exercises the immediate all-enabled action,
+shared `#select-workers`, save/dirty gating, and a batch POST without
+`projectId` or `workerCount`. Control scenarios use temporary configs and
+injected executors; they do not contact Jenkins or vendor services.
+
+### Phase 04 Parallel Auto-Build verification snapshot
+
+| Command/scope | Result |
+| --- | --- |
+| `npm run test:release` | **439/439 passed**: unit 399, template E2E 13, control E2E 20, report 5, WebKit 2 |
+| `npm run typecheck` | Passed; 0 TypeScript errors |
+| `npm run build` | Passed |
+| Code review | Approved, 9.3/10 |
+
+Evidence: [test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md) · [code review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md).
 
 The 2026-09-03 Phase 05 verification snapshot recorded:
 
@@ -4007,6 +4077,24 @@ report-root lease coordinates same-host work using token/PID/hostname owner
 data. It has no UID field, is not a same-UID authorization boundary, and is
 not a distributed lock.
 
+## Persistent aggregate index gate
+
+Run the focused deterministic contracts:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/aggregate-index-builder.spec.ts \
+  tests/unit/persistent-aggregate-bounds.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The suites cover current outcomes and retained history, empty aggregate
+construction, rejection of incomplete discovery, the 5,050 project ceiling,
+discovery-limit signaling, and rejection of oversized staged aggregate output
+without replacing the prior pair. The tests use in-memory manifests and
+temporary report roots; they do not contact Jenkins or vendor services.
+See [report pipeline](./report-pipeline.md) for the persisted index contract.
+
 ## Security checks
 
 - Never inline credentials in JSON, shell history, fixtures, logs, or examples.
@@ -4037,6 +4125,101 @@ running the relevant command; the command output is the release evidence.
 
 Native browser, fixture startup, and live Jenkins results are environment
 evidence only when their commands are freshly run in the target environment.
+</file>
+
+<file path="docs/report-pipeline.md">
+# Report pipeline and aggregate index
+
+This document describes offline report fixtures, retained run discovery, and
+persistent aggregate-index construction. For the broader execution model, see
+[architecture](./architecture.md) and [system architecture](./system-architecture.md).
+
+## Offline report fixtures
+
+`src/templates/template-report-fixture.ts` is the supported facade for the
+checked-in nine-file corpus. The loader validates saved identities before
+browser startup and enforces a 4 MiB per-file and 16 MiB total input limit.
+The build-page URL is derived from the unique **Build with Parameters** link in
+`#side-panel`; its canonical URL, `POST` action, `#bottom-sticker`, and `Build`
+button are validated before routes are installed.
+
+Fixture routes fulfill exact URLs, including the supported login actions and
+build `POST`. The build route redirects to the exact job URL without reading or
+reflecting form data. Unknown methods and URLs are aborted and recorded as
+bounded sanitized misses. These routes are test-only and do not contact Jenkins
+or vendor services.
+
+## Run artifacts and discovery
+
+Each report attempt receives an immutable project/run identity under the report
+root:
+
+```text
+reports/
+├── index.html
+├── aggregate-data.json
+├── assets/report.css
+└── <project-id>/<run-id>/
+    ├── index.html
+    ├── data.json
+    ├── manifest.json
+    └── requested screenshots
+```
+
+`src/artifacts/aggregate-manifest-reader.ts` validates schema-v3 manifests and
+their referenced artifacts before retaining them. Discovery is bounded to at
+most 5,000 inspected manifests, plus directory and artifact-read budgets.
+Invalid or incompatible individual entries are omitted with warnings.
+
+`ManifestDiscoveryResult.incomplete` is true when discovery reaches its
+manifest limit or exhausts a directory/artifact budget. This flag distinguishes
+a fully inspected inventory from one that may have omitted history; warnings
+alone are not a substitute for it.
+
+## Persistent aggregate index
+
+`src/artifacts/aggregate-index-builder.ts` exposes the pure
+`buildAggregateIndex` builder. It accepts validated discovery, optional current
+project outcomes, an optional timestamp, and warnings; it performs no file I/O.
+Current outcomes lead the project list in their execution order and update their
+matching historical row. Retained history for other project IDs remains in the
+index, ordered by project ID; each project's runs are newest first by
+`observedAt`, with `runId` as the tie-breaker.
+
+The builder refuses `discovery.incomplete`. `src/runner.ts` also checks this
+before calling the builder, so incomplete inventory cannot replace a more
+complete published index. Invalid individual manifests can still be excluded
+while valid history is indexed.
+
+An empty `projects` array is a valid schema-v3 aggregate when discovery and
+current outcomes are both empty. The static renderer presents this as an empty
+state. This index behavior does not relax the schema-v1 configuration rule:
+input documents still require 1–50 projects, and report selection still
+requires an enabled report project.
+
+The aggregate project ceiling is 5,050, separate from the 50-project input
+limit. It allows up to 5,000 historical project IDs from discovered manifests
+plus up to 50 current configured projects. Aggregate validation separately
+limits retained run entries to 5,000 total.
+
+## Aggregate publication bounds
+
+`src/artifacts/aggregate-report-publisher.ts` stages `aggregate-data.json` and
+the rendered root `index.html`, then checks both staged file sizes against
+`MAX_STATIC_FILE_BYTES` (16 MiB per file) before writing the publication journal
+or replacing the existing pair. If either file is oversized, publication fails
+and the prior published files remain intact. Successful publication uses the
+existing journal/backup/rollback recovery path.
+
+## Focused contracts
+
+- `tests/unit/aggregate-index-builder.spec.ts` covers empty indexes, incomplete
+discovery rejection, historical-only projects, run ordering, current outcomes,
+and safe metadata.
+- `tests/unit/persistent-aggregate-bounds.spec.ts` covers the 5,050 project
+ceiling, empty aggregate validation, discovery completeness, staged-file size
+rejection with preservation of the prior pair, and history across runs.
+- [Release gates](./release-gates.md) lists the focused test command.
 </file>
 
 <file path="docs/system-architecture.md">
@@ -4083,6 +4266,8 @@ flowchart TB
   SecretStore --> SecretsApi[Loopback /api/secrets]
   Control[Loopback control server] --> SecretsApi
   SecretsApi -. presence-only status; guarded PUT/DELETE .-> SecretStore
+  Control --> ReportsApi[Loopback /api/reports/projects/:id]
+  ReportsApi -. guarded DELETE; lock report-root .-> ReportRoot
   Control --> RunManager[Control run manager]
   RunManager --> ControlExecutor[Control run executor]
   ConfigFile --> Loader[Validate and normalize]
@@ -4095,7 +4280,8 @@ flowchart TB
   Jenkins[Jenkins controller] --> ReportSources[Snyk / SonarQube publisher pages]
   Executor --> Jenkins
   Executor --> ReportRoot[Canonical report root]
-  ReportRoot --> ReadOnlyServer[Read-only report server]
+  ReportRoot --> ReadOnlyServer[Read-only report server / reports index]
+  Control -. direct navigation /reports/index.html .-> ReadOnlyServer
   Templates[Checked-in offline fixtures] -. exact synthetic URL routes, tests only .-> Executor
 ```
 
@@ -4379,6 +4565,21 @@ leases, recovers aggregate publication, and performs bounded orphan cleanup.
 `src/reporting/` escapes rendered values, validates links, sets CSP headers,
 and serves only safe GET/HEAD files below the canonical root. The server is
 read-only, unauthenticated, and loopback by default.
+`src/artifacts/aggregate-index-builder.ts` is the pure projection layer: it
+combines validated discovery with current outcomes, keeping current outcomes
+in order and retaining historical-only projects.
+`ManifestDiscoveryResult.incomplete` signals that a manifest or discovery
+budget was reached. The runner skips publication and the builder rejects an
+incomplete discovery result.
+
+Aggregate validation permits 5,050 project rows (up to 5,000 historical IDs
+plus 50 configured projects); schema-v1 input remains limited to 50 projects.
+An empty `projects` array is valid and renders as an empty index.
+`writeAggregateDataPair` checks each staged file before replacement: both
+`aggregate-data.json` and `index.html` must be at most `MAX_STATIC_FILE_BYTES`
+(16 MiB). An oversized file rejects publication and preserves the previous pair.
+See [report pipeline](./report-pipeline.md) for the detailed index and
+recovery contract.
 
 ## Local secret-store subsystem
 
@@ -9026,22 +9227,22 @@ Phase 04 scope note: the optional `ConfigProjectEditor` toggle remains deferred;
 
 ## Context links
 - [Master contract and side-effect review](./plan.md) · [Selection](./phase-01-config-and-run-selection.md) · [Executor/API](./phase-02-parallel-auto-build-executor-and-api.md) · [UI](./phase-03-control-page-ui-refactor.md).
-- Existing suites: `tests/unit/run-type-config.spec.ts:94-152`; `tests/unit/control-run-api.spec.ts:9-48,107-228,230-298`; `tests/unit/control-run-executor-secrets.spec.ts:187-304`; `tests/unit/bounded-report-workers.spec.ts:76-165`; `tests/unit/control-atomic-components.spec.ts:413-519`; `tests/unit/control-hooks-and-types.spec.ts` (poller/editor behavior); `tests/e2e/control-page.spec.ts:1-166,198-229,697-895`; `tests/e2e/template-auto-build.spec.ts`; `package.json:11-27`.
+- Verification suites: `tests/unit/run-type-config.spec.ts:94-152`; `tests/unit/control-run-api.spec.ts:9-48,107-228,230-298`; `tests/unit/control-run-executor-secrets.spec.ts:187-304`; `tests/unit/bounded-report-workers.spec.ts:76-165`; `tests/unit/control-atomic-components.spec.ts:413-519`; `tests/unit/control-hooks-and-types.spec.ts`; `tests/e2e/control-page.spec.ts:1-166,198-229,693-984`; `tests/e2e/template-auto-build.spec.ts`; `package.json:11-27`.
 
 ## Overview
-**Date:** 2026-09-24 · **Priority:** P2 · **Status:** complete · **Effort:** 2h · **Depends on:** phases 01–03. Prove saved config → guarded API → bounded, irreversible side effects → polled per-project UI outcomes; remove obsolete dialog assertions and validate actual browser surface. Main owns one integrated release gate after all code is merged.
+**Date:** 2026-09-24 · **Priority:** P2 · **Status:** **DONE** · **Completed:** 2026-09-24 · **Effort:** 2h · **Depends on:** phases 01–03. Proved saved config → guarded API → bounded, irreversible side effects → polled per-project UI outcomes; replaced obsolete dialog/per-card interaction expectations and verified the current browser surface.
 
 ## Key Insights
-- API unit fixture currently has only one enabled build (`control-run-api.spec.ts:9-16`), so an omitted-ID 202 alone cannot prove all-enabled selection or parallelism. Add a second/third enabled build and a controlled injected executor, while keeping a disabled build and report project.
-- `bounded-report-workers.spec.ts:76-165` demonstrates deterministic deferred-promise barriers, active/max counters and reversed completion order. Reuse this test **shape** for build scheduler, not report browser/artifact implementation. Do not rely on wall-clock timing or live Jenkins.
-- `control-run-api.spec.ts:207-228` explicitly expects `MISSING_PROJECT_ID` for omitted auto-build ID; this is obsolete and must change. Keep its workerCount-before-ID precedence assertion. Existing `control-page.spec.ts:209-228,808-895` asserts modal and per-card submission; replace with immediate action and omitted-ID payload, not stale locator aliases.
-- Current `RunResultBox`/ExecutionSection tests at `control-atomic-components.spec.ts:413-519` assert old scalar output and `Report workers` label; preserve meaningful scalar/report behavior tests, replace label expectations and add a multi-outcome user-visible case. Delete any existing test that only pins removed dialog IDs/text.
+- Deterministic worker-pool tests use deferred barriers to prove concurrency bounds, configuration-order outcomes, sibling failure isolation, and aggregate failure without live Jenkins.
+- Executor tests cover all-enabled outcome ordering, report/build separation, and scalar compatibility; worker-pool tests separately prove concurrency bounds, failure isolation, and aggregate failure.
+- The E2E suite now drives the immediate all-enabled action, checks obsolete confirmation/per-card controls are absent, verifies dirty/save gating, and inspects a batch POST without `projectId` or `workerCount`.
+- Failure/redaction unit contracts and shared action/result component contracts remain covered independently of the successful browser batch fixture.
 
 ## Requirements
 1. Test selection boundaries (mixed modes, enabled/disabled, order, no eligible, targeted invalid ID), saved `reportWorkers` default/1/2/4 and reject invalid values through existing schema. Count is never accepted in POST, even on omitted-ID build request.
 2. Prove concurrency and failure isolation with deterministic barriers: two active slots before release at count 2, no third until one settles, max 2, completion order != result order; count 1 sequential; count 4 bound; all eligible IDs invoked exactly once. Inject rejection and unknown submission among successes, assert all siblings finish, `failed` aggregate, no retry, correct per-project state/error. One-project scalar fallback unchanged; no report executor/artifact path touched.
 3. Exercise API with CSRF/Origin/Host/content-type guards, ETag match/stale failure, active-run 409, valid targeted and omitted-ID 202, present malformed projectId 422, empty eligible set with zero build invocations, request `workerCount` override 422 precedence, per-project wait defaults/targeted overrides, no secret leakage in logs/result/stages/URLs. Distinguish acceptance from asynchronous terminal outcome on GET.
-4. Browser surface: click single immediate build button, no dialog/card trigger, observe POST lacking `projectId`/`workerCount`, polled batch status and one row per selected project (including partial failure); both buttons disabled on unsaved document, restore after successful Save/ETag. Shared Workers selector is 1–4, accessible, keyboard operable and persists per config; report action/link remains intact. Check desktop and mobile Axe/overflow.
+4. Browser surface: click the immediate build button, observe POST without `projectId`/`workerCount`, and render one outcome row per eligible project; the E2E batch fixture exercises success, while worker/API tests cover failure aggregation. Both actions disable on unsaved config and restore after Save/ETag. Shared Workers selector remains accessible, keyboard-operable, and persistent per config; report action/link remains intact. Check desktop/mobile Axe and overflow.
 5. Keep tests worth maintaining: only observable contracts that fail on plausible bugs, deterministic/offline isolated fixtures; no source-text asserts, same-path parameter padding or mocks that merely echo input. Scoped proof before Main's once-only project-wide `npm run test:release`.
 
 ## Architecture
@@ -9052,10 +9253,10 @@ Layer proofs from pure selector → injected pool/executor → loopback API with
 | --- | --- | --- |
 | Modify | `tests/unit/run-type-config.spec.ts:94-152` | Add all-enabled selector ordered/empty/mode behavior; retain targeted cases. |
 | Modify | `tests/unit/control-run-api.spec.ts:9-48,107-228,230-298` | Multi-build fixture, omitted-ID/targeted/malformed requests, workerCount precedence, one-active-run and polled results. |
-| Modify | `tests/unit/control-run-executor-secrets.spec.ts:187-304` | Saved count now applies to auto-build too; replace obsolete isolation assertion, redaction/ETag/no-report proof. |
-| Add narrowly scoped file if warranted | `tests/unit/auto-build-worker-pool.spec.ts` | Deterministic deferred barriers, order, bound, all-settle and unknown-side-effect no-retry contracts. |
+| Updated | `tests/unit/control-run-executor-secrets.spec.ts:187-304` | Verifies ordered multi-project auto-build outcomes without invoking report execution or allocating report result fields. |
+| Reuse/updated | `tests/unit/bounded-auto-build-workers.spec.ts` | Deferred concurrency barrier, configuration-order outcomes, worker failure isolation, and aggregate failure. |
 | Modify | `tests/unit/control-atomic-components.spec.ts:413-519` | Shared Workers label, both actions' disable semantics, batch results/scalar/report fallback. |
-| Modify | `tests/e2e/control-page.spec.ts:198-229,697-895` | Immediate action, no dialog/per-card button, saved worker count, request payload, polled multi-project rendering, accessibility. |
+| Updated | `tests/e2e/control-page.spec.ts:198-229,693-984` | Immediate action, absence of obsolete controls, saved worker count, request payload, successful batch rendering, accessibility. |
 | Verify unchanged unless breakage | `tests/e2e/template-auto-build.spec.ts`, `tests/unit/control-hooks-and-types.spec.ts` | Underlying Jenkins single-submit and hook optional-ID behavior. |
 | Post-implementation docs | `docs/architecture.md:439-468,541-603,692-712`, `docs/code-standards.md:99-114`, `docs/codebase-summary.md`, `docs/multi-project-configuration.md`, `README.md` | Update only affected current-behavior claims **after implementation**, not as part of planning. |
 
@@ -9063,17 +9264,17 @@ Layer proofs from pure selector → injected pool/executor → loopback API with
 1. First create deterministic 2–4 eligible/disabled/report fixture. Assert pure selector results; fix the obsolete omitted-projectId API expectation while retaining workerCount precedence and explicit blank/null/non-string validation. Keep targeted ID path assertions.
 2. Test scheduler with controllable promises and active counters. At workerCount 2, wait for first two starts, assert third not started; release second first and assert third starts, then release first/third in reverse. Verify max 2, config-order outcomes, exactly one invocation each. Add rejected/unknown path and verify siblings progress, failure aggregate, no repeat submission. Use finite test timeouts and `finally` barriers to avoid hangs.
 3. Test actual loopback API GET result of an omitted-ID run with mixed success/submitted/failure outcomes, saved count from ETag-matched config and per-project redacted fields (including stage text). Confirm stale ETag or zero eligible prevents executor invocation; active run rejects another request with 409; report target never appears in build calls; targeted result still has scalar compatibility. Recheck mutation gate with missing/invalid CSRF or origin and supplied workerCount.
-4. Replace UI modal tests: navigate local dashboard, verify both buttons and Workers select in Execute Actions, no `.btn-auto-build`/`#build-confirm-dialog`; change mode/enabled/count, Save and inspect `If-Match`/new ETag, click build once, inspect one POST with omitted projectId and workerCount, poll until terminal and inspect every per-project row/status/link/stage/error. Verify report path, raw JSON Apply/invalid, config switching/reload, Axe keyboard and responsive overflow.
-5. Run focused commands after each slice (below), then one actual browser smoke against local control server. Main runs `npm run test:release` **once**, after integration, not during sibling work. After smoke proves behavior, update stale architecture/operator docs; remove obsolete dialog asset/test references. Record actual pass/fail evidence without claiming fixture tests proved live Jenkins.
+4. Updated the local-dashboard browser journey for both actions and the shared Workers selector; verified no obsolete confirmation/per-card control, the saved-count/dirty/ETag path, one immediate batch POST omitting `projectId` and `workerCount`, and per-project results. Retained report, raw JSON, config switching, Axe, keyboard, and responsive checks.
+5. Main ran the once-only integrated `npm run test:release` after integration; relevant architecture/operator documentation was updated after verification. Results are recorded below. No fixture test is presented as live Jenkins proof.
 
 ## Actionable verification commands
 ```text
-node scripts/run-playwright.mjs playwright test tests/unit/run-type-config.spec.ts tests/unit/auto-build-worker-pool.spec.ts --config=playwright.unit.config.ts
+node scripts/run-playwright.mjs playwright test tests/unit/run-type-config.spec.ts tests/unit/bounded-auto-build-workers.spec.ts --config=playwright.unit.config.ts
 node scripts/run-playwright.mjs playwright test tests/unit/control-run-api.spec.ts tests/unit/control-run-executor-secrets.spec.ts tests/unit/control-atomic-components.spec.ts --config=playwright.unit.config.ts
 node scripts/run-playwright.mjs playwright test tests/e2e/control-page.spec.ts --config=playwright.control.config.ts
-npm run test:release   # Main only, once all phases land
+npm run test:release   # completed once after integration: 439/439 passed
 ```
-If the worker-pool case is placed in an existing file, omit the non-created filename from the first command. Browser smoke means actual local server launch/open/interact/inspect result and screenshots using the available browser runtime, not just SSR HTML.
+Browser smoke means actual local server launch/open/interact/inspect result and screenshots using the available browser runtime, not just SSR HTML.
 
 ## Todo list
 - [x] Pure selection, API and ETag/security/zero-target regression cases.
@@ -9081,21 +9282,26 @@ If the worker-pool case is placed in an existing file, omit the non-created file
 - [x] Update old modal/worker label assertions; exercise immediate browser action and multi-result UI.
 - [x] Perform once-only integrated gate, then documentation and obsolete reference cleanup.
 
+## Completion record
+- `npm run test:release`: **439/439 passed** (unit 399, template E2E 13, control E2E 20, report 5, WebKit 2); typecheck and production build passed.
+- E2E now verifies the shared `#select-workers` selector, dirty/save action gating, immediate `#btn-run-auto-build` execution, and per-project successful outcomes. Unit/API coverage verifies bounded concurrency, failure isolation and aggregate failure; the browser batch fixture itself is successful.
+- Code review approved at **9.3/10**. Its two non-blocking test-title/coverage observations are recorded in the [review](../reports/code-review-260924-1552-phase-04-testing-and-verification.md); verification details are in the [test report](../reports/phase04-tester-260924-1548-phase04-testing-and-verification.md).
+
 ## Success Criteria
 - Focused tests show observable 1–4 bound, no extra builds, accurate result order/status and no secret leakage; targeted API and report flow remain usable. Empty selection/stale config/invalid mutation/active conflict cause no unintended external side effect.
 - Actual dashboard displays the three controls (two buttons plus one select), sends one build batch request immediately, renders every outcome, and passes accessibility/responsive checks. Report output remains clickable; single build fallback still renders.
-- Main records once-only release-gate result; test fixtures leave no real Jenkins submissions or persistent user config changes. All affected caller/test/docs references migrated or intentionally unchanged.
+- Main recorded the once-only release-gate result above; fixtures leave no real Jenkins submissions or persistent user config changes. All affected caller/test/docs references migrated or intentionally unchanged.
 
 ## Risk Assessment
-- Fake executor tests could pass without observing real UI: pair API boundary and browser journey. Browser fixture checks submitted/failed states without contacting production Jenkins.
+- Pair deterministic worker/API failure proofs with the successful browser batch journey; injected executors and local fixtures do not contact production Jenkins.
 - Race-prone sleeps can give false concurrency proof: use deferred barriers/events and explicit maximum active count, isolated temp roots, guaranteed cleanup.
-- Some old tests enforce obsolete dialog and auto-build worker isolation; replace only when true behavior changed, never re-pin wording or suppress errors.
+- Replaced obsolete modal/per-card interaction expectations with current immediate-action and absent-control assertions; retain no-retry/error behavior at the worker boundary.
 
 ## Security Considerations
 - Verify no submitted run from invalid Host/Origin/Fetch Metadata/CSRF/content-type, stale ETag or no eligible build; no secret values in GET logs/results/stage/link text even with mixed outcomes. Preserve exact allowed-origin/form-action and single-POST protections in existing Jenkins fixture tests; never add automatic retry, live-service test credentials or unguarded external URLs.
 
-## Next steps
-- Main integrates phase changes, runs the release gate once and reports real evidence. Update relevant docs based on implemented behavior, not planned claims; keep this planning assignment restricted to the five requested plan files.
+## Completion
+- Phase 04 and the overall initiative are complete; the once-only release gate and documentation updates are recorded above. No live Jenkins or vendor-service execution is claimed.
 </file>
 
 <file path="plans/260924-1158-control-page-parallel-auto-build/plan.md">
@@ -9113,17 +9319,17 @@ created: 2026-09-24
 # Control Page Parallel Auto-Build — implementation plan
 
 ## Overview
-One enabled/mode-selected project belongs to exactly one action: **Generate Reports (All Enabled)** selects enabled `report` projects; **Trigger Auto Build (All Enabled)** selects enabled `auto-build` projects and submits immediately, without a confirmation dialog. The existing schema-v1 top-level `reportWorkers` (default 1; integer 1–4) remains the persisted, ETag-protected setting for **both** actions; its dashboard label is **Workers**. Phases 01–03 are complete; Phase 04 covers integrated verification.
+One enabled/mode-selected project belongs to exactly one action: **Generate Reports (All Enabled)** selects enabled `report` projects; **Trigger Auto Build (All Enabled)** selects enabled `auto-build` projects and submits immediately, without a confirmation dialog. The existing schema-v1 top-level `reportWorkers` (default 1; integer 1–4) remains the persisted, ETag-protected setting for **both** actions; its dashboard label is **Workers**. All four phases are complete.
 
 ## Phases and progress
-Overall status: **Complete** · **100%** (11 of 11 planned hours; 4 of 4 phases DONE).
+Overall status: **Complete** · **100%** (11 of 11 planned hours; 4 of 4 phases DONE; completed 2026-09-24).
 
 | Phase | Status / progress | Effort | Depends on | Deliverable |
 | --- | --- | ---: | --- | --- |
 | [01 Config and run selection](./phase-01-config-and-run-selection.md) | **DONE** · 100% · 2026-09-24 | 2h | none | Shared saved-count contract; `selectAutoBuildProjects` and single-ID preservation |
 | [02 Parallel executor and API](./phase-02-parallel-auto-build-executor-and-api.md) | **DONE** · 100% · 2026-09-24 | 4h | 01 | Optional-ID API, bounded build pool, ordered per-project outcomes |
 | [03 Control Page UI](./phase-03-control-page-ui-refactor.md) | **DONE** · 100% · 2026-09-24 | 3h | 02 result contract | Two immediate action buttons, shared Workers selector, dialog removal, multi-result view; review 9.2/10, 399/399 unit tests, typecheck/build passed ([review](../reports/code-review-260924-1459-phase-03-control-page-ui-refactor.md)) |
-| [04 Testing and verification](./phase-04-testing-and-verification.md) | **DONE** · 100% · 2026-09-24 | 2h | 01–03 | Focused behavioral proof, browser surface, once-only integrated gate |
+| [04 Testing and verification](./phase-04-testing-and-verification.md) | **DONE** · 100% · 2026-09-24 | 2h | 01–03 | Release gate 439/439; typecheck/build passed; review 9.3/10 approved ([test report](../reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../reports/code-review-260924-1552-phase-04-testing-and-verification.md)) |
 
 ## Preflight contract
 - Keep `runType: 'report' | 'auto-build'` per project, omitted mode ⇒ `report`; `enabled: false` excludes both. No schema version bump, new worker field, browser-local setting, request-level `workerCount`, per-project worker setting, or change to direct CLI report semantics.
@@ -9132,17 +9338,557 @@ Overall status: **Complete** · **100%** (11 of 11 planned hours; 4 of 4 phases 
 - Batch concurrency ≤ `min(reportWorkers, selected project count)`; preserve configuration order in result, isolate failures, never retry a possible Jenkins submission. Aggregate succeeds only when every outcome has `exitCode: 0`; otherwise fails. `record.result.buildProjects` contains per-project sanitized `AutoBuildRunOutcome`; single-target scalar result fields remain for existing clients.
 
 ## Side-effect review checklist (implementation gate)
-- [ ] Explicit all-enabled button conveys immediate Jenkins submissions; clicking once creates one control run, no per-project button or modal; no accidental submit on selection/config edit.
-- [ ] Validate config/ETag and select all targets before launching; disabled/report projects and empty build selection cause **zero** Jenkins POSTs; requests remain guarded, a second active run returns 409.
-- [ ] Bound independent browser/workflow lifecycles; one failure or indeterminate submission cannot cancel siblings or silently schedule a retry; no report artifact publication in build mode.
-- [ ] Redact secret-bearing logs, URLs, errors, project/stage text before persisting/serializing all batch outcomes; keep credential-free URL/origin/form validation at each underlying build invocation.
-- [ ] Update consumers/tests/docs referencing dialog, card button, `Report workers` label and previous auto-build isolation assertion; preserve existing report and targeted build contracts unless explicitly superseded here.
+- [x] Explicit all-enabled button conveys immediate Jenkins submissions; clicking once creates one control run, no per-project button or modal; no accidental submit on selection/config edit.
+- [x] Validate config/ETag and select all targets before launching; disabled/report projects and empty build selection cause **zero** Jenkins POSTs; requests remain guarded, a second active run returns 409.
+- [x] Bound independent browser/workflow lifecycles; one failure or indeterminate submission cannot cancel siblings or silently schedule a retry; no report artifact publication in build mode.
+- [x] Redact secret-bearing logs, URLs, errors, project/stage text before persisting/serializing all batch outcomes; keep credential-free URL/origin/form validation at each underlying build invocation.
+- [x] Update consumers/tests/docs referencing dialog, card button, `Report workers` label and previous auto-build isolation assertion; preserve existing report and targeted build contracts unless explicitly superseded here.
 
 ## Design choice and verification boundary
-Reuse the fixed-loop/indexed-outcome pattern of `src/project/report-worker-pool.ts:26-75`; do **not** feed auto-build into that report-specific browser/artifact runner. Use existing `runAutoBuildProject` per project so launch/context/deadline/cleanup and no-retry submission safeguards remain intact. A small build-specific pool may live under `src/project/` if needed to keep production modules below 200 lines. Scope tests to observable selection, bounded scheduling, partial failure, API/security, saved count, UI interaction/result display; Main runs the project-wide release gate once after integration. After implementation, align relevant architecture/user docs; do not edit source or docs in this planning task.
+Reuse the fixed-loop/indexed-outcome pattern of `src/project/report-worker-pool.ts:26-75`; do **not** feed auto-build into that report-specific browser/artifact runner. Use existing `runAutoBuildProject` per project so launch/context/deadline/cleanup and no-retry submission safeguards remain intact. Phase 04 completed the observable selection, bounded scheduling, partial-failure, API/security, saved-count and UI proofs; the once-only integrated release gate passed 439/439 and relevant docs now reflect shipped behavior.
 
 ## Unresolved questions
 None; preserve targeted scalar responses and use the batch contract above for omitted-ID runs.
+</file>
+
+<file path="plans/260924-2019-persistent-project-report-management/cmd-plan.md">
+# Implementation phase tracker
+
+Plan: [Persistent project report management](./plan.md). Date: 2026-09-24. Total: 16h. Status: pending; no implementation started.
+
+| Phase | Status | Progress | Effort | Dependency |
+| --- | --- | --- | --- | --- |
+| [01 — Persistent aggregate index builder](./phase-01-persistent-aggregate-index-builder.md) | Pending | 0% | 4h | Existing manifest discovery/publisher |
+| [02 — Control reports DELETE API](./phase-02-control-reports-delete-api.md) | Pending | 0% | 5h | Phase 01 builder; shared report-root lock |
+| [03 — Report management page navigation/deletion](./phase-03-control-ui-navigation-and-deletion.md) | Pending | 0% | 3h | Phase 02 HTTP contract; Phase 01 index JSON |
+| [04 — Verification and caller migration](./phase-04-verification-and-caller-migration.md) | Pending | 0% | 4h | Integrated phases 01–03 |
+
+## Acceptance gate
+
+- Report index retains validated reports across subsequent runs/config switches, including unconfigured history; malformed artifacts cannot become rows.
+- DELETE is loopback-only, CSRF-gated, locked, project-contained, symlink-safe; confirms removed count and republished pair. No config/staging/assets/sibling changes.
+- Dashboard links to `/reports/index.html`; control mode serves a CSRF-bearing management page with per-project confirmed deletion there. The saved index and report-only mode stay static/read-only.
+- Focused unit/API tests and Chromium/WebKit browser scenarios pass; full release gate after integration only. See phase 04.
+</file>
+
+<file path="plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md">
+# Phase 01 — Persistent aggregate index builder
+
+## Context links
+
+- [Plan](./plan.md) · [Backend research](./research/researcher-01-report.md) · [Architecture, artifact lifecycle](../../docs/architecture.md) · [Code standards](../../docs/code-standards.md)
+- Existing: `src/runner.ts`, `src/artifacts/aggregate-manifest-reader.ts`, `src/artifacts/aggregate-report-publisher.ts`, `src/artifacts/result-validation.ts`, `src/reporting/aggregate-report-renderer.ts`, `src/result-types.ts`.
+
+## Overview
+
+- **Date:** 2026-09-24. **Description:** Build one all-project aggregate from validated retained manifests plus current outcomes; use same builder from runner and deletion API. **Priority:** P2. **Implementation status:** Done (100%; completed 2026-09-24). **Review status:** approved.
+
+## Key Insights
+
+- `discoverRunManifests` already validates project/run identities and referenced artifacts; it returns bounded diagnostics and at most 5,000 manifests. Runner currently discovers them but `outcomes.map(aggregateSummary)` hides historical-only IDs and warns they were ignored.
+- `AggregateProjectSummary` permits missing `runId`/`reportPath`, so a configured outcome without a validated run can be shown without inventing a link. Historical-only names/states must come from validated manifest, not current config or old aggregate JSON.
+- `result-validation.ts` currently caps aggregate projects at **50**, while validated history across configurations can exceed 50; reconcile that bound with the discovery cap before asserting all-project coverage.
+- Static HTML says “configured projects”; revise index copy/empty state to refer to retained/validated reports. Keep `REPORT_CSP` scriptless.
+- `validAggregateProject` also bounds IDs to 80 characters while `SAFE_ID` accepts up to 81 (one initial character + 80); align validator with the actual shared ID contract, not a new regex.
+- **Empty-root blocker:** `isValidAggregateResult` currently rejects `projects.length === 0`; deleting the last retained project must still publish a valid empty index. Allow zero rows while retaining schema/timestamp/warning validation.
+
+## Requirements
+
+### Functional
+
+1. Every retained validated project's latest state and complete bounded history remains in `reports/aggregate-data.json` and `reports/index.html` after each report run, even when absent from the newly selected config. Incomplete discovery must not publish a partial replacement index.
+2. Active outcome overrides that project's displayed state/name/current run if present; historical runs derive only from discovery. A current failed outcome with no validated report has no fabricated links; historical-only state/name/current report derive from latest validated manifest.
+3. Malformed/unvalidated manifests contribute warnings, never rows/links; run-less configured projects do not crash or emit fake historical runs. A pure history rebuild (deletion path) excludes projects without validated history.
+4. Preserve deterministic project order: active projects in outcome order, then historical-only IDs sorted; sort each project's runs latest-first by validated `observedAt`, with stable `runId` tie-break. Pick current historical state/name from that first run, never filesystem discovery order.
+
+### Non-functional
+
+- No second aggregate schema/store; use `writeAggregateDataPair` through current writer or directly. O(projects + runs) grouping rather than rescanning history per outcome. Keep 5,000-manifest discovery and 16 MiB static-serving bounds; a typed incomplete-discovery signal and prepublication byte check must fail without replacing the previous pair instead of silently omitting projects/runs. Sanitize warnings.
+- New TS module kebab-case, <200 lines; any modified oversized runner should shrink by extracting existing aggregate logic. ESM `.js` imports and strict types.
+
+## Architecture
+
+### System design
+
+- Pure `src/artifacts/aggregate-index-builder.ts` receives `ManifestDiscoveryResult`, optional ordered `ProjectOutcome[]`, timestamp, and caller warnings; returns `AggregateReportResult`. No filesystem I/O or config coupling inside builder. Adjust validation cap only to the bounded discoverable maximum and preserve remaining per-project/total limits.
+
+### Component interactions
+
+- Runner holds report-root lock → `discoverRunManifests` → builder(discovery, outcomes, warnings) → existing pair publisher → return unchanged `RunnerExecutionResult` structure. Deletion later calls same builder(discovery, empty outcomes, diagnostics) under same lock.
+
+### Data flow
+- Validated `project.id`/`name`, `run.runId`/`observedAt`, `state`, optional safe job URL, sanitized warnings, optional validated report path → grouped runs → latest metadata/links → merge active outcomes → aggregate validation → journaled JSON+HTML pair.
+
+## Related code files
+
+- **Modify:** `src/runner.ts` (remove local historical/summary logic, call builder); `src/artifacts/aggregate-manifest-reader.ts` and `src/artifacts/artifact-manifest.ts` (typed complete/incomplete discovery result, migrate callers); `src/artifacts/aggregate-report-publisher.ts` (preflight both staged output sizes against static serving bound before replacing the pair); `src/artifacts/result-validation.ts` (raise 50-project ceiling consistently with discovery, accept zero-project aggregate, align aggregate project-ID length with `SAFE_ID`, preserve 5,000 total run bound); `src/reporting/aggregate-report-renderer.ts` (accurate index wording); relevant existing unit tests asserting old outcome-only behavior.
+- **Create:** `src/artifacts/aggregate-index-builder.ts` (pure common builder, typed entrypoint). No new aggregate snapshot/database.
+- **Delete:** obsolete local `HistoricalRun`/`aggregateSummary` helper and ignored-unconfigured warning branch in `src/runner.ts`; no unrelated files.
+
+## Implementation Steps
+
+1. Trace imports/callers of `runConfiguredProjects`, `writeAggregateData`, `writeAggregateDataPair`, and aggregate validator. Record old outcome-only assumptions in existing tests before cutover.
+2. Move historical-run projection and URL-derived job ID/branch sanitization from `runner.ts` into builder. Group `discovery.manifests` by validated project ID, map each run exactly once; preserve validated optional `reportPath` only, normalized relative manifest links, bounded warnings.
+3. Order each project's runs newest-first from validated `manifest.run.observedAt` with stable `runId` tie-break; choose latest project name/state/current `runId` and optional report link. When no report exists for latest, omit `reportPath` rather than pointing to an older run as “current”; history still lists older valid links.
+4. Overlay each active outcome on its matching historical row or add ephemeral current-only row. Keep its own failure/warnings, only choose a current link when the active `runId` has a validated linked manifest; do not drop non-active historical IDs.
+5. Reconcile `MAX_AGGREGATE_PROJECTS` (now 50), aggregate project-ID length (now 80 vs `SAFE_ID`'s 81), and output limits against 5,000 discovered runs plus at most 50 active outcomes; use explicit bounds accommodating both. Expose a typed incomplete flag when directory, artifact-read, or manifest count budget is exhausted; runner must surface a bounded error and keep the prior pair instead of publishing incomplete history. Check staged JSON/HTML byte sizes against `MAX_STATIC_FILE_BYTES` before replacing existing pair; do not truncate. Permit an empty `projects` array so deleting the last retained project publishes a valid JSON+HTML pair. Preserve schema v3 and sanitized warnings.
+6. Integrate builder into runner inside existing root lock, replacing outcome-only mapping and “ignored historical” warning. Preserve outcome ordering, exit code and `RunnerExecutionResult` fields. Update renderer's count/empty wording; keep report pages static.
+7. Add targeted behavioral coverage under phase 04 for config switch, historical-only, failed/current-only, latest-run selection, invalid manifests and bounds.
+
+## Todo list
+
+- [x] Extract pure grouped builder and stable latest-run selection.
+- [x] Integrate runner and raise aggregate project bound safely.
+- [x] Correct index copy and migrate obsolete outcome-only expectations.
+- [x] Prove output data/HTML persist across runs/config changes.
+
+## Success Criteria
+
+- **Definition of done:** Config A reports remain visible after config B runs; valid unconfigured IDs persist; active failed/no-manifest project has no fake report link; malformed manifests are warned/skipped; generated pair passes existing validation.
+- **Validation methods:** isolated temp-root runner smoke on two distinct configs with injected browser/project execution, inspect resulting JSON and HTML, then targeted aggregate/runner unit cases. Phase 04 owns final cross-project suite.
+
+## Risk Assessment
+
+- **50-row schema cap vs history:** widen bounded cap explicitly; test >50 IDs without allowing unbounded output.
+- **Latest-run ambiguity:** use validated timestamp then stable run ID and test ties.
+- **Current failure without manifest:** keep ephemeral row only in active-run result; do not invent deletion eligibility or stale links.
+- **Discovery/serving limits:** client paging does not expand 5,000-manifest or 16 MiB file ceilings. Fail publication explicitly with old pair intact if discovery is incomplete or outputs cannot be served. Preserve new run artifacts on disk for later capacity work.
+
+## Security Considerations
+
+- **Auth/authorization:** pure builder and static index perform no mutation; write remains under caller's report-root lock. Deletion authorization belongs to phase 02, not this module.
+- **Data protection:** only validated manifest-derived paths, escaped renderer output, sanitized persisted warnings; no raw diagnostic/credentials or filesystem path from manifest used for actions.
+
+## Next steps
+
+- Phase 02 consumes builder's history-only mode for locked refresh; phase 03 consumes resulting root index and aggregate JSON; phase 04 verifies cutover end to end.
+</file>
+
+<file path="plans/260924-2019-persistent-project-report-management/phase-02-control-reports-delete-api.md">
+# Phase 02 — Guarded Control reports DELETE API
+
+## Context links
+
+- [Plan](./plan.md) · [Phase 01 shared builder](./phase-01-persistent-aggregate-index-builder.md) · [Backend research](./research/researcher-01-report.md) · [Architecture, deletion](../../docs/architecture.md) · [Code standards](../../docs/code-standards.md)
+- Existing: `src/reporting/report-server-control.ts`, `report-server-control-security.ts`, `report-server-control-api.ts`, `report-server-json.ts`; `src/artifacts/artifact-paths.ts`, `report-root-lock-owner.ts`, `aggregate-manifest-reader.ts`, `aggregate-report-publisher.ts`.
+
+## Overview
+
+- **Date:** 2026-09-24. **Description:** Add loopback-only `DELETE /api/reports/projects/:projectId` with preflight security, shared root lock, guarded subtree removal, and root index refresh. **Priority:** P2. **Implementation status:** pending. **Review status:** not reviewed.
+
+## Key Insights
+
+- Existing router validates Host for every request and sends `/reports/*` to GET/HEAD-only file handler. Route deletion under `/api/*`, never report file routing.
+- `validateMutationRequest` already enforces Host, HTTP(S) same-origin Origin, accepted Fetch Metadata, timing-safe CSRF, and JSON media type or bodyless DELETE. `ArtifactPaths.acquireReportRootLock({ waitMs: 0 })` can reject lock contention promptly with the known lock error; do not mistake unsafe/permission failures for ordinary contention.
+- Actual `SAFE_ID` is `/^[a-z0-9][a-z0-9-_]{0,80}$/u` in `src/artifacts/artifact-identity.ts`. In addition reject reserved root names/prefixes; `assets` currently passes SAFE_ID.
+- Pair publication is journaled/rollback-aware, but project deletion plus pair publication is not atomic. Never claim an irreversible subtree was restored after a partial failure.
+
+## Requirements
+
+### Functional
+
+1. On valid deletion, remove the entire `reports/<projectId>/` subtree after safety preflight, including invalid/unvalidated files alongside valid runs; rediscover valid remaining manifests and publish `aggregate-data.json` plus `index.html` via `writeAggregateDataPair`. Reply HTTP 200 `{ "success": true, "projectId": "id", "deletedRunsCount": N }` (`N` counts only validated discovered runs, not every removed file).
+2. Missing/previously deleted/no validated retained reports → 404; malformed/unsafe ID → 400; live lock contention → 409; removal/refresh failure → sanitized 500 diagnostic. Unknown method on recognized single-project route → 405 with `Allow: DELETE`.
+3. Keep `config/*.json`, sibling project trees, `reports/assets/`, `.report-root-lock`, staging root and unrelated root files unchanged. `serve:report` remains GET/HEAD-only.
+4. Partial deletion: under same lock attempt rediscovery and publication from whatever validated manifests remain, even if removal fails; preserve primary error/diagnostic and return 500, never success.
+
+### Non-functional
+
+- Acquire lock before *any* filesystem inspection/inventory/removal/discovery; hold through recovery and pair publication, release in `finally`. Avoid long request queue via nonblocking lock acquisition. Inventory and deletion bounded, fail closed on unsafe entries.
+- Keep handler and any extracted I/O guard module kebab-case and each new/materially changed production TS file under 200 lines; reuse policy and publisher, avoid private ad hoc lock or duplicate index builder.
+
+## Architecture
+
+### System design
+
+- `handleControlRequest` routes exact one-segment `/api/reports/projects/:projectId` to new `src/reporting/report-server-control-reports-api.ts`; isolate filesystem safety in `src/artifacts/report-project-deletion.ts` if necessary for size/ownership. Route uses existing `ControlRouterContext` (`reportRoot`, `host`, `port`, `csrfToken`). No new public server mode or report-file mutation.
+
+### Component interactions
+
+- Request → global Host gate → route/method → `validateMutationRequest` → decode and validate ID → `new ArtifactPaths(context.reportRoot).acquireReportRootLock({waitMs:0})` → canonical root/child preflight + validated manifest inventory → remove exact direct child → rediscover → phase 01 builder(history-only) → `writeAggregateDataPair` → JSON response; always release lock.
+
+### Data flow
+
+- URL segment alone selects direct-child path; manifests prove eligibility/count but never supply target path. Discovery's validated metadata powers regenerated rows; publisher stages and journals only root JSON/HTML. Every error response is bounded/sanitized through existing `sendError` and no-cache helpers.
+
+## Related code files
+
+- **Modify:** `src/reporting/report-server-control.ts` (exact API routing); `src/artifacts/report-root-lock-owner.ts` only if a small typed lock-contention signal is needed (avoid touching other lock semantics); existing security/report server tests for route and mode boundaries.
+- **Create:** `src/reporting/report-server-control-reports-api.ts` (request contract and orchestration), `src/artifacts/report-project-deletion.ts` (contained symlink-safe preflight/removal if handler would exceed 200 lines). Both kebab-case.
+- **Delete:** none; do not replace `src/artifacts/aggregate-report-publisher.ts` or `src/reporting/report-server-files.ts`.
+
+## Implementation Steps
+
+1. Register exact prefix + exactly one encoded segment under `/api/`; reject empty, duplicate slash, suffixes and malformed percent-encoding (400). Decode exactly once; reject residual encoded separators/double-encoding, dot traversal, null bytes, IDs not matching actual `SAFE_ID`, `assets`, `.report-root-lock`, `.tmp*`, `.bak*` and other root-internal names. Reject unsupported method with 405/Allow. Apply mutation gate before filesystem work.
+2. Enforce no body or bounded JSON object with no recognized payload; do not silently ignore an unbounded/chunked body. Existing gate accepts bodyless DELETE and JSON; use `readBoundedJsonBody` for a supplied JSON payload, reject nonempty/invalid body with 400/413. Supply no `Content-Type` for browser's bodyless DELETE.
+3. Acquire shared root lock with short/nonblocking wait **before** calling `assertReportRoot`, `lstat`, discovery or `recoverAggregatePublication`. Differentiate known contention from unsafe lock, permission and I/O errors; map only actual contention to 409.
+4. Under lock, recover outstanding aggregate publication, assert canonical existing root, resolve ID as a strict single direct child via `path.relative`, `lstat` child as real directory (not link), compare realpath/identity and require strict containment. Preflight descendants recursively without following symlinks; reject symlinked/reparse-point/nonconforming entries and unsafe mutation race; enforce count/byte/depth budgets (align existing orphan-cleanup limits where suitable). Do not inspect a symlink target.
+5. Discover validated manifests with the phase 01 typed completeness signal; refuse delete if discovery is incomplete. Require ≥1 validated manifest for ID before deletion; otherwise 404 even if an empty/malformed-only project directory exists. Count that project's validated runs but preflight and remove its entire safely contained directory, including invalid files alongside those runs.
+6. After preflight, recheck canonical child identity and remove only its directory; use no-follow checks as close as possible to removal and reject unexpected changes. Rely on report-root ACLs to prevent adversarial external writers while the cooperative lock is held; do not claim a path-based recursive deletion provides a filesystem-atomic defense against a hostile concurrent writer.
+7. Rediscover under same lock, build history-only aggregate with timestamp and sanitized discovery warnings, and call `writeAggregateDataPair`. If removal or publication fails, attempt publisher recovery and refresh from surviving valid manifests while still locked; log/return bounded diagnostic with 500. If refresh also fails, preserve recoverable journal state for next runner and report that index may require recovery. Never re-delete or retry irreversible removal automatically.
+8. Return success only after confirmed deletion and published refreshed pair; release lock in `finally`. Do not change config, separate staging, CSS/assets, secrets or read-only server routes.
+
+## Todo list
+
+- [ ] Wire exact DELETE route, method/CSRF/body guards, stable JSON/error contract.
+- [ ] Implement locked canonical path/symlink preflight and project-only removal.
+- [ ] Rebuild pair using shared builder/publisher under same lock.
+- [ ] Handle contention, 404, partial failure and bounded diagnostics; test protected neighbors.
+
+## Success Criteria
+
+- **Definition of done:** A valid configured or unconfigured retained project's whole directory is deleted (including adjacent invalid files after safe preflight); response count matches validated pre-delete runs, remaining index files agree, other paths unchanged; incomplete discovery/missing or invalid requests never mutate disk; concurrent runner/delete uses one root lock and 409 on contention.
+- **Validation methods:** in-process loopback Control server + isolated temp roots; assert HTTP status/body and filesystem snapshots, lock held through refresh, journal fault injection and recovery, GET/HEAD-only report mode. Detailed matrix in phase 04.
+
+## Risk Assessment
+
+- **Symlink/junction/TOCTOU:** canonical root + `lstat` every entry, no-follow traversal, identity recheck, locked cooperative writers and protected filesystem ACLs; fail closed on unsafe entries, especially Windows reparse points.
+- **Partial removal versus pair rollback:** project tree is not journaled; refresh remaining valid history and return 500 on any failure. Next runner's recovery repairs interrupted pair if immediate refresh fails.
+- **Bad count on truncated discovery:** if discovery budgets exhaust, refuse delete (500/diagnostic) rather than deleting unknown runs while reporting inaccurate count.
+- **Large tree:** bounded preflight before irreversible removal; no silent truncation or unbounded walk.
+
+## Security Considerations
+
+- **Auth/authorization:** loopback binding plus existing Host/Origin/Fetch Metadata/timing-safe CSRF mutation gate; this is local operator intent, not user-account auth. Never expose DELETE via report-only server or `/reports/*`.
+- **Data protection:** reject encoded traversal, reserved root names, links and noncanonical paths; never derive target from manifest, send raw filesystem errors/secret values, or delete outside the selected subtree. Protect report root from untrusted local writers by OS ACLs.
+
+## Next steps
+
+- Phase 03 uses the JSON contract and 404/409 error meanings; phase 04 exercises security, synchronization and recovery on Windows and CI platforms.
+</file>
+
+<file path="plans/260924-2019-persistent-project-report-management/phase-03-control-ui-navigation-and-deletion.md">
+# Phase 03 — Report management page navigation and deletion
+
+## Context links
+
+- [Plan](./plan.md) · [Phase 01 aggregate JSON](./phase-01-persistent-aggregate-index-builder.md) · [Phase 02 DELETE contract](./phase-02-control-reports-delete-api.md) · [Frontend research](./research/researcher-02-report.md) · [Architecture, UI](../../docs/architecture.md)
+- Existing UI/server: `src/reporting/control-page/App.tsx`, `pages/DashboardPage.tsx`, `components/organisms/{HeaderBar,CredentialsDialog}.tsx`, `hooks/useControlApi.ts`, `src/reporting/report-server-control.ts`, `src/reporting/report-server-control-page.ts`.
+
+## Overview
+
+- **Date:** 2026-09-24. **Description:** Navigate from dashboard to an interactive report management page at `/reports/index.html` in control mode; allow confirmed deletion of any retained project on that page. **Priority:** P2. **Implementation status:** pending. **Review status:** not reviewed.
+
+## Key Insights
+
+- The persisted `reports/index.html` is scriptless under `REPORT_CSP`; do not embed a mutation token/script into that file or relax report-only serving. In control mode, intercept the **exact** `/reports/index.html` route before `/reports/*` static dispatch and serve the existing CSRF-bearing React HTML shell with `CONTROL_CSP`; `/reports/<id>/<run>/...` remains immutable static evidence.
+- `App.tsx` currently renders only `DashboardPage`. Path-based selection for the one management route avoids a new router dependency. Reuse the control bundle, existing `useControlApi` for DELETE, Button and Radix Dialog patterns.
+- The report management page reads published `/reports/aggregate-data.json` directly (same origin), independent of active config. Historical-only IDs stay manageable after config changes. Treat absent index as a true empty state, but surface invalid/missing inventory clearly.
+- This changes control-mode rendering of `/reports/index.html`; verify existing consumers expecting static markup there and retain their observable heading, project links and history table in the React view. Report-only mode and the persisted HTML remain unchanged.
+
+## Requirements
+
+### Functional
+
+1. Dashboard header links to `/reports/index.html` in the same tab regardless of config state. Management page has a visible link back to `/`.
+2. At `/reports/index.html` in control mode, list **all** retained validated projects from published aggregate JSON, including those absent from selected config, with name/ID, latest report link (if valid), historical run count and a separate **Delete Reports** action per project. Paginate each project's newest-first runs independently, 20 per page, with accessible previous/next and page count; never truncate the underlying inventory.
+3. Confirmation explicitly states all historical report files for the named project are permanently removed while project configuration and other projects remain. Cancel leaves disk and UI unchanged.
+4. Bodyless CSRF-bearing DELETE to `/api/reports/projects/${encodeURIComponent(projectId)}` displays pending/error/404/409 feedback and prevents duplicate submission. On success, reload aggregate JSON and update rows/counts without losing page location; deleting the last project shows a real empty state.
+5. No destructive UI in persisted static HTML. `serve:report` remains read-only; the React management page is control-mode only. If no index has been generated yet, show no projects and do not expose DELETE for guessed IDs.
+
+### Non-functional
+
+- Accessible labeled Radix dialog with focus trap/restore, cancel/confirm, error announcement and disabled confirm while pending. Links use existing safe relative URL policy and React text escaping, not untrusted URL string concatenation.
+- No duplicate report store, bundle, router, fetch/CSRF implementation, or new auth scheme. Client pagination slices the already-published bounded `runs` array and limits rendered DOM only; it does not relax the 5,000-manifest discovery or 16 MiB static file cap.
+
+## Architecture
+
+### System design
+
+- Special-case control `GET`/`HEAD /reports/index.html` before report subtree dispatch. Return matching control-shell headers and content length for both, but no body for HEAD. Call `renderControlPageHtml(context.csrfToken)` and apply control headers; existing root `/` and `/assets/control-page.{js,css}` remain available. In React `App`, choose `ReportManagementPage` only when `location.pathname === '/reports/index.html'`, otherwise Dashboard. Report-only and all other static file routes retain existing GET/HEAD semantics.
+
+### Component interactions
+
+- Dashboard `HeaderBar` anchor → control management route → `ReportManagementPage` loads static published JSON → project rows and validated relative report links → shared confirmation dialog → `useControlApi` DELETE → API republishes pair → page refreshes inventory. Back link restores dashboard; no config mutation.
+
+### Data flow
+
+- Aggregate project ID/name/state/runs feed rendering only; DELETE request carries encoded ID, and backend independently checks CSRF, validity, lock and filesystem. JSON cache policy remains no-store. Management route never puts token into persisted `reports/index.html`.
+
+## Related code files
+
+- **Modify:** `src/reporting/report-server-control.ts` (exact control-mode route before `/reports/` branch); `src/reporting/control-page/App.tsx` (path selection); `src/reporting/control-page/components/organisms/HeaderBar.tsx` (Reports anchor); `src/reporting/control-page/types/component-contracts.ts` only if actual shared props require it.
+- **Create:** `src/reporting/control-page/pages/ReportManagementPage.tsx` (existing PascalCase component convention); `src/reporting/control-page/components/organisms/DeleteReportsConfirmationDialog.tsx` and a small `hooks/useDeleteReports.ts` only if needed to keep page under repo size target. Reuse existing control bundle and API hook.
+- **Delete:** no obsolete dashboard deletion UI (none exists); do not modify static `src/reporting/project-report-renderer.ts` to carry scripts/tokens.
+
+## Implementation Steps
+
+1. Add a visible native Reports link in dashboard header; keep active-config state unchanged. Add explicit back-to-dashboard navigation to management page.
+2. Register control-only exact GET/HEAD `/reports/index.html` handler before the static `/reports/*` branch using `renderControlPageHtml` and `writeControlSecurityHeaders`. HEAD returns matching metadata but no body. Keep Host validation; preserve static file behavior for all other routes and entire `serve:report` mode.
+3. Select `ReportManagementPage` in `App` based on exact pathname, no additional router. Fetch `/reports/aggregate-data.json` with no-store; handle 404 before first run, valid empty `projects: []`, corrupt JSON and failed fetch distinctly.
+4. Render persisted aggregate projects and historical run links using safe path helpers; display warnings/count/latest state and allow per-project deletion only for verified nonempty historical entries. For each project store its own page index, slice 20 newest-first runs, show accessible previous/next and "Page X of Y" state, reset/clamp the page after refresh/deletion and hide paging controls when ≤20. Never use current config cards as management inventory.
+5. Build a dedicated Radix confirmation dialog with clear permanent-delete warning, cancel, labeled danger confirm, focus and error state. Use `requestJson<{success:true; projectId:string; deletedRunsCount:number}>` and bodyless DELETE, no content-type; block second click while pending.
+6. On success refetch aggregate and show confirmation/count. On 404 refresh stale inventory; on 409 show busy/retry-manually hint; on 500 show failure without assuming disk rollback. Refresh after page revisit; preserve linkable immutable run URLs.
+7. Keep page/module sizes reasonable and match existing Button/Dialog styling; phase 04 tests actual browser, persisted/static vs control view, success/error/empty states and disk side effects.
+
+## Todo list
+
+- [ ] Add control-only report management route and exact React path selection.
+- [ ] Add dashboard Reports link and management back link; render full validated inventory.
+- [ ] Add per-project danger action, accessible confirmation and guarded DELETE flow.
+- [ ] Page historical run lists independently by 20, including last/empty page transitions; refresh surviving history and verify read-only modes stay intact.
+
+## Success Criteria
+
+- Operator clicks Reports in control header, reaches `/reports/index.html`, sees projects retained across configs, pages through each project's historical runs 20 at a time, and deletes exactly one project on that page after confirmation. Index JSON/HTML on disk refresh; project config and sibling reports unchanged. Report-only mode serves scriptless saved index with no action.
+- **Validation:** Real control server browser flow (Chromium/WebKit) on isolated report root plus direct GET/HEAD and CSP checks in control/report modes, API/lock tests and disk inspection in phase 04.
+
+## Risk Assessment
+
+- **CSP mismatch:** control route must serve control headers and CSRF-bearing shell, while report-only and immutable artifacts stay report-CSP static. Test every route boundary and ensure no token is serialized to persisted reports.
+- **Stale/invalid aggregate:** empty only on true not-yet-created index; no DELETE enabled for failed parsing or stale guess. API lock/404 remains authoritative.
+- **Overlarge UI:** bounded index and browser rendering; use existing component patterns, no duplicate config-card inventory.
+
+## Security Considerations
+
+- Control origin, Host gate, CSRF, fetch metadata and Origin guard remain mandatory for DELETE; UI disabling is not authorization. React escapes project labels, links use safe relative-path helper, IDs are encoded only for transport. No automatic DELETE retry.
+
+## Next steps
+
+- Phase 04 verifies persisted static snapshot and live control management page against same retained inventory, deletion flows, keyboard behavior and report-only isolation.
+</file>
+
+<file path="plans/260924-2019-persistent-project-report-management/phase-04-verification-and-caller-migration.md">
+# Phase 04 — Verification and caller migration
+
+## Context links
+
+- [Plan](./plan.md) · [Index phase](./phase-01-persistent-aggregate-index-builder.md) · [API phase](./phase-02-control-reports-delete-api.md) · [UI phase](./phase-03-control-ui-navigation-and-deletion.md)
+- [Backend research](./research/researcher-01-report.md) · [Frontend research](./research/researcher-02-report.md) · [Release gates](../../docs/release-gates.md) · [Code standards](../../docs/code-standards.md)
+- Existing tests: `tests/unit/{sequential-runner,reporting-output,artifact-paths,artifact-lifecycle,report-root-lock-owner,report-server,control-assets-routing,control-secrets-security}.spec.ts`, `tests/e2e/{control-page,generated-report,multi-project-report-flow}.spec.ts`.
+
+## Overview
+
+- **Date:** 2026-09-24. **Description:** Migrate consumers to persistent index and DELETE contracts, prove user-visible behavior and safety with focused unit/API/browser tests, then run final integrated release gates. **Priority:** P2. **Implementation status:** pending. **Review status:** not reviewed.
+
+## Key Insights
+
+- `npm run serve:control` builds and runs `.runner-build/reporting/report-server-cli.js --control`; same server serves `/reports/*`. `serve:report` is a separate read-only mode.
+- Existing tests assert generated aggregate and root pair rollback, but no end-to-end switch between configs or deletion. `tests/unit/reporting-output.spec.ts` and `sequential-runner.spec.ts` are primary contract migration points.
+- Persisted index has no JS (`REPORT_CSP`), while control mode serves the exact `/reports/index.html` as a CSRF-bearing React management route (`CONTROL_CSP`). Browser delete flow must exercise this page and observe actual disk state, not merely mocked fetch success.
+- Project-wide validation is deferred until all integration changes land; narrow behavioral proofs first. Remove obsolete outcome-only/wording tests rather than pin old behavior.
+
+## Requirements
+
+### Functional
+
+1. Verify persistent valid rows and links after successive disjoint config runs; newest-first history, >50 historical IDs, zero remaining projects, malformed runs excluded with bounded warnings. On incomplete discovery or >16 MiB staged output, verify old pair is not silently replaced and project files stay on disk.
+2. Verify API status/side-effect matrix: 200 and validated `deletedRunsCount`; 400 invalid ID; 403 Host/Origin/Fetch Metadata/CSRF; 415 wrong media type; 405 unsupported method; 404 no history/repeated delete; 409 live lock; 500 partial deletion or publication failure with recovery attempt. All unaffected trees/config/staging/assets stay byte-for-byte intact.
+3. Verify browser navigation to `/reports/index.html`, per-project 20-run pagination independently for multiple projects (including 0/20/21, last/first page and post-refresh clamps), historical links and confirmed delete **on that page**, keyboard/focus, loading/error/empty states, configured and unconfigured history deletion, plus static read-only report mode.
+4. Migrate all callers/tests/docs referring to outcome-only aggregate or “configured project” index; preserve report runner return semantics and no auto-build report writes.
+
+### Non-functional
+
+- Deterministic temp roots, scoped fault injection and in-process loopback servers; no real Jenkins, external secrets, or user artifact mutation. Cross-platform symlink/junction cases conditional on platform privileges and explicit Windows behavior.
+- Tests defend observable changes/negative boundaries, not source strings, forwarded mock echoes, or tautological UI assertions. Run project-wide checks once after integration, not during parallel editing.
+
+## Architecture
+
+### System design
+
+- Existing Playwright unit config for pure builder/runner/filesystem/API; in-process Control server for HTTP security and lock tests; browser E2E `control-page.spec.ts` for operator flow; read-only server test for GET/HEAD boundary. Use phase 01 builder across runner/API; no per-test alternate implementation of aggregate generation.
+
+### Component interactions
+
+- Two injected runner executions sharing root → compare both published artifacts → Control Reports page DELETE with real token → compare filesystem and pair contents → report-only mode serves static saved index and rejects mutation. Hold/release shared lock in same and separate processes when testing concurrency.
+
+### Data flow
+
+- Temporary validated manifests → discovered grouped aggregate → staged/backup/journal pair → guarded mutation → surviving validated manifests → refreshed pair + UI inventory. Test 404/409/500 and recovery against on-disk state, not only HTTP codes.
+
+## Related code files
+
+- **Modify:** `tests/unit/sequential-runner.spec.ts`, `reporting-output.spec.ts`, `artifact-paths.spec.ts`, `artifact-lifecycle.spec.ts`, `report-server.spec.ts`, `control-assets-routing.spec.ts` where contract assumptions change; `tests/e2e/control-page.spec.ts`, `generated-report.spec.ts`, `multi-project-report-flow.spec.ts` for full user journey; `docs/architecture.md`, `docs/system-architecture.md`, `docs/code-standards.md` and relevant user docs only if design or shipped behavior needs reconciliation. Keep documentation changes within `docs/`.
+- **Create:** focused `tests/unit/aggregate-index-builder.spec.ts` (cross-config/latest/empty/bounds) and `tests/unit/control-reports-api.spec.ts` (deletion/path/security/lock/recovery), if existing suites cannot host concise behavior tests. Test helpers only as needed for isolated fixtures.
+- **Delete:** obsolete assertions of “ignored unconfigured” or outcome-only project counts and throwaway smoke scripts; no unrelated test/docs files.
+
+## Implementation Steps
+
+1. Trace actual imports/scripts of runner, aggregate publisher, renderer, server router and Dashboard props with targeted searches; migrate all consumers of changed contracts. Do not replace public import paths or create compatibility aliases unless a verified external contract requires them.
+2. Build isolated fixtures with ≥2 valid projects and multiple immutable runs, one malformed manifest, a configured run-less ID, a historical-only ID, shared assets/config/staging canaries. Run A, then disjoint B, then rebuild to assert both history and latest state in JSON+HTML; test deterministic newest-first ordering, no fake link, warning sanitization, >50-project cap, and incomplete/oversize publication fail-closed without losing the prior pair.
+3. Verify empty aggregate: delete final eligible project, assert schema v3 `projects: []`, valid `index.html` empty message, and both files published. Ensure existing publisher rejects malformed nonempty row and still rolls back both outputs.
+4. Exercise API matrix via loopback server and actual filesystem: valid CSRF bodyless/JSON request, invalid/encoded/trailing IDs and reserved names, path prefix siblings, case sensitivity, symlink child and nested symlink/junction, protected root files/other projects; assert no mutation on rejection. Verify valid project deletion removes adjacent invalid files safely while counting only validated runs. Incomplete discovery refuses deletion. Repeated delete returns 404. Test same-root lock across competing deletes and active runner; 409 arrives without exposing lock internals.
+5. Inject removal failure after partial deletion and pair publication failure; assert 500, bounded diagnostic, lock released, remaining valid manifests drive refreshed pair where possible. If forced refresh also fails, recover journal on next run and assert no corrupt mixed pair; do not assume deleted files reappear.
+6. Run browser against real local Control server: Reports header link opens `/reports/index.html` (interactive control view), lists all retained projects, and pages each run history 20 at a time without changing siblings' page state. Confirm deletion there via Radix dialog; verify back link, focus/escape/cancel, destructive wording, CSRF request, in-flight disabled controls, 404/409/500 feedback, empty state and aggregate refresh. Verify `/reports/aggregate-data.json` and on-disk saved HTML match surviving projects. Control GET/HEAD route/CSP vs report-mode static GET/HEAD/CSP remain distinct.
+7. Start report-only server separately and assert GET/HEAD serve retained reports while DELETE on `/api/reports/projects/id`, `/reports/index.html`, and project file paths cannot mutate anything. Confirm no files under staging/config/shared assets/sibling trees change after successful deletion.
+8. Reconcile architecture/system docs against actual implementation (design gate already documented); update user-facing report-control/release guidance and remove obsolete copy. Check <200 lines for new/materially changed TS modules, kebab-case except existing React component convention, ESM `.js` imports and Markdown <800 lines.
+9. Run focused tests and real smoke first, then integrated `npm run typecheck`, `npm run build`, targeted Playwright unit/E2E configs, and project release gate once all slices complete. Record exercised commands/results and browser observations; fix regressions before marking phase complete.
+
+## Todo list
+
+- [ ] Migrate all known callers/obsolete aggregate assumptions.
+- [ ] Cover multi-run history, invalid manifests, empty/large index.
+- [ ] Cover DELETE route/security/filesystem/concurrency/fault recovery.
+- [ ] Cover Control browser UX plus report-only read-only boundary.
+- [ ] Reconcile docs and run final integrated gates once.
+
+## Success Criteria
+
+- **Definition of done:** All named acceptance scenarios pass on isolated roots; no malformed/traversal/symlink input deletes outside selected project; aggregate pair matches surviving history including empty state; configured/unconfigured reports are manageable at `/reports/index.html` in control mode; report-only index stays static and read-only.
+- **Validation methods:** targeted unit/API commands, Chromium/WebKit Playwright UI scenario with actual disk comparisons, integrated typecheck/build/release gate after all code merges. Keep direct smoke evidence of both publication and deletion.
+
+## Risk Assessment
+
+- **Platform path semantics:** Windows reparse/link creation privileges vary; test supported link types conditionally and fail closed in production; avoid assumptions based solely on POSIX.
+- **Partial failure:** deterministic fault injection observes real state and index recovery rather than fake transactional rollback.
+- **Test flakiness under lock:** use explicit barriers/fakes for heartbeat and acquisition contention, no arbitrary sleeps; separate-process case validates cross-process shared lock.
+- **Overlarge history:** enforce bounds without silently dropping eligible projects; surface discovered-budget warnings and fail closed for deletion when inventory incomplete.
+
+## Security Considerations
+
+- **Auth/authorization:** in-process HTTP tests cover Host, same-origin HTTP(S) Origin, Fetch Metadata, timing-safe CSRF, content-type and loopback-only binding. UI disable is not security enforcement.
+- **Data protection:** assert no config/secrets, sibling reports, staging or assets are touched; bounded sanitized errors do not include raw paths or secret values; serve:report exposes GET/HEAD only.
+
+## Next steps
+
+- After verification, mark implementation phases complete and update `cmd-plan.md`/plan status; release only once end-to-end evidence and docs match shipped behavior.
+</file>
+
+<file path="plans/260924-2019-persistent-project-report-management/plan.md">
+---
+title: "Persistent project report management"
+description: "Keep one validated all-project report index and safely delete one project's retained reports from the loopback Control Dashboard."
+status: in-progress
+priority: P2
+effort: 16h
+branch: main
+tags: [reporting, control-page, artifacts, security]
+created: 2026-09-24
+---
+
+# Persistent project report management
+
+## Overview
+
+Keep `reports/index.html` and `reports/aggregate-data.json` as a persistent index of validated retained report history across runs and configuration changes. The report CLI and `serve:report` still use the static index; read-only serving validates it as the root marker. In control mode, navigate from the dashboard to a React management view at `/reports/index.html`: list every retained project, page its run history 20 rows at a time, and confirm guarded whole-project report deletion there. Keep config, siblings, shared assets and staging untouched; reuse discovery, report-root lock, aggregate publisher and mutation security. No second inventory store.
+
+## Phases
+
+| Phase | Work | Status | Progress | Effort |
+| --- | --- | --- | --- | --- |
+| [01: Persistent aggregate index builder](./phase-01-persistent-aggregate-index-builder.md) | Merge validated history with active outcomes; migrate runner | Done · 2026-09-24 | 100% | 4h |
+| [02: Guarded control reports DELETE API](./phase-02-control-reports-delete-api.md) | Lock, safely remove one project tree, republish index | Pending | 0% | 5h |
+| [03: Report management page navigation and deletion](./phase-03-control-ui-navigation-and-deletion.md) | Dashboard link; interactive project inventory and confirmed deletion on report page | Pending | 0% | 3h |
+| [04: Verification and caller migration](./phase-04-verification-and-caller-migration.md) | Prove security, persistence, concurrency, failure recovery, browsers and callers | Pending | 0% | 4h |
+
+## Dependencies
+
+- Phase 01 owns one pure aggregate builder callable by runner and deletion API; Phase 02 follows its result contract. Phase 03 follows DELETE request/response contract; UI and endpoint may be developed in parallel against that agreed contract. Phase 04 runs once all slices integrate.
+- Architecture: [architecture](../../docs/architecture.md), [system view](../../docs/system-architecture.md); standards: [code standards](../../docs/code-standards.md) (`docs/development-rules.md` is not present in this checkout). Research: [backend](./research/researcher-01-report.md), [frontend](./research/researcher-02-report.md).
+- Keep production TS modules under 200 lines; new modules kebab-case and ESM `.js` imports. Existing PascalCase React component filenames may be extended in place; do not create duplicate parallel components. Keep Markdown below 800 lines.
+- Static persisted report HTML has `default-src 'none'` and remains read-only in `serve:report`/offline contexts. Only control mode substitutes a CSRF-bearing React management view at the exact `/reports/index.html` URL with `CONTROL_CSP`; report-run links still use the static handler. Keep the saved index: `assertReportRoot` requires its marker, publisher recovery tracks the HTML+JSON pair, and CLI/report-only clients consume it.
+- Deleting project files and publishing the root pair is **not one atomic filesystem transaction**. After any partial failure, rebuild from remaining valid manifests under the lock; diagnose failure without claiming removed files were restored.
+
+## Validation Summary
+
+**Validated:** 2026-09-24. **Questions asked:** 6.
+
+### Confirmed decisions
+
+- Delete all retained history for one project, including invalid files in its project subtree after a safety preflight; retain config, other projects and shared assets. Count validated runs only.
+- Keep the static `reports/index.html`: scan found it required for read-only root validation, CLI/offline consumption and publication recovery. In control mode, show React management at `/reports/index.html`; no saved CSRF token or script.
+- Paginate historical runs independently per project, 20 rows per page in React. Use the published aggregate within existing 5,000-manifest discovery and 16 MiB static-file boundaries; UI paging does not expand backend capacity. On incomplete discovery/oversize publication, report a limit rather than silently drop retained history; refuse deletion when inventory is incomplete.
+
+### Action items
+
+- [x] Phase 01: explicitly signal incomplete discovery and enforce the published pair's static serving size limit before replacing it.
+- [ ] Phase 03: implement independent 20-run pagination with latest-first ordering and stable page transitions after deletion/reload.
+- [ ] Phase 04: prove the static/read-only index remains used, management route differs only in control mode, and the per-project pager shows all available runs without truncation.
+
+## Unresolved questions
+
+None blocking. History beyond existing discovery/serving limits is not within this plan; those reports stay on disk and require a separate scalable pagination/indexing design before they can be fully indexed.
+</file>
+
+<file path="plans/260924-2019-persistent-project-report-management/research/researcher-01-report.md">
+# Backend research: persistent project report management
+
+Researched 2026-09-24. Scope: current artifact/index publication, locking, Control API security, and safe deletion design.
+
+## Findings
+
+### 1. Manifest discovery, storage, and aggregate publication
+
+- `ArtifactPaths` allocates immutable run directories at `<reportRoot>/<projectId>/<runId>`; staging is a separate sibling root (default `artifacts`). Project/run IDs must satisfy `SAFE_ID`; report/staging roots must be canonical, real directories and must not overlap. [src/artifacts/artifact-paths.ts:163-209]
+- Runner acquires the report-root lock, recovers interrupted aggregate publication, ensures shared stylesheet, and cleans orphan staging/publication entries before and after workers. It then calls `discoverRunManifests(reportRoot)`. [src/runner.ts:102-139]
+- Discovery scans persisted project/run directories (bounded by 5,000 manifests and artifact read/byte budgets), excludes internal lock storage, validates manifests and referenced artifacts, and returns diagnostics for malformed/unsafe/incomplete entries rather than trusting them. Optional report paths are retained only when validated. [src/artifacts/aggregate-manifest-reader.ts:26-32, 215-309]
+- Runner projects each discovered manifest to historical run metadata, then sets `aggregate.projects` to `outcomes.map(...)`. Thus discovery contains retained historical runs, but aggregate project *rows* are gated by projects selected/executed in this invocation; historical-only or removed-from-config projects are omitted. A warning notes unconfigured historical manifests are ignored. [src/runner.ts:139-171]
+- Aggregate publisher validates the model; stages JSON and rendered `index.html` under random exclusive temporary names; journals the intended transaction; backs up prior pair; renames staged files into place; commits journal; and rolls back on publication errors. Recovery handles interrupted journals. `writeAggregateReportFile` renders root `index.html`; `aggregate-data.json` is pretty-printed JSON. Shared stylesheet is under `assets/`. [src/artifacts/aggregate-report-publisher.ts:67-143; src/reporting/report-output.ts:86-140]
+- Existing index publication is atomic/rollback-aware for the JSON+HTML pair, not a transaction with project-directory deletion.
+
+### 2. Locks, leases, cleanup, and deletion serialization
+
+- No `artifact-root-lease.ts` appeared in `src/artifacts/`; current mechanisms are the report-root lock plus per-run staging leases.
+- Runner lock is `<reportRoot>/.report-root-lock`, with owner/claim files, a 2-minute lease, 15-second heartbeat, and 30-second wait. It validates canonical root/lock paths, records process identity, and can reclaim stale/incomplete locks only after process/lease checks. [src/artifacts/report-root-lock-owner.ts:12-20, 42-45, 158-267]
+- Staging leases live in the separate staging root and track project/run, PID, creation and expiry (2-hour duration); cleanup uses leases to avoid deleting active staging runs. Orphan cleanup excludes `assets` and lock internals, uses age/count/byte/removal budgets, and preserves symlink/unsafe entries with warnings. [src/artifacts/staging-lease.ts:7-18, 61-133; src/artifacts/orphan-cleanup.ts:6-16, 190-251]
+- Deletion MUST acquire the same report-root lock as the runner before inventory, removal, discovery, or index publication. A separate delete-only lock would still race runners. Keep lock for the whole operation; map lock contention/timeout to a retryable API conflict/service error.
+- Under the lock: discover validated reports; require the requested ID to correspond to at least one retained validated report; validate direct-child path; remove only that project subtree; rediscover remaining validated reports; rebuild/publish root aggregate pair. Preserve `assets`, `.report-root-lock`, sibling project dirs, staging root, and root files except aggregate pair. Do not base target path on a manifest-provided path.
+
+### 3. Control API and mutation security; endpoint proposal
+
+- `handleControlRequest` checks Host globally, serves exact dashboard/assets routes, forwards `/reports/*` to the read-only report file handler, and dispatches `/api/*` to config/run/secrets handlers. API routing is explicit. `ControlRouterContext` supplies report root, expected host/port, stores/managers, and CSRF token. [src/reporting/report-server-control.ts:17-25, 40-149]
+- Existing config PUT and run POST call shared `validateMutationRequest` before body parsing. Gate requires valid expected Host, same expected HTTP(S) Origin, acceptable Fetch metadata (`same-origin`/`none`; absent metadata allowed), timing-safe `x-csrf-token`, and JSON content type; bodyless DELETE is the explicit exception when no body/content-type (or content-length 0). Host/origin/CSRF/fetch failures are 403; wrong media type is 415. [src/reporting/report-server-control-security.ts:26-110; src/reporting/report-server-control-api.ts:32-48, 76-87]
+- Recommended API: `DELETE /api/reports/projects/{projectId}`. Decode exactly one path segment, validate `SAFE_ID`, reject reserved/internal names (especially `assets`), and use existing mutation gate (bodyless DELETE is supported). Return JSON with deleted project ID and removed run/report count; use 404 for no retained validated project, 400 for malformed ID, 409/503 for lock timeout, and 500 if deletion/index refresh fails. Set `Allow: DELETE` for recognized path with other methods. Dashboard call supplies CSRF header and same-origin request metadata. No mutation through `/reports/*`.
+- Rebuild aggregate from all validated retained report manifests across the root, grouped by project ID—not only current configured/outcome projects. Historical-only row metadata must come from persisted validated manifest data; exclude malformed/unvalidated reports and preserve validation diagnostics. Ensure rows link only to validated report paths.
+
+### 4. Path safety and behavior boundaries
+
+- Follow established artifact patterns: resolve requested ID as exactly one child of canonical report root; validate `SAFE_ID` and reserved names; `lstat` root/child and require real directories, not symlinks; verify `realpath` canonicality/containment; reject symlink/non-directory targets before recursive removal. Preflight nested entries and preserve/refuse unsafe symlinks rather than traversing them. Limit removal inventory/bytes similarly to orphan cleanup. [src/artifacts/artifact-paths.ts:49-85, 163-209; src/artifacts/orphan-cleanup.ts:37-42, 60-94, 190-227]
+- Removal invalidates every immutable URL under `/reports/<projectId>/<runId>/...` for that project (expected explicit-delete consequence); unrelated projects and shared `/reports/assets/*` remain. Root `/reports/index.html` and `aggregate-data.json` are regenerated. `serve:report`/report-file handler remains read-only (`GET`/`HEAD` only); deletion belongs only to authenticated-by-CSRF Control mutation API. [src/reporting/report-server-control.ts:90-104; src/reporting/report-server-files.ts:57-60]
+- Malformed manifests are warned/skipped by discovery; never use their embedded values to choose a deletion path or index link. Requiring at least one validated retained report before deletion prevents a safe-looking arbitrary directory (e.g. shared `assets`) from becoming a target. A project folder may contain additional malformed runs; explicit deletion can remove that validated project’s whole direct-child subtree after filesystem safety checks.
+- Concurrent runner/control deletion serializes on the shared root lock, including across separate processes. Immutable run links remain stable during ordinary publication; explicit deletion removes all links for the selected project. Read-only `serve:report` has no route to delete. If deletion succeeds but index publication fails, report operation failure and ensure next runner rebuilds from remaining manifests; the current publisher does not atomically couple directory removal to index commit.
+
+## Sources
+
+- `src/runner.ts:89-183`
+- `src/artifacts/aggregate-manifest-reader.ts:26-32, 215-309`
+- `src/artifacts/aggregate-report-publisher.ts:67-143`; `src/artifacts/aggregate-publication-recovery.ts`
+- `src/artifacts/artifact-paths.ts:49-95, 163-225`; `src/artifacts/report-root-lock-owner.ts:12-20, 42-45, 158-267`; `src/artifacts/staging-lease.ts`; `src/artifacts/orphan-cleanup.ts`
+- `src/reporting/report-server-control.ts:17-25, 40-149`; `src/reporting/report-server-control-api.ts`; `src/reporting/report-server-control-security.ts:26-110`; `src/reporting/report-server-files.ts:57-60`
+- `src/security/` currently contains URL-policy modules; filesystem safety patterns are in `src/artifacts/` and `src/reporting/report-server-file-io.ts`.
+
+## Unresolved questions
+
+- Should a delete request for an already-removed project return 404 (recommended) or be idempotent 204? API contract choice only; neither affects safe deletion.
+</file>
+
+<file path="plans/260924-2019-persistent-project-report-management/research/researcher-02-report.md">
+# Frontend research: persistent project report management
+
+- Date: 2026-09-24
+- Focus: Control Dashboard navigation, project actions, deletion UX, empty/unconfigured states, caller integration.
+
+## Findings and recommendations
+
+- **Navigation:** Control Page is organized around `pages/DashboardPage.tsx`, `DashboardLayout`, and `HeaderBar`; inspected files show ordinary anchors, not a client router. Add a visible same-tab `Reports` anchor in `HeaderBar` to `/reports/index.html` (use `/reports/` only if server routing guarantees index resolution). Keep it distinct from config selectors/settings actions.
+- **Cards:** `DashboardPage` derives `projectsData` from the active config; `ProjectsGrid` maps each item to a `ProjectCard`. Existing card controls are config/run settings, plus the Jenkins job link. Add a distinct **Delete historical reports** action; do not label it Delete project. Thread a typed callback DashboardPage → ProjectsGrid → ProjectCard. Pass stable project identity, never a user-controlled filesystem path.
+- **Coverage gap:** Dashboard cards represent only projects in the currently selected config. Historical retained projects that were removed from or are absent in that config cannot be managed there. Since the index must cover all retained projects, expose the same project-scoped delete action on the management index (or another all-retained-project surface) too. Keep report deletion separate from config editing/removal.
+- **Confirmation pattern:** Existing `CredentialsDialog` and `BrowserSettingsDialog` use Radix UI (`@radix-ui/react-dialog`): Root/Portal/Overlay/Content, Title/Description, explicit cancel/close, existing Button. No reusable confirmation dialog found. Implement a small dedicated Radix confirmation dialog matching this pattern; avoid native `window.confirm`.
+- **Suggested confirmation:** “Delete all retained reports and validated run history for **{project}**? This permanently removes this project’s historical report files. Project configuration and other projects’ reports are not affected.” Buttons: Cancel and **Delete reports** (destructive). Prevent duplicate submit, show API errors, close and refresh the index/card state only after success.
+- **Empty/unconfigured:** A missing/empty current config yields empty `projectsData`; configured projects drive cards, not report history. A configured zero-run project should still have a card/action. Make deletion of a project with no retained reports safe/idempotent and communicate no-op/success. The aggregate renderer explicitly handles no projects and no validated historical run manifests (`aggregate-report-renderer.ts`, lines 21–48). Retained-only/unconfigured projects need index-side management.
+- **API integration:** Reuse `useControlApi`; it handles same-origin mutation CSRF tokens. Existing secrets hooks use `DELETE`, but there is no report-delete client flow in the inspected Control Page. Add a project-scoped API contract, perform filesystem ownership/containment checks server-side, then refresh/rebuild the index after successful deletion.
+
+## Migration map
+
+- UI call chain: `src/reporting/control-page/pages/DashboardPage.tsx` → `components/organisms/HeaderBar.tsx`, `ProjectsGrid.tsx` → `ProjectCard.tsx`; wire API state through `hooks/useControlApi.ts` (add a dedicated hook only if it meaningfully owns delete/loading/error state).
+- Confirmation precedent: `components/organisms/CredentialsDialog.tsx`, `BrowserSettingsDialog.tsx`; export any new shared component through `components/organisms/index.ts` if used by both dashboard and management surface.
+- Report publishing/serving code visible in `src/reporting/`: `aggregate-report-renderer.ts`, `report-server-control-api.ts`, `report-server-control-page.ts`, `report-server.ts`, `report-server-cli.ts`; report scripts listed: `scripts/copy-report-assets.mjs`, `run-template-report.mjs`, `run-report.mjs`, `run-playwright.mjs`, `report-runtime.mjs`. Integrate deletion/index refresh with the existing publisher/server path; avoid a second disconnected report pipeline.
+- **Caller-trace limitation:** The scoped search result was truncated before showing matches for `aggregate-report-publisher.ts`, `runner.ts`, or `serve:control`; their direct import/script callers are not verified here. Before migration, search all imports and `package.json` scripts for those exact names, update every invocation/contract, and preserve the current report generation path. No caller locations should be inferred from filenames alone.
+
+## Evidence
+
+- `DashboardPage.tsx`: `projectsData` from current config; passes props into HeaderBar/ProjectsGrid; mounts existing dialogs.
+- `ProjectsGrid.tsx`: renders one ProjectCard per project.
+- `ProjectCard.tsx`: project card contract and Jenkins job URL link.
+- `CredentialsDialog.tsx`, `BrowserSettingsDialog.tsx`: Radix dialog implementation.
+- `useControlApi.ts`, `useCredentialsManager.ts`, `useBrowserSettings.ts`: same-origin/CSRF handling and DELETE precedent.
+- `aggregate-report-renderer.ts`: current aggregate HTML rendering and empty states.
+
+## Unresolved questions
+
+- Which exact files/scripts import or invoke `aggregate-report-publisher.ts` and `runner.ts`, and which `package.json` command implements `serve:control`? Verify complete call graph before cutover; search output available in this pass did not include those lines.
+- Does `serve:control` serve `/reports/index.html` from the same origin/root path in every launch mode? Confirm before hard-coding a root-relative link.
+- What stable server-owned project key associates historical manifests with config projects, including rename/case behavior?
 </file>
 
 <file path="playwright.config.ts">
@@ -10383,6 +11129,146 @@ main().catch((error) => {
 });
 </file>
 
+<file path="src/artifacts/aggregate-index-builder.ts">
+import type { DiscoveredRunManifest, ManifestDiscoveryResult } from './artifact-manifest.js';
+import type { ProjectOutcome } from '../project/project-types.js';
+import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from '../result-types.js';
+import { jenkinsJobPathSegments } from '../jenkins/url-identity.js';
+import { assertValidAggregateResult, sanitizePersistedWarnings } from './result-validation.js';
+
+export interface BuildAggregateIndexOptions {
+  readonly discovery: ManifestDiscoveryResult;
+  readonly outcomes?: readonly ProjectOutcome[];
+  readonly generatedAt?: string;
+  readonly warnings?: readonly string[];
+}
+
+interface ProjectedHistoricalRun {
+  readonly summary: AggregateRunSummary;
+  readonly observedAt: string;
+  readonly projectName: string;
+}
+
+function projectRun(item: DiscoveredRunManifest): ProjectedHistoricalRun {
+  const jobSegments = item.manifest.jenkins?.jobUrl === undefined
+    ? []
+    : jenkinsJobPathSegments(item.manifest.jenkins.jobUrl);
+  const rawJobId = jobSegments[2];
+  const jobId = rawJobId === undefined || rawJobId.length > 256 ? undefined : rawJobId;
+  const finalJobSegment = jobSegments.at(-1);
+  const branch = jobSegments.length >= 4 && finalJobSegment !== rawJobId &&
+    finalJobSegment !== undefined && finalJobSegment.length <= 256 ? finalJobSegment : undefined;
+  return {
+    summary: {
+      runId: item.manifest.run.runId,
+      state: item.manifest.state,
+      ...(jobId === undefined ? {} : { jobId }),
+      ...(branch === undefined ? {} : { branch }),
+      manifestPath: `${item.relativeDirectory}/manifest.json`,
+      ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
+      warnings: sanitizePersistedWarnings(item.manifest.warnings),
+    },
+    observedAt: item.manifest.run.observedAt,
+    projectName: item.manifest.project.name,
+  };
+}
+
+function groupHistoricalRuns(
+  manifests: readonly DiscoveredRunManifest[],
+): Map<string, ProjectedHistoricalRun[]> {
+  const grouped = new Map<string, Map<string, ProjectedHistoricalRun>>();
+  for (const item of manifests) {
+    const projectId = item.manifest.project.id;
+    let projectRuns = grouped.get(projectId);
+    if (projectRuns === undefined) {
+      projectRuns = new Map();
+      grouped.set(projectId, projectRuns);
+    }
+    if (!projectRuns.has(item.manifest.run.runId)) {
+      projectRuns.set(item.manifest.run.runId, projectRun(item));
+    }
+  }
+
+  const result = new Map<string, ProjectedHistoricalRun[]>();
+  for (const [projectId, runsMap] of grouped) {
+    const sorted = [...runsMap.values()].sort((left, right) => {
+      const timeCompare = right.observedAt.localeCompare(left.observedAt);
+      if (timeCompare !== 0) return timeCompare;
+      return right.summary.runId.localeCompare(left.summary.runId);
+    });
+    result.set(projectId, sorted);
+  }
+  return result;
+}
+
+export function buildAggregateIndex(options: BuildAggregateIndexOptions): AggregateReportResult {
+  if (options.discovery.incomplete) {
+    throw new Error('cannot build aggregate index from incomplete manifest discovery');
+  }
+
+  const history = groupHistoricalRuns(options.discovery.manifests);
+  const handledProjectIds = new Set<string>();
+  const projects: AggregateProjectSummary[] = [];
+
+  if (options.outcomes !== undefined) {
+    for (const outcome of options.outcomes) {
+      if (handledProjectIds.has(outcome.projectId)) continue;
+      handledProjectIds.add(outcome.projectId);
+      const historicalRuns = history.get(outcome.projectId) ?? [];
+      const matchingRun = historicalRuns.find((r) => r.summary.runId === outcome.runId);
+      const reportPath = matchingRun?.summary.reportPath;
+      projects.push({
+        projectId: outcome.projectId,
+        name: outcome.name,
+        state: outcome.state,
+        runId: outcome.runId,
+        ...(reportPath === undefined ? {} : { reportPath }),
+        runs: historicalRuns.map((r) => r.summary),
+        warnings: sanitizePersistedWarnings([
+          ...outcome.warnings,
+          ...(outcome.error === undefined ? [] : [outcome.error]),
+        ]),
+      });
+    }
+  }
+
+  const historicalOnlyIds = [...history.keys()]
+    .filter((id) => !handledProjectIds.has(id))
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const projectId of historicalOnlyIds) {
+    const historicalRuns = history.get(projectId) ?? [];
+    const latest = historicalRuns[0];
+    if (latest === undefined) continue;
+    projects.push({
+      projectId,
+      name: latest.projectName,
+      state: latest.summary.state,
+      runId: latest.summary.runId,
+      ...(latest.summary.reportPath === undefined ? {} : { reportPath: latest.summary.reportPath }),
+      runs: historicalRuns.map((r) => r.summary),
+      warnings: [],
+    });
+  }
+
+  const generatedAt = options.generatedAt ?? new Date().toISOString();
+  const warnings = sanitizePersistedWarnings([
+    ...(options.warnings ?? []),
+    ...options.discovery.warnings,
+  ]);
+
+  const aggregate: AggregateReportResult = {
+    schemaVersion: 3,
+    generatedAt,
+    projects,
+    warnings,
+  };
+
+  assertValidAggregateResult(aggregate);
+  return aggregate;
+}
+</file>
+
 <file path="src/artifacts/aggregate-manifest-reader.ts">
 import { constants } from 'node:fs';
 import * as fs from 'node:fs/promises';
@@ -10622,8 +11508,7 @@ export async function discoverRunManifests(
   };
   const inspectLegacyContainer = async (container: string): Promise<void> => {
     for (const runId of await safeDirectories(container, budget, noteIncompatible)) {
-      if (artifactBudget.exhausted) return;
-      if (inspected >= maximum) { warnings.push('manifest discovery limit reached'); return; }
+      if (artifactBudget.exhausted || budget.exhausted || inspected >= maximum) return;
       const read = await readManifestIfPresent(path.join(container, runId, 'manifest.json'), artifactBudget);
       if (artifactBudget.exhausted) return;
       if (!read.present) continue;
@@ -10633,13 +11518,12 @@ export async function discoverRunManifests(
   };
 
   for (const projectId of await safeDirectories(root, budget, noteIncompatible)) {
-    if (artifactBudget.exhausted) break;
+    if (artifactBudget.exhausted || budget.exhausted || inspected >= maximum) break;
     if (INTERNAL_DIRECTORIES.has(projectId)) continue;
     if (!SAFE_ID.test(projectId)) { pushDiagnostic(warnings, 'ignored unsafe project artifact directory'); continue; }
     const projectDirectory = path.join(root, projectId);
     for (const runId of await safeDirectories(projectDirectory, budget, noteIncompatible)) {
-      if (artifactBudget.exhausted) break;
-      if (inspected >= maximum) { warnings.push('manifest discovery limit reached'); return { manifests, warnings, ignoredIncompatibleCount }; }
+      if (artifactBudget.exhausted || budget.exhausted || inspected >= maximum) break;
       const directory = path.join(projectDirectory, runId);
       const manifestPath = path.join(directory, 'manifest.json');
       const read = await readManifestIfPresent(manifestPath, artifactBudget);
@@ -10679,6 +11563,7 @@ export async function discoverRunManifests(
       }
     }
   }
+  if (inspected >= maximum) pushDiagnostic(warnings, 'manifest discovery limit reached');
   if (artifactBudget.exhausted) pushDiagnostic(warnings, 'historical artifact discovery budget reached');
   if (budget.exhausted) pushDiagnostic(warnings, 'artifact directory discovery limit reached');
   if (ignoredIncompatibleCount > 0) {
@@ -10691,7 +11576,8 @@ export async function discoverRunManifests(
     const projectOrder = left.manifest.project.id.localeCompare(right.manifest.project.id);
     return projectOrder !== 0 ? projectOrder : left.manifest.run.runId.localeCompare(right.manifest.run.runId);
   });
-  return { manifests, warnings, ignoredIncompatibleCount };
+  const incomplete = budget.exhausted || artifactBudget.exhausted || inspected >= maximum;
+  return { manifests, warnings, ignoredIncompatibleCount, incomplete };
 }
 </file>
 
@@ -10832,6 +11718,7 @@ import * as path from 'node:path';
 import type { AggregateReportResult } from '../result-types.js';
 import { writeAggregateReportFile } from '../reporting/report-output.js';
 import { assertValidAggregateResult } from './result-validation.js';
+import { MAX_STATIC_FILE_BYTES } from '../reporting/report-server-constants.js';
 import {
   type AggregatePublicationJournal,
   recoverAggregatePublication,
@@ -10924,6 +11811,16 @@ export async function writeAggregateDataPair(
   try {
     assertValidAggregateResult(aggregate);
     await writeAggregateReportFile(reportRoot, aggregate, stagedReport);
+    const [dataStat, reportStat] = await Promise.all([
+      fs.stat(stagedData),
+      fs.stat(stagedReport),
+    ]);
+    if (dataStat.size > MAX_STATIC_FILE_BYTES) {
+      throw new Error(`aggregate data exceeds maximum static file size (${dataStat.size} > ${MAX_STATIC_FILE_BYTES})`);
+    }
+    if (reportStat.size > MAX_STATIC_FILE_BYTES) {
+      throw new Error(`aggregate report exceeds maximum static file size (${reportStat.size} > ${MAX_STATIC_FILE_BYTES})`);
+    }
     await writeAggregatePublicationJournal(journalPath, journal);
     journalWritten = true;
     try {
@@ -11024,6 +11921,7 @@ export interface ManifestDiscoveryResult {
   readonly manifests: readonly DiscoveredRunManifest[];
   readonly warnings: readonly string[];
   readonly ignoredIncompatibleCount: number;
+  readonly incomplete: boolean;
 }
 </file>
 
@@ -12082,11 +12980,21 @@ function cachedInspector(inspector: LockProcessInspector): LockProcessInspector 
   };
 }
 
+let cachedCurrentPid: number | undefined;
+let cachedCurrentStartedAt: string | undefined;
+
 async function currentProcessStartedAt(pid: number): Promise<string | undefined> {
   if (process.platform !== 'win32') return undefined;
+  if (pid === cachedCurrentPid && cachedCurrentStartedAt !== undefined) {
+    return cachedCurrentStartedAt;
+  }
   const inspection = await inspectProcessInstance(pid);
   if (inspection.state !== 'live' || inspection.startedAt === undefined) {
     throw new Error('Report root lock process identity could not be established');
+  }
+  if (pid === process.pid) {
+    cachedCurrentPid = pid;
+    cachedCurrentStartedAt = inspection.startedAt;
   }
   return inspection.startedAt;
 }
@@ -12104,7 +13012,7 @@ export async function reclaimStaleLock(
   if (current?.token !== owner.token) return false;
   const recovery = path.join(root, `${REPORT_LOCK_RECOVERY_PREFIX}${crypto.randomBytes(8).toString('hex')}`);
   try { await fs.rename(directory, recovery); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
-  await fs.rm(recovery, { recursive: true, force: true });
+  await fs.rm(recovery, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   return true;
 }
 export async function reclaimIncompleteLock(
@@ -12119,13 +13027,13 @@ export async function reclaimIncompleteLock(
   try { stat = await fs.lstat(directory); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
   if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(directory) !== directory || stat.mtimeMs > now - leaseMs) return false;
   if (await readLockOwner(directory) !== undefined) return false;
-  const claim = await readClaim(directory);
-  if (claim === undefined || claim.hostname !== hostname || claim.expiresAt > now || !canReclaimProcess(claim, await inspector(claim))) return false;
   const entries = await boundedEntries(directory);
   if (entries.length > MAX_INCOMPLETE_ENTRIES || entries.some((entry) => !entry.isFile() || (entry.name !== CLAIM_FILE && !OWNER_TEMP.test(entry.name) && !CLAIM_TEMP.test(entry.name)))) return false;
+  const claim = await readClaim(directory);
+  if (claim !== undefined && (claim.hostname !== hostname || claim.expiresAt > now || !canReclaimProcess(claim, await inspector(claim)))) return false;
   const recovery = path.join(root, `${REPORT_LOCK_RECOVERY_PREFIX}${crypto.randomBytes(8).toString('hex')}`);
   try { await fs.rename(directory, recovery); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
-  await fs.rm(recovery, { recursive: true, force: true });
+  await fs.rm(recovery, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   return true;
 }
 async function assertRoot(reportRoot: string): Promise<string> {
@@ -12153,10 +13061,10 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
   const directory = lockPath(root);
   for (;;) {
     try {
+      const processStartedAt = await currentProcessStartedAt(pid);
       await fs.mkdir(directory, { mode: 0o700 });
       const token = crypto.randomBytes(16).toString('hex');
       const acquiredAt = new Date(currentTime(now)).toISOString();
-      const processStartedAt = await currentProcessStartedAt(pid);
       const claim: LockClaim = { schemaVersion: 1 as const, pid, hostname, acquiredAt, expiresAt: currentTime(now) + leaseMs,
         ...(processStartedAt === undefined ? {} : { processStartedAt }) };
       try {
@@ -12165,7 +13073,7 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
           ...(processStartedAt === undefined ? {} : { processStartedAt }) });
         await fs.unlink(path.join(directory, CLAIM_FILE)).catch(() => undefined);
       } catch (error) {
-        await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+        await fs.rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => undefined);
         throw error;
       }
       let active = true;
@@ -12186,7 +13094,7 @@ export async function acquireReportRootLock(reportRoot: string, options: ReportR
           await heartbeatInFlight;
           try {
             await assertLockDirectory(directory);
-            if ((await readLockOwner(directory))?.token === token) await fs.rm(directory, { recursive: true, force: true });
+            if ((await readLockOwner(directory))?.token === token) await fs.rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
           } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
         },
       };
@@ -12456,7 +13364,7 @@ const REPORTS_KEYS = ['snyk', 'sonarqube'] as const;
 const AGGREGATE_KEYS = ['schemaVersion', 'generatedAt', 'projects', 'warnings'] as const;
 const AGGREGATE_PROJECT_KEYS = ['projectId', 'name', 'state', 'runId', 'reportPath', 'runs', 'warnings'] as const;
 const AGGREGATE_RUN_KEYS = ['runId', 'state', 'jobId', 'branch', 'manifestPath', 'reportPath', 'warnings'] as const;
-const MAX_AGGREGATE_PROJECTS = 50;
+export const MAX_AGGREGATE_PROJECTS = 5_050;
 const MAX_AGGREGATE_RUNS_PER_PROJECT = 5_000;
 const MAX_AGGREGATE_TOTAL_RUNS = 5_000;
 const MAX_AGGREGATE_PATH_LENGTH = 512;
@@ -12540,7 +13448,7 @@ export function isValidManifestContract(
   options: ManifestContractOptions = {},
 ): value is ProjectRunManifest {
   if (!hasOnlyKeys(value, MANIFEST_KEYS) || value.kind !== 'project-run' || value.schemaVersion !== 3 ||
-    !hasOnlyKeys(value.project, MANIFEST_PROJECT_KEYS) || !boundedSafeId(value.project.id, 80) ||
+    !hasOnlyKeys(value.project, MANIFEST_PROJECT_KEYS) || !boundedSafeId(value.project.id, 81) ||
     !boundedString(value.project.name, 256) || options.expectedProjectId !== undefined && value.project.id !== options.expectedProjectId ||
     !hasOnlyKeys(value.run, MANIFEST_RUN_KEYS) || !boundedSafeId(value.run.runId, 96) ||
     !boundedString(value.run.observedAt, 128) || options.expectedRunId !== undefined && value.run.runId !== options.expectedRunId ||
@@ -12661,7 +13569,7 @@ function validSnyk(value: unknown): boolean {
 }
 
 function validProject(value: unknown): value is { id: string; name: string } {
-  return hasOnlyKeys(value, PROJECT_KEYS) && boundedString(value.id, 80) && boundedString(value.name, 256);
+  return hasOnlyKeys(value, PROJECT_KEYS) && boundedString(value.id, 81) && boundedString(value.name, 256);
 }
 
 function validRun(value: unknown): value is { runId: string; observedAt: string } {
@@ -12768,7 +13676,7 @@ function validAggregateProject(value: unknown): value is AggregateProjectSummary
   const runId = value.runId;
   const reportPath = value.reportPath;
   const runs = value.runs;
-  if (!boundedString(projectId, 80) || !SAFE_ID.test(projectId) || !boundedString(name, 256) ||
+  if (!boundedString(projectId, 81) || !SAFE_ID.test(projectId) || !boundedString(name, 256) ||
     !validAggregateState(state) || !Array.isArray(runs) || runs.length > MAX_AGGREGATE_RUNS_PER_PROJECT ||
     !validWarnings(value.warnings) || (runId !== undefined && (!boundedString(runId, 96) || !SAFE_ID.test(runId))) ||
     (reportPath !== undefined && (runId === undefined || reportPath !== aggregateArtifactPath(projectId, runId, 'index.html') ||
@@ -12785,7 +13693,7 @@ export function isValidAggregateResult(value: unknown): value is AggregateReport
   if (!hasOnlyKeys(value, AGGREGATE_KEYS) || value.schemaVersion !== 3) return false;
   const generatedAt = value.generatedAt;
   const projects = value.projects;
-  if (!isIsoUtcTimestamp(generatedAt) || !Array.isArray(projects) || projects.length === 0 ||
+  if (!isIsoUtcTimestamp(generatedAt) || !Array.isArray(projects) ||
     projects.length > MAX_AGGREGATE_PROJECTS || !validWarnings(value.warnings)) return false;
   const projectIds = new Set<string>();
   let totalRuns = 0;
@@ -17401,8 +18309,8 @@ export function renderAggregateReport(aggregate: AggregateReportResult): string 
   <link rel="stylesheet" href="assets/report.css">
 </head>
 <body>
-  <header class="report-header"><p class="eyebrow">Offline vulnerability evidence</p><h1>Vulnerability report index</h1><p class="lede">Generated ${escapeHtmlText(aggregate.generatedAt)} · ${aggregate.projects.length} configured project(s)</p></header>
-  <main>${aggregateWarnings(aggregate.warnings)}${aggregate.projects.length === 0 ? '<p class="empty-state">No configured project outcomes were recorded.</p>' : aggregate.projects.map(projectCard).join('')}</main>
+  <header class="report-header"><p class="eyebrow">Offline vulnerability evidence</p><h1>Vulnerability report index</h1><p class="lede">Generated ${escapeHtmlText(aggregate.generatedAt)} · ${aggregate.projects.length} retained project(s)</p></header>
+  <main>${aggregateWarnings(aggregate.warnings)}${aggregate.projects.length === 0 ? '<p class="empty-state">No retained project reports were recorded.</p>' : aggregate.projects.map(projectCard).join('')}</main>
   <footer><p>Aggregate history is built only from validated schema-v3 manifests. Missing or invalid entries are omitted and surfaced as warnings.</p></footer>
 </body>
 </html>
@@ -28363,16 +29271,15 @@ import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
 import { writeAggregateData } from './artifacts/result-writer.js';
 import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
 import { ensureStylesheet } from './reporting/report-output.js';
-import { sanitizePersistedWarnings } from './artifacts/result-validation.js';
 import { selectReportProjects } from './config/project-run-selection.js';
 import { defaultLaunch, launchOptions, type BrowserLauncher } from './browser-launcher.js';
 
 export { launchOptions };
 import { loadProjectConfigWithDocument } from './config/project-config-loader.js';
 import { normalizeReportWorkerCount } from './config/report-worker-count.js';
-import { jenkinsJobPathSegments } from './jenkins/url-identity.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
-import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from './result-types.js';
+import type { AggregateReportResult } from './result-types.js';
+import { buildAggregateIndex } from './artifacts/aggregate-index-builder.js';
 import { type ProjectRunnerDependencies } from './project/project-runner.js';
 import { executeProjectWorkerPool, type ProjectExecutor } from './project/report-worker-pool.js';
 import type { ProjectOutcome, RunnerExecutionResult } from './project/project-types.js';
@@ -28406,43 +29313,6 @@ function enabledConfiguration(projects: readonly NormalizedProjectConfig[]): {
   return { projects: enabled, browserName: first.browser, reportRoot: first.artifactDir };
 }
 
-interface HistoricalRun {
-  readonly relativeDirectory: string;
-  readonly projectId: string;
-  readonly runId: string;
-  readonly state: 'success' | 'partial' | 'failed';
-  readonly warnings: readonly string[];
-  readonly jobId?: string;
-  readonly branch?: string;
-  readonly reportPath?: string;
-}
-
-function aggregateSummary(
-  outcome: ProjectOutcome,
-  historical: readonly HistoricalRun[],
-): AggregateProjectSummary {
-  const runs: AggregateRunSummary[] = historical
-    .filter((item) => item.projectId === outcome.projectId)
-    .map((item) => ({
-      runId: item.runId,
-      state: item.state,
-      ...(item.jobId === undefined ? {} : { jobId: item.jobId }),
-      ...(item.branch === undefined ? {} : { branch: item.branch }),
-      manifestPath: `${item.relativeDirectory}/manifest.json`,
-      ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
-      warnings: sanitizePersistedWarnings(item.warnings),
-    }));
-  const reportPath = runs.find((run) => run.runId === outcome.runId)?.reportPath;
-  return {
-    projectId: outcome.projectId,
-    name: outcome.name,
-    state: outcome.state,
-    runId: outcome.runId,
-    ...(reportPath === undefined ? {} : { reportPath }),
-    runs,
-    warnings: sanitizePersistedWarnings([...outcome.warnings, ...(outcome.error === undefined ? [] : [outcome.error])]),
-  };
-}
 
 export async function runConfiguredProjects(
   projects: readonly NormalizedProjectConfig[],
@@ -28495,44 +29365,22 @@ export async function runConfiguredProjects(
     const finalCleanup = await artifacts.cleanupOrphans();
     runtimeWarnings.push(...finalCleanup.warnings);
     const discovery = await discoverRunManifests(config.reportRoot);
-    const historical: HistoricalRun[] = discovery.manifests.map((item) => {
-      const jobSegments = item.manifest.jenkins?.jobUrl === undefined
-        ? []
-        : jenkinsJobPathSegments(item.manifest.jenkins.jobUrl);
-      const rawJobId = jobSegments[2];
-      const jobId = rawJobId === undefined || rawJobId.length > 256 ? undefined : rawJobId;
-      const finalJobSegment = jobSegments.at(-1);
-      const branch = jobSegments.length >= 4 && finalJobSegment !== rawJobId &&
-        finalJobSegment !== undefined && finalJobSegment.length <= 256 ? finalJobSegment : undefined;
-      return {
-        relativeDirectory: item.relativeDirectory,
-        projectId: item.manifest.project.id,
-        runId: item.manifest.run.runId,
-        state: item.manifest.state,
-        warnings: sanitizePersistedWarnings(item.manifest.warnings),
-        ...(jobId === undefined ? {} : { jobId }),
-        ...(branch === undefined ? {} : { branch }),
-        ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
-      };
-    });
-    const configuredIds = new Set(config.projects.map((project) => project.id));
-    const orphanWarnings = historical.some((item) => !configuredIds.has(item.projectId))
-      ? ['ignored historical manifests for unconfigured projects']
-      : [];
-    const warnings = sanitizePersistedWarnings([...initialWarnings, ...runtimeWarnings, ...discovery.warnings, ...orphanWarnings]);
-    const aggregate: AggregateReportResult = {
-      schemaVersion: 3,
+    if (discovery.incomplete) {
+      throw new Error('manifest discovery incomplete; skipping aggregate publication to protect historical index');
+    }
+    const aggregate = buildAggregateIndex({
+      discovery,
+      outcomes,
       generatedAt: (dependencies.now ?? (() => new Date()))().toISOString(),
-      projects: outcomes.map((outcome) => aggregateSummary(outcome, historical)),
-      warnings,
-    };
+      warnings: [...initialWarnings, ...runtimeWarnings],
+    });
     await writeAggregateData(config.reportRoot, aggregate);
     return {
       reportRoot: config.reportRoot,
       outcomes,
       aggregate,
       manifests: discovery.manifests,
-      warnings,
+      warnings: aggregate.warnings,
       exitCode: outcomes.some((outcome) => outcome.state === 'failed') ? 1 : 0,
     };
   } finally {
@@ -136409,6 +137257,358 @@ test('captures SonarQube through login template redirect to Overall to Issues', 
 });
 </file>
 
+<file path="tests/unit/aggregate-index-builder.spec.ts">
+import { expect, test } from '@playwright/test';
+
+import type { DiscoveredRunManifest, ManifestDiscoveryResult, ProjectRunManifest } from '../../src/artifacts/artifact-manifest.js';
+import type { ProjectOutcome } from '../../src/project/project-types.js';
+import { buildAggregateIndex } from '../../src/artifacts/aggregate-index-builder.js';
+import { isValidAggregateResult } from '../../src/artifacts/result-validation.js';
+
+function fakeDiscoveredManifest(options: {
+  projectId: string;
+  projectName?: string;
+  runId: string;
+  observedAt: string;
+  state?: 'success' | 'partial' | 'failed';
+  jobUrl?: string;
+  hasReport?: boolean;
+  warnings?: string[];
+}): DiscoveredRunManifest {
+  const {
+    projectId,
+    projectName = `Project ${projectId}`,
+    runId,
+    observedAt,
+    state = 'success',
+    jobUrl = `https://jenkins.example/job/${projectId}/job/main/`,
+    hasReport = true,
+    warnings = [],
+  } = options;
+
+  const manifest: ProjectRunManifest = {
+    kind: 'project-run',
+    schemaVersion: 3,
+    project: { id: projectId, name: projectName },
+    run: { runId, observedAt },
+    state,
+    jenkins: { jobUrl },
+    artifacts: {
+      manifest: 'manifest.json',
+      data: 'data.json',
+      screenshots: [],
+    },
+    warnings,
+  };
+
+  return {
+    manifest,
+    relativeDirectory: `${projectId}/${runId}`,
+    manifestPath: `${projectId}/${runId}/manifest.json`,
+    ...(hasReport ? { reportPath: `${projectId}/${runId}/index.html` } : {}),
+  };
+}
+
+test.describe('buildAggregateIndex', () => {
+  test('returns valid empty aggregate when no manifests and no outcomes exist', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [],
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const result = buildAggregateIndex({
+      discovery,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    expect(result.projects).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.schemaVersion).toBe(3);
+    expect(result.generatedAt).toBe('2026-09-24T12:00:00.000Z');
+  });
+
+  test('throws error if manifest discovery is marked incomplete', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'run-1',
+          observedAt: '2026-09-24T10:00:00.000Z',
+        }),
+      ],
+      warnings: ['manifest discovery limit reached'],
+      ignoredIncompatibleCount: 0,
+      incomplete: true,
+    };
+
+    expect(() =>
+      buildAggregateIndex({ discovery })
+    ).toThrow(/cannot build aggregate index from incomplete manifest discovery/i);
+  });
+
+  test('retains historical-only projects not in active outcomes, sorted alphabetically', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'zebra-service',
+          runId: 'run-z1',
+          observedAt: '2026-09-24T10:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'alpha-service',
+          runId: 'run-a1',
+          observedAt: '2026-09-24T10:00:00.000Z',
+        }),
+      ],
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const result = buildAggregateIndex({
+      discovery,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    expect(result.projects.map((p) => p.projectId)).toEqual(['alpha-service', 'zebra-service']);
+    expect(result.projects[0]?.name).toBe('Project alpha-service');
+    expect(result.projects[0]?.runId).toBe('run-a1');
+    expect(result.projects[0]?.reportPath).toBe('alpha-service/run-a1/index.html');
+  });
+
+  test('orders project runs latest-first by observedAt and breaks ties by runId', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'run-older',
+          observedAt: '2026-09-24T08:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'run-tie-1',
+          observedAt: '2026-09-24T10:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'run-tie-2',
+          observedAt: '2026-09-24T10:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'run-newest',
+          observedAt: '2026-09-24T11:00:00.000Z',
+        }),
+      ],
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const result = buildAggregateIndex({
+      discovery,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    const project = result.projects[0]!;
+    expect(project.projectId).toBe('service-a');
+    expect(project.runId).toBe('run-newest');
+    expect(project.runs.map((r) => r.runId)).toEqual([
+      'run-newest',
+      'run-tie-2',
+      'run-tie-1',
+      'run-older',
+    ]);
+  });
+
+  test('omits reportPath on project if latest run has no report file', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'run-old',
+          observedAt: '2026-09-24T08:00:00.000Z',
+          hasReport: true,
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'run-latest-failed',
+          observedAt: '2026-09-24T10:00:00.000Z',
+          state: 'failed',
+          hasReport: false,
+        }),
+      ],
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const result = buildAggregateIndex({
+      discovery,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    const project = result.projects[0]!;
+    expect(project.runId).toBe('run-latest-failed');
+    expect(project.reportPath).toBeUndefined();
+    expect(project.runs[0]?.reportPath).toBeUndefined();
+    expect(project.runs[1]?.reportPath).toBe('service-a/run-old/index.html');
+  });
+
+  test('active outcomes take precedence over historical metadata and determine project order', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'project-historical',
+          runId: 'hist-1',
+          observedAt: '2026-09-24T08:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'project-b',
+          runId: 'run-b1',
+          observedAt: '2026-09-24T09:00:00.000Z',
+        }),
+        fakeDiscoveredManifest({
+          projectId: 'project-a',
+          runId: 'run-a1',
+          observedAt: '2026-09-24T09:00:00.000Z',
+        }),
+      ],
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const outcomes: ProjectOutcome[] = [
+      {
+        projectId: 'project-b',
+        name: 'Active Project B Name',
+        state: 'success',
+        runId: 'run-b1',
+        warnings: ['active-b-warning'],
+      },
+      {
+        projectId: 'project-a',
+        name: 'Active Project A Name',
+        state: 'partial',
+        runId: 'run-a1',
+        warnings: [],
+      },
+    ];
+
+    const result = buildAggregateIndex({
+      discovery,
+      outcomes,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    // Project order: active outcomes first in order, then historical-only projects alphabetically
+    expect(result.projects.map((p) => p.projectId)).toEqual([
+      'project-b',
+      'project-a',
+      'project-historical',
+    ]);
+
+    expect(result.projects[0]?.name).toBe('Active Project B Name');
+    expect(result.projects[0]?.warnings).toEqual(['active-b-warning']);
+    expect(result.projects[1]?.state).toBe('partial');
+    expect(result.projects[2]?.name).toBe('Project project-historical');
+  });
+
+  test('handles active failure without validated manifest (ephemeral row, no fake links)', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'old-run',
+          observedAt: '2026-09-24T08:00:00.000Z',
+        }),
+      ],
+      warnings: [],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const outcomes: ProjectOutcome[] = [
+      {
+        projectId: 'service-a',
+        name: 'Service A',
+        state: 'failed',
+        runId: 'new-unvalidated-run',
+        error: 'Connection timeout',
+        warnings: ['warn-1'],
+      },
+      {
+        projectId: 'service-brand-new',
+        name: 'Brand New Service',
+        state: 'failed',
+        runId: 'brand-new-run',
+        error: 'Setup failure',
+        warnings: [],
+      },
+    ];
+
+    const result = buildAggregateIndex({
+      discovery,
+      outcomes,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    const serviceA = result.projects.find((p) => p.projectId === 'service-a')!;
+    expect(serviceA.state).toBe('failed');
+    expect(serviceA.runId).toBe('new-unvalidated-run');
+    expect(serviceA.reportPath).toBeUndefined(); // No reportPath fabricated!
+    expect(serviceA.warnings).toEqual(['warn-1', 'Connection timeout']);
+    expect(serviceA.runs.map((r) => r.runId)).toEqual(['old-run']);
+
+    const brandNew = result.projects.find((p) => p.projectId === 'service-brand-new')!;
+    expect(brandNew.state).toBe('failed');
+    expect(brandNew.runId).toBe('brand-new-run');
+    expect(brandNew.reportPath).toBeUndefined();
+    expect(brandNew.runs).toEqual([]);
+    expect(brandNew.warnings).toEqual(['Setup failure']);
+  });
+
+  test('extracts Jenkins jobId and branch and sanitizes persisted warnings', () => {
+    const discovery: ManifestDiscoveryResult = {
+      manifests: [
+        fakeDiscoveredManifest({
+          projectId: 'service-a',
+          runId: 'run-1',
+          observedAt: '2026-09-24T10:00:00.000Z',
+          jobUrl: 'https://jenkins.example/job/folder/job/org/job/repo/job/feature%2Ftest/',
+          warnings: ['secret password=123 in log', 'x'.repeat(600)],
+        }),
+      ],
+      warnings: ['initial diagnostic warning'],
+      ignoredIncompatibleCount: 0,
+      incomplete: false,
+    };
+
+    const result = buildAggregateIndex({
+      discovery,
+      warnings: ['caller warning'],
+      generatedAt: '2026-09-24T12:00:00.000Z',
+    });
+
+    expect(isValidAggregateResult(result)).toBe(true);
+    const run = result.projects[0]!.runs[0]!;
+    expect(run.jobId).toBe('repo');
+    expect(run.branch).toBe('feature/test');
+    expect(run.warnings[0]).not.toContain('123');
+    expect(run.warnings[1]?.length).toBeLessThanOrEqual(500);
+    expect(result.warnings).toContain('caller warning');
+    expect(result.warnings).toContain('initial diagnostic warning');
+  });
+});
+</file>
+
 <file path="tests/unit/artifact-lifecycle.spec.ts">
 import * as fs from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -142879,6 +144079,302 @@ test('parses --env arguments for template report runner', () => {
 });
 </file>
 
+<file path="tests/unit/persistent-aggregate-bounds.spec.ts">
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { expect, test, type Browser } from '@playwright/test';
+import { loadProjectConfig } from '../../src/config.js';
+import { runConfiguredProjects } from '../../src/runner.js';
+
+import { discoverRunManifests } from '../../src/artifacts/aggregate-manifest-reader.js';
+import { writeAggregateDataPair } from '../../src/artifacts/aggregate-report-publisher.js';
+import {
+  isValidAggregateResult,
+  MAX_AGGREGATE_PROJECTS,
+} from '../../src/artifacts/result-validation.js';
+import { MAX_STATIC_FILE_BYTES } from '../../src/reporting/report-server-constants.js';
+import type { AggregateReportResult } from '../../src/result-types.js';
+function failureResult(runId: string) {
+  return {
+    schemaVersion: 3,
+    project: { id: 'service-a', name: 'Service A' },
+    run: { runId, observedAt: '2026-09-24T12:00:00.000Z' },
+    state: 'failed' as const,
+    diagnostic: 'capture failed',
+    warnings: [],
+  };
+}
+
+function failureManifest(runId: string) {
+  return {
+    kind: 'project-run' as const,
+    schemaVersion: 3 as const,
+    project: { id: 'service-a', name: 'Service A' },
+    run: { runId, observedAt: '2026-09-24T12:00:00.000Z' },
+    state: 'failed' as const,
+    artifacts: {
+      manifest: 'manifest.json' as const,
+      data: 'data.json' as const,
+      screenshots: [],
+    },
+    warnings: [],
+  };
+}
+
+test.describe('Persistent aggregate validation and boundary limits', () => {
+  test('isValidAggregateResult accepts zero-project aggregate and 81-character project ID', () => {
+    const emptyAggregate: AggregateReportResult = {
+      schemaVersion: 3,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+      projects: [],
+      warnings: [],
+    };
+    expect(isValidAggregateResult(emptyAggregate)).toBe(true);
+
+    // 81-character project ID matching SAFE_ID: 1 char + 80 chars
+    const maxSafeId = 'a' + 'b'.repeat(80);
+    expect(maxSafeId).toHaveLength(81);
+
+    const aggregateWithMaxId: AggregateReportResult = {
+      schemaVersion: 3,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+      projects: [
+        {
+          projectId: maxSafeId,
+          name: 'Max ID Project',
+          state: 'success',
+          runs: [],
+          warnings: [],
+        },
+      ],
+      warnings: [],
+    };
+    expect(isValidAggregateResult(aggregateWithMaxId)).toBe(true);
+
+    // 82-character project ID should be rejected
+    const overlongId = 'a' + 'b'.repeat(81);
+    expect(isValidAggregateResult({
+      ...aggregateWithMaxId,
+      projects: [{ ...aggregateWithMaxId.projects[0]!, projectId: overlongId }],
+    })).toBe(false);
+  });
+
+  test('isValidAggregateResult enforces MAX_AGGREGATE_PROJECTS ceiling', () => {
+    expect(MAX_AGGREGATE_PROJECTS).toBe(5_050);
+
+    const makeProjects = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        projectId: `proj-${i}`,
+        name: `Project ${i}`,
+        state: 'success' as const,
+        runs: [],
+        warnings: [],
+      }));
+
+    const validAtCeiling: AggregateReportResult = {
+      schemaVersion: 3,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+      projects: makeProjects(MAX_AGGREGATE_PROJECTS),
+      warnings: [],
+    };
+    expect(isValidAggregateResult(validAtCeiling)).toBe(true);
+
+    const invalidAboveCeiling: AggregateReportResult = {
+      schemaVersion: 3,
+      generatedAt: '2026-09-24T12:00:00.000Z',
+      projects: makeProjects(MAX_AGGREGATE_PROJECTS + 1),
+      warnings: [],
+    };
+    expect(isValidAggregateResult(invalidAboveCeiling)).toBe(false);
+  });
+
+  test('discoverRunManifests flags incomplete when manifest maximum is reached', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'disc-incomplete-'));
+    try {
+      for (let i = 1; i <= 3; i++) {
+        const dir = path.join(root, 'service-a', `run-${i}`);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(failureManifest(`run-${i}`)));
+        fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify(failureResult(`run-${i}`)));
+      }
+
+      // Asking for maximum 2 when 3 exist
+      const result = await discoverRunManifests(root, 2);
+      expect(result.incomplete).toBe(true);
+      expect(result.warnings).toContain('manifest discovery limit reached');
+      expect(result.manifests.length).toBeLessThanOrEqual(2);
+
+      // Asking for maximum 10 when 3 exist
+      const completeResult = await discoverRunManifests(root, 10);
+      expect(completeResult.incomplete).toBe(false);
+      expect(completeResult.manifests).toHaveLength(3);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('writeAggregateDataPair rejects output exceeding MAX_STATIC_FILE_BYTES and preserves prior files', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-size-limit-'));
+    try {
+      const initialAggregate: AggregateReportResult = {
+        schemaVersion: 3,
+        generatedAt: '2026-09-24T12:00:00.000Z',
+        projects: [
+          {
+            projectId: 'service-a',
+            name: 'Service A',
+            state: 'success',
+            runs: [],
+            warnings: [],
+          },
+        ],
+        warnings: [],
+      };
+
+      await writeAggregateDataPair(root, initialAggregate);
+      const initialData = fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8');
+      const initialReport = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+
+      const maxWarnings = Array.from({ length: 30 }, () => 'w'.repeat(500));
+      const oversizedRuns = Array.from({ length: 1200 }, (_, i) => ({
+        runId: `run-${i}`,
+        state: 'success' as const,
+        manifestPath: `service-a/run-${i}/manifest.json`,
+        warnings: maxWarnings,
+      }));
+
+      const oversizedAggregate: AggregateReportResult = {
+        schemaVersion: 3,
+        generatedAt: '2026-09-24T12:00:00.000Z',
+        projects: [
+          {
+            projectId: 'service-a',
+            name: 'Service A',
+            state: 'success',
+            runs: oversizedRuns,
+            warnings: [],
+          },
+        ],
+        warnings: [],
+      };
+      expect(isValidAggregateResult(oversizedAggregate)).toBe(true);
+
+      await expect(writeAggregateDataPair(root, oversizedAggregate)).rejects.toThrow(
+        /aggregate data exceeds maximum static file size/i
+      );
+
+      // Previous files are preserved intact
+      expect(fs.readFileSync(path.join(root, 'aggregate-data.json'), 'utf8')).toBe(initialData);
+      expect(fs.readFileSync(path.join(root, 'index.html'), 'utf8')).toBe(initialReport);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('runner persists historical projects in aggregate-data.json and index.html across distinct configuration runs', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-persist-'));
+    try {
+      const environment = { A_USER: 'u-a', A_PASS: 'p-a', B_USER: 'u-b', B_PASS: 'p-b' };
+      const configFile = path.join(root, 'projects.json');
+      fs.writeFileSync(configFile, JSON.stringify({
+        schemaVersion: 1,
+        defaults: { artifactDir: path.join(root, 'reports'), timeoutMs: 5000 },
+        projects: [
+          { id: 'proj-a', name: 'Project A', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/proj-a/', credentials: { usernameVariable: 'A_USER', passwordVariable: 'A_PASS' } },
+          { id: 'proj-b', name: 'Project B', loginUrl: 'https://jenkins.example/login', jobUrl: 'https://jenkins.example/job/proj-b/', credentials: { usernameVariable: 'B_USER', passwordVariable: 'B_PASS' } },
+        ],
+      }), { mode: 0o600 });
+      const allProjects = loadProjectConfig(configFile, environment);
+      const configA = allProjects[0]!;
+      const configB = allProjects[1]!;
+
+      const fakeBrowser = {
+        newContext: async () => ({ newPage: async () => ({}), close: async () => undefined }),
+        close: async () => undefined,
+      } as unknown as Browser;
+
+      await runConfiguredProjects([configA], {
+        launchBrowser: async () => fakeBrowser,
+        executeProject: async (project) => {
+          const dir = path.join(root, 'reports', project.id, 'run-1');
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+            kind: 'project-run',
+            schemaVersion: 3,
+            project: { id: 'proj-a', name: 'Project A' },
+            run: { runId: 'run-1', observedAt: '2026-09-24T10:00:00.000Z' },
+            state: 'failed',
+            artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
+            warnings: [],
+          }));
+          fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({
+            schemaVersion: 3,
+            project: { id: 'proj-a', name: 'Project A' },
+            run: { runId: 'run-1', observedAt: '2026-09-24T10:00:00.000Z' },
+            state: 'failed',
+            diagnostic: 'a failed',
+            warnings: [],
+          }));
+          return {
+            projectId: project.id,
+            name: project.name,
+            state: 'failed',
+            runId: 'run-1',
+            warnings: [],
+          };
+        },
+      });
+
+      const firstData = JSON.parse(fs.readFileSync(path.join(root, 'reports', 'aggregate-data.json'), 'utf8')) as AggregateReportResult;
+      expect(firstData.projects.map((p) => p.projectId)).toEqual(['proj-a']);
+
+      await runConfiguredProjects([configB], {
+        launchBrowser: async () => fakeBrowser,
+        executeProject: async (project) => {
+          const dir = path.join(root, 'reports', project.id, 'run-2');
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
+            kind: 'project-run',
+            schemaVersion: 3,
+            project: { id: 'proj-b', name: 'Project B' },
+            run: { runId: 'run-2', observedAt: '2026-09-24T11:00:00.000Z' },
+            state: 'failed',
+            artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
+            warnings: [],
+          }));
+          fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({
+            schemaVersion: 3,
+            project: { id: 'proj-b', name: 'Project B' },
+            run: { runId: 'run-2', observedAt: '2026-09-24T11:00:00.000Z' },
+            state: 'failed',
+            diagnostic: 'b failed',
+            warnings: [],
+          }));
+          return {
+            projectId: project.id,
+            name: project.name,
+            state: 'failed',
+            runId: 'run-2',
+            warnings: [],
+          };
+        },
+      });
+
+      const secondData = JSON.parse(fs.readFileSync(path.join(root, 'reports', 'aggregate-data.json'), 'utf8')) as AggregateReportResult;
+      expect(secondData.projects.map((p) => p.projectId)).toEqual(['proj-b', 'proj-a']);
+
+      const secondReport = fs.readFileSync(path.join(root, 'reports', 'index.html'), 'utf8');
+      expect(secondReport).toContain('2 retained project(s)');
+      expect(secondReport).toContain('Project B');
+      expect(secondReport).toContain('Project A');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+</file>
+
 <file path="tests/unit/project-config.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -143362,6 +144858,53 @@ test('reclaims an incomplete claim when its recorded PID was reused', async () =
     markOld(directory);
     markOld(claimPath);
     expect(await reclaimIncompleteLock(reportRoot, NOW.getTime(), 1_000, os.hostname(), async () => ({ state: 'live', startedAt: REUSED_AT }))).toBe(true);
+    expect(fs.existsSync(directory)).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+test('reclaims an empty abandoned lock directory when expired', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-empty-dir-'));
+  try {
+    const reportRoot = path.join(root, 'reports');
+    fs.mkdirSync(reportRoot);
+    const directory = createLock(reportRoot);
+    markOld(directory);
+    expect(await reclaimIncompleteLock(reportRoot, NOW.getTime(), 1_000, os.hostname())).toBe(true);
+    expect(fs.existsSync(directory)).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('acquireReportRootLock reclaims an empty abandoned lock directory and acquires lock', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-acquire-empty-'));
+  try {
+    const reportRoot = path.join(root, 'reports');
+    fs.mkdirSync(reportRoot);
+    const directory = createLock(reportRoot);
+    markOld(directory);
+    const lock = await acquireReportRootLock(reportRoot, { leaseMs: 2_000, heartbeatMs: 500, waitMs: 1_000, now: () => NOW.getTime() });
+    expect(fs.existsSync(directory)).toBe(true);
+    const owner = await readLockOwner(directory);
+    expect(owner).toBeDefined();
+    await lock.release();
+    expect(fs.existsSync(directory)).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('does not leak lock directory if process inspection fails before directory creation', async () => {
+  if (process.platform !== 'win32') return;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-no-leak-'));
+  try {
+    const reportRoot = path.join(root, 'reports');
+    fs.mkdirSync(reportRoot);
+    const directory = path.join(reportRoot, '.report-root-lock');
+    await expect(acquireReportRootLock(reportRoot, { pid: 99_999_999, waitMs: 0 })).rejects.toThrow(
+      /process identity could not be established/u,
+    );
     expect(fs.existsSync(directory)).toBe(false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

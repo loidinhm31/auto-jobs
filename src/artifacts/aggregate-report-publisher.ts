@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { AggregateReportResult } from '../result-types.js';
 import { writeAggregateReportFile } from '../reporting/report-output.js';
 import { assertValidAggregateResult } from './result-validation.js';
+import { MAX_STATIC_FILE_BYTES } from '../reporting/report-server-constants.js';
 import {
   type AggregatePublicationJournal,
   recoverAggregatePublication,
@@ -97,6 +98,16 @@ export async function writeAggregateDataPair(
   try {
     assertValidAggregateResult(aggregate);
     await writeAggregateReportFile(reportRoot, aggregate, stagedReport);
+    const [dataStat, reportStat] = await Promise.all([
+      fs.stat(stagedData),
+      fs.stat(stagedReport),
+    ]);
+    if (dataStat.size > MAX_STATIC_FILE_BYTES) {
+      throw new Error(`aggregate data exceeds maximum static file size (${dataStat.size} > ${MAX_STATIC_FILE_BYTES})`);
+    }
+    if (reportStat.size > MAX_STATIC_FILE_BYTES) {
+      throw new Error(`aggregate report exceeds maximum static file size (${reportStat.size} > ${MAX_STATIC_FILE_BYTES})`);
+    }
     await writeAggregatePublicationJournal(journalPath, journal);
     journalWritten = true;
     try {

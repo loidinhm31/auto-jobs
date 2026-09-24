@@ -60,7 +60,7 @@ const REPORTS_KEYS = ['snyk', 'sonarqube'] as const;
 const AGGREGATE_KEYS = ['schemaVersion', 'generatedAt', 'projects', 'warnings'] as const;
 const AGGREGATE_PROJECT_KEYS = ['projectId', 'name', 'state', 'runId', 'reportPath', 'runs', 'warnings'] as const;
 const AGGREGATE_RUN_KEYS = ['runId', 'state', 'jobId', 'branch', 'manifestPath', 'reportPath', 'warnings'] as const;
-const MAX_AGGREGATE_PROJECTS = 50;
+export const MAX_AGGREGATE_PROJECTS = 5_050;
 const MAX_AGGREGATE_RUNS_PER_PROJECT = 5_000;
 const MAX_AGGREGATE_TOTAL_RUNS = 5_000;
 const MAX_AGGREGATE_PATH_LENGTH = 512;
@@ -144,7 +144,7 @@ export function isValidManifestContract(
   options: ManifestContractOptions = {},
 ): value is ProjectRunManifest {
   if (!hasOnlyKeys(value, MANIFEST_KEYS) || value.kind !== 'project-run' || value.schemaVersion !== 3 ||
-    !hasOnlyKeys(value.project, MANIFEST_PROJECT_KEYS) || !boundedSafeId(value.project.id, 80) ||
+    !hasOnlyKeys(value.project, MANIFEST_PROJECT_KEYS) || !boundedSafeId(value.project.id, 81) ||
     !boundedString(value.project.name, 256) || options.expectedProjectId !== undefined && value.project.id !== options.expectedProjectId ||
     !hasOnlyKeys(value.run, MANIFEST_RUN_KEYS) || !boundedSafeId(value.run.runId, 96) ||
     !boundedString(value.run.observedAt, 128) || options.expectedRunId !== undefined && value.run.runId !== options.expectedRunId ||
@@ -265,7 +265,7 @@ function validSnyk(value: unknown): boolean {
 }
 
 function validProject(value: unknown): value is { id: string; name: string } {
-  return hasOnlyKeys(value, PROJECT_KEYS) && boundedString(value.id, 80) && boundedString(value.name, 256);
+  return hasOnlyKeys(value, PROJECT_KEYS) && boundedString(value.id, 81) && boundedString(value.name, 256);
 }
 
 function validRun(value: unknown): value is { runId: string; observedAt: string } {
@@ -372,7 +372,7 @@ function validAggregateProject(value: unknown): value is AggregateProjectSummary
   const runId = value.runId;
   const reportPath = value.reportPath;
   const runs = value.runs;
-  if (!boundedString(projectId, 80) || !SAFE_ID.test(projectId) || !boundedString(name, 256) ||
+  if (!boundedString(projectId, 81) || !SAFE_ID.test(projectId) || !boundedString(name, 256) ||
     !validAggregateState(state) || !Array.isArray(runs) || runs.length > MAX_AGGREGATE_RUNS_PER_PROJECT ||
     !validWarnings(value.warnings) || (runId !== undefined && (!boundedString(runId, 96) || !SAFE_ID.test(runId))) ||
     (reportPath !== undefined && (runId === undefined || reportPath !== aggregateArtifactPath(projectId, runId, 'index.html') ||
@@ -389,7 +389,7 @@ export function isValidAggregateResult(value: unknown): value is AggregateReport
   if (!hasOnlyKeys(value, AGGREGATE_KEYS) || value.schemaVersion !== 3) return false;
   const generatedAt = value.generatedAt;
   const projects = value.projects;
-  if (!isIsoUtcTimestamp(generatedAt) || !Array.isArray(projects) || projects.length === 0 ||
+  if (!isIsoUtcTimestamp(generatedAt) || !Array.isArray(projects) ||
     projects.length > MAX_AGGREGATE_PROJECTS || !validWarnings(value.warnings)) return false;
   const projectIds = new Set<string>();
   let totalRuns = 0;

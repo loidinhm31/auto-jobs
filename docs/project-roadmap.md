@@ -4,6 +4,19 @@ Last updated: 2026-09-24
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Jenkins Stage View Build Monitoring & Status Tracking](../plans/260924-0218-stage-view-build-monitoring/plan.md)
 
+## Persistent project report management
+
+Plan: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
+
+**Overall status:** In progress · **25%** (4 of 16 planned hours; 1 of 4 phases DONE).
+
+| Phase | Status | Progress | Effort | Completed | Evidence/detail |
+|---|---|---:|---:|---|---|
+| 01. Persistent aggregate index builder | **DONE** | **100%** | 4h | 2026-09-24 | Merged validated retained history with active outcomes; incomplete discovery and oversized publication fail closed. Review 10/10; targeted tests 13/13, unit suite 415/415, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md), [review](../plans/reports/code-review-260924-2121-phase-01-persistent-aggregate-index-builder.md)). |
+| 02. Guarded control reports DELETE API | Pending | 0% | 5h | — | Lock, safely remove one project tree, republish index |
+| 03. Report management page navigation and deletion | Pending | 0% | 3h | — | Dashboard link, inventory, pagination, confirmed deletion |
+| 04. Verification and caller migration | Pending | 0% | 4h | — | End-to-end security, persistence, concurrency, recovery, browser and caller verification |
+
 ## Control Page Parallel Auto-Build
 
 Plan: [Control Page Parallel Auto-Build](../plans/260924-1158-control-page-parallel-auto-build/plan.md)
@@ -149,6 +162,7 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Phase 02 evidence: QA recorded 398/398 unit and 18/18 control tests passing; code review recorded 30/30 focused tests and a clean typecheck, scored 9.5/10 with no critical issues or warnings ([test report](../plans/reports/tester-260924-1347-phase-02-parallel-auto-build-executor-and-api.md); [review](../plans/reports/code-review-260924-1355-phase-02-parallel-auto-build.md)). QA's initial typecheck report had five TS2550 diagnostics; the final review records the ES2023-compatible helper and a subsequent clean typecheck.
 - Completed Phase 03 (Control Page UI) on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-03-control-page-ui-refactor.md)); delivered immediate all-enabled actions, the shared Workers selector and ordered multi-project results.
 - Completed Phase 04 (Testing and verification) and Control Page Parallel Auto-Build at 100% on 2026-09-24 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [overall plan](../plans/260924-1158-control-page-parallel-auto-build/plan.md)). Release gate passed 439/439; typecheck/build passed; review approved at 9.3/10 with no critical issues ([test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
+- Completed Phase 01 (Persistent aggregate index builder) on 2026-09-24; retained validated report history across configuration changes and added fail-closed discovery/publication bounds. Review approved 10/10; targeted specs passed 13/13, unit suite 415/415, typecheck 0 errors ([phase](../plans/260924-2019-persistent-project-report-management/phase-01-persistent-aggregate-index-builder.md), [review](../plans/reports/code-review-260924-2121-phase-01-persistent-aggregate-index-builder.md)).
 
 ### 0.1.0 (development) — 2026-09-23
 

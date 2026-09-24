@@ -1,11 +1,14 @@
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
-**Document scope:** schema-v1 report capture, bounded execution, Control Page
-execution/results, offline build fixtures, and dynamic credentials.<br>
-**Current milestone:** Control Page Parallel Auto-Build — **complete**, 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build passed; review approved 9.3/10.<br>
-**Prior completed milestone:** Phase 02 Parallel Auto-Build Executor and API —
-DONE (2026-09-24)
+**Document scope:** schema-v1 report capture, persistent aggregate history,
+bounded execution, Control Page results, offline build fixtures, and dynamic
+credentials.<br>
+**Current milestone:** Persistent Aggregate Index Builder — Phase 01
+implementation (2026-09-24).<br>
+**Prior completed milestone:** Control Page Parallel Auto-Build — complete,
+100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
+passed; review approved 9.3/10.
 
 ## Product summary
 
@@ -17,6 +20,10 @@ target; the loopback Control Page can trigger all enabled `auto-build` projects
 in a bounded batch. Both paths return sanitized in-memory outcomes without
 collecting reports or writing artifacts. Offline Jenkins fixtures make report
 and build journeys deterministic without a live controller.
+
+The root aggregate is rebuilt from validated schema-v3 manifests and current
+report outcomes so history-only projects survive configuration changes. An
+incomplete inventory blocks replacing the last complete index.
 
 Phase 01 adds a local `SecretStore` persistence seam for the control plane.
 It stores validated environment-style key/value pairs in the git-ignored
@@ -137,6 +144,14 @@ and failure semantics are validated before side effects.
 - Hold the report-root lock through worker settlement, browser close, final
   cleanup, manifest discovery, and aggregate publication.
 - Stage, validate, and publish immutable per-run artifacts and an aggregate.
+- Rebuild the persistent root index from validated schema-v3 manifests and
+  current outcomes; retain history-only projects across configuration changes.
+- Refuse to replace the index when `ManifestDiscoveryResult.incomplete` is true;
+  allow an empty `projects` array when both history and outcomes are empty.
+- Keep aggregate bounds distinct from input configuration: up to 5,050 project
+  rows and 5,000 total retained runs, while schema-v1 input remains 1–50 projects.
+- Check staged aggregate JSON and HTML independently against the 16 MiB static
+  file limit before replacing the prior pair.
 
 ### FR-4: Auto-build execution
 
@@ -294,6 +309,20 @@ and failure semantics are validated before side effects.
 | Determinism | Unit and fixture tests use injected dependencies or exact default-deny routes. |
 | Maintainability | Keep one responsibility per module, strict TypeScript, and production files below 200 lines when changed. |
 | Documentation | Keep each Markdown file below 800 lines and link only verified paths. |
+
+## Persistent aggregate index acceptance criteria
+
+- [x] `buildAggregateIndex` combines complete discovery and current outcomes
+  without file I/O, preserves current outcome order, and retains history-only
+  projects.
+- [x] Incomplete discovery is rejected; empty discovery and no outcomes produce
+  a valid aggregate with `projects: []`.
+- [x] Aggregate validation allows up to 5,050 project rows and 5,000 total run
+  entries without changing the 1–50 schema-v1 input limit.
+- [x] The publisher rejects either staged file above 16 MiB before replacing
+  the existing aggregate pair.
+- [x] Focused coverage exists in `aggregate-index-builder.spec.ts` and
+  `persistent-aggregate-bounds.spec.ts`.
 
 ## Phase 01 acceptance criteria
 
@@ -456,6 +485,7 @@ require the environment variables named by project configuration.
 | --- | --- | --- |
 | Schema and mode selection | `src/config/`, `src/config.ts` | [multi-project configuration](./multi-project-configuration.md) |
 | Report runner | `src/runner.ts`, `src/project/project-runner.ts` | [architecture](./architecture.md) |
+| Persistent aggregate index | `src/artifacts/aggregate-index-builder.ts`, `aggregate-manifest-reader.ts`, `aggregate-report-publisher.ts`, `result-validation.ts` | [report pipeline](./report-pipeline.md) |
 | Jenkins identity and trigger | `src/jenkins/url-identity.ts`, `src/jenkins/build-trigger*.ts` | [system architecture](./system-architecture.md) |
 | Auto-build lifecycle | `src/project/project-workflow.ts`, `src/project/auto-build-runner.ts` | [codebase summary](./codebase-summary.md) |
 | Local secret persistence | `src/reporting/report-server-secret-store.ts`, `src/reporting/report-server-constants.ts` | [architecture](./architecture.md), [multi-project configuration](./multi-project-configuration.md), [code standards](./code-standards.md) |
@@ -485,6 +515,10 @@ report CLI still has no production auto-build command.
 ## Changelog
 
 ### 0.1.0 (development) — 2026-09-24
+
+- Added the persistent aggregate-index builder: validated history and current
+  outcomes share one index; incomplete discovery cannot replace it; the index
+  supports zero projects, 5,050 project rows, and 16 MiB staged-file limits.
 
 - Completed Phase 03 Control Page UI refactor: shared saved Workers selector,
   all-enabled report/build actions, no per-card build control or confirmation

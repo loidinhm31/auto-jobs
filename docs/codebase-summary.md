@@ -1,9 +1,9 @@
 # Codebase summary
 
-This summary is based on a fresh Repomix compaction (`repomix-output.xml`) and
-the checked-in source/configuration, including Stage View completion monitoring
-and its Control Page wait toggle. The form builder and raw JSON view share the
-saved document state. Tests use local fixtures; no live Jenkins run is claimed.
+This summary reflects the refreshed `repomix-output.xml` and checked-in
+source/configuration. It includes Stage View completion monitoring and
+persistent project history in the static aggregate report. Deterministic
+fixtures use local inputs; no live Jenkins run is claimed.
 
 ## Repository profile
 
@@ -76,7 +76,12 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
   and the confirmation flow are removed; `RunResultBox` renders ordered
   `BuildProjectOutcomeRow` results with scalar fallback for older records.
 - Phase 04 auto-build verification (2026-09-24): E2E replaced obsolete build-confirmation/per-card interactions with absent-control checks and immediate batch action, shared `#select-workers`, saved/dirty gating, and request assertions without `projectId`/`workerCount`. `npm run test:release` passed 439/439 (unit 399, template E2E 13, control E2E 20, report 5, WebKit 2); typecheck/build passed; review approved 9.3/10.
-- Repomix inventory refreshed: 295 files packed to `repomix-output.xml`; ignored/binary files remain excluded and two credential-like fixture test files were omitted by its security scan.
+- Persistent aggregate index builder: pure projection of current report
+  outcomes and validated history. Incomplete discovery blocks publication;
+  aggregate data allows zero projects, up to 5,050 project rows, and staged
+  JSON/HTML files up to 16 MiB each.
+- Repomix compaction regenerated at `repomix-output.xml`; repository ignore
+  rules remain in effect.
 
 ## Entry points and scripts
 
@@ -86,6 +91,7 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
 | `src/cli.ts` | Parses the explicit `--config` path and reports project outcomes. |
 | `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and `selectReportProjects`, `selectAutoBuildProjects`, and `selectAutoBuildProject`. |
 | `src/runner.ts` | Saved-count report dispatch, bounded multi-project execution, and aggregate publication. |
+| `src/artifacts/aggregate-index-builder.ts` | Builds the validated aggregate from current outcomes and retained manifests without file I/O. |
 | `src/project/report-worker-pool.ts` | Fixed in-process loops with indexed outcomes and per-project failure isolation. |
 | `src/project/auto-build-runner.ts` | Explicit one-project auto-build API with optional Stage View wait and rich build outcome. |
 | `src/project/auto-build-worker-pool.ts` | Bounded concurrent project loops with configuration-ordered outcomes and per-project failure isolation. |
@@ -461,6 +467,20 @@ Report roots contain `index.html`, `aggregate-data.json`, CSS assets, and
 `manifest.json`, and requested screenshots. Auto-build runs do not allocate
 these report artifacts. Test-runner traces and reports in `test-results/` or
 `playwright-report/` are test evidence, not vendor evidence.
+
+The pure `buildAggregateIndex` builder keeps current outcomes in configuration
+order and retains history-only projects. The manifest reader sets
+`ManifestDiscoveryResult.incomplete` when its manifest or directory/artifact
+budgets are reached; the builder rejects incomplete discovery and the runner
+skips aggregate publication. The schema-v3 aggregate accepts `projects: []` for
+zero-project index and up to 5,050 project rows, separate from the schema-v1
+input limit of 50 projects. Aggregate validation also caps total retained runs
+at 5,000. Before publication, the publisher checks both staged JSON and HTML
+against the 16 MiB static-file limit and preserves the previous pair on
+oversize rejection.
+
+Focused coverage lives in `tests/unit/aggregate-index-builder.spec.ts` and
+`tests/unit/persistent-aggregate-bounds.spec.ts`.
 
 The deterministic release sequence is documented in
 [release gates](./release-gates.md). Template tests fulfill exact URLs from

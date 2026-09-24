@@ -570,6 +570,24 @@ report-root lease coordinates same-host work using token/PID/hostname owner
 data. It has no UID field, is not a same-UID authorization boundary, and is
 not a distributed lock.
 
+## Persistent aggregate index gate
+
+Run the focused deterministic contracts:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/aggregate-index-builder.spec.ts \
+  tests/unit/persistent-aggregate-bounds.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The suites cover current outcomes and retained history, empty aggregate
+construction, rejection of incomplete discovery, the 5,050 project ceiling,
+discovery-limit signaling, and rejection of oversized staged aggregate output
+without replacing the prior pair. The tests use in-memory manifests and
+temporary report roots; they do not contact Jenkins or vendor services.
+See [report pipeline](./report-pipeline.md) for the persisted index contract.
+
 ## Security checks
 
 - Never inline credentials in JSON, shell history, fixtures, logs, or examples.

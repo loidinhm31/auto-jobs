@@ -5,16 +5,15 @@ import { discoverRunManifests } from './artifacts/aggregate-manifest-reader.js';
 import { writeAggregateData } from './artifacts/result-writer.js';
 import { recoverAggregatePublication } from './artifacts/aggregate-publication-recovery.js';
 import { ensureStylesheet } from './reporting/report-output.js';
-import { sanitizePersistedWarnings } from './artifacts/result-validation.js';
 import { selectReportProjects } from './config/project-run-selection.js';
 import { defaultLaunch, launchOptions, type BrowserLauncher } from './browser-launcher.js';
 
 export { launchOptions };
 import { loadProjectConfigWithDocument } from './config/project-config-loader.js';
 import { normalizeReportWorkerCount } from './config/report-worker-count.js';
-import { jenkinsJobPathSegments } from './jenkins/url-identity.js';
 import type { NormalizedProjectConfig } from './config/config-types.js';
-import type { AggregateProjectSummary, AggregateReportResult, AggregateRunSummary } from './result-types.js';
+import type { AggregateReportResult } from './result-types.js';
+import { buildAggregateIndex } from './artifacts/aggregate-index-builder.js';
 import { type ProjectRunnerDependencies } from './project/project-runner.js';
 import { executeProjectWorkerPool, type ProjectExecutor } from './project/report-worker-pool.js';
 import type { ProjectOutcome, RunnerExecutionResult } from './project/project-types.js';
@@ -48,43 +47,6 @@ function enabledConfiguration(projects: readonly NormalizedProjectConfig[]): {
   return { projects: enabled, browserName: first.browser, reportRoot: first.artifactDir };
 }
 
-interface HistoricalRun {
-  readonly relativeDirectory: string;
-  readonly projectId: string;
-  readonly runId: string;
-  readonly state: 'success' | 'partial' | 'failed';
-  readonly warnings: readonly string[];
-  readonly jobId?: string;
-  readonly branch?: string;
-  readonly reportPath?: string;
-}
-
-function aggregateSummary(
-  outcome: ProjectOutcome,
-  historical: readonly HistoricalRun[],
-): AggregateProjectSummary {
-  const runs: AggregateRunSummary[] = historical
-    .filter((item) => item.projectId === outcome.projectId)
-    .map((item) => ({
-      runId: item.runId,
-      state: item.state,
-      ...(item.jobId === undefined ? {} : { jobId: item.jobId }),
-      ...(item.branch === undefined ? {} : { branch: item.branch }),
-      manifestPath: `${item.relativeDirectory}/manifest.json`,
-      ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
-      warnings: sanitizePersistedWarnings(item.warnings),
-    }));
-  const reportPath = runs.find((run) => run.runId === outcome.runId)?.reportPath;
-  return {
-    projectId: outcome.projectId,
-    name: outcome.name,
-    state: outcome.state,
-    runId: outcome.runId,
-    ...(reportPath === undefined ? {} : { reportPath }),
-    runs,
-    warnings: sanitizePersistedWarnings([...outcome.warnings, ...(outcome.error === undefined ? [] : [outcome.error])]),
-  };
-}
 
 export async function runConfiguredProjects(
   projects: readonly NormalizedProjectConfig[],
@@ -137,44 +99,22 @@ export async function runConfiguredProjects(
     const finalCleanup = await artifacts.cleanupOrphans();
     runtimeWarnings.push(...finalCleanup.warnings);
     const discovery = await discoverRunManifests(config.reportRoot);
-    const historical: HistoricalRun[] = discovery.manifests.map((item) => {
-      const jobSegments = item.manifest.jenkins?.jobUrl === undefined
-        ? []
-        : jenkinsJobPathSegments(item.manifest.jenkins.jobUrl);
-      const rawJobId = jobSegments[2];
-      const jobId = rawJobId === undefined || rawJobId.length > 256 ? undefined : rawJobId;
-      const finalJobSegment = jobSegments.at(-1);
-      const branch = jobSegments.length >= 4 && finalJobSegment !== rawJobId &&
-        finalJobSegment !== undefined && finalJobSegment.length <= 256 ? finalJobSegment : undefined;
-      return {
-        relativeDirectory: item.relativeDirectory,
-        projectId: item.manifest.project.id,
-        runId: item.manifest.run.runId,
-        state: item.manifest.state,
-        warnings: sanitizePersistedWarnings(item.manifest.warnings),
-        ...(jobId === undefined ? {} : { jobId }),
-        ...(branch === undefined ? {} : { branch }),
-        ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
-      };
-    });
-    const configuredIds = new Set(config.projects.map((project) => project.id));
-    const orphanWarnings = historical.some((item) => !configuredIds.has(item.projectId))
-      ? ['ignored historical manifests for unconfigured projects']
-      : [];
-    const warnings = sanitizePersistedWarnings([...initialWarnings, ...runtimeWarnings, ...discovery.warnings, ...orphanWarnings]);
-    const aggregate: AggregateReportResult = {
-      schemaVersion: 3,
+    if (discovery.incomplete) {
+      throw new Error('manifest discovery incomplete; skipping aggregate publication to protect historical index');
+    }
+    const aggregate = buildAggregateIndex({
+      discovery,
+      outcomes,
       generatedAt: (dependencies.now ?? (() => new Date()))().toISOString(),
-      projects: outcomes.map((outcome) => aggregateSummary(outcome, historical)),
-      warnings,
-    };
+      warnings: [...initialWarnings, ...runtimeWarnings],
+    });
     await writeAggregateData(config.reportRoot, aggregate);
     return {
       reportRoot: config.reportRoot,
       outcomes,
       aggregate,
       manifests: discovery.manifests,
-      warnings,
+      warnings: aggregate.warnings,
       exitCode: outcomes.some((outcome) => outcome.state === 'failed') ? 1 : 0,
     };
   } finally {

@@ -29,7 +29,7 @@ it is not a replacement for schema or security validation.
 | `src/jenkins/` | Jenkins authentication, exact URL identity, scoped locators, and guarded build submission. |
 | `src/project/` | Report and auto-build workflow orchestration, run state, outcomes, and capture. |
 | `src/workflow/` | Shared absolute deadlines, hard cleanup timeouts, and diagnostic helpers. |
-| `src/artifacts/` | Immutable report identity, staging/publication, manifest discovery, and bounded cleanup. |
+| `src/artifacts/` | Immutable report identity, bounded manifest discovery, persistent aggregate-index building/publication/recovery, staging, and cleanup. |
 | `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
 | `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
 | `src/reporting/` | Static report rendering, links, read-only report serving, and control-plane routing. |
@@ -272,8 +272,9 @@ Tests must defend observable behavior and fail on plausible regressions:
   method/classes, one POST, response classification, unknown-after-POST, no
   retry, mode/enabled gates, secret redaction, and resource cleanup.
 - For report execution, assert project order, fresh contexts, failure
-  continuation, artifact identity, aggregate publication, and that auto-build
-  projects are excluded.
+  continuation, artifact identity, historical aggregate retention, and
+  auto-build exclusion. Cover incomplete discovery rejection, the valid empty
+  index, project/run limits, and staged data/HTML size boundaries.
 - Keep fixture routes exact and default-deny. Do not treat a checked-in HTML
   snapshot as evidence of a live vendor or Jenkins run.
 - Avoid tests that only inspect implementation text or incidental defaults;

@@ -44,8 +44,8 @@ export function renderAggregateReport(aggregate: AggregateReportResult): string 
   <link rel="stylesheet" href="assets/report.css">
 </head>
 <body>
-  <header class="report-header"><p class="eyebrow">Offline vulnerability evidence</p><h1>Vulnerability report index</h1><p class="lede">Generated ${escapeHtmlText(aggregate.generatedAt)} · ${aggregate.projects.length} configured project(s)</p></header>
-  <main>${aggregateWarnings(aggregate.warnings)}${aggregate.projects.length === 0 ? '<p class="empty-state">No configured project outcomes were recorded.</p>' : aggregate.projects.map(projectCard).join('')}</main>
+  <header class="report-header"><p class="eyebrow">Offline vulnerability evidence</p><h1>Vulnerability report index</h1><p class="lede">Generated ${escapeHtmlText(aggregate.generatedAt)} · ${aggregate.projects.length} retained project(s)</p></header>
+  <main>${aggregateWarnings(aggregate.warnings)}${aggregate.projects.length === 0 ? '<p class="empty-state">No retained project reports were recorded.</p>' : aggregate.projects.map(projectCard).join('')}</main>
   <footer><p>Aggregate history is built only from validated schema-v3 manifests. Missing or invalid entries are omitted and surfaced as warnings.</p></footer>
 </body>
 </html>

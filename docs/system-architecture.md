@@ -41,6 +41,8 @@ flowchart TB
   SecretStore --> SecretsApi[Loopback /api/secrets]
   Control[Loopback control server] --> SecretsApi
   SecretsApi -. presence-only status; guarded PUT/DELETE .-> SecretStore
+  Control --> ReportsApi[Loopback /api/reports/projects/:id]
+  ReportsApi -. guarded DELETE; lock report-root .-> ReportRoot
   Control --> RunManager[Control run manager]
   RunManager --> ControlExecutor[Control run executor]
   ConfigFile --> Loader[Validate and normalize]
@@ -53,7 +55,8 @@ flowchart TB
   Jenkins[Jenkins controller] --> ReportSources[Snyk / SonarQube publisher pages]
   Executor --> Jenkins
   Executor --> ReportRoot[Canonical report root]
-  ReportRoot --> ReadOnlyServer[Read-only report server]
+  ReportRoot --> ReadOnlyServer[Read-only report server / reports index]
+  Control -. direct navigation /reports/index.html .-> ReadOnlyServer
   Templates[Checked-in offline fixtures] -. exact synthetic URL routes, tests only .-> Executor
 ```
 
@@ -337,6 +340,21 @@ leases, recovers aggregate publication, and performs bounded orphan cleanup.
 `src/reporting/` escapes rendered values, validates links, sets CSP headers,
 and serves only safe GET/HEAD files below the canonical root. The server is
 read-only, unauthenticated, and loopback by default.
+`src/artifacts/aggregate-index-builder.ts` is the pure projection layer: it
+combines validated discovery with current outcomes, keeping current outcomes
+in order and retaining historical-only projects.
+`ManifestDiscoveryResult.incomplete` signals that a manifest or discovery
+budget was reached. The runner skips publication and the builder rejects an
+incomplete discovery result.
+
+Aggregate validation permits 5,050 project rows (up to 5,000 historical IDs
+plus 50 configured projects); schema-v1 input remains limited to 50 projects.
+An empty `projects` array is valid and renders as an empty index.
+`writeAggregateDataPair` checks each staged file before replacement: both
+`aggregate-data.json` and `index.html` must be at most `MAX_STATIC_FILE_BYTES`
+(16 MiB). An oversized file rejects publication and preserves the previous pair.
+See [report pipeline](./report-pipeline.md) for the detailed index and
+recovery contract.
 
 ## Local secret-store subsystem
 
