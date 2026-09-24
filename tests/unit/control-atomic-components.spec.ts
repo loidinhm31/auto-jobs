@@ -461,20 +461,97 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
         expect(hiddenHtml).toContain('id="run-result-box"');
         expect(hiddenHtml).toContain('hidden');
       });
+      test('renders multiple buildProjects in config order with badges, build links, stages, and errors', () => {
+        const batchHtml = renderToString(
+          React.createElement(RunResultBox, {
+            result: {
+              buildProjects: [
+                {
+                  projectId: 'proj-alpha',
+                  projectName: 'Alpha Service',
+                  state: 'succeeded',
+                  buildResult: 'SUCCESS',
+                  exitCode: 0,
+                  buildNumber: '42',
+                  buildPageUrl: 'https://jenkins.example.com/job/alpha/42',
+                  jobUrl: 'https://jenkins.example.com/job/alpha',
+                  stages: [
+                    { index: 1, name: 'Build', status: 'SUCCESS', duration: '12s' },
+                    { index: 2, name: 'Test', status: 'SUCCESS', duration: '45s' },
+                  ],
+                },
+                {
+                  projectId: 'proj-beta',
+                  projectName: 'Beta Service',
+                  state: 'failed',
+                  buildResult: 'FAILURE',
+                  exitCode: 1,
+                  buildNumber: '10',
+                  buildPageUrl: 'https://jenkins.example.com/job/beta/10',
+                  jobUrl: 'https://jenkins.example.com/job/beta',
+                  error: 'Compilation error in step 2',
+                  stages: [
+                    { index: 1, name: 'Build', status: 'FAILED', duration: '5s' },
+                  ],
+                },
+                {
+                  projectId: 'proj-gamma',
+                  projectName: 'Gamma Service',
+                  state: 'submission-unknown',
+                  exitCode: 1,
+                  jobUrl: '',
+                  error: 'Socket timeout before Jenkins handshake',
+                },
+              ],
+            },
+          }),
+        );
+
+        expect(batchHtml).toContain('id="run-result-box"');
+        expect(batchHtml).not.toContain('hidden');
+        expect(batchHtml).toContain('Alpha Service');
+        expect(batchHtml).toContain('(proj-alpha)');
+        expect(batchHtml).toContain('SUCCESS');
+        expect(batchHtml).toContain('bg-emerald-100');
+        expect(batchHtml).toContain('Build #42');
+        expect(batchHtml).toContain('href="https://jenkins.example.com/job/alpha/42"');
+        expect(batchHtml).toContain('Build: SUCCESS (12s)');
+        expect(batchHtml).toContain('Test: SUCCESS (45s)');
+        expect(batchHtml).toContain('Beta Service');
+        expect(batchHtml).toContain('FAILURE');
+        expect(batchHtml).toContain('bg-red-100');
+        expect(batchHtml).toContain('Build #10');
+        expect(batchHtml).toContain('Error: Compilation error in step 2');
+        expect(batchHtml).toContain('Gamma Service');
+        expect(batchHtml).toContain('submission-unknown');
+        expect(batchHtml).toContain('Error: Socket timeout before Jenkins handshake');
+        expect(batchHtml).not.toContain('href=""');
+        const alphaPos = batchHtml.indexOf('Alpha Service');
+        const betaPos = batchHtml.indexOf('Beta Service');
+        const gammaPos = batchHtml.indexOf('Gamma Service');
+        expect(alphaPos).toBeLessThan(betaPos);
+        expect(betaPos).toBeLessThan(gammaPos);
+      });
     });
     test.describe('ExecutionSection', () => {
-      test('renders Generate Reports button and Report workers select with options 1-4', () => {
+      test('renders Generate Reports and Trigger Auto Build buttons and Workers select with options 1-4', () => {
         const html = renderToString(
           React.createElement(ExecutionSection, {
             onRunReports: () => {},
+            onRunAutoBuild: () => {},
             reportWorkers: 1,
             hasDocument: true,
           }),
         );
         expect(html).toContain('id="btn-run-reports"');
-        expect(html).toContain('id="select-report-workers"');
-        expect(html).toContain('Report workers');
+        expect(html).toContain('Generate Reports (All Enabled)');
+        expect(html).toContain('id="btn-run-auto-build"');
+        expect(html).toContain('Trigger Auto Build (All Enabled)');
+        expect(html).toContain('id="select-workers"');
+        expect(html).toContain('Workers');
         expect(html).toContain('value="1"');
+        expect(html).toContain('value="2"');
+        expect(html).toContain('value="3"');
         expect(html).toContain('value="4"');
       });
 
@@ -482,38 +559,55 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
         const noDocHtml = renderToString(
           React.createElement(ExecutionSection, {
             onRunReports: () => {},
+            onRunAutoBuild: () => {},
             hasDocument: false,
           }),
         );
-        expect(noDocHtml).toMatch(/id="select-report-workers"[^>]*disabled/);
+        expect(noDocHtml).toMatch(/id="select-workers"[^>]*disabled/);
 
         const loadingHtml = renderToString(
           React.createElement(ExecutionSection, {
             onRunReports: () => {},
+            onRunAutoBuild: () => {},
             hasDocument: true,
             isLoading: true,
           }),
         );
-        expect(loadingHtml).toMatch(/id="select-report-workers"[^>]*disabled/);
+        expect(loadingHtml).toMatch(/id="select-workers"[^>]*disabled/);
       });
 
-      test('disables Generate Reports button when isDirty, isLoading, or hasDocument is false', () => {
+      test('disables both run buttons when isDirty, isLoading, or hasDocument is false', () => {
         const dirtyHtml = renderToString(
           React.createElement(ExecutionSection, {
             onRunReports: () => {},
+            onRunAutoBuild: () => {},
             isDirty: true,
             hasDocument: true,
           }),
         );
         expect(dirtyHtml).toMatch(/id="btn-run-reports"[^>]*disabled/);
+        expect(dirtyHtml).toMatch(/id="btn-run-auto-build"[^>]*disabled/);
+
+        const loadingHtml = renderToString(
+          React.createElement(ExecutionSection, {
+            onRunReports: () => {},
+            onRunAutoBuild: () => {},
+            isLoading: true,
+            hasDocument: true,
+          }),
+        );
+        expect(loadingHtml).toMatch(/id="btn-run-reports"[^>]*disabled/);
+        expect(loadingHtml).toMatch(/id="btn-run-auto-build"[^>]*disabled/);
 
         const noDocHtml = renderToString(
           React.createElement(ExecutionSection, {
             onRunReports: () => {},
+            onRunAutoBuild: () => {},
             hasDocument: false,
           }),
         );
         expect(noDocHtml).toMatch(/id="btn-run-reports"[^>]*disabled/);
+        expect(noDocHtml).toMatch(/id="btn-run-auto-build"[^>]*disabled/);
       });
     });
   });

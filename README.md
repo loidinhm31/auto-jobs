@@ -163,10 +163,15 @@ npm run serve:control
 
 Open `http://127.0.0.1:4173/` in your browser.
 
-> **Warning:** Triggering `auto-build` from the dashboard submits a parameterized build to the target Jenkins job. Always confirm the target job and project configuration before submitting.
+> **Warning:** **Trigger Auto Build (All Enabled)** starts a Jenkins build
+> immediately for every enabled `auto-build` project in the active configuration.
+> There is no confirmation dialog; review all Enabled and Run Type settings
+> before triggering.
 
-- **Config management**: Edit `enabled`, `runType` (`report` vs `auto-build`), and raw JSON with ETag concurrency control. Choose **Report workers** (1–4, default 1) for the saved schema-v1 document; changing it updates raw JSON and requires the existing ETag-protected Save before Generate Reports can run.
-- **Mutual exclusion**: Only one report or auto-build run may be active at a time. Within a report batch, saved `reportWorkers` bounds concurrent selected report projects (default 1, maximum 4); auto-build remains a single-project run.
+- **Config management**: Edit `enabled`, `runType` (`report` or `auto-build`), and raw JSON with ETag concurrency control. Choose **Workers** (1–4, default 1) for the saved schema-v1 document; count changes update raw JSON and disable both run actions until ETag-protected Save succeeds.
+- **Execution**: **Generate Reports (All Enabled)** selects enabled report projects; **Trigger Auto Build (All Enabled)** selects enabled auto-build projects. Both use the same saved `reportWorkers` count to bound concurrency. Project cards retain Enabled and Run Type controls, but no longer have a per-card `.btn-auto-build` action.
+- **Results**: Build batches show one ordered outcome per project, including status, optional build number/link, stages, and error details. Older single-project records retain scalar result rendering.
+- **Mutual exclusion**: Only one report or auto-build run may be active. The UI disables both actions while a run is queued/running; auto-build submits an immediate batch, while targeted single-project selection remains available to API callers.
 - **Security**: The control dashboard is strictly restricted to loopback (`127.0.0.1`) and rejects non-loopback bindings and cross-origin state-modifying requests.
 - **Build pipeline**: Bundled via Vite (`vite.control.config.ts`) into `.runner-build/reporting/control-page/` as single-bundle CSS and JS, ensuring strict Content Security Policy (`script-src 'self'`, `style-src 'self'`) compliance without inline styles or eval.
 

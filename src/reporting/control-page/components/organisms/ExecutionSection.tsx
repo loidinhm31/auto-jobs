@@ -8,6 +8,7 @@ export interface ExecutionSectionProps {
   isDirty?: boolean;
   isLoading?: boolean;
   onRunReports: () => void;
+  onRunAutoBuild?: () => void;
   reportWorkers?: number;
   hasDocument?: boolean;
   onReportWorkersChange?: (count: number) => void;
@@ -25,6 +26,7 @@ export function ExecutionSection({
   isDirty = false,
   isLoading = false,
   onRunReports,
+  onRunAutoBuild,
   reportWorkers = 1,
   hasDocument = true,
   onReportWorkersChange,
@@ -37,7 +39,7 @@ export function ExecutionSection({
     }
   };
 
-  const runButton = React.createElement(
+  const runReportsButton = React.createElement(
     Button,
     {
       type: 'button',
@@ -49,9 +51,21 @@ export function ExecutionSection({
     'Generate Reports (All Enabled)',
   );
 
+  const runAutoBuildButton = React.createElement(
+    Button,
+    {
+      type: 'button',
+      id: 'btn-run-auto-build',
+      variant: 'danger',
+      disabled: isDirty || isLoading || !hasDocument || !onRunAutoBuild,
+      onClick: onRunAutoBuild,
+    },
+    'Trigger Auto Build (All Enabled)',
+  );
+
   const selectWorkers = React.createElement(Select, {
-    id: 'select-report-workers',
-    label: 'Report workers',
+    id: 'select-workers',
+    label: 'Workers',
     options: REPORT_WORKER_OPTIONS,
     value: String(reportWorkers ?? 1),
     disabled: !hasDocument || isLoading,
@@ -67,7 +81,8 @@ export function ExecutionSection({
   return React.createElement(
     'div',
     { className: cn('actions-bar flex flex-wrap gap-4 items-end', className) },
-    runButton,
+    runReportsButton,
+    runAutoBuildButton,
     selectContainer,
   );
 }

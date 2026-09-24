@@ -146,7 +146,8 @@ flowchart LR
   [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7),
   `ConfigProjectEditor`, `ConfigDefaultsEditor`,
   [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23),
-  [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5)),
+  [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5),
+  [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx),
   compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/):
   [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx),
   [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx),
@@ -155,8 +156,7 @@ flowchart LR
   [`RunStatusCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RunStatusCard.tsx),
   [`RawJsonSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RawJsonSection.tsx),
   [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx),
-  [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx),
-  [`BuildConfirmDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx)),
+  [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx)),
   layout templates ([`components/templates/DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)),
   pages ([`pages/DashboardPage.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx)),
   error boundary ([`components/ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)),
@@ -462,10 +462,12 @@ to `failed`. A timeout includes any observed build number, current result, and
 stage breakdown. Outcomes do not expose form bodies, parameters, crumbs,
 headers, cookies, or response bodies, and auto-build does not persist reports.
 
-The Control Page persists the project setting in `ConfigProjectEditor`.
-`BuildConfirmDialog` initializes its checkbox from the selected project's
-effective value and sends the operator's per-run choice; `RunResultBox` shows
-the build number, terminal result, and stage names, statuses, and durations.
+The Control Page persists `waitForCompletion` through `ConfigFormBuilder`; its
+action bar exposes **Generate Reports (All Enabled)** (`#btn-run-reports`),
+**Trigger Auto Build (All Enabled)** (`#btn-run-auto-build`), and shared saved
+**Workers** (`#select-workers`, 1–4). Builds start immediately, without a
+per-card trigger or confirmation dialog. `RunResultBox` renders ordered
+per-project rows with scalar fallback for older records.
 
 Every configured, discovered, redirected, and final URL in either path must be
 credential-free HTTP(S) and inside its allowed canonical origin. Context and
@@ -588,8 +590,8 @@ URLs are redacted with all non-empty stored values before persistence.
 
 The optional top-level `reportWorkers` in `ProjectConfigDocumentV1` accepts an
 integer from 1 through 4; omission defaults to 1. `ConfigStore` validates and
-saves it with the document through the existing read/write and ETag flow. The
-setting applies to a report batch, not per project.
+saves it with the document through the existing read/write and ETag flow.
+The setting bounds report batches and the separate Control API auto-build pool; it is not a per-project request override.
 
 `loadProjectConfigWithDocument` reads the JSON once and returns the validated
 document with normalized projects; `loadProjectConfig` retains its existing
@@ -674,16 +676,19 @@ The Control Dashboard frontend refactor implements Atomic Design principles, cle
    - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls adhering to exact test IDs for headless selection (`#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless`) and executable path input (`#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path`).
    - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Controls active configuration selection (`<select id="config-select">`), reload action (`#btn-reload`), save action (`#btn-save`, disabled unless `isDirty`), and modal open triggers (`#btn-credentials`, `#btn-browser-settings`).
    - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Streaming run log output `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, formatting string logs or `RunLogEntry[]` timestamped records and auto-scrolling to the latest log output.
-   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Execution outcome box `<div id="run-result-box" class="run-result-box">`, displaying validated report links matching `/reports/`, Jenkins build links, and error diagnostics (`.run-error-msg`).
+   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Displays report results, ordered `buildProjects` rows, scalar fallback for older records, and errors in `#run-result-box`.
+   - [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx): Displays each project's identity/status, optional build number/link, stages, and error.
 
 4. **Contract Fidelity Guarantees**:
-   - **DOM ID and Class Compatibility**: Every element ID, class token, and `data-*` attribute targeted by Playwright test locators is preserved without modification.
+   - **DOM contracts**: Retained component IDs/classes stay stable; retired dialog
+     and per-card build controls are removed. Updated component specs cover the
+     action bar and ordered multi-project result rows.
    - **Raw JSON Editor Preservation**: The configuration editor retains a standard `<textarea id="raw-json-textarea">` to ensure native Playwright `.fill()` and `.textContent` operations succeed without complex DOM interceptors.
    - **Accessibility**: Includes explicit ARIA roles (`role="status"`, `role="log"`, `role="alert"`), `aria-live="polite"` live regions, and `label[for]` associations.
    - **Zero Leakage**: Credential inputs enforce `type="password"`, `autoComplete="off"`, and input value clearing on submission, clear, and dialog closure.
 
 5. **Compound Organisms and Page Assembly (Phase 04)**:
-   - Integrates atomic primitives and molecules into feature-complete panels: [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx), [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx), [`ProjectCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectCard.tsx), [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx), [`RunStatusCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RunStatusCard.tsx), [`RawJsonSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RawJsonSection.tsx), [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx), [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx), and [`BuildConfirmDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx).
+   - Integrates current organisms into dashboard panels: `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, and `BrowserSettingsDialog`.
    - Layout template ([`DashboardLayout`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)) provides structure with skip links and alert regions.
    - Page view ([`DashboardPage`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx)) and Root ([`App`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), [`ErrorBoundary`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)) integrate hooks for unified state management.
 
@@ -692,27 +697,21 @@ The Control Dashboard frontend refactor implements Atomic Design principles, cle
    - The loopback dashboard frontend is 100% React, compiled via Vite into `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, `assets/control-page.js`).
    - `scripts/copy-report-assets.mjs` stages only `report.css`.
 
-### Dashboard report-worker selector and shared editor
+### Control Page execution actions and saved Workers
 
-`ConfigFormBuilder` edits project/default fields; `ExecutionSection` adds an
-accessible `Report workers` selector (1–4, default 1) beside Generate Reports.
-`DashboardPage` binds it to `useConfigManager.updateReportWorkers`, backed by
-`useConfigDocumentEditor`; the transition updates top-level `reportWorkers`,
-marks the document dirty, and regenerates formatted raw JSON. The form and
-valid raw-JSON Apply update the same schema-validated document; invalid JSON
-leaves the applied model unchanged.
+`ConfigFormBuilder` edits project/default fields. `ExecutionSection` places
+**Generate Reports (All Enabled)** (`#btn-run-reports`), **Trigger Auto Build
+(All Enabled)** (`#btn-run-auto-build`), and one shared **Workers** selector
+(`#select-workers`, 1–4, default 1) in the action bar. `DashboardPage` binds the
+selector to `updateReportWorkers`; edits update the validated document and raw
+JSON, mark it dirty, and require `PUT /api/config` with `If-Match` before runs.
+The saved count is never sent as request-level `workerCount`.
 
-A dirty document disables Generate Reports. Save writes the document through
-`PUT /api/config` with the current `If-Match` ETag; successful Save updates the
-A report trigger carries config name/ETag/type; auto-build also accepts optional
-`projectId`: omitted selects all enabled build projects; a supplied ID selects one.
-Request `workerCount` is rejected; saved `reportWorkers` (1–4, default 1) bounds
-both report and control auto-build pools. Each auto-build result includes an
-ordered `buildProjects` array; the run succeeds only if every `exitCode === 0`.
-
-The UI and CLI share `assertProjectConfigDocument`. `runFromConfig` calls
-`loadProjectConfigWithDocument`, reading once and using the saved count with
-normalized projects.
+The report action selects all enabled report projects. The build action sends
+`runType: 'auto-build'` without `projectId`, selecting all enabled auto-build
+projects; API callers may still target one ID. The saved count bounds both
+pools, preserves configuration order, and the batch succeeds only if every
+outcome has `exitCode === 0`.
 
 ## Test and release boundary
 

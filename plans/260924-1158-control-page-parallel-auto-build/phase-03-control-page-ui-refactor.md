@@ -5,7 +5,7 @@
 - Current UI: `src/reporting/control-page/pages/DashboardPage.tsx:1-19,69-135,180-258`; `src/reporting/control-page/components/organisms/ExecutionSection.tsx:7-73`; `src/reporting/control-page/components/organisms/ProjectCard.tsx:6-24,41-105`; `src/reporting/control-page/components/organisms/ProjectsGrid.tsx:6-48`; `src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx:1-120`; `src/reporting/control-page/components/organisms/index.ts:1-12`; `src/reporting/control-page/hooks/useRunPoller.ts:13-29,171-238`; `src/reporting/control-page/components/molecules/RunResultBox.tsx:5-149`; `src/reporting/control-page/components/organisms/RunStatusCard.tsx:8-41`.
 
 ## Overview
-**Date:** 2026-09-24 · **Priority:** P2 · **Status:** pending · **Effort:** 3h · **Depends on:** phase 02 result contract. Make the action bar the single execution surface: both all-enabled buttons and one shared, saved Workers selector; immediate build submission with clear per-project result presentation.
+**Completed:** 2026-09-24 · **Priority:** P2 · **Status:** DONE (100%) · **Effort:** 3h · **Depends on:** phase 02 result contract. Make the action bar the single execution surface: both all-enabled buttons and one shared, saved Workers selector; immediate build submission with clear per-project result presentation.
 
 ## Key Insights
 - `ProjectCard` already has accessible Enabled checkbox and `runType` select (report/auto-build). Keep those; only the per-card `.btn-auto-build` and `onTriggerBuild` callback go. `ProjectsGrid` simply forwards this obsolete callback.
@@ -42,10 +42,10 @@
 4. Validate full journey: edit mode/enabled/count → dirty disables both → Save/ETag clears dirty → click build once and observe one omitted-ID POST/no modal → poll → every outcome visible (including failed/unknown). Confirm report action uses same saved count and report links still render.
 
 ## Todo list
-- [ ] Two buttons and one shared Workers selector in ExecutionSection, with dirty/loading/no-config states.
-- [ ] Immediate omitted-ID build handler; remove dialog, per-card trigger and re-export cleanly.
-- [ ] Render all sanitized build outcomes plus scalar fallback and report result.
-- [ ] Update old modal/worker-label tests rather than pinning obsolete UI text.
+- [x] Two buttons and one shared Workers selector in ExecutionSection, with dirty/loading/no-config states.
+- [x] Immediate omitted-ID build handler; remove dialog, per-card trigger and re-export cleanly.
+- [x] Render all sanitized build outcomes plus scalar fallback and report result.
+- [x] Update old modal/worker-label tests rather than pinning obsolete UI text.
 
 ## Success Criteria
 - Browser: button `#btn-run-auto-build` is in Execute Actions; none in project cards; clicking it sends one POST with `runType: 'auto-build'`, no `projectId`, no `workerCount`, no dialog, then shows every selected build outcome. Report button still sends `runType: 'report'`.

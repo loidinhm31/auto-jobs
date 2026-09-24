@@ -1,6 +1,5 @@
 import React from 'react';
 import type { ProjectCardData } from '../../types/component-contracts.js';
-import { Button } from '../atoms/Button.js';
 import { Select } from '../atoms/Select.js';
 
 export interface ProjectCardProps {
@@ -8,7 +7,6 @@ export interface ProjectCardProps {
   isDirty?: boolean;
   onToggleEnabled: (projectId: string, enabled: boolean) => void;
   onChangeRunType: (projectId: string, runType: 'report' | 'auto-build') => void;
-  onTriggerBuild: (project: ProjectCardData) => void;
 }
 
 export function ProjectCard({
@@ -16,7 +14,6 @@ export function ProjectCard({
   isDirty = false,
   onToggleEnabled,
   onChangeRunType,
-  onTriggerBuild,
 }: ProjectCardProps) {
   const isEnabled = project.enabled !== false;
   const runType = project.runType || 'report';
@@ -89,20 +86,6 @@ export function ProjectCard({
         </div>
       </div>
 
-      {runType === 'auto-build' && (
-        <div className="field-row mt-4 pt-3 border-t border-slate-200 flex justify-end">
-          <Button
-            type="button"
-            variant="danger"
-            size="sm"
-            className="btn-auto-build"
-            disabled={!isEnabled || isDirty}
-            onClick={() => onTriggerBuild(project)}
-          >
-            Trigger Auto-Build
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

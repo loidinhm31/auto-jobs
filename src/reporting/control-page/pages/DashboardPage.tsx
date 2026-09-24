@@ -11,7 +11,6 @@ import { RawJsonSection } from '../components/organisms/RawJsonSection.js';
 import { ConfigFormBuilder } from '../components/organisms/ConfigFormBuilder.js';
 import { ExecutionSection } from '../components/organisms/ExecutionSection.js';
 import { RunStatusCard } from '../components/organisms/RunStatusCard.js';
-import { BuildConfirmDialog } from '../components/organisms/BuildConfirmDialog.js';
 import { CredentialsDialog } from '../components/organisms/CredentialsDialog.js';
 import { BrowserSettingsDialog } from '../components/organisms/BrowserSettingsDialog.js';
 import { DashboardLayout } from '../components/templates/DashboardLayout.js';
@@ -75,7 +74,6 @@ export function DashboardPage() {
     triggerRun,
   } = useRunPoller();
 
-  const [confirmProject, setConfirmProject] = useState<ProjectCardData | null>(null);
 
   // Initial load
   useEffect(() => {
@@ -113,18 +111,9 @@ export function DashboardPage() {
     updateProject(projectId, { runType });
   };
 
-  const handleOpenAutoBuildConfirm = (project: ProjectCardData) => {
-    setConfirmProject(project);
-  };
-
-  const handleConfirmAutoBuild = async (
-    projectId: string,
-    waitForCompletion?: boolean,
-    waitTimeoutMs?: number,
-  ) => {
-    setConfirmProject(null);
+  const handleRunAutoBuild = async () => {
     if (activeConfigName && etag) {
-      await triggerRun(activeConfigName, etag, 'auto-build', projectId, waitForCompletion, waitTimeoutMs);
+      await triggerRun(activeConfigName, etag, 'auto-build');
     }
   };
 
@@ -183,7 +172,6 @@ export function DashboardPage() {
           isDirty={isDirty}
           onToggleEnabled={handleToggleEnabled}
           onChangeRunType={handleChangeRunType}
-          onTriggerBuild={handleOpenAutoBuildConfirm}
         />
       }
       formBuilderSection={
@@ -207,8 +195,9 @@ export function DashboardPage() {
       actionsSection={
         <ExecutionSection
           isDirty={isDirty}
-          isLoading={isTriggering}
+          isLoading={isTriggering || runStatus === 'running' || runStatus === 'queued'}
           onRunReports={() => void handleRunReports()}
+          onRunAutoBuild={() => void handleRunAutoBuild()}
           reportWorkers={typeof currentDoc?.reportWorkers === 'number' ? currentDoc.reportWorkers : 1}
           hasDocument={Boolean(currentDoc)}
           onReportWorkersChange={updateReportWorkers}
@@ -224,13 +213,6 @@ export function DashboardPage() {
       }
       dialogs={
         <>
-          <BuildConfirmDialog
-            isOpen={Boolean(confirmProject)}
-            project={confirmProject}
-            onConfirm={handleConfirmAutoBuild}
-            onCancel={() => setConfirmProject(null)}
-          />
-
           <CredentialsDialog
             isOpen={isCredsOpen}
             isLoading={isCredsLoading}

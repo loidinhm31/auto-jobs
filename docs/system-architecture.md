@@ -7,7 +7,7 @@ verification:
 
 - **Report:** authenticate, inspect one exact Jenkins job, capture bounded Snyk
   and SonarQube evidence, and publish immutable static reports.
-- **Auto-build:** run one selected or all enabled Jenkins projects through a
+- **Auto-build:** run one selected or all enabled `auto-build` projects in a
   bounded pool; optionally wait for new Stage View runs and return safe in-memory
   outcomes with build and stage details. It does not publish reports.
 - **Offline fixture:** load the checked-in nine-file corpus and fulfill only
@@ -15,9 +15,10 @@ verification:
 - **SecretStore and secrets API:** persist validated local credential values
   outside project JSON and expose only boolean presence through guarded
   `/api/secrets` operations.
-- **Control UI:** edit schema-v1 settings, manage credentials, and set report
-  workers. Auto-build projects have a saved wait toggle and a confirmation
-  modal override; the result card shows build and stage status.
+- **Control UI:** edit schema-v1 settings and manage credentials. The action bar
+  exposes all-enabled report/build actions and one shared saved Workers
+  selector; builds start immediately without a per-card button or confirmation
+  dialog. Results show ordered project outcomes or the legacy scalar fallback.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
@@ -92,27 +93,28 @@ asynchronously; the executor then:
 | Auto-build dispatch | Optional `projectId`: select one project if supplied, otherwise all enabled auto-build projects. Run `executeAutoBuildWorkerPool` with saved `reportWorkers ?? 1` and merged environment. |
 | Redact | Use every non-empty stored value to redact control logs, report warnings, caught errors/stacks, and auto-build URL result fields before recording them. |
 
-An auto-build run returns `result.buildProjects` in configuration order, even
-for one selected project. Run status is `succeeded` only when every outcome has
-`exitCode === 0`; otherwise it is `failed`. Worker exceptions become
-`submission-unknown` outcomes with exit code 1, while siblings continue.
+Auto-build returns ordered `result.buildProjects` rows, including for
+one-project runs. Status succeeds only if every `exitCode === 0`; worker
+exceptions become `submission-unknown` while siblings continue. The Control
+Page renders identity, status/result, optional build number/link, stages, and
+errors per row; older scalar results keep their fallback.
 
-`DashboardPage` binds the `ExecutionSection` selector beside Generate Reports
-to the active document's `updateReportWorkers` transition. A selection updates
-the shared document, marks it dirty, and regenerates raw JSON. Valid raw-JSON
-Apply validates through the shared schema and updates the same document;
-invalid input leaves the applied model unchanged. Generate Reports stays
-disabled while the document is dirty; Save persists it through the existing
-`If-Match` ETag flow. The report POST then identifies that saved document,
-without carrying a worker count. The UI and CLI share
-`assertProjectConfigDocument`; `runFromConfig` reads the file once through
-`loadProjectConfigWithDocument` and uses both its document and normalized
-projects.
+`DashboardPage` binds the `ExecutionSection` **Workers** selector
+(`#select-workers`) to the active document's `updateReportWorkers` transition.
+It updates top-level `reportWorkers` and raw JSON, marks the document dirty, and
+requires ETag-protected Save before either run action enables. The saved 1–4
+count applies to both pools and is never sent as request-level `workerCount`.
 
-For auto-builds, schema-v1 accepts `waitForCompletion` in `defaults` or per
-project (project value wins; if absent from both, normalized default is `true`).
-`ConfigProjectEditor` persists the project setting; `BuildConfirmDialog` sends
-a per-run choice in `POST /api/run`. The report runner ignores this option.
+**Generate Reports (All Enabled)** (`#btn-run-reports`) triggers report mode;
+**Trigger Auto Build (All Enabled)** (`#btn-run-auto-build`) sends
+`runType: 'auto-build'` without `projectId`, selecting all enabled auto-build
+projects. Both actions are disabled without a document, while the document is
+dirty, or while a run is queued/running. Valid raw-JSON Apply updates the same
+schema-validated model; invalid input leaves the applied model unchanged.
+
+For auto-builds, `waitForCompletion` remains persisted by `ConfigProjectEditor`
+and applies through the saved project/default setting; there is no per-run
+modal override. The report runner ignores this option.
 
 
 The file-mode report CLI and direct library calls keep their existing
@@ -628,19 +630,20 @@ graph TD
    - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls with contract-specified element IDs: `#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless` for headless mode; `#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path` for browser binary path.
    - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Renders configuration selector (`<select id="config-select">`), reload action (`#btn-reload`), save action (`#btn-save`, disabled unless `isDirty`), and dialog open buttons (`#btn-credentials`, `#btn-browser-settings`).
    - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Streaming run log viewer `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, formatting string logs or timestamped `RunLogEntry[]` entries and auto-scrolling to newest output.
-   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Execution result panel `<div id="run-result-box" class="run-result-box">`, displaying report links matching `/reports/`, Jenkins build links, and error diagnostics (`.run-error-msg`).
+   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Execution result panel `#run-result-box` for report results, ordered multi-project builds, scalar fallback, and errors.
+   - [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx): Per-project identity/status, optional build link/number, stages, and errors.
 
 3. **Contract Fidelity Guarantees**:
-   - Exact DOM ID and CSS class preservation satisfies Playwright E2E locators (`tests/e2e/control-page.spec.ts`) without requiring test changes.
+   - **DOM contracts**: Retained IDs/classes remain stable; removed dialog and per-card build controls are not part of the current UI contract.
    - Preserves `<textarea id="raw-json-textarea">` as a native textarea for Playwright `.fill()` and `.textContent` operations.
    - Enforces zero plaintext credential leakage: password masking, `autoComplete="off"`, and input value clearing on save, clear, or dialog close.
-   - The suite also covers `ExecutionSection`'s report-worker selector options
-     and disabled states.
+   - Updated component tests cover both all-enabled action buttons, the shared
+     Workers options/disabled states, and ordered multi-project plus scalar results.
 
 #### React Application Assembly and Legacy Cleanup (Phases 04 - 06)
 
 1. **Compound Organisms and Page Assembly ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/))**:
-   - Assembles atomic and molecular components into interactive dashboard subsystems: [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx), [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx), [`ProjectCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectCard.tsx), [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx), [`RunStatusCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RunStatusCard.tsx), [`RawJsonSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RawJsonSection.tsx), [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx), [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx), and [`BuildConfirmDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BuildConfirmDialog.tsx).
+   - Assembles current organisms into dashboard subsystems: `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, and `BrowserSettingsDialog`.
    - Layout template ([`DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)) encapsulates accessible skip links (`.skip-link`), status notifications, and container constraints.
    - Page and Application Root ([`DashboardPage.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx), [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), [`ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)) wire headless hooks (`useControlApi`, `useConfigManager`, `useCredentialsManager`, `useBrowserSettings`, `useRunPoller`) into a unified unidirectional data flow.
 
@@ -747,8 +750,8 @@ On [`template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template
 ## Invariants for extensions
 
 1. Keep report capture and auto-build submission as separate executors.
-2. Require explicit project-level auto-build selection and confirmation at the
-   caller boundary; never infer it from config shape or UI text.
+2. Require deliberate auto-build intent at the caller boundary: a direct call
+   names one project; the Control Page action targets all enabled auto-build projects.
 3. Keep `jobUrl` as the only target identity and validate every action URL
    against it before navigation or submission.
 4. Validate structure and visibility before clicks; never read hidden form

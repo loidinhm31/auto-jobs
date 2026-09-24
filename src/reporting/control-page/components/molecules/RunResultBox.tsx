@@ -1,6 +1,7 @@
 import React, { forwardRef } from 'react';
 import type { RunResultBoxProps } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
+import { BuildProjectOutcomeRow } from './build-project-outcome-row.js';
 
 export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
   function RunResultBox(
@@ -14,15 +15,24 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
     ref,
   ) {
     const hasReportUrl = Boolean(result?.reportUrl);
+    const hasBuildProjects = Array.isArray(result?.buildProjects) && result.buildProjects.length > 0;
     const hasBuildPageUrl = Boolean(result?.buildPageUrl);
+    const hasBuildResult = Boolean(result?.buildResult);
     const hasError = Boolean(result?.error);
     const hasSummary = Boolean(result && typeof result['summary'] === 'string');
 
     const isVisible =
       explicitVisible !== undefined
         ? explicitVisible
-        : Boolean(result && (hasReportUrl || hasBuildPageUrl || hasError || hasSummary));
-
+        : Boolean(
+            result &&
+              (hasReportUrl ||
+                hasBuildProjects ||
+                hasBuildPageUrl ||
+                hasBuildResult ||
+                hasError ||
+                hasSummary),
+          );
     const children: React.ReactNode[] = [];
 
     if (result?.reportUrl) {
@@ -40,6 +50,19 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
               className: 'text-emerald-700 font-semibold underline hover:text-emerald-800',
             },
             'Open Generated Report',
+          ),
+        ),
+      );
+    } else if (hasBuildProjects) {
+      children.push(
+        React.createElement(
+          'div',
+          { key: 'build-projects-list', className: 'build-projects-container flex flex-col gap-1' },
+          result!.buildProjects!.map((proj, idx) =>
+            React.createElement(BuildProjectOutcomeRow, {
+              key: `proj-${proj.projectId || idx}`,
+              project: proj,
+            }),
           ),
         ),
       );
@@ -87,7 +110,6 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
           ),
         ),
       );
-
       if (Array.isArray(result?.stages) && result.stages.length > 0) {
         children.push(
           React.createElement(

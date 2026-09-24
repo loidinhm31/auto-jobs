@@ -1,23 +1,23 @@
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
-**Document scope:** schema-v1 report capture, Phase 2 Jenkins auto-build,
-Phase 3 offline build-page fixtures, and dynamic-credential Phases 01–05<br>
-**Current milestone:** Phase 05 Unit, API, and Playwright E2E Verification —
-**DONE** (2026-09-03)<br>
-**Prior completed milestone:** Phase 04 Control UI Credential Modal and State —
-**DONE**
+**Document scope:** schema-v1 report capture, bounded execution, Control Page
+execution/results, offline build fixtures, and dynamic credentials.<br>
+**Current milestone:** Control Page Parallel Auto-Build — Phase 03 UI complete;
+Phase 04 testing/verification pending (2026-09-24).<br>
+**Prior completed milestone:** Phase 02 Parallel Auto-Build Executor and API —
+DONE (2026-09-24)
 
 ## Product summary
 
 `auto-jobs` is a private Node.js/TypeScript Playwright runner for collecting
 bounded Snyk and SonarQube vulnerability evidence from exact Jenkins job pages.
-It writes immutable static reports for the report path. The explicit auto-build
-path submits one Jenkins **Build with Parameters** form for the configured
-target job and returns a sanitized in-memory outcome; it does not collect
-evidence or write report artifacts. Phase 3 adds a minimal checked-in build
-detail page and exact offline routes so both paths can be proven without live
-Jenkins or vendor services.
+It writes immutable static reports for the report path. A direct auto-build
+call submits one Jenkins **Build with Parameters** form for an exact selected
+target; the loopback Control Page can trigger all enabled `auto-build` projects
+in a bounded batch. Both paths return sanitized in-memory outcomes without
+collecting reports or writing artifacts. Offline Jenkins fixtures make report
+and build journeys deterministic without a live controller.
 
 Phase 01 adds a local `SecretStore` persistence seam for the control plane.
 It stores validated environment-style key/value pairs in the git-ignored
@@ -52,8 +52,8 @@ and failure semantics are validated before side effects.
 
 1. Make report capture deterministic, bounded, and safe for multiple configured
    projects.
-2. Permit an intentional Jenkins parameterized build only for one exact,
-   enabled, explicitly selected `auto-build` project.
+2. Permit an intentional Jenkins parameterized build for one exact enabled
+   project through direct execution, or all enabled builds through the loopback UI.
 3. Keep report capture and build submission mutually exclusive.
 4. Preserve target identity: `jobUrl` is the only branch/job identity.
 5. Make ambiguous post-submit outcomes visible without risking duplicate builds.
@@ -86,6 +86,7 @@ and failure semantics are validated before side effects.
 | --- | --- | --- |
 | Report operator | Collect evidence for configured jobs | `npm run report -- --config <path>` |
 | Build integration | Submit one selected target-branch build | `selectAutoBuildProject` → `runAutoBuildProject` |
+| Control operator | Run selected modes across enabled projects and inspect each result | Loopback Control Page action bar and ordered run results |
 | Maintainer | Prove behavior without external services | Unit tests and exact offline fixtures |
 | Reviewer | Inspect safe outputs and release gates | Static report root, manifests, and documented commands |
 | Control maintainer | Inspect presence and manage local credential values without changing project JSON | `GET`/`PUT`/`DELETE /api/secrets` in loopback control mode |
@@ -126,10 +127,10 @@ and failure semantics are validated before side effects.
   before artifact initialization or browser launch.
 - In control mode, reject any own `workerCount` property in `POST /api/run` with
   `422 INVALID_WORKER_COUNT` before `startRun`.
-- Require the saved configuration ETag to match the request before execution;
-  pass `reportWorkers ?? 1` from that matched document only to `reportExecutor`.
-- Keep the pool count out of `AutoBuildRunnerDependencies`; control mode uses
-  saved `reportWorkers` to bound a separate auto-build worker pool.
+- Require the saved configuration ETag to match before execution. Use that
+  document's `reportWorkers ?? 1` for report execution and to bound the separate
+  control auto-build pool; keep the count out of per-project
+  `AutoBuildRunnerDependencies`.
 - Preserve selected configuration order in outcomes and continue queued work
   after an individual project failure.
 - Authenticate through exact Jenkins login, open exact `jobUrl`, discover
@@ -262,6 +263,25 @@ and failure semantics are validated before side effects.
   record bounded sanitized misses.
 - Keep fixture helpers modular and preserve `template-report-fixture.ts` as the
   public facade. Report mode does not follow the build route.
+
+### FR-11: Control Page batch actions and outcome presentation
+
+- Keep the action bar as the only execution surface:
+  **Generate Reports (All Enabled)** (`#btn-run-reports`), **Trigger Auto
+  Build (All Enabled)** (`#btn-run-auto-build`), and one shared **Workers**
+  selector (`#select-workers`, 1–4).
+- The selector uses saved schema-v1 `reportWorkers` (default 1), applies to both
+  bounded pools, and is not sent as request-level `workerCount`.
+- Report selects enabled report projects; auto-build immediately selects enabled
+  `auto-build` projects by omitting `projectId`. Keep per-ID API support.
+- Enabled and `runType` controls define targets; no per-card `.btn-auto-build`,
+  confirmation dialog, or run-on-edit behavior.
+- Count edits mark the document dirty; require ETag-protected Save before
+  execution. Keep actions disabled without a document and while runs are
+  queued/running.
+- Render ordered `buildProjects` rows with project identity, state/result,
+  optional build number/link, stages, and errors. Keep the report link and
+  scalar fallback for older single-project records.
 
 ## Non-functional requirements
 
@@ -448,21 +468,28 @@ require the environment variables named by project configuration.
 | Run-executor environment injection | `src/reporting/report-server-run-manager.ts`, `src/reporting/report-server-run-executor.ts`, `src/reporting/report-server.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
+| Control actions and results | `ExecutionSection`, `DashboardPage`, `ProjectCard`, `ProjectsGrid`, `RunResultBox`, `BuildProjectOutcomeRow`; `tests/unit/control-atomic-components.spec.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, `tests/unit/control-secret-store.spec.ts`, `tests/unit/control-secrets-api.spec.ts`, `tests/e2e/control-page.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect policy | `src/jenkins/build-trigger.ts`, `src/project/auto-build-runner.ts` | [architecture](./architecture.md), [release gates](./release-gates.md) |
 
-## Open scope
-
-Dynamic-credentials Phases 01–05 are complete through the local store, guarded
-presence API, per-run environment injection/redaction, Control UI
-credential modal/state, and unit/API/Playwright end-to-end verification. No
-planned phase remains in this plan. All future work must preserve server-side
-configuration validation, loopback and CSRF protections, single-run/concurrency
-rules, explicit auto-build confirmation, no-process-global mutation, DOM
-secret wiping, and safe outcome mapping. The current report CLI still has no
-production auto-build command.
+Dynamic-credentials Phases 01–05 remain complete through the local store,
+guarded presence API, per-run environment injection/redaction, Control UI
+credential workflow, and unit/API/Playwright verification. The current Control
+Page Parallel Auto-Build plan has completed Phase 03 UI; Phase 04 testing and
+verification remains. Preserve server-side configuration and security checks,
+saved worker-count/ETag boundaries, explicit all-enabled build intent, safe
+outcome mapping, and no process-global credential mutation. The report CLI
+still has no production auto-build command.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-24
+
+- Completed Phase 03 Control Page UI refactor: shared saved Workers selector,
+  all-enabled report/build actions, no per-card build control or confirmation
+  dialog, and ordered per-project result rows with scalar fallback.
+- Focused `control-atomic-components.spec.ts` passed 25/25; the full browser
+  journey remains in Phase 04.
 
 ### 0.1.0 (development) — 2026-09-03
 

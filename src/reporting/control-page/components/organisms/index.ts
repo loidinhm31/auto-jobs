@@ -1,4 +1,3 @@
-export * from './BuildConfirmDialog.js';
 export * from './CredentialsDialog.js';
 export * from './BrowserSettingsDialog.js';
 export * from './HeaderBar.js';

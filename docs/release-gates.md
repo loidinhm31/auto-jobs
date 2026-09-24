@@ -253,7 +253,7 @@ Deterministic testing of the Control API and UI is executed via:
 ```sh
 npm run test:control
 ```
-which exercises config reading/atomic saving, validation errors, report execution, auto-build confirmation dialogs, and WCAG A/AA accessibility scanning in Chromium and WebKit.
+which exercises config reading/atomic saving, validation errors, report and auto-build execution contracts, and WCAG A/AA accessibility scanning in Chromium and WebKit.
 
 ### Phase 01 control asset routing gate
 
@@ -298,7 +298,7 @@ node scripts/run-playwright.mjs playwright test \
   --config=playwright.unit.config.ts
 ```
 
-The [`control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/control-atomic-components.spec.ts) suite verifies 21 unit checks:
+The [`control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/control-atomic-components.spec.ts) suite verifies the atomic and molecular component contracts:
 - [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): strictly renders required variant classes (`badge-idle`, `badge-queued`, `badge-running`, `badge-succeeded`, `badge-failed`, `badge-unknown` for `unknown` and `submission-unknown`), credential states (`badge-configured`, `badge-missing`), and browser unconfigured state (`badge-missing` class with `"Not Set"` text);
 - [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): renders variant classes (`btn-primary`, `btn-secondary`, `btn-danger`, `btn-outline`), default `type="button"`, compact `btn-sm` sizing, disabled state, and loading spinner;
 - [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): associates label via `htmlFor`, displays error with `role="alert"` and `aria-invalid="true"`, and defaults `type="password"` with `autoComplete="off"`;
@@ -309,7 +309,12 @@ The [`control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/
 - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): verifies exact element IDs for headless selection (`#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless`) and binary path input (`#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path`);
 - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): verifies element IDs (`#config-select`, `#btn-reload`, `#btn-save`, `#btn-credentials`, `#btn-browser-settings`) and ensures `#btn-save` is disabled when not dirty;
 - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, handles string logs and timestamped `RunLogEntry[]` entries, and defaults to `"No active run."`;
-- [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): renders outcome box `#run-result-box`, reports link matching `/reports/`, Jenkins build link, error messages, and `.hidden` toggle when null.
+- [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): keeps `#run-result-box`, renders report results and ordered `buildProjects` rows, and preserves scalar build-result fallback and errors.
+- [`BuildProjectOutcomeRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/build-project-outcome-row.tsx): renders each project's identity, result/state badge, optional build number/link, stages, and error without an empty link.
+- [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx): verifies the exact all-enabled action labels/IDs, one `Workers` selector (`#select-workers`, 1–4), and disabled states.
+
+The 2026-09-24 focused run passed 25/25 checks; this is component-level proof,
+not the project-wide release gate.
 
 ### Phase 04 credential dialog gate
 
@@ -430,13 +435,14 @@ npm run test:control
 ```
 
 `npm run test:control` runs `tests/e2e/control-page.spec.ts` in Chromium and
-WebKit. The 2026-09-23 Phase 03 run passed 18/18 tests ([test report](../plans/reports/tester-260923-2218-phase-03-dashboard-and-verification.md)).
-The browser contract covers the document-bound Report workers selector (saved
-values/default 1 and config switching), raw JSON synchronization, dirty-state
-and Save/ETag run gating, request omission of `workerCount`, crafted override
-rejection, auto-build isolation, and keyboard/accessibility behavior, alongside
-existing credentials and browser-settings flows. Tests use temporary config
-roots and injected executors; they do not contact Jenkins or vendor services.
+WebKit. The 2026-09-23 browser run passed 18/18, but predates the Phase 03
+Control Page refactor and is historical evidence only. The current E2E spec
+still asserts removed `.btn-auto-build`/`#build-confirm-dialog` controls and
+the former `#select-report-workers` ID; Phase 04 must replace those assertions
+before the new action bar is browser-verified. The focused component spec above
+covers current action labels/IDs, worker options, multi-project results, and
+scalar fallback. Control scenarios use temporary configs and injected executors;
+they do not contact Jenkins or vendor services.
 
 The 2026-09-03 Phase 05 verification snapshot recorded:
 
@@ -451,7 +457,7 @@ The 2026-09-03 Phase 05 verification snapshot recorded:
 | Secret leakage checks | Zero observed |
 
 Phase 03 React refactor addition:
-- [`tests/unit/control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/control-atomic-components.spec.ts): 21/21 passed (bringing unit checks to 269/269, combined unit and control E2E checks to 275/275).
+- The original React refactor baseline recorded 21/21 atomic-component checks; the current contract above includes the updated action bar and result rows.
 
 ### Phase 06 legacy cleanup and release verification gate
 

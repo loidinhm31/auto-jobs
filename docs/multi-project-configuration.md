@@ -389,12 +389,17 @@ executes an auto-build project in a mixed document. It reads the config once
 through `loadProjectConfigWithDocument`; CLI and Dashboard validation share
 `assertProjectConfigDocument`.
 
-The Dashboard's `ExecutionSection` places the accessible `Report workers`
-selector (1–4, default 1) beside Generate Reports and binds it to the current
-shared document. A selection marks the document dirty and updates raw JSON;
-valid raw-JSON Apply validates and updates that same document, while invalid
-JSON leaves the model unchanged. Save uses the existing `If-Match` ETag flow,
-and Generate Reports stays disabled until Save succeeds.
+The Dashboard's `ExecutionSection` action bar contains **Generate Reports (All
+Enabled)** (`#btn-run-reports`), **Trigger Auto Build (All Enabled)**
+(`#btn-run-auto-build`), and one shared **Workers** selector
+(`#select-workers`, 1–4, default 1) backed by the document's top-level
+`reportWorkers`. Changing the count updates raw JSON and marks the document
+dirty; both actions require a successful ETag-protected Save before execution.
+The report action selects all enabled report projects; the build action
+immediately selects all enabled `auto-build` projects without `projectId`.
+Project cards retain Enabled and Run Type editing but have no build trigger;
+there is no per-build confirmation dialog. The same saved count bounds both
+worker pools.
 
 A report `POST /api/run` carries `configName`, `configEtag`, and `runType`.
 Auto-build requests may omit `projectId` to select every enabled auto-build project or

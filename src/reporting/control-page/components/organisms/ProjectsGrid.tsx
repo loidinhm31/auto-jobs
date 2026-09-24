@@ -8,7 +8,6 @@ export interface ProjectsGridProps {
   isDirty?: boolean;
   onToggleEnabled: (projectId: string, enabled: boolean) => void;
   onChangeRunType: (projectId: string, runType: 'report' | 'auto-build') => void;
-  onTriggerBuild: (project: ProjectCardData) => void;
   className?: string;
 }
 
@@ -17,7 +16,6 @@ export function ProjectsGrid({
   isDirty = false,
   onToggleEnabled,
   onChangeRunType,
-  onTriggerBuild,
   className,
 }: ProjectsGridProps) {
   return (
@@ -40,7 +38,6 @@ export function ProjectsGrid({
             isDirty={isDirty}
             onToggleEnabled={onToggleEnabled}
             onChangeRunType={onChangeRunType}
-            onTriggerBuild={onTriggerBuild}
           />
         ))
       )}

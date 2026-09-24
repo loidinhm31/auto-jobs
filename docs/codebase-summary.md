@@ -42,13 +42,11 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
   `config/projects.template.json` schema-v1 validation, end-to-end production
   report capture with Snyk/Sonar evidence, auto-build submission, and Control UI
   project card rendering with zero cross-origin errors.
-- Phase 03 addition (React migration): accessible Atomic Design UI primitives
-  ([atoms](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/) and
-  [molecules](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))
-  and styling infrastructure in
-  [`src/reporting/control-page/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/),
-  guaranteeing strict DOM ID, CSS class, data-attribute, and ARIA contract
-  fidelity for 100% Playwright test compatibility.
+- React migration (Phase 03 of the React refactor): accessible Atomic Design
+  primitives ([atoms](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/) and
+  [molecules](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/)) and
+  Tailwind styling in [`src/reporting/control-page/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/),
+  preserving the active DOM IDs, CSS classes, data attributes, and ARIA contracts.
 - Phase 06 addition: removal of legacy imperative assets (`control-page.js`,
   `control-page.html`, `control-page.css`); control dashboard frontend is now
   100% React application compiled via Vite with zero legacy assets.
@@ -73,6 +71,10 @@ saved document state. Tests use local fixtures; no live Jenkins run is claimed.
   auto-build projects; a supplied ID selects one. The bounded pool uses saved
   `reportWorkers` (1–4, default 1), preserves config order, and returns a
   `buildProjects` array; run status succeeds only if every outcome has `exitCode === 0`.
+- Phase 03 parallel auto-build UI: the action bar exposes all-enabled report and
+  build actions plus one shared saved Workers selector. Per-card build buttons
+  and the confirmation flow are removed; `RunResultBox` renders ordered
+  `BuildProjectOutcomeRow` results with scalar fallback for older records.
 - Repomix inventory refreshed for this summary; ignored and binary files remain
   outside the compaction.
 
@@ -299,13 +301,12 @@ The Control Dashboard UI uses Atomic Design principles to isolate visual primiti
    - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls with contract-specified IDs: badges (`#badge-browser-headless`, `#badge-browser-executable-path`), controls (`#browser-headless-select`, `#browser-executable-path-input`), and clear buttons (`#btn-clear-browser-headless`, `#btn-clear-browser-executable-path`).
    - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Renders configuration selector (`<select id="config-select" aria-label="Select Configuration">`) and toolbar buttons (`#btn-reload`, `#btn-save`, `#btn-credentials`, `#btn-browser-settings`). Enforces `#btn-save` disabled when `!isDirty || isSaving || isLoading`.
    - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`. Formats strings or `RunLogEntry[]` timestamps (`[${timestamp}] ${message}`), defaults to `"No active run."`, and auto-scrolls on log updates.
-   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Renders outcome panel `<div id="run-result-box" class="run-result-box">`. Displays report links containing `/reports/`, Jenkins build links, and error messages (`.run-error-msg`), or hides with `.hidden` when null.
+   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Renders report results, ordered `buildProjects` rows, scalar build results for older records, and error messages in `#run-result-box`.
 
 4. **Organism Assembly and Phase 06 Legacy Cleanup**:
-   - Compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/)): `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, `BrowserSettingsDialog`, and `BuildConfirmDialog` assembled via `DashboardLayout`, `DashboardPage`, `ErrorBoundary`, and `App.tsx`.
+   - Compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/)): `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, and `BrowserSettingsDialog`; the per-card build-confirmation flow was removed in Phase 03.
    - Phase 06 cleanup removed all legacy imperative assets (`control-page.js`, `control-page.html`, `control-page.css`). The application is 100% React compiled into `.runner-build/reporting/control-page/` by Vite.
-   - Strict DOM element IDs, CSS classes, and `data-key` attributes match test expectations without requiring test alterations.
-   - Component contracts are exercised in `tests/unit/control-atomic-components.spec.ts`.
+   - Current component contracts are exercised in `tests/unit/control-atomic-components.spec.ts`, including the new action-bar and multi-result behavior.
 
 
 ### Control Dashboard config form builder (integrated; Active Config Phase 02–04)
@@ -318,21 +319,22 @@ editor handles timeout, browser, artifact directory, and default credential
 references. Credential controls accept variable names only, never secret
 values.
 
-For auto-build projects, `ConfigProjectEditor` persists the optional
-`waitForCompletion` toggle. `BuildConfirmDialog` starts checked according to
-the project's effective setting and sends the operator's choice as a per-run
-override in `POST /api/run`. `RunResultBox` displays the build number, terminal
-result, and stage names, statuses, and durations.
+For auto-build projects, `ConfigProjectEditor` persists optional
+`waitForCompletion` settings; no per-run modal override remains. The action bar
+contains `#btn-run-reports`, `#btn-run-auto-build`, and the shared saved
+`Workers` selector (`#select-workers`, 1–4); edits mark the document dirty and
+both actions wait for ETag-conditional Save. `RunResultBox` renders ordered
+`BuildProjectOutcomeRow` entries with identity, status/result, optional build
+number/link, stages, and error; older scalar build results remain supported.
 
 
 `useConfigDocumentEditor` owns document/raw-JSON synchronization, validation,
-dirty state, raw JSON Apply, and mutations. Its
-`updateProjectDocumentReportWorkers` transition writes the top-level count.
-`DashboardPage` binds `ExecutionSection`'s 1–4 selector beside Generate
-Reports to that transition. Changes update the shared document and formatted
-JSON and mark it dirty; valid raw-JSON Apply updates the same schema-validated
-model, while invalid input leaves it unchanged. Generate Reports is disabled
-until the document is saved through the existing ETag-conditional flow.
+dirty state, Apply, and mutations. `updateProjectDocumentReportWorkers` writes
+the top-level saved count; `DashboardPage` binds the shared `Workers` selector
+to that transition. Changes update the same document/raw JSON and mark it dirty.
+Valid raw-JSON Apply updates the schema-validated model; invalid input leaves
+the applied model unchanged. Both actions remain disabled for dirty or
+unavailable config and while a run is queued/running.
 
 ## Local SecretStore backend
 
@@ -420,7 +422,7 @@ set `Cache-Control: no-store`.
 | `src/reporting/control-page/hooks/` | Headless React hooks: `useControlApi`, `useConfigManager` (active configuration plus API/ETag flow), `useConfigDocumentEditor` (document/raw-JSON editing and validation), `useCredentialsManager`, `useBrowserSettings`, and `useRunPoller`. |
 | `src/reporting/control-page/hooks/config-document-transitions.ts` | Immutable add, update, remove, defaults, and report-worker count transitions for the editor document. |
 | `src/reporting/control-page/components/atoms/` | Atomic UI primitives: `Badge`, `Button`, `Input`, `Select`, `StatusBanner`, and `LoadingIndicator` with forwardRef support and variant contracts. |
-| `src/reporting/control-page/components/molecules/` | Compound molecules: `CredentialRow`, `BrowserSettingRow`, `ConfigSelectorBar`, `ConfigProjectEditor`, `ConfigDefaultsEditor`, `LogViewer`, and `RunResultBox` preserving UI contracts. |
+| `src/reporting/control-page/components/molecules/` | Compound molecules: `CredentialRow`, `BrowserSettingRow`, `ConfigSelectorBar`, `ConfigProjectEditor`, `ConfigDefaultsEditor`, `LogViewer`, `RunResultBox`, and `BuildProjectOutcomeRow`. |
 | `src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx` | Integrated config-form organism mounted by `DashboardPage` beside `RawJsonSection`; shares document state with the raw editor. |
 | `vite.control.config.ts` | Vite configuration for Control Dashboard: React plugin, Tailwind CSS, single-bundle outputs, and CSP-compliant asset emission. |
 | `scripts/copy-report-assets.mjs` | Asset copy script: stages `src/reporting/report.css` into `.runner-build/reporting/`. |
@@ -439,7 +441,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/bounded-auto-build-workers.spec.ts` | Verifies concurrency bounds, configuration-order outcomes, sibling failure isolation, saved-count pool dispatch, and aggregate status. |
 | `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, ETag-checked report worker count, and auto-build isolation. |
 | `tests/unit/control-hooks-and-types.spec.ts` | Hook/API lifecycles, active-config persistence, and document-level report-worker transition coverage. |
-| `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts and `ExecutionSection` report-worker selector options and disabled states. |
+| `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts for the shared Workers/action bar and ordered multi-project plus scalar-fallback result presentation. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
 | `tests/unit/report-server-secret-store.spec.ts` | Phase 01 backend contract and control-mode wiring coverage. |
