@@ -1,8 +1,9 @@
 # Report pipeline and aggregate index
 
-This document describes offline report fixtures, retained run discovery, and
-persistent aggregate-index construction. For the broader execution model, see
-[architecture](./architecture.md) and [system architecture](./system-architecture.md).
+This document describes offline report fixtures, retained-run discovery and
+deletion, and persistent aggregate-index construction. For the broader
+execution model, see [architecture](./architecture.md) and [system
+architecture](./system-architecture.md).
 
 ## Offline report fixtures
 
@@ -81,12 +82,12 @@ or replacing the existing pair. If either file is oversized, publication fails
 and the prior published files remain intact. Successful publication uses the
 existing journal/backup/rollback recovery path.
 
-## Control API project deletion
+## Control API report deletion
 
 Control mode routes `DELETE /api/reports/projects/:projectId` through
 `src/reporting/report-server-control-reports-api.ts` to
-`src/artifacts/report-project-deletion.ts`. The HTTP security, body, and status
-contract is documented in [architecture](./architecture.md).
+`src/artifacts/report-project-deletion.ts`. The whole-project HTTP contract is
+in [architecture](./architecture.md); the per-run contract follows below.
 
 `deleteProjectReports()` revalidates the safe ID and canonical report root,
 acquires the shared report-root lock without waiting, then requires complete
@@ -117,11 +118,59 @@ state; failed refresh does not claim deleted files were restored. The suite
 also confirms report mode serves GET/HEAD snapshots and rejects DELETE without
 mutating saved files.
 
-The Control report-management page at `/reports/index.html` reads the published
-aggregate and invokes this API only after confirmation; the persisted
-`reports/index.html` remains a static snapshot. See [architecture](./architecture.md)
-for the UI and route distinction and [release gates](./release-gates.md) for
-navigation, pagination, and deletion coverage.
+### Individual report-run deletion
+
+Control mode routes `DELETE /api/reports/projects/:projectId/runs/:runId`
+through `src/reporting/report-server-control-reports-api.ts` to
+`src/artifacts/report-run-deletion.ts`. The report-only server remains
+GET/HEAD-only.
+
+Both IDs must satisfy `SAFE_ID`
+(`/^[a-z0-9][a-z0-9-_]{0,80}$/u`); the route rejects malformed or double
+encoding, separators, null bytes, traversal, reserved names, and dot-prefixed
+IDs. Mutations require the control server's Host validation plus same-origin
+Origin, accepted Fetch Metadata, and CSRF checks. DELETE may be bodyless or
+carry an empty JSON object; a supplied body must use JSON and is bounded to
+1 MiB. Non-empty bodies return `400`; other methods return `405` with
+`Allow: DELETE`.
+
+| Outcome | Status and contract |
+| --- | --- |
+| Deleted | `200 { success: true, projectId, runId, remainingRunsCount }`. The count is the remaining validated runs for that project. |
+| Invalid IDs/body | `400`; `INVALID_PROJECT_ID`, `INVALID_RUN_ID`, or `INVALID_BODY`. |
+| Failed Host or mutation security checks | `403 FORBIDDEN_HOST` or `403 FORBIDDEN_MUTATION`. |
+| No validated run for the project/run pair | `404 RUN_NOT_FOUND`. |
+| Report-root lock is held | `409 REPORT_ROOT_LOCKED`; no run is removed and the lock path is not exposed. |
+| Oversized or unsupported body | `413` or `415`. |
+| Unsafe root/tree, incomplete discovery, removal, or refresh failure | `500`; service-specific codes identify the failed boundary. |
+
+`deleteProjectRunReport()` takes the shared report-root lock without waiting,
+recovers interrupted aggregate publication, verifies the canonical run path,
+and requires complete manifest discovery plus a validated target run. Before
+removal it rejects symlinks and non-file/non-directory entries and bounds
+preflight to 32 levels, 4,096 entries, and 256 MiB. It removes only the selected
+run directory, leaving sibling runs untouched. It prunes the project directory
+only when no filesystem entries remain.
+
+After removal, the service rediscovers surviving manifests and republishes
+`aggregate-data.json` and `index.html` from the surviving history. If removal
+or refresh fails, it attempts best-effort index recovery and always releases
+the lock; a refresh error reports that the run was already deleted and the
+index may need recovery.
+
+`tests/unit/control-reports-run-delete-api.spec.ts` covers single-run removal
+with sibling-run preservation and aggregate refresh, final-run project
+directory pruning and an empty aggregate, malformed IDs/routes, missing
+project/run targets, lock contention without lock-path leakage, missing/invalid
+CSRF, non-DELETE methods with `Allow`, and injected removal failure with lock
+release and retained run files.
+
+The current Control report-management page at `/reports/index.html` reads the
+published aggregate and invokes the whole-project endpoint only after
+confirmation. Per-run UI is planned for Phase 02; persisted `reports/index.html`
+remains a static snapshot. See [architecture](./architecture.md) for the UI
+and route distinction and [release gates](./release-gates.md) for navigation,
+pagination, and deletion coverage.
 
 ## Focused contracts
 

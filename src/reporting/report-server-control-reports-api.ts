@@ -9,8 +9,32 @@ import {
   deleteProjectReports,
   ProjectDeletionError,
 } from '../artifacts/report-project-deletion.js';
+import {
+  assertSafeRunId,
+  deleteProjectRunReport,
+  RunDeletionError,
+} from '../artifacts/report-run-deletion.js';
 
 const PROJECT_ROUTE_PREFIX = '/api/reports/projects/';
+
+function parseSegment(
+  segment: string,
+  errorName: 'INVALID_PROJECT_ID' | 'INVALID_RUN_ID',
+): { ok: true; value: string } | { ok: false; code: string; message: string } {
+  if (segment.length === 0) return { ok: false, code: errorName, message: 'empty identifier' };
+  if (segment.includes('%25')) return { ok: false, code: errorName, message: 'double-encoded identifier' };
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(segment);
+  } catch {
+    return { ok: false, code: errorName, message: 'malformed percent-encoding' };
+  }
+  if (decoded.includes('/') || decoded.includes('\\')) return { ok: false, code: errorName, message: 'contains path separators' };
+  if (decoded.includes('\0')) return { ok: false, code: errorName, message: 'contains null bytes' };
+  if (decoded === '.' || decoded === '..' || decoded.includes('..')) return { ok: false, code: errorName, message: 'contains path traversal' };
+  if (!SAFE_ID.test(decoded)) return { ok: false, code: errorName, message: 'identifier is invalid' };
+  return { ok: true, value: decoded };
+}
 
 export async function handleControlReportsApi(
   context: ControlRouterContext,
@@ -23,7 +47,6 @@ export async function handleControlReportsApi(
     sendError(response, 400, 'INVALID_PROJECT_ID', 'missing project id in path');
     return;
   }
-
   if (!pathname.startsWith(PROJECT_ROUTE_PREFIX)) {
     sendError(response, 400, 'INVALID_PROJECT_ID', 'invalid project route');
     return;
@@ -35,46 +58,34 @@ export async function handleControlReportsApi(
     return;
   }
 
-  if (rawSegment.includes('/')) {
+  let rawProjectId: string;
+  let rawRunId: string | undefined;
+
+  const runsIdx = rawSegment.indexOf('/runs/');
+  if (runsIdx !== -1) {
+    rawProjectId = rawSegment.slice(0, runsIdx);
+    rawRunId = rawSegment.slice(runsIdx + '/runs/'.length);
+    if (rawProjectId.includes('/') || rawRunId.includes('/')) {
+      sendError(response, 400, 'INVALID_RUN_ID', 'run route contains unexpected path segments');
+      return;
+    }
+  } else if (rawSegment.includes('/runs')) {
+    sendError(response, 400, 'INVALID_RUN_ID', 'missing run id in path');
+    return;
+  } else if (rawSegment.includes('/')) {
     sendError(response, 400, 'INVALID_PROJECT_ID', 'project route must contain exactly one segment');
     return;
+  } else {
+    rawProjectId = rawSegment;
   }
 
-  if (rawSegment.includes('%25')) {
-    sendError(response, 400, 'INVALID_PROJECT_ID', 'double-encoded project id');
+  const projectParsed = parseSegment(rawProjectId, 'INVALID_PROJECT_ID');
+  if (!projectParsed.ok) {
+    sendError(response, 400, projectParsed.code, projectParsed.message);
     return;
   }
-
-  let decoded: string;
   try {
-    decoded = decodeURIComponent(rawSegment);
-  } catch {
-    sendError(response, 400, 'INVALID_PROJECT_ID', 'malformed percent-encoding in project id');
-    return;
-  }
-
-  if (decoded.includes('/') || decoded.includes('\\')) {
-    sendError(response, 400, 'INVALID_PROJECT_ID', 'project id contains path separators');
-    return;
-  }
-
-  if (decoded.includes('\0')) {
-    sendError(response, 400, 'INVALID_PROJECT_ID', 'project id contains null bytes');
-    return;
-  }
-
-  if (decoded === '.' || decoded === '..' || decoded.includes('..')) {
-    sendError(response, 400, 'INVALID_PROJECT_ID', 'project id contains path traversal');
-    return;
-  }
-
-  if (!SAFE_ID.test(decoded)) {
-    sendError(response, 400, 'INVALID_PROJECT_ID', 'project id is invalid');
-    return;
-  }
-
-  try {
-    assertSafeProjectId(decoded);
+    assertSafeProjectId(projectParsed.value);
   } catch (error) {
     if (error instanceof ProjectDeletionError) {
       sendError(response, error.status, error.code, error.message);
@@ -84,9 +95,29 @@ export async function handleControlReportsApi(
     return;
   }
 
+  let validatedRunId: string | undefined;
+  if (rawRunId !== undefined) {
+    const runParsed = parseSegment(rawRunId, 'INVALID_RUN_ID');
+    if (!runParsed.ok) {
+      sendError(response, 400, runParsed.code, runParsed.message);
+      return;
+    }
+    try {
+      assertSafeRunId(runParsed.value);
+      validatedRunId = runParsed.value;
+    } catch (error) {
+      if (error instanceof RunDeletionError) {
+        sendError(response, error.status, error.code, error.message);
+        return;
+      }
+      sendError(response, 400, 'INVALID_RUN_ID', 'run id is invalid');
+      return;
+    }
+  }
+
   if (method !== 'DELETE') {
     response.setHeader('allow', 'DELETE');
-    sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for project reports endpoint');
+    sendError(response, 405, 'METHOD_NOT_ALLOWED', 'method not allowed for reports endpoint');
     return;
   }
 
@@ -117,13 +148,18 @@ export async function handleControlReportsApi(
   }
 
   try {
-    const result = await deleteProjectReports(context.reportRoot, decoded);
-    sendJson(response, 200, result);
+    if (validatedRunId !== undefined) {
+      const result = await deleteProjectRunReport(context.reportRoot, projectParsed.value, validatedRunId);
+      sendJson(response, 200, result);
+    } else {
+      const result = await deleteProjectReports(context.reportRoot, projectParsed.value);
+      sendJson(response, 200, result);
+    }
   } catch (error) {
-    if (error instanceof ProjectDeletionError) {
+    if (error instanceof ProjectDeletionError || error instanceof RunDeletionError) {
       sendError(response, error.status, error.code, error.message);
       return;
     }
-    sendError(response, 500, 'INTERNAL_ERROR', error instanceof Error ? error.message : 'failed to delete project reports');
+    sendError(response, 500, 'INTERNAL_ERROR', error instanceof Error ? error.message : 'failed to delete report');
   }
 }

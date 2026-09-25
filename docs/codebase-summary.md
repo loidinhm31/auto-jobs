@@ -42,6 +42,12 @@ run is claimed.
   opens a control-only React history page over the published aggregate, with
   independent 20-run pagination and confirmed deletion; persisted report HTML
   stays static and read-only.
+- Individual Report Run Deletion Phase 01: guarded loopback
+  `DELETE /api/reports/projects/:projectId/runs/:runId` is routed to
+  `report-run-deletion.ts`, which removes one validated run under the shared
+  lock, prunes an empty project directory, and rebuilds the aggregate. The
+  focused API suite covers eight scenarios; Phase 02 UI and Phase 03 release
+  verification remain planned.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
   testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
@@ -97,8 +103,7 @@ run is claimed.
   Coverage includes aggregate retention/bounds, DELETE security and failure
   recovery, the read-only report boundary, and Chromium/WebKit management UX.
   No code-coverage metrics were collected.
-- Repomix compaction regenerated at `repomix-output.xml`; repository ignore
-  rules remain in effect.
+- Repomix compaction regenerated at `repomix-output.xml` for this summary. The security scan excluded two test files with credential-shaped URL examples; repository ignore rules remain in effect.
 
 ## Entry points and scripts
 
@@ -432,15 +437,17 @@ set `Cache-Control: no-store`.
 | `src/project/auto-build-runner.ts` | One-project auto-build lifecycle, redaction, and cleanup. |
 | `src/project/project-runner.ts` | Report run state, capture, failure artifacts, and report outcomes. |
 | `src/artifacts/` | Run identities, staging leases, publication, manifest discovery, cleanup, and aggregate recovery. |
-| `src/artifacts/report-project-deletion.ts` | Safe project subtree deletion, bounded filesystem preflight, report-root lock handling, and aggregate rebuild. |
+| `src/artifacts/report-project-deletion.ts` | Safe whole-project subtree deletion, bounded filesystem preflight, report-root lock handling, and aggregate rebuild. |
+| `src/artifacts/report-run-deletion.ts` | Safe single-run deletion, bounded target preflight, report-root lock handling, empty-project pruning, and aggregate rebuild. |
 | `src/reporting/` | HTML rendering, report links, view models, static serving, and control API routing. |
 | `src/reporting/report-server-secret-store.ts` | Canonical fixed-file secret persistence, validation, frozen snapshots, atomic writes, in-memory locking, and deletion. |
 | `src/reporting/report-server-constants.ts` | Shared report/control limits plus `SECRETS_FILE_NAME`, `MAX_SECRET_FILE_BYTES`, and control body limits. |
 | `src/reporting/report-server-control-security.ts` | Security headers and Host/Origin/Fetch Metadata/timing-safe CSRF/content-type validation. |
 | `src/reporting/report-server-control-secrets-api.ts` | Modular `/api/secrets` GET/PUT/DELETE handler, presence-map construction, bounded input, and store operations. |
 | `src/reporting/report-server-control-api.ts` | Config/run handlers and re-export facade for the secrets handler. |
-| `src/reporting/report-server-control-reports-api.ts` | Guarded project-report DELETE endpoint and request validation. |
-| `tests/unit/control-reports-delete-api.spec.ts` | Project deletion security/body gates, lock and prefix safety, filesystem preflight, empty aggregate, and injected removal/publication failure handling. |
+| `src/reporting/report-server-control-reports-api.ts` | Guarded whole-project and per-run DELETE routes plus request validation. |
+| `tests/unit/control-reports-delete-api.spec.ts` | Whole-project deletion security/body gates, lock and prefix safety, filesystem preflight, empty aggregate, and injected removal/publication failure handling. |
+| `tests/unit/control-reports-run-delete-api.spec.ts` | Per-run deletion, sibling preservation, final-project pruning, request validation, lock contention, CSRF, method handling, and injected removal failure coverage. |
 | `src/reporting/report-server-control.ts` | Host preflight, control and built-asset routing, and `ControlRouterContext` dependencies. |
 | `src/reporting/report-server-control-page.ts` | Asset loader: reads built HTML, CSS, and JS from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches buffers. |
 | `src/reporting/report-server.ts` | Report/control server lifecycle; creates the SecretStore only in control mode. |
@@ -503,11 +510,11 @@ at 5,000. Before publication, the publisher checks both staged JSON and HTML
 against the 16 MiB static-file limit and preserves the previous pair on
 oversize rejection.
 
-The control-only `DELETE /api/reports/projects/:projectId` operation removes the
-whole target subtree only after complete validated-manifest discovery. It
-returns 409 on report-root lock contention, then rebuilds both aggregate files
-from surviving manifests. If refresh fails after removal, the API reports the
-deletion and attempted recovery separately from the index failure.
+The control-only `DELETE /api/reports/projects/:projectId` removes a whole
+project subtree after complete validated-manifest discovery. The
+`DELETE /api/reports/projects/:projectId/runs/:runId` endpoint removes only one
+validated run, prunes an empty project directory, and republishes both aggregate
+files from surviving manifests under the same report-root lock.
 
 Focused coverage lives in `tests/unit/aggregate-index-builder.spec.ts` and
 `tests/unit/persistent-aggregate-bounds.spec.ts`.

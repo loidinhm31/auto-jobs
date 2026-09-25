@@ -15,9 +15,10 @@ verification:
 - **SecretStore and secrets API:** persist validated local credential values
   outside project JSON and expose only boolean presence through guarded
   `/api/secrets` operations.
-- **Project report deletion:** guarded loopback
-  `DELETE /api/reports/projects/:projectId` uses the report-root lock;
-  contention returns `409` and the aggregate rebuilds from survivors.
+- **Report deletion:** guarded loopback whole-project and individual-run
+  `DELETE /api/reports/projects/:projectId` and
+  `DELETE /api/reports/projects/:projectId/runs/:runId` use the report-root lock;
+  contention returns `409`; run deletion preserves siblings, prunes an empty project directory, and rebuilds the aggregate from survivors.
 - **Control UI:** The Dashboard edits schema-v1 settings and credentials and
   exposes all-enabled report/build actions with one saved Workers selector.
   Its `/reports/index.html` React view lists retained history, independently
@@ -31,9 +32,9 @@ verification:
   auto-build; Chromium/WebKit Control UI scenarios run without Jenkins.
 
 The [architecture](./architecture.md) document contains the field-level runtime
-contract. See [multi-project configuration](./multi-project-configuration.md)
-for JSON, credential, and secrets API details and [release gates](./release-gates.md)
-for validation commands.
+contract. See [report pipeline](./report-pipeline.md) for aggregate and deletion
+contracts, [multi-project configuration](./multi-project-configuration.md) for
+JSON/credential contracts, and [release gates](./release-gates.md) for validation.
 
 
 ## Context and boundaries
@@ -45,8 +46,8 @@ flowchart TB
   SecretStore --> SecretsApi[Loopback /api/secrets]
   Control[Loopback control server] --> SecretsApi
   SecretsApi -. presence-only status; guarded PUT/DELETE .-> SecretStore
-  Control --> ReportsApi[Loopback DELETE /api/reports/projects/:projectId]
-  ReportsApi --> DeleteReports[Safe project removal + aggregate rebuild]
+  Control --> ReportsApi[Loopback project/run DELETE API]
+  ReportsApi --> DeleteReports[Safe project/run removal + aggregate rebuild]
   DeleteReports -. guarded mutation; report-root lock .-> ReportRoot
   Control --> RunManager[Control run manager]
   RunManager --> ControlExecutor[Control run executor]

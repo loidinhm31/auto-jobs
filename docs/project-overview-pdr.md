@@ -4,9 +4,9 @@
 **Document scope:** schema-v1 report capture, persistent aggregate history,
 bounded execution, Control Page actions and report management, offline build
 fixtures, and dynamic credentials.<br>
-**Current milestone:** Persistent project report management — complete
-(4/4 phases; Phase 04 verification approved; 2026-09-25).<br>
-**Prior completed milestone:** Control Page Parallel Auto-Build — complete,
+**Current milestone:** Individual report run deletion — Phase 01 API/service complete; Phases 02–03 pending (2026-09-25).<br>
+**Previous completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 verification approved; 2026-09-25).<br>
+**Earlier completed milestone:** Control Page Parallel Auto-Build — complete,
 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
 passed; review approved 9.3/10.
 
@@ -334,6 +334,26 @@ and failure semantics are validated before side effects.
   `serve:report` stays read-only. Cover route security and navigation,
   pagination, and deletion in unit and Chromium/WebKit E2E tests.
 
+### FR-14: Control API individual report-run deletion
+
+- Expose `DELETE /api/reports/projects/:projectId/runs/:runId` only through
+  loopback control mode. Validate both safe IDs, Host/Origin/Fetch Metadata/CSRF,
+  JSON content type when a body is present, and an empty-or-`{}` body.
+- Acquire the shared report-root lock without waiting. Require complete
+  validated-manifest discovery, a canonical target run directory, and a
+  validated target run; reject unsafe filesystem entries and bound preflight
+  to 32 levels, 4,096 entries, and 256 MiB.
+- Remove only the requested run, preserve siblings, and prune its project
+  directory only if the directory is empty. Republish both aggregate files from
+  surviving manifests under the same lock.
+- Return `200` with `{ success: true, projectId, runId, remainingRunsCount }`;
+  return `404 RUN_NOT_FOUND` for an absent/unvalidated target and `409
+  REPORT_ROOT_LOCKED` for contention. If refresh fails after removal, report
+  that the run was deleted and attempt best-effort index recovery.
+- Cover observable deletion, preservation, pruning, aggregate, invalid/missing
+  target, security, method, lock, and failure behavior in
+  `tests/unit/control-reports-run-delete-api.spec.ts`.
+
 ## Non-functional requirements
 
 | Area | Requirement |
@@ -551,6 +571,7 @@ require the environment variables named by project configuration.
 | Control UI credential management | `src/reporting/control-page/` (React application: `App.tsx`, `components/`, `hooks/`) | [system architecture](./system-architecture.md), [codebase summary](./codebase-summary.md) |
 | Control report-management navigation and deletion | `src/reporting/control-page/pages/ReportManagementPage.tsx`, `src/reporting/control-page/hooks/use-delete-reports.ts`, `src/reporting/report-server-control.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Persistent report-management verification | `src/artifacts/report-project-deletion.ts`, `tests/unit/aggregate-index-builder.spec.ts`, `tests/unit/persistent-aggregate-bounds.spec.ts`, `tests/unit/control-reports-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
+| Individual report-run deletion API and verification | `src/reporting/report-server-control-reports-api.ts`, `src/artifacts/report-run-deletion.ts`, `tests/unit/control-reports-run-delete-api.spec.ts` | [report pipeline](./report-pipeline.md), [code standards](./code-standards.md), [release gates](./release-gates.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |

@@ -256,7 +256,7 @@ npm run test:control
 ```
 which exercises config reading/atomic saving, validation errors, report and auto-build execution contracts, and WCAG A/AA accessibility scanning in Chromium and WebKit.
 
-### Control project-report deletion gate
+### Control project and run deletion API gates
 
 Run the focused control-only DELETE API contract:
 
@@ -274,6 +274,26 @@ post-failure disk state. Successful deletion preserves config, shared assets,
 and sibling projects, and publishes a valid empty aggregate when deleting the
 last project. Tests use isolated temporary roots and do not contact Jenkins or
 vendors. The tree preflight enforces 32 levels, 4,096 entries, and 256 MiB.
+
+### Individual report-run deletion gate
+
+Run the focused unit/API contract:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-reports-run-delete-api.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+The eight-test suite uses temporary report/config roots and the in-process
+Control Server. It verifies a successful run deletion preserves sibling runs
+and republishes the aggregate, deleting the final validated run prunes the
+empty project directory and permits an empty aggregate, malformed routes and
+missing targets fail with `400`/`404`, root-lock contention returns `409`
+without leaking the lock path, missing/invalid CSRF returns `403`, non-DELETE
+methods return `405` with `Allow: DELETE`, and an injected removal failure
+leaves run files intact and releases the lock. This unit suite is included in
+`npm run test:unit`; it does not contact Jenkins or vendors.
 
 ### Control report-management UI gate
 

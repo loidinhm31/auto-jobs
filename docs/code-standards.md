@@ -29,7 +29,7 @@ it is not a replacement for schema or security validation.
 | `src/jenkins/` | Jenkins authentication, exact URL identity, scoped locators, and guarded build submission. |
 | `src/project/` | Report and auto-build workflow orchestration, run state, outcomes, and capture. |
 | `src/workflow/` | Shared absolute deadlines, hard cleanup timeouts, and diagnostic helpers. |
-| `src/artifacts/` | Immutable report identity, bounded manifest discovery, aggregate-index building/publication/recovery, project-report deletion, staging, and cleanup. |
+| `src/artifacts/` | Immutable report identity, bounded manifest discovery, aggregate-index building/publication/recovery, project/run deletion, staging, and cleanup. |
 | `src/reports/` | Snyk/SonarQube discovery, capture, parsing, normalization, and source-specific policy. |
 | `src/security/` | URL origin/base-path, relative-link, credential-like URL, traversal, and containment policy. |
 | `src/reporting/` | Static report rendering, links, read-only report serving, and control-plane routing. |
@@ -37,8 +37,9 @@ it is not a replacement for schema or security validation.
 | `src/reporting/report-server-control-secrets-api.ts` | Presence-only `/api/secrets` handler; parse and validate endpoint inputs, invoke SecretStore, and never return values. |
 | `src/reporting/report-server-control-security.ts` | Shared control response headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
 | `src/reporting/report-server-control-api.ts` | Config/run handlers and the API facade; keep secrets and project-report handlers in their dedicated modules. |
-| `src/reporting/report-server-control-reports-api.ts` | Guarded `DELETE /api/reports/projects/:projectId` route and request validation. |
-| `src/artifacts/report-project-deletion.ts` | Canonical-path and tree preflight, root-lock coordination, subtree removal, and aggregate refresh. |
+| `src/reporting/report-server-control-reports-api.ts` | Guarded whole-project `DELETE /api/reports/projects/:projectId` and per-run `DELETE /api/reports/projects/:projectId/runs/:runId` routes. |
+| `src/artifacts/report-project-deletion.ts` | Canonical-path and tree preflight, root-lock coordination, project-subtree removal, and aggregate refresh. |
+| `src/artifacts/report-run-deletion.ts` | Canonical single-run preflight, root-lock coordination, run removal, empty-project pruning, and aggregate refresh. |
 | `src/reporting/report-server-control.ts` | Loopback routing, Host preflight, and exact `/reports/index.html` GET/HEAD control-shell handling before static report routing. |
 | `src/reporting/control-page/App.tsx`, `src/reporting/control-page/components/organisms/HeaderBar.tsx` | Select Dashboard vs report-management view by pathname and link to `/reports/index.html`. |
 | `src/reporting/control-page/pages/ReportManagementPage.tsx` | Load and classify the published aggregate independently of active project configuration. |
@@ -47,7 +48,7 @@ it is not a replacement for schema or security validation.
 | `tests/e2e/control-report-management.spec.ts` | Browser-level navigation, retained-history, pagination, and deletion workflows. |
 | `src/reporting/report-server-run-manager.ts` | Single-active control-run lifecycle and optional `SecretStore` dependency carried into execution. |
 | `src/reporting/report-server-run-executor.ts` | Per-run SecretStore snapshot, environment merge, mode dispatch, and control-output redaction. |
-| `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers. |
+| `tests/unit/` | Deterministic contracts with injected dependencies or in-process servers, including whole-project and individual-run deletion APIs. |
 | `tests/e2e/` | Browser-facing workflows against checked-in fixtures or explicit test routes. |
 
 A module may depend inward on shared contracts and policy helpers, but a
@@ -168,20 +169,11 @@ Compiler settings in `tsconfig.json` are the source of truth:
 - Keep the secrets handler in `report-server-control-secrets-api.ts` and project
   report deletion in `report-server-control-reports-api.ts`; keep
   `report-server-control-api.ts` as the config/run facade.
-- Route exact `/api/secrets` paths and one safe project-ID segment for report
-  deletion. `handleControlRequest` validates Host before dispatch.
-- Use `validateMutationRequest` for every PUT/DELETE. It checks Host and Origin,
-  accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode`, timing-safe `x-csrf-token`, and
-  JSON content type when a body is present (bodyless DELETE is allowed).
-- Parse mutations through `readBoundedJsonBody`; preserve the 1 MiB body limit.
-  Secrets parsing must finish before touching SecretStore; report deletion
-  accepts only an empty JSON object when a body is sent.
-- Keep canonical report-root/path checks, bounded symlink-rejecting preflight
-  (32 levels, 4,096 entries, 256 MiB), locking, removal, and aggregate refresh
-  in `report-project-deletion.ts`; do not expose deletion through report mode.
-- Return secrets presence booleans only. Report deletion success contains the
-  project ID and validated-run count; never echo request bodies. Use shared
-  response helpers so control responses carry `Cache-Control: no-store`.
+- Route exact `/api/secrets`, one safe project-ID segment for whole-project report deletion, and exact nested project/run segments for individual deletion. `handleControlRequest` validates Host before dispatch.
+- Use `validateMutationRequest` for every PUT/DELETE. It checks Host and Origin, accepted `Sec-Fetch-Site`/`Sec-Fetch-Mode`, timing-safe `x-csrf-token`, and JSON content type when a body is present (bodyless DELETE is allowed).
+- Parse mutations through `readBoundedJsonBody`; preserve the 1 MiB body limit. Secrets parsing must finish before touching SecretStore; both report deletion endpoints accept only an empty JSON object when a body is sent.
+- Keep canonical report-root/path checks, bounded symlink-rejecting preflight (32 levels, 4,096 entries, 256 MiB), locking, removal, and aggregate refresh in the dedicated deletion services; whole-project deletion preflights the subtree, while `report-run-deletion.ts` preflights only the selected run.
+- Return secrets presence booleans only. Project deletion success contains the project ID and validated-run count; run deletion success contains project/run IDs and remaining validated-run count. Never echo request bodies; use shared response helpers so control responses carry `Cache-Control: no-store`.
 
 ### Control UI credential state
 
@@ -264,12 +256,14 @@ Tests must defend observable behavior and fail on plausible regressions:
   non-JSON content types, invalid keys/values/bodies, unsupported methods, and
   the unavailable-store response. Use the real loopback server plus a direct
   handler test only for the missing dependency boundary.
-- For project-report deletion, use an isolated report root and loopback server.
-  Cover safe IDs, body/media-type/method rules, 404/409 outcomes, symlink/depth
-  preflight, prefix-sibling and shared-file preservation, the valid empty
-  aggregate, removal/publication failure injection, and lock release in
-  `tests/unit/control-reports-delete-api.spec.ts`. The same suite verifies the
-  report-only GET/HEAD and DELETE boundary.
+- For whole-project report deletion, `tests/unit/control-reports-delete-api.spec.ts`
+  covers full-tree preflight, aggregate updates, request validation, and
+  removal/publication failure behavior. It also checks the report-only GET/HEAD
+  and DELETE boundary.
+- For individual report-run deletion, `tests/unit/control-reports-run-delete-api.spec.ts`
+  covers sibling preservation, final-run pruning, aggregate refresh,
+  invalid/missing targets, lock contention, CSRF, method handling, and injected
+  removal failure with lock-release assertions.
 - For the Control report-management UI, `tests/unit/control-assets-routing.spec.ts`
   covers the control-only GET/HEAD shell and report-mode static route.
   `tests/e2e/control-report-management.spec.ts` runs in Chromium and WebKit;

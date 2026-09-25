@@ -17,7 +17,7 @@ in the project configuration. Tests may fulfill those exact URLs with
 test-only Playwright routes; unmatched network requests are blocked.
 
 See [system architecture](./system-architecture.md) for the component view,
-[report pipeline](./report-pipeline.md) for fixtures and aggregate persistence,
+[report pipeline](./report-pipeline.md) for fixtures, aggregate persistence, and report deletion,
 [multi-project configuration](./multi-project-configuration.md) for field
 contracts, and [release gates](./release-gates.md) for validation commands.
 
@@ -120,12 +120,12 @@ flowchart LR
   evidence, and normalize source-specific results.
 - `src/artifacts/` owns immutable report identities, bounded manifest discovery,
   aggregate-index construction/publication/recovery, staging, and cleanup.
-- `src/artifacts/report-project-deletion.ts` safely removes a project subtree
-  under the report-root lock and rebuilds the aggregate from surviving runs.
+- `src/artifacts/report-project-deletion.ts` removes project trees;
+  `src/artifacts/report-run-deletion.ts` removes one run, prunes empty projects, and both services lock/rebuild aggregates.
 - `src/reporting/` renders static HTML/CSS and serves only files below a
   canonical report root.
 - `src/reporting/report-server-control-reports-api.ts` handles the guarded
-  `DELETE /api/reports/projects/:projectId` control endpoint.
+  `DELETE /api/reports/projects/:projectId` and `/runs/:runId` control endpoints.
 - `src/reporting/report-server-control.ts` validates Host, serves the Control
   Dashboard and exact report-management shell ahead of static routing, and
   dispatches APIs/assets with router dependencies.
@@ -473,14 +473,14 @@ dashboard (`127.0.0.1:4173`). It exposes:
   `GET`/`PUT`/`DELETE /api/secrets`;
 - Direct navigation from the dashboard header to the persistent report index
   (`GET /reports/index.html`); and
-- Safe per-project report deletion under `DELETE /api/reports/projects/:projectId`.
+- Safe whole-project and individual-run report deletion under `DELETE /api/reports/projects/:projectId` and `DELETE /api/reports/projects/:projectId/runs/:runId`.
 
-### Persistent report management and per-project deletion
+### Persistent report management and deletion
 
-Control mode exposes an explicit per-project report deletion endpoint:
-`DELETE /api/reports/projects/:projectId`.
+Control mode exposes whole-project and individual-run endpoints:
+`DELETE /api/reports/projects/:projectId` and `/api/reports/projects/:projectId/runs/:runId`.
 
-#### HTTP contract
+#### Whole-project HTTP contract
 `DELETE /api/reports/projects/:projectId` is available only in loopback control
 mode; `serve:report` remains GET/HEAD-only. The router checks Host before
 dispatch. Mutation requests also require same-origin `Origin`, accepted
