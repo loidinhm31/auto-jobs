@@ -589,6 +589,9 @@ test.describe('Control Report Management Page & Deletion E2E (Phase 03)', () => 
     await expect(dialog.locator('#delete-run-dialog-description')).toContainText('run-01');
     await expect(dialog.locator('#delete-run-dialog-description')).toContainText('Project Alpha');
 
+    // Axe audit for accessibility on DeleteRunConfirmationDialog and per-run action
+    const axeResults = await new AxeBuilder({ page }).analyze();
+    expect(axeResults.violations).toEqual([]);
     await page.locator('#cancel-delete-run-btn').click();
     await expect(dialog).toBeHidden();
     expect(fs.existsSync(path.join(reportRoot, 'project-alpha', 'run-01'))).toBe(true);
@@ -612,6 +615,15 @@ test.describe('Control Report Management Page & Deletion E2E (Phase 03)', () => 
     // On UI: run-01 row is gone, run-02 row remains
     await expect(page.locator('#delete-run-run-01-btn')).toBeHidden();
     await expect(page.locator('#delete-run-run-02-btn')).toBeVisible();
+
+    // Aggregate index (aggregate-data.json and static index.html) updates accurately
+    const aggregateData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8'));
+    const alphaProj = aggregateData.projects.find((p: { projectId: string }) => p.projectId === 'project-alpha');
+    expect(alphaProj).toBeDefined();
+    expect(alphaProj.runs).toHaveLength(1);
+    expect(alphaProj.runs[0].runId).toBe('run-02');
+    const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
+    expect(indexHtml).toContain(AGGREGATE_REPORT_MARKER);
   });
 
   test('deleting last remaining run prunes project folder and updates UI', async ({ page }) => {
@@ -660,6 +672,12 @@ test.describe('Control Report Management Page & Deletion E2E (Phase 03)', () => 
     // UI reflects empty state since no projects remain
     await expect(page.locator('#project-solo-project')).toBeHidden();
     await expect(page.locator('.empty-state')).toContainText('No retained project reports were recorded.');
+
+    // Aggregate reflects 0 projects and valid index.html
+    const aggregateData = JSON.parse(fs.readFileSync(path.join(reportRoot, 'aggregate-data.json'), 'utf8'));
+    expect(aggregateData.projects).toEqual([]);
+    const indexHtml = fs.readFileSync(path.join(reportRoot, 'index.html'), 'utf8');
+    expect(indexHtml).toContain(AGGREGATE_REPORT_MARKER);
   });
 
   test('handles 409 conflict during individual run deletion', async ({ page }) => {

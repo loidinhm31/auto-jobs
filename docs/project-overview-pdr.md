@@ -4,7 +4,7 @@
 **Document scope:** schema-v1 report capture, persistent aggregate history,
 bounded execution, Control Page actions and report management, offline build
 fixtures, and dynamic credentials.<br>
-**Current milestone:** Individual report run deletion — Phases 01–02 API/UI complete; Phase 03 verification pending (2026-09-25).<br>
+**Current milestone:** Individual report run deletion — complete (3/3 phases; Phase 03 verification approved 2026-09-25).<br>
 **Previous completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 verification approved; 2026-09-25).<br>
 **Earlier completed milestone:** Control Page Parallel Auto-Build — complete,
 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
@@ -621,9 +621,12 @@ report CLI still has no production auto-build command.
   34/34, and `npm run test:report` 5/5 (482 passed; none failed or skipped).
   No code-coverage metrics were collected. Review approved 9.8/10 with
   `npm run typecheck` clean ([phase](../plans/260924-2019-persistent-project-report-management/phase-04-verification-and-caller-migration.md), [test report](../plans/reports/phase04-tester-260925-0048-verification-and-caller-migration.md), [review](../plans/reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md)).
-- Completed Individual report run deletion Phase 02: added per-run table actions,
-  scope-specific confirmation, guarded deletion, feedback, and aggregate refresh.
-  Phase 03 release verification remains pending.
+- Completed Individual report run deletion through Phase 03: verified
+  cancellation, selected-run/sibling preservation, final-run pruning, and
+  aggregate refresh in Chromium and WebKit; Axe reported 0 violations.
+  `npm run typecheck`, `npm run build`, `npm run test:unit` (454/454),
+  `npm run test:control` (40/40), and `npm run test:report` (5/5) passed;
+  review approved 9.5/10 with no blockers ([phase](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md), [test report](../plans/reports/phase03-tester-260925-1517-phase-03-verification-and-release-gates.md), [review](../plans/reports/code-reviewer-260925-1521-phase-03-verification-and-release-gates.md)).
 
 
 ### 0.1.0 (development) — 2026-09-24

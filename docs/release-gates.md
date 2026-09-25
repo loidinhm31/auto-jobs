@@ -3,11 +3,11 @@
 This project has deterministic local gates for native browsers, offline report
 fixtures, the Phase 3 build-page fixture, the Phase 01 SecretStore backend,
 the Phase 02 control secrets API/security boundary, report-management routing
-and browser flows, the Phase 03 control run-environment boundary, the Phase 04
-control UI credential dialog, and the Phase 05 dynamic-credential verification
-suite. The commands below are the current release contract; test counts are
-intentionally not hard-coded except where a dated verification snapshot is
-recorded for traceability.
+and Chromium/WebKit flows for project and individual report-run deletion, the
+Phase 03 control run-environment boundary, the Phase 04 credential dialog,
+and the Phase 05 dynamic-credential verification suite. The commands below are
+the current release contract; test counts are intentionally not hard-coded
+except where a dated verification snapshot is recorded for traceability.
 
 ## Gate order
 
@@ -295,18 +295,59 @@ methods return `405` with `Allow: DELETE`, and an injected removal failure
 leaves run files intact and releases the lock. This unit suite is included in
 `npm run test:unit`; it does not contact Jenkins or vendors.
 
+Run the focused browser contract in both configured browsers:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/e2e/control-report-management.spec.ts \
+  --config=playwright.control.config.ts \
+  --grep='individual.*run|last remaining run'
+```
+
+These isolated-root flows verify cancellation leaves both run directories
+intact, confirmation removes only the selected run while preserving its sibling
+and visible row, aggregate refresh, final-run pruning and empty-state
+publication, and lock-conflict feedback. Axe finds no violations on the
+individual-run confirmation dialog and action. This browser gate does not
+contact Jenkins or vendors.
+
 ### Control report-management UI gate
+
+Run the focused UI and hook contract unit tests:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-delete-run-ui.spec.ts \
+  --config=playwright.unit.config.ts
+```
 
 `npm run test:control` includes `tests/e2e/control-report-management.spec.ts`
 under Chromium and WebKit (`playwright.control.config.ts`). It covers dashboard
 navigation/back, empty/history-only inventories, independent 20/21-run
 pagination, cancel/Escape dismissal, confirmed project/run deletion, sibling
 preservation, final-project/final-run empty-state refresh, and 409/500 feedback.
-Assertions include on-disk state, not only UI responses.
-
+Axe scans cover the retained-history table/actions and per-run confirmation
+dialog, with zero violations; direct on-disk assertions verify the results.
 `tests/unit/control-assets-routing.spec.ts` runs under `npm run test:unit` and
 checks the control-only `/reports/index.html` GET/HEAD CSRF shell, CSP and HEAD
 body boundary, plus the report-mode static-index route.
+
+### Individual report-run deletion Phase 03 verification snapshot (2026-09-25)
+
+| Command/scope | Result |
+| --- | --- |
+| `npm run typecheck` / `npm run build` | Passed; 0 TypeScript errors |
+| `npm run test:unit` | 454/454 passed |
+| `npm run test:control` (Chromium + WebKit) | 40/40 passed |
+| `npm run test:report` | 5/5 passed |
+| Combined test suites | 499/499 passed; none failed or skipped |
+| Axe accessibility scans | 0 violations on audited views |
+| Code review | Approved, 9.5/10; no blockers |
+
+The browser checks verify cancellation, selected-run removal, sibling
+preservation, final-run pruning, aggregate refresh, and accessibility. These
+phase-specific results do not claim the separate post-integration
+`npm run test:release` command was run. Evidence: [phase checklist](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md), [test report](../plans/reports/phase03-tester-260925-1517-phase-03-verification-and-release-gates.md), [review](../plans/reports/code-reviewer-260925-1521-phase-03-verification-and-release-gates.md).
 
 ### Phase 01 control asset routing gate
 

@@ -1,7 +1,7 @@
 ---
 title: "Individual report run deletion"
 description: "Allow deleting individual report runs within a project from the Control Dashboard, with root locking, safety preflight, empty project pruning, and aggregate index rebuild."
-status: in-progress
+status: completed
 priority: P2
 effort: 8h
 branch: main
@@ -19,9 +19,11 @@ Enable operators to delete individual report runs (`reports/<projectId>/<runId>/
 
 | Phase | Work | Status | Progress | Effort |
 | --- | --- | --- | --- | --- |
-| [01: Guarded run deletion API and service](./phase-01-guarded-run-deletion-api.md) | Implement `deleteProjectRunReport` service and `DELETE /api/reports/projects/:projectId/runs/:runId` endpoint with root lock and empty project pruning | Done (2026-09-25) | 100% | 3h |
-| [02: Per-run deletion UI and confirmation](./phase-02-per-run-deletion-ui.md) | Add Actions column with Delete button per run row in `ProjectRunsTable`, `DeleteRunConfirmationDialog`, and refresh inventory after successful deletion | Done (2026-09-25) | 100% | 3h |
-| [03: Verification and release gates](./phase-03-verification-and-release-gates.md) | Unit/E2E test suite covering single-run removal, sibling preservation, empty pruning, lock contention, and full release gates | Planned | 0% | 2h |
+| [01: Guarded run deletion API and service](./phase-01-guarded-run-deletion-api.md) | Implement `deleteProjectRunReport` service and `DELETE /api/reports/projects/:projectId/runs/:runId` endpoint with root lock and empty project pruning | **DONE** (2026-09-25) | 100% | 3h |
+| [02: Per-run deletion UI and confirmation](./phase-02-per-run-deletion-ui.md) | Add Actions column with Delete button per run row in `ProjectRunsTable`, `DeleteRunConfirmationDialog`, and refresh inventory after successful deletion | **DONE** (2026-09-25) | 100% | 3h |
+| [03: Verification and release gates](./phase-03-verification-and-release-gates.md) | Unit/E2E test suite covering single-run removal, sibling preservation, empty pruning, lock contention, and full release gates | **DONE** (2026-09-25) | 100% | 2h |
+
+**Overall status:** DONE · 100% (8h/8h; all 3 phases DONE; completed 2026-09-25).
 
 ## Dependencies
 

@@ -167,9 +167,12 @@ release and retained run files.
 
 The Control report-management page at `/reports/index.html` reads the published
 aggregate and offers confirmation-gated whole-project deletion plus a per-run
-Delete action. The per-run dialog names the project/run and states its scope.
-Success and `404` refresh inventory, and deleting the last run removes its
-project from the aggregate inventory. Persisted `reports/index.html` remains a
+Delete action. The per-run dialog names the project/run and states that only
+that run and its artifacts will be removed. Success and `404` refresh inventory.
+Browser verification confirms cancellation leaves both run directories intact;
+confirmation removes only the selected run, preserves sibling files and the
+sibling row, and refreshes `aggregate-data.json` and `index.html`. Deleting the
+last run removes its project from inventory. Persisted report HTML remains a
 static snapshot. See [architecture](./architecture.md) for UI behavior and
 [release gates](./release-gates.md) for browser verification.
 
@@ -183,9 +186,15 @@ static snapshot. See [architecture](./architecture.md) for UI behavior and
   ceiling, empty aggregate validation, incomplete discovery, oversized staged
   output preserving the prior pair, malformed-row rollback, journal recovery,
   and cross-configuration history with malformed-manifest/canary checks.
-- `tests/e2e/control-report-management.spec.ts` runs under Chromium and WebKit.
-  It covers navigation, empty/history-only inventories, independent 20/21-run
-  pagination, cancellation/Escape and confirmed project/run deletion, sibling
-  preservation, final-project/final-run empty states, lock/server errors, and
-  on-disk aggregate/project state.
+- `tests/e2e/control-report-management.spec.ts` runs under Chromium and WebKit
+  against temporary roots and an in-process Control Server. It covers
+  navigation, empty/history-only inventories, independent 20/21-run pagination,
+  cancellation/Escape, confirmed project/run deletion, sibling preservation,
+  final-project/final-run empty states, and lock/server feedback. Axe scans
+  cover the retained-history table/actions and per-run confirmation dialog;
+  direct disk assertions verify deletion and aggregate state. No live Jenkins
+  or vendor services are contacted.
+- `tests/unit/control-delete-run-ui.spec.ts` covers the per-run deletion hook
+  contracts, CSRF injection, error code mapping (409/404/500), DOM IDs, and
+  accessibility attributes.
 - [Release gates](./release-gates.md) lists the focused test commands.

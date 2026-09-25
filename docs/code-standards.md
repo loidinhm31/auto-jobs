@@ -263,13 +263,19 @@ Tests must defend observable behavior and fail on plausible regressions:
 - For individual report-run deletion, `tests/unit/control-reports-run-delete-api.spec.ts`
   covers sibling preservation, final-run pruning, aggregate refresh,
   invalid/missing targets, lock contention, CSRF, method handling, and injected
-  removal failure with lock-release assertions.
+  removal failure with lock-release assertions. `tests/unit/control-delete-run-ui.spec.ts`
+  validates frontend hook behavior, DOM element IDs, and accessibility contracts.
 - For the Control report-management UI, `tests/unit/control-assets-routing.spec.ts`
   covers the control-only GET/HEAD shell and report-mode static route.
-  `tests/e2e/control-report-management.spec.ts` runs in Chromium and WebKit;
-  cover empty/history-only inventories, independent 20/21-run pagination,
-  confirmed project and per-run deletion, cancellation, sibling preservation,
-  final-run pruning, and 409/500 feedback with on-disk assertions.
+  `tests/e2e/control-report-management.spec.ts` runs in Chromium and WebKit.
+  Cover empty/history-only inventories, independent 20/21-run pagination,
+  project and per-run cancellation, Escape dismissal, and confirmed deletion.
+  For per-run deletion, assert cancellation leaves both run directories intact,
+  confirmation removes only the selected run and row, preserves its sibling,
+  and refreshes the aggregate; deleting the final run prunes the project
+  directory and publishes an empty aggregate. Axe scans cover the retained
+  inventory/actions and per-run confirmation dialog; assert 409/500 feedback
+  and on-disk state.
 - For the dynamic-credential browser flow, `tests/e2e/control-page.spec.ts`
   must run against isolated temporary roots in Chromium and WebKit. Cover
   accessible modal state, key discovery, Missing/Configured transitions,

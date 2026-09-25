@@ -8,17 +8,17 @@ Completed initiative: [Persistent project report management](../plans/260924-201
 
 Plan: [Individual report run deletion](../plans/260925-0701-individual-report-run-deletion/plan.md)
 
-**Overall status:** In progress · **Phases 01–02 of 03 complete** (2026-09-25).
+**Overall status:** **DONE** · **100%** (8/8 planned hours; all 3 phases DONE; completed 2026-09-25).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
 |---|---|---:|---:|---:|---|
 | 01. Guarded run deletion API and service | **DONE** | **100%** | 3h | 2026-09-25 | Added the guarded per-run DELETE API, locked single-run removal, empty-project pruning, and aggregate refresh. Focused API tests 8/8; unit suite 490/490; typecheck 0 errors ([phase](../plans/260925-0701-individual-report-run-deletion/phase-01-guarded-run-deletion-api.md), [test report](../plans/reports/phase01-tester-260925-0724-guarded-run-deletion-api-and-service.md)). |
 | 02. Per-run deletion UI and confirmation | **DONE** | **100%** | 3h | 2026-09-25 | Added accessible per-run deletion controls and confirmation with inventory refresh. Validation: 11 focused unit and 20 report-management E2E tests passed; typecheck/build passed; review 9.5/10, no critical findings ([phase](../plans/260925-0701-individual-report-run-deletion/phase-02-per-run-deletion-ui.md), [validation](../plans/reports/run-tests-260925-1442-phase-02-per-run-deletion-validation.md), [review](../plans/reports/code-review-260925-1444-phase-02-per-run-deletion-ui.md)). |
-| 03. Verification and release gates | Planned | 0% | 2h | — | Complete API/UI integration verification and release gates. |
+| 03. Verification and release gates | **DONE** | **100%** | 2h | 2026-09-25 | Confirmed Chromium/WebKit deletion flows, sibling preservation, final-run pruning and aggregate refresh; Axe: 0 violations. Gates: typecheck/build, unit 454/454, control 40/40, report 5/5 (499/499 total); review 9.5/10, no blockers ([phase](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md), [test report](../plans/reports/phase03-tester-260925-1517-phase-03-verification-and-release-gates.md), [review](../plans/reports/code-reviewer-260925-1521-phase-03-verification-and-release-gates.md)). |
 
-Phases 01 and 02 are complete: guarded API and per-run UI/confirmation. Phase 03 remains the final milestone for end-to-end verification and release gates.
+All three phases are complete: guarded API, per-run UI/confirmation, and verification/release gates. Main owns the once-only post-integration `npm run test:release` gate.
 
-**Next step:** Proceed to [Phase 03 — Verification and release gates](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md).
+**Completion evidence:** [Phase 03 verification checklist](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md), [test report](../plans/reports/phase03-tester-260925-1517-phase-03-verification-and-release-gates.md), and [code review](../plans/reports/code-reviewer-260925-1521-phase-03-verification-and-release-gates.md).
 
 
 ## Persistent project report management
@@ -174,7 +174,8 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 
 - Completed Phase 04 (Verification and caller migration) and Persistent project report management at 100% (16/16 planned hours; all four phases DONE) on 2026-09-25. Phase evidence: 443/443 unit, 34/34 Control, and 5/5 report tests passed; typecheck passed with 0 errors; review approved at 9.8/10 ([test report](../plans/reports/phase04-tester-260925-0048-verification-and-caller-migration.md), [review](../plans/reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md)).
 - Completed Phase 01 of Individual report run deletion on 2026-09-25; added the guarded per-run DELETE API, locked single-run removal, empty-project pruning, and aggregate refresh. Verification recorded 8/8 focused API tests, 490/490 unit tests, and typecheck with 0 errors ([phase](../plans/260925-0701-individual-report-run-deletion/phase-01-guarded-run-deletion-api.md), [test report](../plans/reports/phase01-tester-260925-0724-guarded-run-deletion-api-and-service.md)).
-- Completed Phase 02 (Per-run deletion UI and confirmation) on 2026-09-25; added accessible per-run deletion controls and confirmation with refreshed report inventory. Validation: typecheck/build passed, 11 focused unit and 20 report-management E2E tests passed; review scored 9.5/10 with no critical findings. Next: [Phase 03 — Verification and release gates](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md) ([phase](../plans/260925-0701-individual-report-run-deletion/phase-02-per-run-deletion-ui.md), [validation](../plans/reports/run-tests-260925-1442-phase-02-per-run-deletion-validation.md), [review](../plans/reports/code-review-260925-1444-phase-02-per-run-deletion-ui.md)).
+- Completed Phase 02 (Per-run deletion UI and confirmation) on 2026-09-25; added accessible per-run deletion controls and confirmation with refreshed report inventory. Validation: typecheck/build passed, 11 focused unit and 20 report-management E2E tests passed; review scored 9.5/10 with no critical findings ([phase](../plans/260925-0701-individual-report-run-deletion/phase-02-per-run-deletion-ui.md), [validation](../plans/reports/run-tests-260925-1442-phase-02-per-run-deletion-validation.md), [review](../plans/reports/code-review-260925-1444-phase-02-per-run-deletion-ui.md)).
+- Completed Phase 03 (Verification and release gates) and Individual report run deletion at 100% (8/8 planned hours; all 3 phases DONE) on 2026-09-25. Cross-browser E2E, accessibility (0 violations), typecheck/build, and all tests passed: unit 454/454, Control 40/40, report 5/5 (499/499 total). Review: 9.5/10, no blockers ([phase](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md), [test report](../plans/reports/phase03-tester-260925-1517-phase-03-verification-and-release-gates.md), [review](../plans/reports/code-reviewer-260925-1521-phase-03-verification-and-release-gates.md)).
 - Main owns the once-only post-integration `npm run test:release` gate after all workstreams land.
 
 ### 0.1.0 (development) — 2026-09-24

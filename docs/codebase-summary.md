@@ -1,11 +1,11 @@
 # Codebase summary
 
 This summary is based on the refreshed `repomix-output.xml` and checked-in
-source/configuration. It includes Stage View monitoring, persistent report
-history, guarded project/run deletion, report-management UI, and Phase 04
-verification/caller migration. Per-run deletion UI is Phase 02 complete;
-Phase 03 release verification remains pending. Fixtures use local inputs; no
-live Jenkins run is claimed.
+source/configuration. It covers Stage View monitoring, persistent report
+history, guarded project/run deletion, report-management UI, and Phase 03
+verification and release gates. Individual report-run deletion is complete
+through Phase 03; its deterministic browser verification uses local roots and
+does not claim a live Jenkins run.
 
 ## Repository profile
 
@@ -42,12 +42,13 @@ live Jenkins run is claimed.
   the report-root lock and rebuilds surviving aggregates. The control-only
   history page shows retained projects with independent 20-run pagination and
   confirmation-gated project deletion; persisted report HTML stays static.
-- Individual report-run deletion (Phases 01–02): guarded loopback
+- Individual report-run deletion (Phases 01–03): guarded loopback
   `DELETE /api/reports/projects/:projectId/runs/:runId` removes one validated
   run under the shared lock, prunes an empty project directory, and rebuilds
   the aggregate. The React history table offers confirmed per-run deletion
-  with post-outcome inventory refresh; deleting the final run removes its
-  project from the aggregate. Phase 03 release verification remains pending.
+  with post-outcome inventory refresh; Chromium/WebKit E2E verifies cancel,
+  selected-run removal, sibling preservation, final-run pruning, and aggregate
+  refresh.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
   testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
@@ -103,6 +104,11 @@ live Jenkins run is claimed.
   Coverage includes aggregate retention/bounds, DELETE security and failure
   recovery, the read-only report boundary, and Chromium/WebKit management UX.
   No code-coverage metrics were collected.
+- Individual report-run deletion Phase 03 verification (2026-09-25): typecheck
+  and build passed; unit 454/454, Control 40/40, and report 5/5 passed
+  (499 total). Chromium/WebKit browser checks include zero Axe violations,
+  cancellation, selected-run/sibling disk state, final-run pruning, and
+  aggregate refresh. Coverage metrics were not collected.
 - Repomix compaction regenerated at `repomix-output.xml` for this summary. The security scan excluded two test files with credential-shaped URL examples; repository ignore rules remain in effect.
 
 ## Entry points and scripts
