@@ -8,16 +8,17 @@ Completed initiative: [Persistent project report management](../plans/260924-201
 
 Plan: [Individual report run deletion](../plans/260925-0701-individual-report-run-deletion/plan.md)
 
-**Overall status:** In progress · **Phase 01 of 03 complete** (2026-09-25).
+**Overall status:** In progress · **Phases 01–02 of 03 complete** (2026-09-25).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
 |---|---|---:|---:|---:|---|
 | 01. Guarded run deletion API and service | **DONE** | **100%** | 3h | 2026-09-25 | Added the guarded per-run DELETE API, locked single-run removal, empty-project pruning, and aggregate refresh. Focused API tests 8/8; unit suite 490/490; typecheck 0 errors ([phase](../plans/260925-0701-individual-report-run-deletion/phase-01-guarded-run-deletion-api.md), [test report](../plans/reports/phase01-tester-260925-0724-guarded-run-deletion-api-and-service.md)). |
-| 02. Per-run deletion UI and confirmation | Planned | 0% | 3h | — | Add confirmed per-run deletion controls and refresh the report inventory. |
+| 02. Per-run deletion UI and confirmation | **DONE** | **100%** | 3h | 2026-09-25 | Added accessible per-run deletion controls and confirmation with inventory refresh. Validation: 11 focused unit and 20 report-management E2E tests passed; typecheck/build passed; review 9.5/10, no critical findings ([phase](../plans/260925-0701-individual-report-run-deletion/phase-02-per-run-deletion-ui.md), [validation](../plans/reports/run-tests-260925-1442-phase-02-per-run-deletion-validation.md), [review](../plans/reports/code-review-260925-1444-phase-02-per-run-deletion-ui.md)). |
 | 03. Verification and release gates | Planned | 0% | 2h | — | Complete API/UI integration verification and release gates. |
 
-The completed Phase 01 remains an API/backend milestone; per-run UI and the
-initiative-wide release gate are not yet complete.
+Phases 01 and 02 are complete: guarded API and per-run UI/confirmation. Phase 03 remains the final milestone for end-to-end verification and release gates.
+
+**Next step:** Proceed to [Phase 03 — Verification and release gates](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md).
 
 
 ## Persistent project report management
@@ -172,7 +173,8 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 ### 0.1.0 (development) — 2026-09-25
 
 - Completed Phase 04 (Verification and caller migration) and Persistent project report management at 100% (16/16 planned hours; all four phases DONE) on 2026-09-25. Phase evidence: 443/443 unit, 34/34 Control, and 5/5 report tests passed; typecheck passed with 0 errors; review approved at 9.8/10 ([test report](../plans/reports/phase04-tester-260925-0048-verification-and-caller-migration.md), [review](../plans/reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md)).
-- Completed Phase 01 of Individual report run deletion on 2026-09-25; added `DELETE /api/reports/projects/:projectId/runs/:runId`, a locked single-run deletion service, empty-project pruning, and aggregate refresh. Verification recorded 8/8 focused API tests, 490/490 unit tests, and typecheck with 0 errors ([phase](../plans/260925-0701-individual-report-run-deletion/phase-01-guarded-run-deletion-api.md), [test report](../plans/reports/phase01-tester-260925-0724-guarded-run-deletion-api-and-service.md)). Per-run UI and release-gate phases remain planned.
+- Completed Phase 01 of Individual report run deletion on 2026-09-25; added the guarded per-run DELETE API, locked single-run removal, empty-project pruning, and aggregate refresh. Verification recorded 8/8 focused API tests, 490/490 unit tests, and typecheck with 0 errors ([phase](../plans/260925-0701-individual-report-run-deletion/phase-01-guarded-run-deletion-api.md), [test report](../plans/reports/phase01-tester-260925-0724-guarded-run-deletion-api-and-service.md)).
+- Completed Phase 02 (Per-run deletion UI and confirmation) on 2026-09-25; added accessible per-run deletion controls and confirmation with refreshed report inventory. Validation: typecheck/build passed, 11 focused unit and 20 report-management E2E tests passed; review scored 9.5/10 with no critical findings. Next: [Phase 03 — Verification and release gates](../plans/260925-0701-individual-report-run-deletion/phase-03-verification-and-release-gates.md) ([phase](../plans/260925-0701-individual-report-run-deletion/phase-02-per-run-deletion-ui.md), [validation](../plans/reports/run-tests-260925-1442-phase-02-per-run-deletion-validation.md), [review](../plans/reports/code-review-260925-1444-phase-02-per-run-deletion-ui.md)).
 - Main owns the once-only post-integration `npm run test:release` gate after all workstreams land.
 
 ### 0.1.0 (development) — 2026-09-24

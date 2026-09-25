@@ -8,6 +8,7 @@ import { cn } from '../../utils/cn.js';
 export interface ProjectRunsTableProps {
   runs: readonly AggregateRunSummary[];
   projectName: string;
+  onDeleteRun?: (runId: string) => void;
 }
 
 const RUNS_PER_PAGE = 20;
@@ -56,7 +57,7 @@ function renderArtifactLinks(run: AggregateRunSummary) {
   );
 }
 
-export function ProjectRunsTable({ runs, projectName }: ProjectRunsTableProps) {
+export function ProjectRunsTable({ runs, projectName, onDeleteRun }: ProjectRunsTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const totalRuns = runs.length;
   const totalPages = Math.max(1, Math.ceil(totalRuns / RUNS_PER_PAGE));
@@ -88,6 +89,7 @@ export function ProjectRunsTable({ runs, projectName }: ProjectRunsTableProps) {
               <th scope="col" className="p-2.5">Branch</th>
               <th scope="col" className="p-2.5">State</th>
               <th scope="col" className="p-2.5">Artifacts</th>
+              <th scope="col" className="p-2.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -118,6 +120,17 @@ export function ProjectRunsTable({ runs, projectName }: ProjectRunsTableProps) {
                       ))}
                     </ul>
                   ) : null}
+                </td>
+                <td className="p-2.5 text-right">
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    id={`delete-run-${run.runId}-btn`}
+                    onClick={() => onDeleteRun?.(run.runId)}
+                    aria-label={`Delete report run ${run.runId} for ${projectName}`}
+                  >
+                    Delete
+                  </Button>
                 </td>
               </tr>
             ))}

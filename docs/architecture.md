@@ -533,25 +533,25 @@ succeeded but refresh still fails, the API returns `500 REFRESH_FAILED` and
 reports that the project was deleted and the index may need recovery.
 
 #### UI confirmation and navigation
-The Dashboard **Reports** link navigates to `/reports/index.html`; the control
-router intercepts this exact `GET`/`HEAD` path before `/reports/` static dispatch
-and returns the CSRF-bearing Vite shell with `CONTROL_CSP` and no-store headers;
-HEAD has the HTML content length but no body; `App` renders `ReportManagementPage` for this pathname.
-The page fetches `/reports/aggregate-data.json` with `cache: 'no-store'` and
-renders all retained validated projects, independent of active configuration.
-A missing index or valid `projects: []` shows the empty state; a schema-invalid
-aggregate is flagged as corrupt, while parse/fetch failures show a load error.
-Safe local report links, warnings, and history remain available. Each project
-independently pages newest-first runs by 20; pagination limits rendered rows
-only. **Delete Reports** is disabled without runs and opens an accessible
-labeled Radix confirmation explaining whole-project permanent removal;
-cancellation makes no request.
-Confirmation uses the shared CSRF-aware client for a bodyless
-`DELETE /api/reports/projects/:projectId`; success refreshes inventory, `404`
-refreshes stale inventory, and `409` gives retry guidance; other failures are
-surfaced without implying rollback.
-The persisted `reports/index.html` remains static/scriptless. `serve:report`
-and immutable artifact routes remain GET/HEAD-only with report-serving CSP.
+The Dashboard **Reports** link opens `/reports/index.html`; the control router
+intercepts exact `GET`/`HEAD` before static routing and returns the CSRF-bearing
+Vite shell with `CONTROL_CSP`/no-store; `HEAD` preserves HTML length without a
+body. The page fetches `/reports/aggregate-data.json` with no-store, independent
+of active configuration. Missing/empty inventory shows empty state; invalid
+schema shows corrupt-data feedback, while parse/fetch failures show load errors.
+Safe local links, warnings, and history remain visible. Per-project tables page
+newest-first runs independently by 20. **Delete Reports** opens a labeled Radix
+confirmation and sends whole-project deletion only after confirmation.
+Each run row's **Delete** opens a labeled confirmation naming project and run
+and stating that only that run and its artifacts will be permanently removed.
+Cancel/Escape closes without mutation; controls disable in-flight and confirm shows a spinner.
+`useDeleteRun` uses the shared CSRF-aware client for
+`DELETE /api/reports/projects/:projectId/runs/:runId`. Success and `404` refresh
+inventory; `409` offers retry guidance; other errors warn disk state may have changed.
+Deleting the last run removes its project from the aggregate inventory.
+Whole-project deletion uses its CSRF-aware endpoint and refreshes on success/`404`.
+Both deletion flows are control-only. Persisted `reports/index.html` remains
+static/scriptless, and `serve:report` plus immutable artifacts remain GET/HEAD-only.
 
 #### Serving modes
 `serve:report` remains strictly read-only and unauthenticated (GET/HEAD only).

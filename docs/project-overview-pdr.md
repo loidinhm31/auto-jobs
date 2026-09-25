@@ -4,7 +4,7 @@
 **Document scope:** schema-v1 report capture, persistent aggregate history,
 bounded execution, Control Page actions and report management, offline build
 fixtures, and dynamic credentials.<br>
-**Current milestone:** Individual report run deletion — Phase 01 API/service complete; Phases 02–03 pending (2026-09-25).<br>
+**Current milestone:** Individual report run deletion — Phases 01–02 API/UI complete; Phase 03 verification pending (2026-09-25).<br>
 **Previous completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 verification approved; 2026-09-25).<br>
 **Earlier completed milestone:** Control Page Parallel Auto-Build — complete,
 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
@@ -354,6 +354,23 @@ and failure semantics are validated before side effects.
   target, security, method, lock, and failure behavior in
   `tests/unit/control-reports-run-delete-api.spec.ts`.
 
+### FR-15: Control UI per-run deletion
+- Give each retained run row a **Delete** action that opens an accessible Radix
+  confirmation naming the project and run and warning that only this run and
+  its artifacts will be permanently removed.
+- Cancel or Escape sends no request. While deleting, disable dialog controls
+  and show a spinner on the confirm button to prevent duplicate submission.
+- Confirm through the shared CSRF-aware client with a bodyless
+  `DELETE /api/reports/projects/:projectId/runs/:runId`.
+- On success, close the dialog, show success feedback, and refresh the
+  aggregate. On `404`, show stale-run feedback and refresh as well. Keep the
+  dialog open with retry guidance for `409`; surface other failures without
+  promising rollback.
+- Reflect the refreshed inventory after the last run is removed, without a
+  full-page reload. Keep persisted report HTML and `serve:report` read-only;
+  browser coverage verifies cancellation, sibling preservation, and final-run
+  removal.
+
 ## Non-functional requirements
 
 | Area | Requirement |
@@ -571,7 +588,7 @@ require the environment variables named by project configuration.
 | Control UI credential management | `src/reporting/control-page/` (React application: `App.tsx`, `components/`, `hooks/`) | [system architecture](./system-architecture.md), [codebase summary](./codebase-summary.md) |
 | Control report-management navigation and deletion | `src/reporting/control-page/pages/ReportManagementPage.tsx`, `src/reporting/control-page/hooks/use-delete-reports.ts`, `src/reporting/report-server-control.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Persistent report-management verification | `src/artifacts/report-project-deletion.ts`, `tests/unit/aggregate-index-builder.spec.ts`, `tests/unit/persistent-aggregate-bounds.spec.ts`, `tests/unit/control-reports-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
-| Individual report-run deletion API and verification | `src/reporting/report-server-control-reports-api.ts`, `src/artifacts/report-run-deletion.ts`, `tests/unit/control-reports-run-delete-api.spec.ts` | [report pipeline](./report-pipeline.md), [code standards](./code-standards.md), [release gates](./release-gates.md) |
+| Individual report-run deletion API/UI | `src/reporting/report-server-control-reports-api.ts`, `src/artifacts/report-run-deletion.ts`, `src/reporting/control-page/hooks/use-delete-run.ts`, `src/reporting/control-page/components/molecules/project-runs-table.tsx`, `src/reporting/control-page/components/organisms/ProjectReportHistoryCard.tsx`, `src/reporting/control-page/components/organisms/DeleteRunConfirmationDialog.tsx`, `src/reporting/control-page/pages/ReportManagementPage.tsx`; `tests/unit/control-reports-run-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |
@@ -604,6 +621,10 @@ report CLI still has no production auto-build command.
   34/34, and `npm run test:report` 5/5 (482 passed; none failed or skipped).
   No code-coverage metrics were collected. Review approved 9.8/10 with
   `npm run typecheck` clean ([phase](../plans/260924-2019-persistent-project-report-management/phase-04-verification-and-caller-migration.md), [test report](../plans/reports/phase04-tester-260925-0048-verification-and-caller-migration.md), [review](../plans/reports/code-review-260925-0053-phase-04-verification-and-caller-migration.md)).
+- Completed Individual report run deletion Phase 02: added per-run table actions,
+  scope-specific confirmation, guarded deletion, feedback, and aggregate refresh.
+  Phase 03 release verification remains pending.
+
 
 ### 0.1.0 (development) — 2026-09-24
 

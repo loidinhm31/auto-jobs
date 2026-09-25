@@ -7,3 +7,6 @@ export * from './RawJsonSection.js';
 export * from './ExecutionSection.js';
 export * from './ConfigFormBuilder.js';
 export * from './RunStatusCard.js';
+export * from './DeleteReportsConfirmationDialog.js';
+export * from './DeleteRunConfirmationDialog.js';
+export * from './ProjectReportHistoryCard.js';

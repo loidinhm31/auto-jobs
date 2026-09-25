@@ -30,3 +30,16 @@ export interface ProjectDeletionResult {
   projectId: string;
   deletedRunsCount: number;
 }
+
+export interface RunDeletionResult {
+  success: true;
+  projectId: string;
+  runId: string;
+  remainingRunsCount: number;
+}
+
+export interface TargetRunToDelete {
+  projectId: string;
+  projectName: string;
+  runId: string;
+}

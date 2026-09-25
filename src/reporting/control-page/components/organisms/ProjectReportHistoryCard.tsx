@@ -8,11 +8,13 @@ import { cn } from '../../utils/cn.js';
 export interface ProjectReportHistoryCardProps {
   project: AggregateProjectSummary;
   onDeleteClick: (project: AggregateProjectSummary) => void;
+  onDeleteRunClick?: (project: AggregateProjectSummary, runId: string) => void;
 }
 
 export function ProjectReportHistoryCard({
   project,
   onDeleteClick,
+  onDeleteRunClick,
 }: ProjectReportHistoryCardProps) {
   const currentReportHref = localReportHref(project.reportPath);
   const hasRuns = project.runs.length > 0;
@@ -66,7 +68,11 @@ export function ProjectReportHistoryCard({
         </div>
       ) : null}
 
-      <ProjectRunsTable runs={project.runs} projectName={project.name} />
+      <ProjectRunsTable
+        runs={project.runs}
+        projectName={project.name}
+        onDeleteRun={(runId) => onDeleteRunClick?.(project, runId)}
+      />
 
       {project.warnings.length > 0 ? (
         <ul className="warning-list mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800 list-disc list-inside">

@@ -299,10 +299,10 @@ leaves run files intact and releases the lock. This unit suite is included in
 
 `npm run test:control` includes `tests/e2e/control-report-management.spec.ts`
 under Chromium and WebKit (`playwright.control.config.ts`). It covers dashboard
-navigation/back, an empty inventory, history-only projects, independent
-20/21-run pagination, cancel and Escape dismissal, confirmed deletion with
-sibling preservation, final-project empty-state refresh, and lock-conflict and
-server-error feedback. Assertions include on-disk state, not only UI responses.
+navigation/back, empty/history-only inventories, independent 20/21-run
+pagination, cancel/Escape dismissal, confirmed project/run deletion, sibling
+preservation, final-project/final-run empty-state refresh, and 409/500 feedback.
+Assertions include on-disk state, not only UI responses.
 
 `tests/unit/control-assets-routing.spec.ts` runs under `npm run test:unit` and
 checks the control-only `/reports/index.html` GET/HEAD CSRF shell, CSP and HEAD

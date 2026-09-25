@@ -1,10 +1,11 @@
 # Codebase summary
 
-This summary reflects the refreshed `repomix-output.xml` and checked-in
-source/configuration. It includes Stage View completion monitoring, persistent
-project history, guarded Control API deletion, and Phase 04 report-management
-verification and caller migration. Fixtures use local inputs; no live Jenkins
-run is claimed.
+This summary is based on the refreshed `repomix-output.xml` and checked-in
+source/configuration. It includes Stage View monitoring, persistent report
+history, guarded project/run deletion, report-management UI, and Phase 04
+verification/caller migration. Per-run deletion UI is Phase 02 complete;
+Phase 03 release verification remains pending. Fixtures use local inputs; no
+live Jenkins run is claimed.
 
 ## Repository profile
 
@@ -38,16 +39,15 @@ run is claimed.
   dynamic credential persistence, injected execution, and zero leakage.
 - Control report management: guarded loopback
   `DELETE /api/reports/projects/:projectId` removes one project subtree under
-  the report-root lock and rebuilds surviving aggregates. Dashboard navigation
-  opens a control-only React history page over the published aggregate, with
-  independent 20-run pagination and confirmed deletion; persisted report HTML
-  stays static and read-only.
-- Individual Report Run Deletion Phase 01: guarded loopback
-  `DELETE /api/reports/projects/:projectId/runs/:runId` is routed to
-  `report-run-deletion.ts`, which removes one validated run under the shared
-  lock, prunes an empty project directory, and rebuilds the aggregate. The
-  focused API suite covers eight scenarios; Phase 02 UI and Phase 03 release
-  verification remain planned.
+  the report-root lock and rebuilds surviving aggregates. The control-only
+  history page shows retained projects with independent 20-run pagination and
+  confirmation-gated project deletion; persisted report HTML stays static.
+- Individual report-run deletion (Phases 01–02): guarded loopback
+  `DELETE /api/reports/projects/:projectId/runs/:runId` removes one validated
+  run under the shared lock, prunes an empty project directory, and rebuilds
+  the aggregate. The React history table offers confirmed per-run deletion
+  with post-outcome inventory refresh; deleting the final run removes its
+  project from the aggregate. Phase 03 release verification remains pending.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
   testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
@@ -138,9 +138,9 @@ run is claimed.
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
 | `src/reporting/control-page/` | Control Dashboard frontend sources (types, utils, headless hooks, components, styles) bundled via Vite into `.runner-build/reporting/control-page/`. |
 | `src/reporting/control-page/App.tsx`, `src/reporting/control-page/components/organisms/HeaderBar.tsx` | Select the Dashboard or report-management view by pathname and provide Reports navigation. |
-| `src/reporting/control-page/pages/ReportManagementPage.tsx` | Loads and classifies the published aggregate independently of active configuration. |
-| `src/reporting/control-page/hooks/use-delete-reports.ts` | Sends CSRF-aware project deletion requests and refreshes report inventory after outcomes. |
-| `src/reporting/control-page/components/organisms/ProjectReportHistoryCard.tsx`, `src/reporting/control-page/components/molecules/project-runs-table.tsx`, `src/reporting/control-page/components/organisms/DeleteReportsConfirmationDialog.tsx` | Compose per-project history, 20-run pagination, and confirmation-gated deletion. |
+| `src/reporting/control-page/pages/ReportManagementPage.tsx` | Loads the aggregate independently of active configuration and composes confirmed project/run deletion flows. |
+| `src/reporting/control-page/hooks/use-delete-reports.ts`, `use-delete-run.ts` | Use the shared CSRF-aware client, refresh inventory, and surface mutation feedback. |
+| `ProjectReportHistoryCard.tsx`, `project-runs-table.tsx`, `DeleteReportsConfirmationDialog.tsx`, `DeleteRunConfirmationDialog.tsx` | Compose project history, 20-run pagination, and confirmed deletion controls. |
 | `vite.control.config.ts` | Vite configuration for Control Dashboard: React plugin, Tailwind CSS, single-bundle outputs, and CSP-compliant asset emission. |
 
 Useful package scripts include `typecheck`, `build` (compiles TypeScript, bundles the Vite control dashboard into `.runner-build/reporting/control-page/`, and stages report assets), `test:unit`,

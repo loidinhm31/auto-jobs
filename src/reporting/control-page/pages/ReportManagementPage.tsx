@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AggregateReportResult } from '../types/report-management-types.js';
+import type { AggregateProjectSummary, AggregateReportResult } from '../types/report-management-types.js';
 import { useDeleteReports } from '../hooks/use-delete-reports.js';
+import { useDeleteRun } from '../hooks/use-delete-run.js';
 import { ProjectReportHistoryCard } from '../components/organisms/ProjectReportHistoryCard.js';
 import { DeleteReportsConfirmationDialog } from '../components/organisms/DeleteReportsConfirmationDialog.js';
+import { DeleteRunConfirmationDialog } from '../components/organisms/DeleteRunConfirmationDialog.js';
 import { StatusBanner } from '../components/atoms/StatusBanner.js';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'corrupt' | 'error';
@@ -45,15 +47,21 @@ export function ReportManagementPage() {
 
   const {
     targetProject,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    closeDeleteDialog,
-    confirmDelete,
-  } = useDeleteReports({
-    onSuccess: fetchAggregate,
-    onFeedback: setFeedback,
-  });
+    isDeleting: isDeletingProject,
+    deleteError: projectDeleteError,
+    openDeleteDialog: openProjectDeleteDialog,
+    closeDeleteDialog: closeProjectDeleteDialog,
+    confirmDelete: confirmProjectDelete,
+  } = useDeleteReports({ onSuccess: fetchAggregate, onFeedback: setFeedback });
+
+  const {
+    targetRun,
+    isDeleting: isDeletingRun,
+    deleteError: runDeleteError,
+    openDeleteDialog: openRunDeleteDialog,
+    closeDeleteDialog: closeRunDeleteDialog,
+    confirmDelete: confirmRunDelete,
+  } = useDeleteRun({ onSuccess: fetchAggregate, onFeedback: setFeedback });
 
   useEffect(() => {
     void fetchAggregate();
@@ -139,11 +147,18 @@ export function ReportManagementPage() {
             ) : null}
 
             <div className="projects-report-list">
-              {aggregate.projects.map((proj) => (
+              {aggregate.projects.map((proj: AggregateProjectSummary) => (
                 <ProjectReportHistoryCard
                   key={proj.projectId}
                   project={proj}
-                  onDeleteClick={openDeleteDialog}
+                  onDeleteClick={openProjectDeleteDialog}
+                  onDeleteRunClick={(project, runId) =>
+                    openRunDeleteDialog({
+                      projectId: project.projectId,
+                      projectName: project.name,
+                      runId,
+                    })
+                  }
                 />
               ))}
             </div>
@@ -153,13 +168,23 @@ export function ReportManagementPage() {
 
       <DeleteReportsConfirmationDialog
         isOpen={Boolean(targetProject)}
-        isLoading={isDeleting}
+        isLoading={isDeletingProject}
         projectId={targetProject?.projectId ?? null}
         projectName={targetProject?.name ?? null}
         runsCount={targetProject?.runs.length ?? 0}
-        errorMessage={deleteError}
-        onClose={closeDeleteDialog}
-        onConfirm={confirmDelete}
+        errorMessage={projectDeleteError}
+        onClose={closeProjectDeleteDialog}
+        onConfirm={confirmProjectDelete}
+      />
+      <DeleteRunConfirmationDialog
+        isOpen={Boolean(targetRun)}
+        isLoading={isDeletingRun}
+        projectId={targetRun?.projectId ?? null}
+        projectName={targetRun?.projectName ?? null}
+        runId={targetRun?.runId ?? null}
+        errorMessage={runDeleteError}
+        onClose={closeRunDeleteDialog}
+        onConfirm={confirmRunDelete}
       />
     </div>
   );

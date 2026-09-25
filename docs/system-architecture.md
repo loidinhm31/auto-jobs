@@ -19,11 +19,11 @@ verification:
   `DELETE /api/reports/projects/:projectId` and
   `DELETE /api/reports/projects/:projectId/runs/:runId` use the report-root lock;
   contention returns `409`; run deletion preserves siblings, prunes an empty project directory, and rebuilds the aggregate from survivors.
-- **Control UI:** The Dashboard edits schema-v1 settings and credentials and
-  exposes all-enabled report/build actions with one saved Workers selector.
-  Its `/reports/index.html` React view lists retained history, independently
-  pages 20 runs per project, and offers confirmed whole-project deletion; the
-  persisted report HTML remains static and scriptless.
+- **Control UI:** Dashboard edits schema-v1 settings/credentials and exposes
+  all-enabled report/build actions with one saved Workers selector. Its React
+  `/reports/index.html` view lists history, pages 20 runs per project, and offers
+  confirmed whole-project and per-run deletion; run deletion refreshes the
+  inventory. Persisted report HTML remains static/scriptless.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-

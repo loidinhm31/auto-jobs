@@ -165,12 +165,13 @@ project/run targets, lock contention without lock-path leakage, missing/invalid
 CSRF, non-DELETE methods with `Allow`, and injected removal failure with lock
 release and retained run files.
 
-The current Control report-management page at `/reports/index.html` reads the
-published aggregate and invokes the whole-project endpoint only after
-confirmation. Per-run UI is planned for Phase 02; persisted `reports/index.html`
-remains a static snapshot. See [architecture](./architecture.md) for the UI
-and route distinction and [release gates](./release-gates.md) for navigation,
-pagination, and deletion coverage.
+The Control report-management page at `/reports/index.html` reads the published
+aggregate and offers confirmation-gated whole-project deletion plus a per-run
+Delete action. The per-run dialog names the project/run and states its scope.
+Success and `404` refresh inventory, and deleting the last run removes its
+project from the aggregate inventory. Persisted `reports/index.html` remains a
+static snapshot. See [architecture](./architecture.md) for UI behavior and
+[release gates](./release-gates.md) for browser verification.
 
 ## Focused contracts
 
@@ -184,6 +185,7 @@ pagination, and deletion coverage.
   and cross-configuration history with malformed-manifest/canary checks.
 - `tests/e2e/control-report-management.spec.ts` runs under Chromium and WebKit.
   It covers navigation, empty/history-only inventories, independent 20/21-run
-  pagination, cancel/Escape/confirmation behavior, final-project empty state,
-  lock and server-error feedback, and on-disk aggregate/project state.
+  pagination, cancellation/Escape and confirmed project/run deletion, sibling
+  preservation, final-project/final-run empty states, lock/server errors, and
+  on-disk aggregate/project state.
 - [Release gates](./release-gates.md) lists the focused test commands.

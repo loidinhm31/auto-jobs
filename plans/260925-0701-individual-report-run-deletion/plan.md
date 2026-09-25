@@ -20,7 +20,7 @@ Enable operators to delete individual report runs (`reports/<projectId>/<runId>/
 | Phase | Work | Status | Progress | Effort |
 | --- | --- | --- | --- | --- |
 | [01: Guarded run deletion API and service](./phase-01-guarded-run-deletion-api.md) | Implement `deleteProjectRunReport` service and `DELETE /api/reports/projects/:projectId/runs/:runId` endpoint with root lock and empty project pruning | Done (2026-09-25) | 100% | 3h |
-| [02: Per-run deletion UI and confirmation](./phase-02-per-run-deletion-ui.md) | Add Actions column with Delete button per run row in `ProjectRunsTable`, `DeleteRunConfirmationDialog`, and optimistic/refreshed state | Planned | 0% | 3h |
+| [02: Per-run deletion UI and confirmation](./phase-02-per-run-deletion-ui.md) | Add Actions column with Delete button per run row in `ProjectRunsTable`, `DeleteRunConfirmationDialog`, and refresh inventory after successful deletion | Done (2026-09-25) | 100% | 3h |
 | [03: Verification and release gates](./phase-03-verification-and-release-gates.md) | Unit/E2E test suite covering single-run removal, sibling preservation, empty pruning, lock contention, and full release gates | Planned | 0% | 2h |
 
 ## Dependencies

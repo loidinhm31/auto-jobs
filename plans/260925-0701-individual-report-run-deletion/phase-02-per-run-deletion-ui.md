@@ -1,5 +1,7 @@
 # Phase 02 — Per-run deletion UI and confirmation
 
+**Status:** Done · **Progress:** 100% · **Completed:** 2026-09-25
+
 ## Overview
 
 Enhance the Control Dashboard report management view (`/reports/index.html`) so that each historical run in the `ProjectRunsTable` displays a dedicated Delete button. Clicking it triggers an accessible confirmation dialog explaining permanent removal of that run. Confirming sends a guarded `DELETE` request with CSRF token and refreshes the aggregate inventory.
@@ -25,3 +27,16 @@ Enhance the Control Dashboard report management view (`/reports/index.html`) so 
 4. **Code Standards:**
    - Components strictly under 200 LOC.
    - Clean modular division between table molecule, dialog organism, and page.
+
+## Verification Checklist
+
+- [x] Table Actions column added with `Delete` button per run (`id="delete-run-${run.runId}-btn"`)
+- [x] `onDeleteRun` prop wired through `ProjectReportHistoryCard` to `ProjectRunsTable`
+- [x] `DeleteRunConfirmationDialog` implemented with `@radix-ui/react-dialog` displaying project name, ID, run ID, and warning
+- [x] Keyboard dismiss (`Escape`), focus trapping, cancel button, and in-flight busy state handling implemented
+- [x] Surfaces 409 lock conflicts and 500 error messages with actionable advice
+- [x] `ReportManagementPage` state management via `useDeleteRun` hook sending `DELETE` with `x-csrf-token`
+- [x] Re-fetches `/reports/aggregate-data.json` and updates UI without full reload
+- [x] Unit tests in `tests/unit/control-delete-run-ui.spec.ts` pass
+- [x] E2E tests in `tests/e2e/control-report-management.spec.ts` covering sibling run preservation, empty project pruning, and 409 conflict pass
+- [x] All production modules strictly under 200 LOC

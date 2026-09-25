@@ -537,4 +537,173 @@ test.describe('Control Report Management Page & Deletion E2E (Phase 03)', () => 
     await expect(dialog).toBeHidden();
     await expect(page.locator('#project-error-proj')).toBeVisible();
   });
+
+  test('deletes individual report run with confirmation, preserving sibling runs', async ({ page }) => {
+    createProjectRunFiles(reportRoot, 'project-alpha', 'run-01');
+    createProjectRunFiles(reportRoot, 'project-alpha', 'run-02');
+
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'project-alpha',
+        name: 'Project Alpha',
+        state: 'success',
+        reportPath: 'project-alpha/run-02/index.html',
+        runs: [
+          {
+            runId: 'run-02',
+            state: 'success',
+            jobId: '102',
+            branch: 'main',
+            manifestPath: 'project-alpha/run-02/manifest.json',
+            reportPath: 'project-alpha/run-02/index.html',
+            warnings: [],
+          },
+          {
+            runId: 'run-01',
+            state: 'success',
+            jobId: '101',
+            branch: 'main',
+            manifestPath: 'project-alpha/run-01/manifest.json',
+            reportPath: 'project-alpha/run-01/index.html',
+            warnings: [],
+          },
+        ],
+        warnings: [],
+      },
+    ]);
+
+    await page.goto(`${serverUrl}reports/index.html`);
+    await expect(page.locator('#project-project-alpha')).toBeVisible();
+
+    // Both run delete buttons are visible
+    const deleteRun01Btn = page.locator('#delete-run-run-01-btn');
+    const deleteRun02Btn = page.locator('#delete-run-run-02-btn');
+    await expect(deleteRun01Btn).toBeVisible();
+    await expect(deleteRun02Btn).toBeVisible();
+
+    // 1. Test Cancel on run-01
+    await deleteRun01Btn.click();
+    const dialog = page.locator('#delete-run-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('#delete-run-dialog-title')).toHaveText('Delete Report Run');
+    await expect(dialog.locator('#delete-run-dialog-description')).toContainText('run-01');
+    await expect(dialog.locator('#delete-run-dialog-description')).toContainText('Project Alpha');
+
+    await page.locator('#cancel-delete-run-btn').click();
+    await expect(dialog).toBeHidden();
+    expect(fs.existsSync(path.join(reportRoot, 'project-alpha', 'run-01'))).toBe(true);
+    expect(fs.existsSync(path.join(reportRoot, 'project-alpha', 'run-02'))).toBe(true);
+
+    // 2. Confirm deletion of run-01
+    await deleteRun01Btn.click();
+    await expect(dialog).toBeVisible();
+    await page.locator('#confirm-delete-run-btn').click();
+
+    // Dialog closes, success banner appears
+    await expect(dialog).toBeHidden();
+    const banner = page.locator('#report-feedback-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('Successfully deleted report run run-01 for Project Alpha');
+
+    // On disk: run-01 removed, run-02 preserved
+    expect(fs.existsSync(path.join(reportRoot, 'project-alpha', 'run-01'))).toBe(false);
+    expect(fs.existsSync(path.join(reportRoot, 'project-alpha', 'run-02'))).toBe(true);
+
+    // On UI: run-01 row is gone, run-02 row remains
+    await expect(page.locator('#delete-run-run-01-btn')).toBeHidden();
+    await expect(page.locator('#delete-run-run-02-btn')).toBeVisible();
+  });
+
+  test('deleting last remaining run prunes project folder and updates UI', async ({ page }) => {
+    createProjectRunFiles(reportRoot, 'solo-project', 'run-only');
+
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'solo-project',
+        name: 'Solo Project',
+        state: 'success',
+        reportPath: 'solo-project/run-only/index.html',
+        runs: [
+          {
+            runId: 'run-only',
+            state: 'success',
+            jobId: '50',
+            branch: 'main',
+            manifestPath: 'solo-project/run-only/manifest.json',
+            reportPath: 'solo-project/run-only/index.html',
+            warnings: [],
+          },
+        ],
+        warnings: [],
+      },
+    ]);
+
+    await page.goto(`${serverUrl}reports/index.html`);
+    await expect(page.locator('#project-solo-project')).toBeVisible();
+
+    const deleteBtn = page.locator('#delete-run-run-only-btn');
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+
+    const dialog = page.locator('#delete-run-dialog');
+    await expect(dialog).toBeVisible();
+    await page.locator('#confirm-delete-run-btn').click();
+
+    await expect(dialog).toBeHidden();
+    const banner = page.locator('#report-feedback-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('Successfully deleted report run run-only for Solo Project');
+
+    // Project directory pruned from disk
+    expect(fs.existsSync(path.join(reportRoot, 'solo-project'))).toBe(false);
+
+    // UI reflects empty state since no projects remain
+    await expect(page.locator('#project-solo-project')).toBeHidden();
+    await expect(page.locator('.empty-state')).toContainText('No retained project reports were recorded.');
+  });
+
+  test('handles 409 conflict during individual run deletion', async ({ page }) => {
+    createProjectRunFiles(reportRoot, 'locked-run-project', 'run-99');
+
+    initAggregateIndex(reportRoot, [
+      {
+        projectId: 'locked-run-project',
+        name: 'Locked Run Project',
+        state: 'success',
+        reportPath: 'locked-run-project/run-99/index.html',
+        runs: [
+          {
+            runId: 'run-99',
+            state: 'success',
+            jobId: '99',
+            branch: 'main',
+            manifestPath: 'locked-run-project/run-99/manifest.json',
+            reportPath: 'locked-run-project/run-99/index.html',
+            warnings: [],
+          },
+        ],
+        warnings: [],
+      },
+    ]);
+
+    await page.goto(`${serverUrl}reports/index.html`);
+    await expect(page.locator('#project-locked-run-project')).toBeVisible();
+
+    const lock = await acquireReportRootLock(reportRoot);
+    try {
+      await page.locator('#delete-run-run-99-btn').click();
+      const dialog = page.locator('#delete-run-dialog');
+      await expect(dialog).toBeVisible();
+      await page.locator('#confirm-delete-run-btn').click();
+
+      const errorMsg = page.locator('#delete-run-error-message');
+      await expect(errorMsg).toBeVisible();
+      await expect(errorMsg).toContainText('Server is currently busy or another operation holds the report lock');
+
+      await page.locator('#cancel-delete-run-btn').click();
+      await expect(dialog).toBeHidden();
+    } finally {
+      await lock.release();
+    }
+  });
 });
