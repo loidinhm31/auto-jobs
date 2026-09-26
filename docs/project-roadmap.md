@@ -8,15 +8,15 @@ Completed initiative: [Persistent project report management](../plans/260924-201
 
 Plan: [Final-report PDF export](../plans/260925-1729-final-report-pdf-export/plan.md)
 
-**Overall status:** **In Progress** · **33%** (1 of 3 phases DONE; Phase 01 completed 2026-09-26).
+**Overall status:** **In Progress** · **67%** (2 of 3 phases DONE; Phases 01 and 02 completed 2026-09-26).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
 |---|---|---:|---:|---|---|
 | 01 — Shared control report viewer | **DONE** | **100%** | — | 2026-09-26 | Delivered the control-only React report viewer and shared report-body rendering. Verification: 35 focused unit tests; typecheck/build and existing Control/report-management E2E suites (20 each) passed ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md), 9.0/10). |
-| 02 — Real-text browser PDF | Pending | 0% | — | — | [Composition, tables, fonts, links](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md) |
+| 02 — Real-text browser PDF | **DONE** | **100%** | — | 2026-09-26 | Implementation and review complete; 499/499 unit tests passed, Cycle 2 review 9.5/10 ([phase](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md), [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). |
 | 03 — Verification and documentation | Pending | 0% | — | — | [PDF text/image/link/browser proof](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md) |
 
-Phase 01 review recorded two non-blocking warnings: a case-only duplicate page filename and global `report.css` selectors that may affect control-bar styling. Browser PDF implementation and end-to-end PDF verification remain pending in Phases 02–03.
+Phase 01 review recorded two non-blocking warnings: a case-only duplicate page filename and global `report.css` selectors that may affect control-bar styling. Phase 02 browser PDF implementation and code review are complete; end-to-end PDF/browser verification remains pending in Phase 03.
 
 ## Individual report run deletion
 
@@ -186,7 +186,8 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 
 ### 0.1.0 (development) — 2026-09-26
 
-- Completed Phase 01 (Shared control report viewer) on 2026-09-26; delivered the control-only React final-report viewer and shared report-body rendering. Validation recorded 35 focused unit tests, typecheck/build, and existing Control/report-management E2E suites (20 each) passing; review scored 9.0/10 with no critical findings and two non-blocking warnings ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md)). The overall PDF-export initiative remains in progress; browser PDF implementation and verification are pending.
+- Completed Phase 01 (Shared control report viewer) on 2026-09-26; delivered the control-only React final-report viewer and shared report-body rendering. Validation recorded 35 focused unit tests, typecheck/build, and existing Control/report-management E2E suites (20 each) passing; review scored 9.0/10 with no critical findings and two non-blocking warnings ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md)). The overall PDF-export initiative remains in progress; Phase 02 implementation is complete, with end-to-end PDF/browser verification pending in Phase 03.
+- Completed Phase 02 (Real-text browser PDF) on 2026-09-26: delivered semantic report composition, embedded Unicode fonts, portrait-first pagination, clickable evidence/internal links, and accessible download lifecycle. Validation: 499/499 unit tests passed; Cycle 2 code review scored 9.5/10 ([phase](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md), [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). Phase 03 end-to-end PDF/browser verification remains pending.
 
 ### 0.1.0 (development) — 2026-09-25
 

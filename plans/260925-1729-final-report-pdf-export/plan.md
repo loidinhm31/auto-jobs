@@ -12,7 +12,7 @@ created: 2026-09-25
 # Final-report PDF export
 
 ## Confirmed scope
-Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct React/browser download containing everything displayed, not just the viewport. Phase 01's shared control viewer completed 2026-09-26; browser PDF export and its verification remain in Phases 02–03.
+Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct React/browser download containing everything displayed, not just the viewport. Phase 01 shared viewer and Phase 02 browser PDF implementation completed 2026-09-26; Phase 03 end-to-end verification remains.
 
 ## Decision
 - Preserve final report URLs. Control mode serves a React viewer using validated saved JSON and the existing escaped report body renderer shared with static output.
@@ -28,7 +28,7 @@ Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct R
 | Phase | Status | Progress | Detail |
 |---|---|---|---|
 | 01 — Shared control report viewer | **DONE** | 100% | [Viewer integration](./phase-01-control-report-viewer.md); completed 2026-09-26. |
-| 02 — Real-text browser PDF | Pending | 0% | [Composition, tables, fonts, links](./phase-02-browser-pdf-export.md) |
+| 02 — Real-text browser PDF | **DONE** | 100% | [Composition, tables, fonts, links](./phase-02-browser-pdf-export.md); completed 2026-09-26. |
 | 03 — Verification and documentation | Pending | 0% | [PDF text/image/link/browser proof](./phase-03-verification-and-documentation.md) |
 
 Dependency: Phase 01 → Phase 02 → Phase 03. No implementation work is authorized by this document alone.
@@ -47,7 +47,7 @@ Validated 2026-09-25; three design questions asked.
 - **Page layout:** A4 portrait preferred; reduce table font before expanding width.
 - **Links:** real Snyk/Sonar evidence links must be clickable.
 - Revisions applied: removed raster pipeline; selected semantic jsPDF/AutoTable composition, font embedding, portrait-first layout, annotation verification. Phase documents updated to avoid a contradictory handoff.
-- Action items: plan revision complete; Phase 01 implementation completed 2026-09-26. Browser PDF implementation and full export verification remain pending in Phases 02–03.
+Action items: plan revision complete; Phases 01 and 02 implementation completed 2026-09-26. Full browser/PDF verification remains in Phase 03.
 
 ## Evidence and design
 - [Architecture design](./architecture-design.md), linked as proposed from [current architecture](../../docs/architecture.md).
@@ -55,7 +55,7 @@ Validated 2026-09-25; three design questions asked.
 - Planning/PDF/frontend skills read directly; hard-planning and validation workflow instructions loaded. Native slash-command dispatch is unavailable; workflows followed through available tools.
 
 ## Verification and activation
-During planning (2026-09-25), plan structure/local links were checked; no application build, test, package install, or PDF runtime smoke was run. Phase 01 verification was later reported 2026-09-26: typecheck/build passed, 35 focused unit tests and existing Control/report-management E2E suites (20 each) passed ([code review](../reports/code-review-260926-0624-phase-01-control-report-viewer.md)). PDF runtime proof remains pending in Phases 02–03. The active-plan helper was invoked from the installed global path, but `EVCRATE_SESSION_ID` is absent, so active-plan state was not persisted. Use this explicit plan path for continuation.
+Phase 02 implementation verified 2026-09-26: 499/499 unit tests passed; Cycle 2 code review scored 9.5/10 ([review](./code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). Typecheck/build passed. Full browser/PDF runtime proof remains pending in Phase 03.
 
 ## Unresolved questions
-No product questions. Implementation must prove exact font coverage, portrait table readability, wrapped/table hyperlink geometry, and browser download behavior; these are not yet runtime-verified.
+No unresolved Phase 02 implementation questions. End-to-end PDF parsing/visual review, font coverage, portrait readability, wrapped/table link geometry, and real browser download behavior remain Phase 03 verification gates.

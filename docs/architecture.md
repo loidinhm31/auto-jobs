@@ -3,7 +3,8 @@
 This document covers schema-v1 configuration, report and Jenkins auto-build
 workflows, Stage View monitoring, the loopback Control Page and control API,
 local SecretStore, credential UI, report management, the Control-only React
-final-report viewer, and deterministic verification boundaries. The report command remains report-only. Control
+final-report viewer and browser PDF export, and deterministic verification
+boundaries. The report command remains report-only. Control
 `POST /api/run` accepts either one selected auto-build project or all enabled
 auto-build projects when `projectId` is omitted; mode is never inferred from URL,
 selector, CLI, or env.
@@ -18,7 +19,7 @@ test-only Playwright routes; unmatched network requests are blocked.
 
 See [system architecture](./system-architecture.md) for the component view; [report pipeline](./report-pipeline.md) covers
 fixtures, aggregate/deletion, and the final-report viewer. [Phase 01](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md) documents the control-only React view.
-[PDF export design](../plans/260925-1729-final-report-pdf-export/architecture-design.md) remains planned, not shipped.
+[PDF export](./report-pipeline.md#client-side-pdf-export) is browser-side jsPDF/AutoTable composition from the validated React report DOM; persisted static report output remains unchanged.
 See [multi-project configuration](./multi-project-configuration.md) for field contracts and [release gates](./release-gates.md) for validation.
 
 ## Scope and operating modes
@@ -123,7 +124,7 @@ flowchart LR
 - `src/artifacts/report-project-deletion.ts` removes project trees;
   `src/artifacts/report-run-deletion.ts` removes one run, prunes empty projects, and both services lock/rebuild aggregates.
 - `src/reporting/project-report-route.ts` is a browser-safe exact matcher for safe project/run report paths shared by the control router and React app.
-- `src/reporting/project-report-body-renderer.ts` composes the escaped full report body shared by the React viewer and static `project-report-renderer.ts` output.
+- `src/reporting/project-report-body-renderer.ts` composes the escaped report body shared by React and static output; the viewer's `ReportExportButton` passes its ready DOM to the separate jsPDF/AutoTable composer documented in [report pipeline](./report-pipeline.md#client-side-pdf-export).
 - `src/reporting/report-server-control-reports-api.ts` handles guarded whole-project and per-run `DELETE` endpoints.
 - `src/reporting/report-server-control.ts` validates Host, preflights final-
   report indexes, and serves a control shell before static report fallback.

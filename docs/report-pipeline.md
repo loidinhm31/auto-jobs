@@ -1,9 +1,9 @@
 # Report pipeline and aggregate index
 
-This document describes offline report fixtures, final-report artifact serving
-and the Control-only React final-report viewer, retained-run discovery and
-deletion, and persistent aggregate-index construction. For broader execution
-details, see [architecture](./architecture.md) and [system architecture](./system-architecture.md).
+This document describes offline report fixtures, final-report artifact serving,
+the Control-only React report viewer and client-side PDF export, retained-run
+discovery and deletion, and persistent aggregate-index construction. For broader
+execution details, see [architecture](./architecture.md) and [system architecture](./system-architecture.md).
 
 ## Offline report fixtures
 
@@ -71,8 +71,63 @@ The latter wraps that same body in the persisted static document and its report
 CSP. The React page's HTML sink receives only locally generated escaped body
 markup; it never inserts saved report HTML or vendor markup. `.project-report-surface`
 styles and Tailwind-preflight overrides isolate the view without changing the
-standalone stylesheet behavior. Phase 01 adds the viewer only; PDF generation
-and download remain the planned next phase.
+standalone stylesheet behavior. Phase 01 added the viewer; Phase 02 adds local
+browser PDF export described below.
+
+## Client-side PDF export
+
+The **Export PDF** action is part of the final-report viewer toolbar, not the
+history page. `ReportExportButton` is enabled only when the validated report is
+ready. It passes `#project-report-surface` to `useReportPdfExport`, which
+prevents concurrent exports, exposes preparing/composing/downloading/error
+states, and lets the operator dismiss an error or retry. The export is a local
+download; it does not call a PDF server API or modify persisted report files.
+
+| Module | Responsibility |
+| --- | --- |
+| `pages/final-project-report-page.tsx`, `components/molecules/ReportExportButton.tsx` | Keep the accessible export action in the viewer chrome and pass the ready report surface, project ID, and run ID. |
+| `hooks/use-report-pdf-export.ts` | Guard re-entry and missing report identity/content; expose export lifecycle and error state. |
+| `utils/report-pdf-content.ts`, `report-pdf-span-extractor.ts`, `report-pdf-block-extractors.ts`, `types/report-pdf-types.ts` | Convert the displayed report DOM into ordered, typed heading, text, list, metadata, table, figure, and footer blocks with link spans. |
+| `utils/report-pdf-layout.ts`, `report-pdf-span-renderer.ts`, `report-pdf-table-renderer.ts`, `report-pdf-constants.ts` | Lay out real text, pagination, images, anchors, and tables using explicit PDF coordinates and styles. |
+| `utils/report-pdf-fonts.ts`, `assets/fonts/` | Register bundled Noto Sans regular/bold font data with jsPDF. The source TTFs and `OFL.txt` retain the SIL Open Font License notice. |
+| `utils/report-pdf-image-loader.ts` | Accept embedded image data or same-origin report images, load and decode bytes, and fail export on unsafe or unreadable evidence. |
+| `utils/export-report-pdf.ts` | Compose the jsPDF document, produce a Blob, sanitize the identity-based filename, and trigger a browser download. |
+
+`extractReportPdfContent()` walks the report surface in DOM order; it does not
+render a screenshot or attempt general HTML/CSS conversion. It captures
+headings and badges, rich-text spans and line breaks, paragraphs, warning and
+provenance lists, definition-list metadata, all table rows/cells, evidence
+figures/captions, anchors, and footer text. Skip links, the control report bar,
+and `aria-hidden` content are excluded. The adapter consumes each semantic
+subtree once, while plain wrapper elements are traversed for their children.
+
+The composer uses the browser runtime dependencies `jspdf` and
+`jspdf-autotable`. jsPDF creates compressed A4 portrait pages in millimeters
+with 10 mm margins. Paragraphs and table cells remain PDF text; findings tables
+retain all seven columns, wrap cell content, and use the 8 pt table floor
+(ordinary tables start at 9 pt). AutoTable handles table pagination. Local
+regular and bold Noto Sans font payloads are registered in jsPDF's virtual
+file system, avoiding remote font requests and the limited standard-font
+repertoire.
+
+External text links are accepted through the existing `safeExternalHref`
+policy and become PDF URI annotations; report-local anchors are resolved to
+PDF page destinations after layout. Evidence screenshot sources are kept
+separate from source URLs: only embedded data images or same-origin report
+images are loaded, and image decoding failures surface in the export status.
+Figures preserve image aspect ratio and retain captions as text. Export does
+not visit Snyk or SonarQube; recipients follow source annotations themselves.
+
+The download filename is `<projectId>-<runId>-report.pdf`, with unsafe
+filename characters replaced. The Blob is handed to a temporary browser
+object URL and anchor; the object URL is revoked after the browser handoff.
+Saved report HTML continues to use its existing static/scriptless rendering
+and CSP. The export adds no external renderer, print flow, upload, or server
+publication path.
+
+Phase 02 implementation verification reports 499/499 unit tests and a 9.5/10
+Cycle 2 code review. Phase 03 remains responsible for release-level PDF text,
+image, link, visual-layout, and browser-download verification.
 
 `src/artifacts/aggregate-manifest-reader.ts` validates schema-v3 manifests and
 their referenced artifacts before retaining them. Discovery is bounded to at
@@ -235,3 +290,14 @@ static snapshot. See [architecture](./architecture.md) for UI behavior and
   contracts, CSRF injection, error code mapping (409/404/500), DOM IDs, and
   accessibility attributes.
 - [Release gates](./release-gates.md) lists the focused test commands.
+
+## Client-side PDF export
+
+In Control mode (`npm run serve:control`), the final individual report viewer (`/reports/<projectId>/<runId>/index.html`) offers a direct client-side PDF download via `ReportExportButton`.
+
+- **Real selectable text & embedded images**: jsPDF and jspdf-autotable render headings, prose, definition lists (`<dl>`), lists, table cells, and captions as selectable vector text; screenshots remain embedded images without full-page rasterization.
+- **Embedded licensed fonts**: Noto Sans Regular and Bold TrueType fonts are bundled locally with full Latin, Vietnamese, punctuation, and Unicode support via VFS/addFont.
+- **Portrait-first layout**: A4 portrait (210 x 297 mm, 10 mm margins) with a 10 pt body font and an 8 pt readability floor for the 7-column Snyk findings table with cell line wrapping.
+- **Interactive evidence links**: Clickable URI annotations open exact validated Snyk and SonarQube source URLs without remote calls during generation; internal anchors (#jenkins-job, #snyk-test-report, #artifacts) resolve to destination pages.
+- **Lifecycle & safety**: State transitions (`idle` → `preparing` → `composing` → `downloading` → `idle`), synchronous reentrancy protection, unmount guards, automatic object URL cleanup, and strict same-origin image validation. Files are named `<projectId>-<runId>-report.pdf`.
+- **Focused tests**: `tests/unit/report-pdf-fonts.spec.ts`, `tests/unit/report-pdf-content.spec.ts`, `tests/unit/report-pdf-layout.spec.ts`, `tests/unit/use-report-pdf-export.spec.ts`, and `tests/unit/control-final-report-pdf-export.spec.ts`.

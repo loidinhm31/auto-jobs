@@ -21,9 +21,10 @@ verification:
   contention returns `409`; run deletion preserves siblings, prunes an empty project directory, and rebuilds the aggregate from survivors.
 - **Control UI:** The Dashboard edits schema-v1 settings/credentials and exposes
   all-enabled report/build actions with one saved Workers selector. The React
-  `/reports/index.html` page manages history and deletion; existing final-report
-  URLs open a separate React view over validated JSON using the body renderer
-  shared with static output. Both views are Control-only; saved report HTML remains static/scriptless.
+  `/reports/index.html` page manages history/deletion; final-report URLs open a
+  separate validated-JSON view over the body renderer shared with static output.
+  Its toolbar composes browser PDFs with jsPDF/AutoTable and embedded Noto Sans;
+  both views are Control-only, and persisted report HTML remains static/scriptless.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-

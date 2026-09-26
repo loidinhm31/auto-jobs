@@ -2,9 +2,9 @@
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, persistent aggregate history,
-bounded execution, Control Page actions/report management, final-report viewer,
-offline build fixtures, and dynamic credentials.<br>
-**Current milestone:** Final-report PDF export — Phase 01 control-only React viewer complete; Phase 02 browser PDF pending (2026-09-26).<br>
+bounded execution, Control Page actions/report management, final-report viewer
+and browser PDF export, offline build fixtures, and dynamic credentials.<br>
+**Current milestone:** Final-report PDF export — Phase 01 viewer and Phase 02 browser composition implemented; Phase 03 verification pending (2026-09-26).<br>
 **Previous completed milestone:** Individual report run deletion — complete (3/3 phases; verified 2026-09-25).<br>
 **Earlier completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 approved 2026-09-25).<br>
 **Previous initiative:** Control Page Parallel Auto-Build — complete, 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439 passed; typecheck/build passed; review approved 9.3/10.
@@ -394,6 +394,29 @@ and failure semantics are validated before side effects.
   delivers no PDF generation/download UI; Phase 02 consumes the validated ready
   report surface.
 
+### FR-17: Client-side final-report PDF export (Phase 02)
+
+- Add an accessible **Export PDF** action to the Control-only final-report
+  viewer. Keep it disabled until the validated report is ready and while an
+  export is active; keep the action/status UI outside the report content.
+- Read the locally generated report surface through a narrow semantic DOM
+  adapter. Preserve headings, badges, prose, metadata, lists, tables, evidence
+  figures/captions, anchors, and footer in document order; omit only export
+  chrome and hidden UI.
+- Compose selectable/searchable text and real-text tables with browser-side
+  `jspdf` and `jspdf-autotable`; keep evidence screenshots as images. Prefer
+  A4 portrait layout and wrapped table content.
+- Bundle and embed local Noto Sans regular/bold TrueType font data under its
+  included SIL Open Font License. Do not request fonts from a remote service.
+- Preserve safe evidence/reference URLs as PDF link annotations and resolve
+  report-local anchors to PDF destinations. Do not visit linked source sites
+  during generation; load only safe report-local or embedded images.
+- Download one `<projectId>-<runId>-report.pdf` directly in the browser. Do not
+  add a PDF server endpoint, print dialog, upload, report regeneration, or
+  mutation of saved artifacts.
+- Keep duplicate invocation and generation failures visible and retryable;
+  preserve the viewer, static report output, and existing CSP.
+
 ## Non-functional requirements
 
 | Area | Requirement |
@@ -613,6 +636,7 @@ require the environment variables named by project configuration.
 | Persistent report-management verification | `src/artifacts/report-project-deletion.ts`, `tests/unit/aggregate-index-builder.spec.ts`, `tests/unit/persistent-aggregate-bounds.spec.ts`, `tests/unit/control-reports-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
 | Individual report-run deletion API/UI | `src/reporting/report-server-control-reports-api.ts`, `src/artifacts/report-run-deletion.ts`, `src/reporting/control-page/hooks/use-delete-run.ts`, `src/reporting/control-page/components/molecules/project-runs-table.tsx`, `src/reporting/control-page/components/organisms/ProjectReportHistoryCard.tsx`, `src/reporting/control-page/components/organisms/DeleteRunConfirmationDialog.tsx`, `src/reporting/control-page/pages/ReportManagementPage.tsx`; `tests/unit/control-reports-run-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
 | Control final-report viewer (Phase 01) | `src/reporting/project-report-route.ts`, `src/reporting/report-server-control.ts`, `src/reporting/project-report-body-renderer.ts`, `src/reporting/control-page/pages/final-project-report-page.tsx`, and `src/reporting/control-page/hooks/use-project-report.ts`; `tests/unit/project-report-route.spec.ts`, `tests/unit/control-final-report-route.spec.ts`, `tests/unit/reporting-renderer.spec.ts`, `tests/unit/use-project-report.spec.ts` | [architecture](./architecture.md), [report pipeline](./report-pipeline.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
+| Client-side PDF export (Phase 02) | `ReportExportButton.tsx`, `use-report-pdf-export.ts`, `report-pdf-content.ts`, `report-pdf-layout.ts`, `report-pdf-table-renderer.ts`, `report-pdf-fonts.ts`, `report-pdf-image-loader.ts`, `export-report-pdf.ts`; `tests/unit/report-pdf-content.spec.ts`, `tests/unit/report-pdf-layout.spec.ts`, `tests/unit/report-pdf-fonts.spec.ts`, `tests/unit/use-report-pdf-export.spec.ts`, `tests/unit/control-final-report-pdf-export.spec.ts` | [architecture](./architecture.md), [report pipeline](./report-pipeline.md), [system architecture](./system-architecture.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |
@@ -638,9 +662,11 @@ report CLI still has no production auto-build command.
 
 ### 0.1.0 (development) — 2026-09-26
 
-- Completed Phase 01 of the final-report PDF export plan: added the control-only
-  React final-report viewer and shared full-body renderer. PDF generation and
-  download remain Phase 02 work ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md)).
+- Completed Phase 01's Control-only final-report viewer and Phase 02's
+  browser-side jsPDF/AutoTable export with embedded OFL Noto Sans fonts,
+  semantic report-DOM extraction, safe links/images, and direct PDF download.
+  Phase 02 reports 499/499 unit tests and a 9.5/10 Cycle 2 code review; Phase
+  03 PDF release verification remains ([Phase 02](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md)).
 
 ### 0.1.0 (development) — 2026-09-25
 

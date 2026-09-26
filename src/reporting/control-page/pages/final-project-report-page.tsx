@@ -6,6 +6,7 @@ import {
 } from '../../project-report-body-renderer.js';
 import { useProjectReport } from '../hooks/use-project-report.js';
 import { ProjectReportStatusView } from '../components/molecules/ProjectReportStatusView.js';
+import { ReportExportButton } from '../components/molecules/ReportExportButton.js';
 
 export function FinalProjectReportPage() {
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -116,8 +117,12 @@ export function FinalProjectReportPage() {
             )}
           </nav>
 
-          {/* Reserved integration slot for Phase 02 PDF export */}
-          <div id="report-export-controls" className="flex items-center gap-3" />
+          <ReportExportButton
+            projectId={projectId}
+            runId={runId}
+            isReady={state.status === 'ready'}
+            getReportElement={() => (typeof document !== 'undefined' ? document.getElementById('project-report-surface') : null)}
+          />
         </div>
       </header>
 

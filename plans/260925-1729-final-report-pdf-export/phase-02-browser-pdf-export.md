@@ -5,7 +5,7 @@
 - [Phase 01](./phase-01-control-report-viewer.md) provides the validated complete report surface and identity.
 
 ## Overview
-- Date: 2026-09-25. Priority: P2. Implementation: pending. Review: user requirements validated; technical proof pending.
+- Date: 2026-09-26. Priority: P2. Status: **DONE**. Progress: **100%**. Completed: 2026-09-26. Implementation complete. Review: Cycle 2 scored 9.5/10; all Cycle 1 findings verified and resolved. Ready for Phase 03 release gates.
 - React direct download using `jspdf` + `jspdf-autotable`; text stays text, screenshots stay images.
 
 ## Key Insights
@@ -59,11 +59,11 @@ Reuse/leave unchanged unless a concrete incompatibility appears:
 11. Release temporary image buffers/PDF references and revoke object URLs after handoff. Navigation/unmount invalidates output; suppress stale downloads. On font/image/composition/memory errors, preserve report UI, give explicit feedback, and allow manual reattempt—never a partial file or automatic retry.
 
 ## Todo list
-- [ ] Browser packages and licensed searchable Unicode fonts.
-- [ ] Semantic report adapter and complete real-text/image composition.
-- [ ] Portrait-first table fitting and full pagination.
-- [ ] Exact clickable evidence/reference links, including wrapped/table spans.
-- [ ] Accessible download lifecycle, duplicate suppression, cleanup/errors.
+- [x] Browser packages and licensed searchable Unicode fonts.
+- [x] Semantic report adapter and complete real-text/image composition.
+- [x] Portrait-first table fitting and full pagination.
+- [x] Exact clickable evidence/reference links, including wrapped/table spans.
+- [x] Accessible download lifecycle, duplicate suppression, cleanup/errors.
 
 ## Success Criteria
 - One click downloads a PDF with selectable/searchable report headings, prose, metadata, table cells, and captions; screenshots remain images.
@@ -84,7 +84,7 @@ Reuse/leave unchanged unless a concrete incompatibility appears:
 - Generation never visits Snyk/Sonar. Clicking may require the recipient's network access/login.
 
 ## Next steps
-- Phase 03 proves text extraction, image/PDF visuals, portrait fitting, URI annotations, and real downloads before documenting release.
+- Phase 02 implementation and Cycle 2 code review completed 2026-09-26; all previous findings verified and resolved.
+- Phase 03 owns the end-to-end PDF/browser release gates.
 
-## Unresolved questions
-- None requiring product clarification. Confirm font repertoire, exact package compatibility, and readability floor during implementation smoke.
+- No unresolved Phase 02 implementation questions. End-to-end PDF parsing/visual review, font coverage, portrait readability, wrapped/table link geometry, and real browser download behavior remain Phase 03 verification gates.

@@ -1,17 +1,18 @@
 # Codebase summary
 
-This summary is based on the refreshed `repomix-output.xml` and checked-in
-source/configuration. It covers Stage View monitoring, persistent report
-history, guarded project/run deletion, the Control-only React final-report
-viewer and shared body renderer, and release-gate boundaries. The viewer phase
-is complete; client-side PDF generation remains planned and is not implemented.
+This summary is based on the refreshed `repomix-output.xml` and current
+source/configuration. It covers report/build execution, retained history,
+Control-only report management and the final-report viewer, including its
+browser PDF export. The Phase 02 PDF implementation is present; Phase 03
+release-level PDF verification remains pending.
 
 ## Repository profile
 
-- Package: `auto-jobs` (`0.1.0`), private ESM package.
 - Runtime: Node.js 24 or newer; npm 11.13.0; TypeScript 7.0.2.
 - Browser/runtime library: Playwright Test 1.62.1 with Chromium, Firefox, and
   WebKit adapters. The standard install script provisions Chromium and WebKit.
+- Control browser-PDF dependencies: `jspdf` and `jspdf-autotable` are runtime
+  dependencies bundled with the Control Page.
 - Primary output: immutable static vulnerability reports aggregating Jenkins,
   Snyk, and SonarQube evidence.
 - Phase 2 addition: an explicit one-project Jenkins parameterized-build
@@ -48,11 +49,11 @@ is complete; client-side PDF generation remains planned and is not implemented.
   with post-outcome inventory refresh; Chromium/WebKit E2E verifies cancel,
   selected-run removal, sibling preservation, final-run pruning, and aggregate
   refresh.
-- Final-report viewer (PDF plan Phase 01): existing per-run URLs open a
-  Control-only React page after safe route matching and existing-index
-  preflight. It validates saved report JSON/manifest identities and uses the
-  escaped full-body renderer shared with static report output; report-only
-  serving and persisted HTML remain static.
+- Final-report viewer and PDF export (Phases 01–02): Control-only React viewer
+  validates saved JSON/manifest identity and shares the escaped body renderer
+  with static output. The browser export uses a semantic DOM adapter, jsPDF and
+  AutoTable, embedded Noto Sans fonts, safe image loading, and text/link
+  annotations; persisted report HTML remains unchanged.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
   testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
@@ -153,6 +154,9 @@ is complete; client-side PDF generation remains planned and is not implemented.
 | `src/reporting/project-report-route.ts` | Browser-safe matching and validation for safe final-report route IDs and exact index/directory forms. |
 | `src/reporting/project-report-body-renderer.ts` | Composes the complete escaped evidence body shared by React and static output. |
 | `src/reporting/control-page/pages/final-project-report-page.tsx`, `hooks/use-project-report.ts` | Render validated per-run evidence and expose loading/missing/invalid/load-error states. |
+| `src/reporting/control-page/components/molecules/ReportExportButton.tsx`, `hooks/use-report-pdf-export.ts` | Ready-report toolbar action, export state/re-entry guard, and visible error handling. |
+| `src/reporting/control-page/utils/export-report-pdf.ts`, `report-pdf-content.ts`, `report-pdf-layout.ts`, `report-pdf-table-renderer.ts` | Semantic DOM extraction and browser-side jsPDF/AutoTable composition with pagination, links, and images. |
+| `src/reporting/control-page/utils/report-pdf-fonts.ts`, `report-pdf-image-loader.ts`, `src/reporting/control-page/assets/fonts/` | Register embedded OFL Noto Sans regular/bold fonts and load safe report evidence images. |
 | `src/reporting/control-page/pages/ReportManagementPage.tsx` | Loads the aggregate independently of active configuration and composes confirmed project/run deletion flows. |
 | `src/reporting/control-page/hooks/use-delete-reports.ts`, `use-delete-run.ts` | Use the shared CSRF-aware client, refresh inventory, and surface mutation feedback. |
 | `ProjectReportHistoryCard.tsx`, `project-runs-table.tsx`, `DeleteReportsConfirmationDialog.tsx`, `DeleteRunConfirmationDialog.tsx` | Compose project history, 20-run pagination, and confirmed deletion controls. |
