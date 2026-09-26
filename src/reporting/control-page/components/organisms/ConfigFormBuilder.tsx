@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ConfigError } from '../../../../config-errors.js';
 import { validateProject } from '../../../../config/project-config-project-validation.js';
 import {
@@ -47,6 +47,13 @@ export function ConfigFormBuilder({
   const [draftValidationErrors, setDraftValidationErrors] = useState<string[]>([]);
   const project = projects[selectedIndex];
   const isAtCapacity = projects.length >= PROJECT_CONFIG_LIMITS.maxProjects;
+  const selectedProjectIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (project) {
+      selectedProjectIdRef.current = project.id;
+    }
+  }, [project]);
 
   useEffect(() => {
     setIsAddingProject(false);
@@ -54,7 +61,13 @@ export function ConfigFormBuilder({
     setCloneSourceId(null);
     setDraftValidationErrors([]);
     setAddBlocked(false);
-    setSelectedIndex(0);
+    setSelectedIndex(() => {
+      if (selectedProjectIdRef.current) {
+        const found = projects.findIndex((p) => p.id === selectedProjectIdRef.current);
+        if (found >= 0) return found;
+      }
+      return 0;
+    });
   }, [replacementRevision]);
 
   useEffect(() => {
@@ -140,6 +153,7 @@ export function ConfigFormBuilder({
       setCloneSourceId(null);
       setDraftValidationErrors([]);
       setSelectedIndex(projects.length);
+      selectedProjectIdRef.current = newProjectDraft.id;
     } else {
       setAddBlocked(true);
     }
@@ -218,7 +232,9 @@ export function ConfigFormBuilder({
                 setCloneSourceId(null);
                 setDraftValidationErrors([]);
               }
-              setSelectedIndex(Number(event.target.value));
+              const nextIndex = Number(event.target.value);
+              setSelectedIndex(nextIndex);
+              selectedProjectIdRef.current = projects[nextIndex]?.id ?? null;
             }}
             options={
               isAddingProject

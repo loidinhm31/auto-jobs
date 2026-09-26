@@ -18,7 +18,8 @@ export function generateCloneProjectId(
   const normalizedSource = (sourceId || 'project')
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
-    .replace(/^-+/, '');
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
   const safeBase = normalizedSource.length > 0 ? normalizedSource : 'project';
 
   // First candidate: `<base>-copy`

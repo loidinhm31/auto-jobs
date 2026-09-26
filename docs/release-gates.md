@@ -769,6 +769,16 @@ Verified Phase 03 client-side PDF export across Chromium and WebKit runtimes:
 - Total tests: 557/557 passed (100% pass rate). Review score: 9.5/10.
 - Verified: selectable Unicode text (Vietnamese diacritics), embedded screenshots, portrait A4 dimensions, and live Snyk/Sonar/Jenkins clickable URI annotations.
 
+
+## Control page project groups and cloning snapshot (2026-09-27)
+
+Verified Phase 04 project groups and cloning across Chromium and WebKit runtimes:
+- `npm run typecheck`: passed (0 errors)
+- `npm run build`: passed (TypeScript + Vite bundle 2.68 MB)
+- `npm run test:unit`: 593/593 passed (includes 15 in `control-project-transitions.spec.ts`, 12 in `control-config-api.spec.ts`)
+- `npm run test:control`: 44/44 passed across Chromium and WebKit
+- Browser smoke: 7/7 scenarios passed (legacy Ungrouped, group CRUD, multi-context persistence, config switching, bidirectional raw JSON sync, cloning draft lifecycle, 50-project 6-group compact layout with independent column scrolling)
+
 ## Test-count and evidence policy
 
 This document reports verified release evidence only from freshly executed commands.

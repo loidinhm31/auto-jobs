@@ -581,7 +581,6 @@ graph TD
    - `UseConfigManagerResult` exposes `activeConfigName` and load operations, but
      not `setActiveConfigName`; that setter remains internal to the hook.
    - Synchronizes structured document edits with the raw JSON textarea view, tracking validation state (`jsonValidationMsg`) and `isDirty` flags to gate execution actions.
-
 3. **`useCredentialsManager` (`useCredentialsManager.ts`)**:
    - Discovers required credential variable names dynamically from the active configuration using `discoverRequiredCredentialKeys(doc)`.
    - Queries secret presence via `GET /api/secrets?keys=...` to populate `credentialRows: CredentialRowData[]` without exposing secret values.
@@ -598,7 +597,6 @@ graph TD
    - Polls `GET /api/run?id=<runId>` at 1,000ms intervals with exponential backoff on transient network errors (up to 5 consecutive errors).
    - Fast-fails on fatal 4xx errors (excluding 408/429) and ceases polling when reaching terminal statuses (`succeeded`, `failed`, `submission-unknown`).
    - Handles leak-free unmount and cancellation via `AbortController` and timer resets.
-
 #### Component Prop Contracts (`src/reporting/control-page/types/component-contracts.ts`)
 
 Provides strongly-typed prop interfaces for Phase 03 component implementers (atoms and molecules) and Phase 04 page assembly:

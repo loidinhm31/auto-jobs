@@ -132,6 +132,16 @@ Older application versions whose schema allowlists predate these fields may
 reject a grouped document; restore a pre-group copy or remove the metadata
 before rolling back.
 
+## Project draft cloning
+
+Operators can clone any configured project in the Control editor using **Clone selected project**:
+
+- **Pure utility**: `cloneProjectDraft` in `src/reporting/control-page/utils/clone-project-draft.ts` creates an independent copy via `structuredClone(source)` without mutational aliasing of nested objects (`selectors`, `credentials`, `autoBuild`).
+- **Safe bounded identities**: Generates unique IDs appending `-copy` (then `-copy-2`, `-copy-3`, …) while truncating the base ID so the total length never exceeds 63 characters (`/^[a-z0-9][a-z0-9-]{0,62}$/u`). Names append ` (copy)` capped at 200 characters.
+- **Disabled and ungrouped**: Clones default to `enabled: false` to guard against unintended execution, and remove `groupId` so the project begins in the `Ungrouped` column.
+- **Draft lifecycle**: Cancelling the draft leaves the document intact. Clicking "Save Project" commits the draft to the board; global Save persists it to the configuration file on disk.
+- **Verification contracts**: Covered in [`clone-project-draft.spec.ts`](../tests/unit/clone-project-draft.spec.ts) and [`control-project-transitions.spec.ts`](../tests/unit/control-project-transitions.spec.ts).
+
 
 ## Run type and selection
 

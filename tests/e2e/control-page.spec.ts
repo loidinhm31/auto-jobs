@@ -1065,4 +1065,71 @@ test.describe('Control Page Dashboard E2E', () => {
     await saveBtn.click();
     await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
   });
+
+  test('Phase 03/04: supports project draft cloning, deep copy independence, draft cancellation, and disabled ungrouped persistence', async ({ page }) => {
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    const ungroupedCol = page.locator('#group-column-ungrouped');
+    await expect(ungroupedCol).toBeVisible();
+    await expect(ungroupedCol.locator('.project-card')).toHaveCount(2);
+
+    // 1. Open clone draft for selected project
+    const cloneBtn = page.locator('#btn-clone-project');
+    await expect(cloneBtn).toBeVisible();
+    await expect(cloneBtn).toBeEnabled();
+    await cloneBtn.click();
+
+    // Verify draft status banner appears
+    await expect(page.locator('text=Cloned project draft (from \'demo-report-service\')')).toBeVisible();
+
+    // Verify ID and Name are populated with copy suffix
+    const idInput = page.locator('#config-project-id');
+    const nameInput = page.locator('#config-project-name');
+    const enabledCheckbox = page.locator('label', { hasText: 'Enabled' }).locator('input[type="checkbox"]');
+
+    await expect(idInput).toHaveValue('demo-report-service-copy');
+    await expect(nameInput).toHaveValue('Demo Report Service (copy)');
+    await expect(enabledCheckbox).not.toBeChecked();
+
+    // 2. Cancel draft leaves original intact
+    const cancelBtn = page.locator('#btn-cancel-project');
+    await expect(cancelBtn).toBeVisible();
+    await cancelBtn.click();
+
+    // Draft banner gone, clone button available again
+    await expect(page.locator('text=Cloned project draft')).toBeHidden();
+    await expect(cloneBtn).toBeEnabled();
+    await expect(ungroupedCol.locator('.project-card')).toHaveCount(2);
+
+    // 3. Clone again and commit draft
+    await cloneBtn.click();
+    await expect(page.locator('text=Cloned project draft (from \'demo-report-service\')')).toBeVisible();
+
+    const saveProjectBtn = page.locator('#btn-save-project');
+    await expect(saveProjectBtn).toBeVisible();
+    await saveProjectBtn.click();
+
+    // Cloned project added to board inside Ungrouped column as disabled
+    await expect(ungroupedCol.locator('.project-card')).toHaveCount(3);
+    const clonedCard = ungroupedCol.locator('.project-card', { hasText: 'demo-report-service-copy' });
+    await expect(clonedCard).toBeVisible();
+    await expect(clonedCard.locator('#checkbox-enabled-demo-report-service-copy')).not.toBeChecked();
+
+    // 4. Global Save persists clone to disk
+    const saveBtn = page.locator('#btn-save');
+    await expect(saveBtn).toBeEnabled();
+    await saveBtn.click();
+    await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
+
+    // 5. Reload confirms persistence across sessions
+    const reloadBtn = page.locator('#btn-reload');
+    await reloadBtn.click();
+    await expect(ungroupedCol.locator('.project-card')).toHaveCount(3);
+    await expect(ungroupedCol.locator('.project-card', { hasText: 'demo-report-service-copy' })).toBeVisible();
+
+    // Original project remains untouched and enabled
+    const originalCard = ungroupedCol.locator('.project-card', { hasText: 'demo-report-service' }).first();
+    await expect(originalCard).toBeVisible();
+  });
 });

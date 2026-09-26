@@ -467,6 +467,15 @@ and failure semantics are validated before side effects.
   lifecycle in the focused group-validation, group-transition, and editor
   lifecycle unit contracts.
 
+### FR-19: Project draft cloning
+
+- Enable cloning any configured project in `ConfigFormBuilder` into an independent editable draft.
+- Generate bounded unique IDs (`<id>-copy`, `-copy-2`) capped at 63 characters and bounded names (`<name> (copy)`) capped at 200 characters.
+- Default clones to `enabled: false` and ungrouped state (no `groupId`).
+- Deeply copy nested configuration settings via `structuredClone` to prevent mutational aliasing between draft and source.
+- Provide full draft lifecycle: Cancel discards draft without document changes; Save Project adds to board; global Save persists to disk.
+- Reset draft state on `replacementRevision` increments (file load/switch or raw Apply).
+
 
 ## Non-functional requirements
 

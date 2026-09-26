@@ -1,7 +1,7 @@
 ---
 title: "Control page compact project groups and cloning"
 description: "Persist single-membership groups, display compact scrollable project columns, and clone existing project settings into safe drafts."
-status: in-progress
+status: completed
 priority: P2
 effort: not-estimated
 branch: main
@@ -13,7 +13,7 @@ created: 2026-09-26
 
 ## Scope
 
-Phase 01 implementation is complete; focused behavior tests, full unit tests, typecheck/build, and review are recorded in the [Phase 01 test report](../reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md) and [code review](../reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md). Phases 02–04 remain pending.
+All 4 phases are complete: group schema/document lifecycle, compact grouped project board, project draft cloning, and comprehensive behavioral verification with documentation.
 
 User confirmed:
 1. Compact project cards; groups saved inside the selected configuration JSON.
@@ -24,13 +24,14 @@ User confirmed:
 
 ## Phases
 
+**Overall status:** **DONE** · **100%** (all 4 phases complete; completed 2026-09-27T02:40:00+07:00).
+
 | Phase | Status | Progress | Dependency | Detail |
 |---|---|---|---|---|
 | 01 Shared group schema and document lifecycle | DONE | 100% | None | Completed 2026-09-26T23:40:20+07:00; [Phase 01](./phase-01-group-schema-and-document-state.md) |
 | 02 Compact grouped project board | DONE | 100% | 01 | Completed 2026-09-27T00:55:00+07:00; [Phase 02](./phase-02-compact-grouped-project-board.md) |
 | 03 Clone selected project draft | DONE | 100% | 01 | Completed 2026-09-27T01:55:00+07:00; [Phase 03](./phase-03-clone-project-draft.md) |
-| 04 Behavioral verification and documentation | Pending | 0% | 01–03 | [Phase 04](./phase-04-verification-and-documentation.md) |
-Phases 02/03 share DashboardPage and editor wiring: integrate sequentially or assign a single owner. Do not have concurrent agents edit those files. Check references through LSP before exported contract changes; migrate all callers in the same cutover.
+| 04 Behavioral verification and documentation | DONE | 100% | 01–03 | Completed 2026-09-27T02:40:00+07:00; [Phase 04](./phase-04-verification-and-documentation.md) |
 
 ## Main decisions
 
@@ -72,4 +73,4 @@ Phase 04 defines commands and actual browser smoke scenarios. Existing source-te
 
 ## Planning status and unresolved questions
 
-Product questions resolved and validation interview completed. Phase 01 completed 2026-09-26T23:40:20+07:00; focused/full unit tests, typecheck/build, and review are recorded in the [test report](../reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md) and [code review](../reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md). Phases 02–04, including integrated browser verification, remain pending. Active-plan persistence unavailable: helper reported missing EVCRATE_SESSION_ID; use this plan path explicitly.
+Product questions resolved and validation interview completed. All phases 01–04 complete. Verification and documentation finalized on 2026-09-27T02:40:00+07:00. No unresolved questions.

@@ -547,6 +547,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/control-hooks-and-types.spec.ts` | Hook/API lifecycles, active-config persistence, and document-level report-worker transition coverage. |
 | `tests/unit/project-group-validation.spec.ts`, `project-group-transitions.spec.ts`, `config-document-editor-groups.spec.ts` | Group schema/reference boundaries, immutable membership transitions, and document replacement versus edit/Save revision behavior. |
 | `tests/unit/clone-project-draft.spec.ts` | Project draft cloning, suffix-aware bounded ID and name generation, nested data independence, capacity guards, and replacementRevision reset. |
+| `tests/unit/control-project-transitions.spec.ts` | Group and clone transition boundaries: membership move/delete invariants, clone identity bounds, nested mutation independence, and capacity/collision guards. |
 | `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts for the shared Workers/action bar and ordered multi-project plus scalar-fallback result presentation. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |

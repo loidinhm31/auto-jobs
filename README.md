@@ -291,6 +291,13 @@ This runs `tests/e2e/template-server-integration.spec.ts` alongside navigation a
 - Production auto-build workflow execution against the mock server.
 - Control Dashboard UI loading `projects.template.json` with zero cross-origin or CSP violations.
 
+
+## Control Dashboard
+
+The interactive Control Dashboard (`npm run serve:control` at `http://127.0.0.1:4173/`) provides full configuration editing, project management, and execution triggering:
+
+- **Compact Project Groups Board**: Projects are organized by group into compact, scrollable columns with horizontal board overflow containment. Unassigned projects appear in an `Ungrouped` column. Operators can create new groups, manage project assignments via checklist dialog, rename groups, or delete groups (which moves projects to Ungrouped without deleting them).
+- **Project Draft Cloning**: Select any configured project and click **Clone selected project** to create an independent editable draft. Cloned projects receive a unique suffix-aware ID (`<id>-copy`), bounded name (`<name> (copy)`), disabled initial state (`enabled: false`), and ungrouped placement. Nested settings (selectors, timeouts, credentials references) are deeply cloned with complete mutation independence.
 ## Report paths and layout
 
 ```text

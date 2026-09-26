@@ -228,4 +228,129 @@ test.describe('Control Config API', () => {
     expect(body.error.code).toBe('SCHEMA_ERROR');
     expect(body.error.message).toContain('reportWorkers');
   });
+
+  test('PUT /api/config?name= persists projectGroups and groupId and round-trips through GET with updated ETag', async ({ request }) => {
+    const getRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const initial = await getRes.json();
+
+    const updatedDoc = {
+      ...initial.document,
+      projectGroups: [
+        { id: 'group-platform', name: 'Platform Engineering' },
+      ],
+      projects: [
+        {
+          ...initial.document.projects[0],
+          groupId: 'group-platform',
+        },
+      ],
+    };
+
+    const parsedServerUrl = new URL(serverUrl);
+    const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+    const putRes = await request.put(`${serverUrl}api/config?name=default.json`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'if-match': initial.etag,
+        'content-type': 'application/json',
+      },
+      data: updatedDoc,
+    });
+
+    expect(putRes.status()).toBe(200);
+    const putBody = await putRes.json();
+    expect(putBody.document.projectGroups).toEqual([
+      { id: 'group-platform', name: 'Platform Engineering' },
+    ]);
+    expect(putBody.document.projects[0].groupId).toBe('group-platform');
+    expect(putBody.etag).not.toBe(initial.etag);
+
+    // GET round-trip verification
+    const secondGet = await request.get(`${serverUrl}api/config?name=default.json`);
+    const secondBody = await secondGet.json();
+    expect(secondBody.document.projectGroups).toEqual([
+      { id: 'group-platform', name: 'Platform Engineering' },
+    ]);
+    expect(secondBody.document.projects[0].groupId).toBe('group-platform');
+    expect(secondBody.etag).toBe(putBody.etag);
+
+    // On-disk verification
+    const onDisk = JSON.parse(fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8'));
+    expect(onDisk.projectGroups).toEqual([
+      { id: 'group-platform', name: 'Platform Engineering' },
+    ]);
+    expect(onDisk.projects[0].groupId).toBe('group-platform');
+  });
+
+  test('PUT /api/config?name= rejects invalid projectGroups duplicate IDs with 422 SCHEMA_ERROR and preserves disk', async ({ request }) => {
+    const getRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const initial = await getRes.json();
+    const diskBefore = fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8');
+
+    const parsedServerUrl = new URL(serverUrl);
+    const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+    const putRes = await request.put(`${serverUrl}api/config?name=default.json`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'if-match': initial.etag,
+        'content-type': 'application/json',
+      },
+      data: {
+        ...initial.document,
+        projectGroups: [
+          { id: 'dup-id', name: 'Team Alpha' },
+          { id: 'dup-id', name: 'Team Beta' },
+        ],
+      },
+    });
+
+    expect(putRes.status()).toBe(422);
+    const body = await putRes.json();
+    expect(body.error.code).toBe('SCHEMA_ERROR');
+    expect(body.error.message).toContain('duplicate group id: dup-id');
+
+    // Preserves disk content
+    const diskAfter = fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8');
+    expect(diskAfter).toBe(diskBefore);
+  });
+
+  test('PUT /api/config?name= rejects dangling project groupId with 422 SCHEMA_ERROR and preserves disk', async ({ request }) => {
+    const getRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const initial = await getRes.json();
+    const diskBefore = fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8');
+
+    const parsedServerUrl = new URL(serverUrl);
+    const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+    const putRes = await request.put(`${serverUrl}api/config?name=default.json`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'if-match': initial.etag,
+        'content-type': 'application/json',
+      },
+      data: {
+        ...initial.document,
+        projects: [
+          {
+            ...initial.document.projects[0],
+            groupId: 'non-existent-group-id',
+          },
+        ],
+      },
+    });
+
+    expect(putRes.status()).toBe(422);
+    const body = await putRes.json();
+    expect(body.error.code).toBe('SCHEMA_ERROR');
+    expect(body.error.message).toContain('non-existent-group-id');
+
+    // Preserves disk content
+    const diskAfter = fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8');
+    expect(diskAfter).toBe(diskBefore);
+  });
 });
