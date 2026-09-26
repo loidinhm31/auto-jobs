@@ -2,10 +2,9 @@
 
 This summary is based on the refreshed `repomix-output.xml` and checked-in
 source/configuration. It covers Stage View monitoring, persistent report
-history, guarded project/run deletion, report-management UI, and Phase 03
-verification and release gates. Individual report-run deletion is complete
-through Phase 03; its deterministic browser verification uses local roots and
-does not claim a live Jenkins run.
+history, guarded project/run deletion, the Control-only React final-report
+viewer and shared body renderer, and release-gate boundaries. The viewer phase
+is complete; client-side PDF generation remains planned and is not implemented.
 
 ## Repository profile
 
@@ -49,6 +48,11 @@ does not claim a live Jenkins run.
   with post-outcome inventory refresh; Chromium/WebKit E2E verifies cancel,
   selected-run removal, sibling preservation, final-run pruning, and aggregate
   refresh.
+- Final-report viewer (PDF plan Phase 01): existing per-run URLs open a
+  Control-only React page after safe route matching and existing-index
+  preflight. It validates saved report JSON/manifest identities and uses the
+  escaped full-body renderer shared with static report output; report-only
+  serving and persisted HTML remain static.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
   testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
@@ -109,7 +113,9 @@ does not claim a live Jenkins run.
   (499 total). Chromium/WebKit browser checks include zero Axe violations,
   cancellation, selected-run/sibling disk state, final-run pruning, and
   aggregate refresh. Coverage metrics were not collected.
-- Repomix compaction regenerated at `repomix-output.xml` for this summary. The security scan excluded two test files with credential-shaped URL examples; repository ignore rules remain in effect.
+- Repomix XML compaction refreshed for this summary. Its security check
+  excluded `tests/unit/config.spec.ts` and `tests/unit/reporting-renderer.spec.ts`
+  because of credential-shaped URL examples.
 
 ## Entry points and scripts
 
@@ -139,11 +145,14 @@ does not claim a live Jenkins run.
 | `src/reporting/report-server-control-security.ts` | Enforces control security headers and Host/Origin/Fetch Metadata/CSRF/content-type gates. |
 | `src/reporting/report-server-control-api.ts` | Owns config/run handlers; omitted auto-build `projectId` selects a batch; re-exports the modular secrets handler. |
 | `src/reporting/control-page/types/index.ts` | Defines optional `RunTriggerRequest.projectId`, `AutoBuildProjectResult.exitCode`, and `RunResult.buildProjects`. |
-| `src/reporting/report-server-control.ts` | Validates Host, serves the control Dashboard and exact `/reports/index.html` GET/HEAD shell before static report routing, and carries router context. |
+| `src/reporting/report-server-control.ts` | Validates Host, serves Control Dashboard, history and exact per-run React shells after final-index preflight; sends unmatched report paths to static serving. |
 | `src/reporting/report-server-control-page.ts` | Loads Vite-built HTML, CSS, and JS assets from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches assets. |
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
 | `src/reporting/control-page/` | Control Dashboard frontend sources (types, utils, headless hooks, components, styles) bundled via Vite into `.runner-build/reporting/control-page/`. |
-| `src/reporting/control-page/App.tsx`, `src/reporting/control-page/components/organisms/HeaderBar.tsx` | Select the Dashboard or report-management view by pathname and provide Reports navigation. |
+| `src/reporting/control-page/App.tsx`, `HeaderBar.tsx` | Select Dashboard, report history, or final-report view by pathname and provide history navigation. |
+| `src/reporting/project-report-route.ts` | Browser-safe matching and validation for safe final-report route IDs and exact index/directory forms. |
+| `src/reporting/project-report-body-renderer.ts` | Composes the complete escaped evidence body shared by React and static output. |
+| `src/reporting/control-page/pages/final-project-report-page.tsx`, `hooks/use-project-report.ts` | Render validated per-run evidence and expose loading/missing/invalid/load-error states. |
 | `src/reporting/control-page/pages/ReportManagementPage.tsx` | Loads the aggregate independently of active configuration and composes confirmed project/run deletion flows. |
 | `src/reporting/control-page/hooks/use-delete-reports.ts`, `use-delete-run.ts` | Use the shared CSRF-aware client, refresh inventory, and surface mutation feedback. |
 | `ProjectReportHistoryCard.tsx`, `project-runs-table.tsx`, `DeleteReportsConfirmationDialog.tsx`, `DeleteRunConfirmationDialog.tsx` | Compose project history, 20-run pagination, and confirmed deletion controls. |

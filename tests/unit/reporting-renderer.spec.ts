@@ -4,6 +4,7 @@ import type { ProjectFailureResultV3, ProjectRunManifest } from '../../src/artif
 import { escapeHtmlAttribute, escapeHtmlText } from '../../src/reporting/html-escape.js';
 import { renderAggregateReport } from '../../src/reporting/aggregate-report-renderer.js';
 import { localArtifactHref, localManifestHref, localReportHref, safeExternalHref } from '../../src/reporting/report-links.js';
+import { projectReportTitle, renderProjectReportBody } from '../../src/reporting/project-report-body-renderer.js';
 import { renderProjectReport } from '../../src/reporting/project-report-renderer.js';
 import { createProjectReportViewModel } from '../../src/reporting/report-view-model.js';
 import type { AggregateReportResult, VulnerabilityReportResultV3 } from '../../src/result-types.js';
@@ -90,4 +91,51 @@ test('keeps the SonarQube Issues anchor in a direct failed report', () => {
   const html = renderProjectReport(createProjectReportViewModel(failure, manifest('failed', false)));
   expect(html).toContain('id="sonarqube-issues"');
   expect(html).toContain('No SonarQube Issues evidence was captured.');
+});
+
+test('project-report-body-renderer provides pure body HTML with full parity', () => {
+  const successModel = createProjectReportViewModel(result({ project: { id: 'service-a', name: 'Service <A>' } }), manifest());
+  const successBody = renderProjectReportBody(successModel);
+  const successDoc = renderProjectReport(successModel);
+
+  expect(projectReportTitle(successModel)).toBe('Service <A> vulnerability report');
+  expect(successDoc).toContain(successBody);
+  expect(successBody).not.toMatch(/<!doctype/iu);
+  expect(successBody).not.toMatch(/<html[\s>]/iu);
+  expect(successBody).not.toMatch(/<head[\s>]/iu);
+  expect(successBody).not.toMatch(/<body[\s>]/iu);
+  expect(successBody).toContain('<header class="report-header">');
+  expect(successBody).toContain('<main>');
+  expect(successBody).toContain('<footer>');
+  expect(successBody).toContain('id="snyk-test-report"');
+  expect(successBody).toContain('id="sonarqube-overall"');
+  expect(successBody).toContain('id="artifacts"');
+
+  // Partial run parity
+  const partialModel = createProjectReportViewModel(result({ state: 'partial' }), {
+    ...manifest('partial'),
+    artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
+    warnings: ['Snyk screenshot unavailable'],
+  });
+  const partialBody = renderProjectReportBody(partialModel);
+  const partialDoc = renderProjectReport(partialModel);
+  expect(partialDoc).toContain(partialBody);
+  expect(partialBody).toContain('Partial');
+  expect(partialBody).toContain('Snyk screenshot unavailable');
+
+  // Failed run parity
+  const failure: ProjectFailureResultV3 = {
+    schemaVersion: 3,
+    project: { id: 'service-a', name: 'Service A' },
+    run: { runId: RUN_ID, observedAt: OBSERVED_AT },
+    state: 'failed',
+    diagnostic: 'Jenkins login failed',
+    warnings: [],
+  };
+  const failedModel = createProjectReportViewModel(failure, manifest('failed', false));
+  const failedBody = renderProjectReportBody(failedModel);
+  const failedDoc = renderProjectReport(failedModel);
+  expect(failedDoc).toContain(failedBody);
+  expect(failedBody).toContain('id="sonarqube-issues"');
+  expect(failedBody).toContain('Jenkins login failed');
 });

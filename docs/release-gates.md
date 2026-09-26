@@ -332,6 +332,26 @@ dialog, with zero violations; direct on-disk assertions verify the results.
 checks the control-only `/reports/index.html` GET/HEAD CSRF shell, CSP and HEAD
 body boundary, plus the report-mode static-index route.
 
+### Final-report viewer Phase 01 focused gate
+
+Run the route, renderer, and report-state unit contracts:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/project-report-route.spec.ts \
+  tests/unit/control-final-report-route.spec.ts \
+  tests/unit/reporting-renderer.spec.ts \
+  tests/unit/use-project-report.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+These tests cover safe route matching, control-only shell GET/HEAD/405 behavior,
+directory redirects and index preflight, static artifact/report-mode fallback,
+shared body parity for success/partial/failed reports, route/data/manifest
+agreement, and accessible loading/error states. They use local roots and an
+in-process server, not Jenkins or vendor services. The group is included in
+`npm run test:unit`.
+
 ### Individual report-run deletion Phase 03 verification snapshot (2026-09-25)
 
 | Command/scope | Result |

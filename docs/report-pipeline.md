@@ -1,9 +1,9 @@
 # Report pipeline and aggregate index
 
-This document describes offline report fixtures, retained-run discovery and
-deletion, and persistent aggregate-index construction. For the broader
-execution model, see [architecture](./architecture.md) and [system
-architecture](./system-architecture.md).
+This document describes offline report fixtures, final-report artifact serving
+and the Control-only React final-report viewer, retained-run discovery and
+deletion, and persistent aggregate-index construction. For broader execution
+details, see [architecture](./architecture.md) and [system architecture](./system-architecture.md).
 
 ## Offline report fixtures
 
@@ -36,6 +36,43 @@ reports/
     ├── manifest.json
     └── requested screenshots
 ```
+
+## Control-only final-report viewer
+
+The existing `/reports/<projectId>/<runId>/index.html` URL opens a React
+viewer only in Control mode. `project-report-route.ts` is browser-safe and
+shared by the router and `App.tsx`. It accepts the exact report prefix, two
+safe ID segments, and either explicit `index.html` or a directory form
+(with or without a trailing slash); query and fragment text do not affect the
+match. It rejects traversal/dot IDs, reserved names, encoded separators,
+backslashes, null bytes, and double encoding. Sibling artifacts such as
+`data.json`, `manifest.json`, and screenshots do not match the viewer route
+and continue through static file serving.
+
+After Host validation and report-root resolution, the control router preflights
+the canonical existing run `index.html` before returning its React shell.
+Directory-form requests redirect to the explicit index URL. The shell is
+available only for GET/HEAD; HEAD has the same content length as GET and no
+body, and other methods return 405. Other report paths retain static serving.
+The standalone report server continues to serve immutable scriptless HTML
+under `REPORT_CSP`.
+
+`App.tsx` selects `FinalProjectReportPage` separately from the report-history
+page at `/reports/index.html`. `useProjectReport` fetches `data.json` and
+`manifest.json` concurrently with `cache: 'no-store'`, aborts on unmount, and
+reuses the schema validators. It requires route, data, and manifest project/run
+IDs to agree, plus matching project name, timestamp, state, and Jenkins job
+URL, before exposing a ready view model. Loading, missing, invalid, and
+load-error states remain outside the report body.
+
+`project-report-body-renderer.ts` owns the escaped report header, sections,
+anchors, and footer shared by the React page and `project-report-renderer.ts`.
+The latter wraps that same body in the persisted static document and its report
+CSP. The React page's HTML sink receives only locally generated escaped body
+markup; it never inserts saved report HTML or vendor markup. `.project-report-surface`
+styles and Tailwind-preflight overrides isolate the view without changing the
+standalone stylesheet behavior. Phase 01 adds the viewer only; PDF generation
+and download remain the planned next phase.
 
 `src/artifacts/aggregate-manifest-reader.ts` validates schema-v3 manifests and
 their referenced artifacts before retaining them. Discovery is bounded to at

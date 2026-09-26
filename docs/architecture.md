@@ -2,8 +2,8 @@
 
 This document covers schema-v1 configuration, report and Jenkins auto-build
 workflows, Stage View monitoring, the loopback Control Page and control API,
-local SecretStore, credential UI, persistent report management, and deterministic
-verification boundaries. The report command remains report-only. Control
+local SecretStore, credential UI, report management, the Control-only React
+final-report viewer, and deterministic verification boundaries. The report command remains report-only. Control
 `POST /api/run` accepts either one selected auto-build project or all enabled
 auto-build projects when `projectId` is omitted; mode is never inferred from URL,
 selector, CLI, or env.
@@ -16,10 +16,10 @@ static normalized vulnerability report. Runtime navigation uses the exact URLs
 in the project configuration. Tests may fulfill those exact URLs with
 test-only Playwright routes; unmatched network requests are blocked.
 
-See [system architecture](./system-architecture.md) for the component view,
-[report pipeline](./report-pipeline.md) for fixtures, aggregate persistence, and report deletion,
-[multi-project configuration](./multi-project-configuration.md) for field
-contracts, and [release gates](./release-gates.md) for validation commands.
+See [system architecture](./system-architecture.md) for the component view; [report pipeline](./report-pipeline.md) covers
+fixtures, aggregate/deletion, and the final-report viewer. [Phase 01](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md) documents the control-only React view.
+[PDF export design](../plans/260925-1729-final-report-pdf-export/architecture-design.md) remains planned, not shipped.
+See [multi-project configuration](./multi-project-configuration.md) for field contracts and [release gates](./release-gates.md) for validation.
 
 ## Scope and operating modes
 
@@ -122,13 +122,11 @@ flowchart LR
   aggregate-index construction/publication/recovery, staging, and cleanup.
 - `src/artifacts/report-project-deletion.ts` removes project trees;
   `src/artifacts/report-run-deletion.ts` removes one run, prunes empty projects, and both services lock/rebuild aggregates.
-- `src/reporting/` renders static HTML/CSS and serves only files below a
-  canonical report root.
-- `src/reporting/report-server-control-reports-api.ts` handles the guarded
-  `DELETE /api/reports/projects/:projectId` and `/runs/:runId` control endpoints.
-- `src/reporting/report-server-control.ts` validates Host, serves the Control
-  Dashboard and exact report-management shell ahead of static routing, and
-  dispatches APIs/assets with router dependencies.
+- `src/reporting/project-report-route.ts` is a browser-safe exact matcher for safe project/run report paths shared by the control router and React app.
+- `src/reporting/project-report-body-renderer.ts` composes the escaped full report body shared by the React viewer and static `project-report-renderer.ts` output.
+- `src/reporting/report-server-control-reports-api.ts` handles guarded whole-project and per-run `DELETE` endpoints.
+- `src/reporting/report-server-control.ts` validates Host, preflights final-
+  report indexes, and serves a control shell before static report fallback.
 - `src/reporting/control-page/` contains the Control Dashboard frontend sources:
   server data contracts (`types/index.ts`), shared UI component prop interfaces
   (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
@@ -136,7 +134,7 @@ flowchart LR
   headless React hooks (`hooks/useControlApi.ts`, `hooks/useConfigManager.ts`,
   `hooks/useConfigDocumentEditor.ts` for document/raw-JSON editing and
   validation, `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`,
-  `hooks/useRunPoller.ts`),
+  `hooks/useRunPoller.ts`, `hooks/use-project-report.ts` for validated final reports),
   atomic design UI primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/):
   [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31),
   [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5),
@@ -162,7 +160,7 @@ flowchart LR
   [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx),
   [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx)),
   layout templates ([`components/templates/DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)),
-  pages ([`pages/DashboardPage.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx) and [`pages/ReportManagementPage.tsx`](../src/reporting/control-page/pages/ReportManagementPage.tsx)),
+  pages ([`DashboardPage`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx), [`ReportManagementPage`](../src/reporting/control-page/pages/ReportManagementPage.tsx), and [`FinalProjectReportPage`](../src/reporting/control-page/pages/final-project-report-page.tsx)),
   error boundary ([`components/ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)),
   and application markup (`index.html`, [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), `main.tsx`, [`styles/globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css)),
   bundled by `vite.control.config.ts` into `.runner-build/reporting/control-page/` with

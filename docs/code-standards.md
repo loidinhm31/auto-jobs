@@ -40,8 +40,11 @@ it is not a replacement for schema or security validation.
 | `src/reporting/report-server-control-reports-api.ts` | Guarded whole-project `DELETE /api/reports/projects/:projectId` and per-run `DELETE /api/reports/projects/:projectId/runs/:runId` routes. |
 | `src/artifacts/report-project-deletion.ts` | Canonical-path and tree preflight, root-lock coordination, project-subtree removal, and aggregate refresh. |
 | `src/artifacts/report-run-deletion.ts` | Canonical single-run preflight, root-lock coordination, run removal, empty-project pruning, and aggregate refresh. |
-| `src/reporting/report-server-control.ts` | Loopback routing, Host preflight, and exact `/reports/index.html` GET/HEAD control-shell handling before static report routing. |
-| `src/reporting/control-page/App.tsx`, `src/reporting/control-page/components/organisms/HeaderBar.tsx` | Select Dashboard vs report-management view by pathname and link to `/reports/index.html`. |
+| `src/reporting/project-report-route.ts` | Browser-safe exact final-report route matcher shared by the Control router and React app; reject ambiguous, unsafe segments. |
+| `src/reporting/project-report-body-renderer.ts`, `project-report-renderer.ts` | One escaped full-body composition for React and static HTML; the static wrapper retains the document shell and CSP. |
+| `src/reporting/report-server-control.ts` | Loopback routing, Host preflight, exact history/final-report shells, final-index preflight, and static fallback. |
+| `src/reporting/control-page/App.tsx`, `src/reporting/control-page/components/organisms/HeaderBar.tsx` | Select Dashboard, history, or final-report view by exact pathname and link to the report index. |
+| `src/reporting/control-page/pages/final-project-report-page.tsx`, `src/reporting/control-page/hooks/use-project-report.ts` | Fetch and validate saved JSON, require route/data/manifest identity agreement, and render only the generated report body after readiness. |
 | `src/reporting/control-page/pages/ReportManagementPage.tsx` | Load/classify the aggregate independently of active configuration and compose project/run deletion flows. |
 | `src/reporting/control-page/hooks/use-delete-reports.ts`, `use-delete-run.ts` | Use the shared CSRF-aware client, refresh inventory, and surface mutation feedback. |
 | `ProjectReportHistoryCard.tsx`, `project-runs-table.tsx`, `DeleteReportsConfirmationDialog.tsx`, `DeleteRunConfirmationDialog.tsx` | Compose project history, per-project pagination, per-run actions, and confirmation dialogs. |

@@ -328,3 +328,51 @@ details:not([open]) > :not(summary) {
   }
 }
 
+/* Report surface isolation countering Tailwind preflight */
+.project-report-surface {
+  isolation: isolate;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #172033;
+}
+.project-report-surface h1 {
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0.15rem 0 0.5rem;
+}
+.project-report-surface h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+.project-report-surface h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+.project-report-surface p {
+  margin: 0.4rem 0;
+  line-height: 1.5;
+}
+.project-report-surface a {
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+.project-report-surface ul:not([class]) {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+}
+.project-report-surface ol:not([class]) {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+}
+.project-report-surface table {
+  border-collapse: collapse;
+}
+.project-report-surface th {
+  font-weight: 700;
+}
+

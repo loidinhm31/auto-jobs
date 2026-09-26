@@ -2,13 +2,12 @@
 
 **Product:** `auto-jobs`  
 **Document scope:** schema-v1 report capture, persistent aggregate history,
-bounded execution, Control Page actions and report management, offline build
-fixtures, and dynamic credentials.<br>
-**Current milestone:** Individual report run deletion — complete (3/3 phases; Phase 03 verification approved 2026-09-25).<br>
-**Previous completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 verification approved; 2026-09-25).<br>
-**Earlier completed milestone:** Control Page Parallel Auto-Build — complete,
-100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439; typecheck/build
-passed; review approved 9.3/10.
+bounded execution, Control Page actions/report management, final-report viewer,
+offline build fixtures, and dynamic credentials.<br>
+**Current milestone:** Final-report PDF export — Phase 01 control-only React viewer complete; Phase 02 browser PDF pending (2026-09-26).<br>
+**Previous completed milestone:** Individual report run deletion — complete (3/3 phases; verified 2026-09-25).<br>
+**Earlier completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 approved 2026-09-25).<br>
+**Previous initiative:** Control Page Parallel Auto-Build — complete, 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439 passed; typecheck/build passed; review approved 9.3/10.
 
 ## Product summary
 
@@ -371,6 +370,30 @@ and failure semantics are validated before side effects.
   browser coverage verifies cancellation, sibling preservation, and final-run
   removal.
 
+### FR-16: Control-only final-report viewer (PDF export Phase 01)
+
+- Preserve each existing final-report URL. In Control mode, match only
+  `/reports/<projectId>/<runId>/index.html` and its directory forms using the
+  browser-safe route parser and safe ID rules; reject ambiguous encoded paths.
+- Before serving a React shell for a final-report URL, preflight the canonical
+  existing run index. Serve the shell only for GET/HEAD, redirect directory
+  forms to the explicit index URL, and return 405 for other methods. Keep
+  unmatched artifact paths on the existing static handler.
+- Fetch `data.json` and `manifest.json` without cache, abort requests on
+  unmount, and validate both saved schemas. Require route/data/manifest project
+  and run identities, project name, timestamp, state, and Jenkins job URL to
+  agree before exposing a ready report model.
+- Present loading, missing, invalid, and load-error states; render report
+  content only after validation. Compose the complete report body through the
+  renderer shared with static output, preserving its escaped sections, links,
+  anchors, screenshots, warnings, and footer.
+- The React HTML sink may receive only that locally generated escaped body,
+  never saved report HTML or vendor markup. Scope styles to the report surface;
+  do not weaken either CSP or change persisted report-only output.
+- Keep `/reports/index.html` as the distinct history-management page. Phase 01
+  delivers no PDF generation/download UI; Phase 02 consumes the validated ready
+  report surface.
+
 ## Non-functional requirements
 
 | Area | Requirement |
@@ -589,6 +612,7 @@ require the environment variables named by project configuration.
 | Control report-management navigation and deletion | `src/reporting/control-page/pages/ReportManagementPage.tsx`, `src/reporting/control-page/hooks/use-delete-reports.ts`, `src/reporting/report-server-control.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Persistent report-management verification | `src/artifacts/report-project-deletion.ts`, `tests/unit/aggregate-index-builder.spec.ts`, `tests/unit/persistent-aggregate-bounds.spec.ts`, `tests/unit/control-reports-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
 | Individual report-run deletion API/UI | `src/reporting/report-server-control-reports-api.ts`, `src/artifacts/report-run-deletion.ts`, `src/reporting/control-page/hooks/use-delete-run.ts`, `src/reporting/control-page/components/molecules/project-runs-table.tsx`, `src/reporting/control-page/components/organisms/ProjectReportHistoryCard.tsx`, `src/reporting/control-page/components/organisms/DeleteRunConfirmationDialog.tsx`, `src/reporting/control-page/pages/ReportManagementPage.tsx`; `tests/unit/control-reports-run-delete-api.spec.ts`, `tests/e2e/control-report-management.spec.ts` | [report pipeline](./report-pipeline.md), [release gates](./release-gates.md) |
+| Control final-report viewer (Phase 01) | `src/reporting/project-report-route.ts`, `src/reporting/report-server-control.ts`, `src/reporting/project-report-body-renderer.ts`, `src/reporting/control-page/pages/final-project-report-page.tsx`, and `src/reporting/control-page/hooks/use-project-report.ts`; `tests/unit/project-report-route.spec.ts`, `tests/unit/control-final-report-route.spec.ts`, `tests/unit/reporting-renderer.spec.ts`, `tests/unit/use-project-report.spec.ts` | [architecture](./architecture.md), [report pipeline](./report-pipeline.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Secrets API verification | `tests/unit/control-secrets-api.spec.ts`, `tests/unit/control-secrets-security.spec.ts` | [release gates](./release-gates.md) |
 | Control-mode wiring | `src/reporting/report-server-control.ts`, `src/reporting/report-server.ts` | [system architecture](./system-architecture.md) |
 | SecretStore verification | `tests/unit/report-server-secret-store.spec.ts`, `tests/unit/control-secret-store.spec.ts` | [release gates](./release-gates.md) |
@@ -611,6 +635,12 @@ intent, safe outcome mapping, and no process-global credential mutation. The
 report CLI still has no production auto-build command.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-26
+
+- Completed Phase 01 of the final-report PDF export plan: added the control-only
+  React final-report viewer and shared full-body renderer. PDF generation and
+  download remain Phase 02 work ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md)).
 
 ### 0.1.0 (development) — 2026-09-25
 

@@ -1,8 +1,9 @@
 ﻿import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as path from 'node:path';
 
-import { handleReportRequest } from './report-server-files.js';
-import { assertReportRoot, type ReportRootReference } from './report-server-file-io.js';
+import { decodeRequestPath, handleReportRequest } from './report-server-files.js';
+import { assertReportRoot, openReportFile, type ReportRootReference } from './report-server-file-io.js';
+import { parseProjectReportRoute, type ProjectReportRouteMatch } from './project-report-route.js';
 import {
   writeControlSecurityHeaders,
   validateHostHeader,
@@ -119,6 +120,13 @@ export async function handleControlRequest(
       response.end('report file not found\n');
       return;
     }
+
+    const reportRoute = parseProjectReportRoute(url);
+    if (reportRoute !== undefined) {
+      await handleFinalReportShell(context, reportRef, reportRoute, method, response);
+      return;
+    }
+
     const reportRelativeUrl = url.slice('/reports'.length);
     const subRequest = Object.create(request, {
       url: { value: reportRelativeUrl },
@@ -174,4 +182,64 @@ async function handleApiRequest(
   }
 
   sendError(response, 404, 'NOT_FOUND', 'API endpoint not found');
+}
+
+async function handleFinalReportShell(
+  context: ControlRouterContext,
+  reportRef: ReportRootReference,
+  reportRoute: ProjectReportRouteMatch,
+  method: string,
+  response: ServerResponse,
+): Promise<void> {
+  if (method !== 'GET' && method !== 'HEAD') {
+    response.setHeader('allow', 'GET, HEAD');
+    writeControlSecurityHeaders(response);
+    response.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' });
+    response.end('method not allowed\n');
+    return;
+  }
+
+  const relativeReportIndexPath = `/${reportRoute.projectId}/${reportRoute.runId}/index.html`;
+  const decodedPath = decodeRequestPath(relativeReportIndexPath);
+  if (decodedPath === undefined) {
+    writeControlSecurityHeaders(response);
+    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    response.end('report file not found\n');
+    return;
+  }
+
+  const opened = await openReportFile(reportRef.path, decodedPath, reportRef.identity);
+  if (opened === undefined) {
+    writeControlSecurityHeaders(response);
+    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    response.end('report file not found\n');
+    return;
+  }
+  try {
+    await opened.handle.close();
+  } catch {
+    // ignore close error
+  }
+
+  if (reportRoute.isDirectory) {
+    writeControlSecurityHeaders(response);
+    response.writeHead(302, {
+      location: reportRoute.canonicalPath,
+      'content-type': 'text/plain; charset=utf-8',
+    });
+    response.end(`redirecting to ${reportRoute.canonicalPath}\n`);
+    return;
+  }
+
+  writeControlSecurityHeaders(response);
+  const html = await renderControlPageHtml(context.csrfToken);
+  response.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': Buffer.byteLength(html),
+  });
+  if (method === 'HEAD') {
+    response.end();
+  } else {
+    response.end(html);
+  }
 }

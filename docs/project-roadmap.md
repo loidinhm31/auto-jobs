@@ -1,8 +1,22 @@
 # Project roadmap
 
-Last updated: 2026-09-25  
+Last updated: 2026-09-26  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
+
+## Final-report PDF export
+
+Plan: [Final-report PDF export](../plans/260925-1729-final-report-pdf-export/plan.md)
+
+**Overall status:** **In Progress** · **33%** (1 of 3 phases DONE; Phase 01 completed 2026-09-26).
+
+| Phase | Status | Progress | Effort | Completed | Evidence/detail |
+|---|---|---:|---:|---|---|
+| 01 — Shared control report viewer | **DONE** | **100%** | — | 2026-09-26 | Delivered the control-only React report viewer and shared report-body rendering. Verification: 35 focused unit tests; typecheck/build and existing Control/report-management E2E suites (20 each) passed ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md), 9.0/10). |
+| 02 — Real-text browser PDF | Pending | 0% | — | — | [Composition, tables, fonts, links](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md) |
+| 03 — Verification and documentation | Pending | 0% | — | — | [PDF text/image/link/browser proof](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md) |
+
+Phase 01 review recorded two non-blocking warnings: a case-only duplicate page filename and global `report.css` selectors that may affect control-bar styling. Browser PDF implementation and end-to-end PDF verification remain pending in Phases 02–03.
 
 ## Individual report run deletion
 
@@ -169,6 +183,10 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Verified zero dangling references in codebase; updated `docs/codebase-summary.md` and `docs/project-overview-pdr.md`.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-26
+
+- Completed Phase 01 (Shared control report viewer) on 2026-09-26; delivered the control-only React final-report viewer and shared report-body rendering. Validation recorded 35 focused unit tests, typecheck/build, and existing Control/report-management E2E suites (20 each) passing; review scored 9.0/10 with no critical findings and two non-blocking warnings ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md)). The overall PDF-export initiative remains in progress; browser PDF implementation and verification are pending.
 
 ### 0.1.0 (development) — 2026-09-25
 
