@@ -71,8 +71,8 @@ The latter wraps that same body in the persisted static document and its report
 CSP. The React page's HTML sink receives only locally generated escaped body
 markup; it never inserts saved report HTML or vendor markup. `.project-report-surface`
 styles and Tailwind-preflight overrides isolate the view without changing the
-standalone stylesheet behavior. Phase 01 added the viewer; Phase 02 adds local
-browser PDF export described below.
+standalone stylesheet behavior. Phases 01–03 deliver the viewer, export, and
+browser-verified PDF behavior described below.
 
 ## Client-side PDF export
 
@@ -92,6 +92,9 @@ download; it does not call a PDF server API or modify persisted report files.
 | `utils/report-pdf-fonts.ts`, `assets/fonts/` | Register bundled Noto Sans regular/bold font data with jsPDF. The source TTFs and `OFL.txt` retain the SIL Open Font License notice. |
 | `utils/report-pdf-image-loader.ts` | Accept embedded image data or same-origin report images, load and decode bytes, and fail export on unsafe or unreadable evidence. |
 | `utils/export-report-pdf.ts` | Compose the jsPDF document, produce a Blob, sanitize the identity-based filename, and trigger a browser download. |
+| `tests/unit/control-final-report-pdf-export.spec.ts`, `control-final-report-pdf-scenarios.spec.ts` | Exercise real downloads and inspect Unicode text, images, links, pagination, mobile viewport, debounce, missing assets, and offline integrity. |
+| `tests/unit/helpers/pdf-parser.ts` | Inflate FlateDecode streams and decode ToUnicode maps to inspect PDF text, page boxes, image dimensions, and URI annotations in memory. |
+| `tests/unit/helpers/report-pdf-fixture-constants.ts`, `report-pdf-fixtures.ts` | Build isolated report roots with source URLs, screenshots, Unicode content, findings, and scenario options. |
 
 `extractReportPdfContent()` walks the report surface in DOM order; it does not
 render a screenshot or attempt general HTML/CSS conversion. It captures
@@ -125,9 +128,10 @@ Saved report HTML continues to use its existing static/scriptless rendering
 and CSP. The export adds no external renderer, print flow, upload, or server
 publication path.
 
-Phase 02 implementation verification reports 499/499 unit tests and a 9.5/10
-Cycle 2 code review. Phase 03 remains responsible for release-level PDF text,
-image, link, visual-layout, and browser-download verification.
+Phase 03 verification on 2026-09-26 recorded 557/557 checks passing, with
+typecheck and build passing and the focused PDF scenarios passing 7/7 in both
+Chromium and WebKit. See the [release snapshot](./release-gates.md#final-report-pdf-export-phase-03-verification-snapshot-2026-09-26)
+and [review](../plans/reports/code-review-260926-1707-phase-03-verification-and-documentation.md).
 
 `src/artifacts/aggregate-manifest-reader.ts` validates schema-v3 manifests and
 their referenced artifacts before retaining them. Discovery is bounded to at
@@ -291,13 +295,3 @@ static snapshot. See [architecture](./architecture.md) for UI behavior and
   accessibility attributes.
 - [Release gates](./release-gates.md) lists the focused test commands.
 
-## Client-side PDF export
-
-In Control mode (`npm run serve:control`), the final individual report viewer (`/reports/<projectId>/<runId>/index.html`) offers a direct client-side PDF download via `ReportExportButton`.
-
-- **Real selectable text & embedded images**: jsPDF and jspdf-autotable render headings, prose, definition lists (`<dl>`), lists, table cells, and captions as selectable vector text; screenshots remain embedded images without full-page rasterization.
-- **Embedded licensed fonts**: Noto Sans Regular and Bold TrueType fonts are bundled locally with full Latin, Vietnamese, punctuation, and Unicode support via VFS/addFont.
-- **Portrait-first layout**: A4 portrait (210 x 297 mm, 10 mm margins) with a 10 pt body font and an 8 pt readability floor for the 7-column Snyk findings table with cell line wrapping.
-- **Interactive evidence links**: Clickable URI annotations open exact validated Snyk and SonarQube source URLs without remote calls during generation; internal anchors (#jenkins-job, #snyk-test-report, #artifacts) resolve to destination pages.
-- **Lifecycle & safety**: State transitions (`idle` → `preparing` → `composing` → `downloading` → `idle`), synchronous reentrancy protection, unmount guards, automatic object URL cleanup, and strict same-origin image validation. Files are named `<projectId>-<runId>-report.pdf`.
-- **Focused tests**: `tests/unit/report-pdf-fonts.spec.ts`, `tests/unit/report-pdf-content.spec.ts`, `tests/unit/report-pdf-layout.spec.ts`, `tests/unit/use-report-pdf-export.spec.ts`, and `tests/unit/control-final-report-pdf-export.spec.ts`.

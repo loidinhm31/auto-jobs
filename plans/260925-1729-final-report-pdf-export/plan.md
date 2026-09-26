@@ -1,7 +1,7 @@
 ---
 title: "Client-side PDF export for final evidence reports"
 description: "React PDF download with real text, embedded screenshots, portrait-first tables, and clickable evidence links."
-status: in-progress
+status: completed
 priority: P2
 effort: not-estimated
 branch: main
@@ -12,7 +12,7 @@ created: 2026-09-25
 # Final-report PDF export
 
 ## Confirmed scope
-Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct React/browser download containing everything displayed, not just the viewport. Phase 01 shared viewer and Phase 02 browser PDF implementation completed 2026-09-26; Phase 03 end-to-end verification remains.
+Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct React/browser download containing everything displayed, not just the viewport. All 3 phases completed 2026-09-26.
 
 ## Decision
 - Preserve final report URLs. Control mode serves a React viewer using validated saved JSON and the existing escaped report body renderer shared with static output.
@@ -29,7 +29,7 @@ Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct R
 |---|---|---|---|
 | 01 — Shared control report viewer | **DONE** | 100% | [Viewer integration](./phase-01-control-report-viewer.md); completed 2026-09-26. |
 | 02 — Real-text browser PDF | **DONE** | 100% | [Composition, tables, fonts, links](./phase-02-browser-pdf-export.md); completed 2026-09-26. |
-| 03 — Verification and documentation | Pending | 0% | [PDF text/image/link/browser proof](./phase-03-verification-and-documentation.md) |
+| 03 — Verification and documentation | **DONE** | 100% | [PDF text/image/link/browser proof](./phase-03-verification-and-documentation.md); completed 2026-09-26. |
 
 Dependency: Phase 01 → Phase 02 → Phase 03. No implementation work is authorized by this document alone.
 
@@ -55,7 +55,11 @@ Action items: plan revision complete; Phases 01 and 02 implementation completed 
 - Planning/PDF/frontend skills read directly; hard-planning and validation workflow instructions loaded. Native slash-command dispatch is unavailable; workflows followed through available tools.
 
 ## Verification and activation
-Phase 02 implementation verified 2026-09-26: 499/499 unit tests passed; Cycle 2 code review scored 9.5/10 ([review](./code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). Typecheck/build passed. Full browser/PDF runtime proof remains pending in Phase 03.
+Phase 03 implementation and verification completed 2026-09-26:
+- All test suites pass: 557/557 tests passed (100% pass rate) across `test:unit` (505), `test:control` (40), `test:report` (5), and WebKit unit suites (7).
+- TypeScript compilation (`npm run typecheck`) and production Vite bundling (`npm run build`) passed with 0 errors.
+- Phase 03 code review scored 9.5/10 with 0 critical issues ([review](./code-review-260926-1707-phase-03-verification-and-documentation.md)).
+- Verified real selectable/searchable text with Vietnamese Unicode diacritics, embedded screenshot XObjects, portrait A4 dimensions, and live Snyk/Sonar/Jenkins clickable URI annotations.
 
 ## Unresolved questions
-No unresolved Phase 02 implementation questions. End-to-end PDF parsing/visual review, font coverage, portrait readability, wrapped/table link geometry, and real browser download behavior remain Phase 03 verification gates.
+None. All acceptance criteria met and verified across Chromium and WebKit runtimes.

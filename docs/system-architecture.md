@@ -23,14 +23,15 @@ verification:
   all-enabled report/build actions with one saved Workers selector. The React
   `/reports/index.html` page manages history/deletion; final-report URLs open a
   separate validated-JSON view over the body renderer shared with static output.
-  Its toolbar composes browser PDFs with jsPDF/AutoTable and embedded Noto Sans;
-  both views are Control-only, and persisted report HTML remains static/scriptless.
+  Its toolbar ships a Phase 03-verified jsPDF/AutoTable browser export with
+  embedded Noto Sans, text, images, and links; both views are Control-only and
+  persisted report HTML remains static/scriptless.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
   driven.
-- **Verification:** isolated contracts cover report deletion, credentials, and
-  auto-build; Chromium/WebKit Control UI scenarios run without Jenkins.
+- **Verification:** isolated contracts cover report deletion, credentials,
+  auto-build, and PDF semantics; Chromium/WebKit scenarios run without Jenkins.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [report pipeline](./report-pipeline.md) for aggregate and deletion

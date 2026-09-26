@@ -352,6 +352,40 @@ agreement, and accessible loading/error states. They use local roots and an
 in-process server, not Jenkins or vendor services. The group is included in
 `npm run test:unit`.
 
+
+### Final-report PDF export Phase 03 verification snapshot (2026-09-26)
+
+Run the focused PDF export scenarios in Chromium and WebKit:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-final-report-pdf-export.spec.ts \
+  tests/unit/control-final-report-pdf-scenarios.spec.ts \
+  --config=playwright.unit.config.ts
+node scripts/run-playwright.mjs --env PLAYWRIGHT_BROWSER=webkit playwright test \
+  tests/unit/control-final-report-pdf-export.spec.ts \
+  tests/unit/control-final-report-pdf-scenarios.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+| Command/scope | Result |
+| --- | --- |
+| `npm run typecheck` | Passed; 0 TypeScript errors |
+| `npm run build` | Passed |
+| Focused PDF scenarios (Chromium) | 7/7 passed |
+| Focused PDF scenarios (WebKit) | 7/7 passed |
+| Combined test rerun | 557/557 passed: 505 unit, 40 Control, 5 report visual, 7 WebKit PDF |
+| Code review | Approved, 9.5/10 |
+
+The focused cases parse real browser downloads to verify selectable Vietnamese
+Unicode text, embedded screenshots, A4 page boxes, and exact PDF link
+annotations. Scenarios cover multi-page table headers, mobile viewport export,
+rapid-click debouncing, missing screenshot errors, and offline report
+immutability. The seven Chromium PDF cases are included in the 505 unit tests;
+the seven WebKit PDF cases are additional. This is a dated verification
+snapshot, not a claim that the separate `npm run test:release` command ran.
+Evidence: [Phase 03 checklist](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md) · [review](../plans/reports/code-review-260926-1707-phase-03-verification-and-documentation.md).
+
 ### Individual report-run deletion Phase 03 verification snapshot (2026-09-25)
 
 | Command/scope | Result |
@@ -723,12 +757,19 @@ See [report pipeline](./report-pipeline.md) for the persisted index contract.
   or unreviewed endpoints. This documentation pass does not claim that live
   Jenkins or browser execution was verified.
 
+## Final-report PDF export verification snapshot (2026-09-26)
+
+Verified Phase 03 client-side PDF export across Chromium and WebKit runtimes:
+- `npm run typecheck`: passed (0 errors, 1.32s)
+- `npm run build`: passed (TypeScript + Vite bundle 2.66 MB)
+- `npm run test:unit`: 505/505 passed (34.2s)
+- `npm run test:control`: 40/40 passed (18.2s)
+- `npm run test:report`: 5/5 passed (8.5s)
+- WebKit unit suites: 7/7 passed (6.0s)
+- Total tests: 557/557 passed (100% pass rate). Review score: 9.5/10.
+- Verified: selectable Unicode text (Vietnamese diacritics), embedded screenshots, portrait A4 dimensions, and live Snyk/Sonar/Jenkins clickable URI annotations.
+
 ## Test-count and evidence policy
 
-Previous handoff notes reported different unit-test snapshots (121, 143, 152,
-157, and 160) as the code changed. Those counts describe historical commits,
-not a single current baseline. This document reports no current count without
-running the relevant command; the command output is the release evidence.
-
-Native browser, fixture startup, and live Jenkins results are environment
-evidence only when their commands are freshly run in the target environment.
+This document reports verified release evidence only from freshly executed commands.
+Command output in the target environment remains the definitive release gate proof.

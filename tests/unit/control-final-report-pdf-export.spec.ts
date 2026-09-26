@@ -3,82 +3,18 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { createReportServer } from '../../src/reporting/report-server.js';
-import { AGGREGATE_REPORT_MARKER } from '../../src/reporting/report-server-constants.js';
+import {
+  initReportRoot,
+  createRichRunFiles,
+  FIXTURE_JENKINS_URL,
+  FIXTURE_SNYK_LIVE_URL,
+  FIXTURE_SONAR_HOME_URL,
+  FIXTURE_SONAR_OVERALL_URL,
+  FIXTURE_SONAR_ISSUES_URL,
+} from './helpers/report-pdf-fixtures.js';
+import { parsePdf } from './helpers/pdf-parser.js';
 
-function createValidRunFiles(reportRoot: string, projectId: string, runId: string): void {
-  const dir = path.join(reportRoot, projectId, runId);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, 'manifest.json'),
-    JSON.stringify({
-      kind: 'project-run',
-      schemaVersion: 3,
-      project: { id: projectId, name: `Project ${projectId}` },
-      run: { runId, observedAt: '2026-09-24T10:00:00.000Z' },
-      state: 'success',
-      jenkins: { jobUrl: 'https://jenkins.example/job/service-a/' },
-      artifacts: { manifest: 'manifest.json', data: 'data.json', screenshots: [] },
-      warnings: [],
-    }),
-    'utf8',
-  );
-  fs.writeFileSync(
-    path.join(dir, 'data.json'),
-    JSON.stringify({
-      schemaVersion: 3,
-      project: { id: projectId, name: `Project ${projectId}` },
-      run: { runId, observedAt: '2026-09-24T10:00:00.000Z' },
-      state: 'success',
-      jenkins: { jobUrl: 'https://jenkins.example/job/service-a/' },
-      navigation: {
-        'jenkins-job': { key: 'jenkins-job', localAnchor: '#jenkins', state: 'found', liveUrl: 'https://jenkins.example/job/service-a/' },
-        'snyk-report': { key: 'snyk-report', localAnchor: '#snyk-test-report', state: 'found', liveUrl: 'https://snyk.example/' },
-        'sonarqube-home': { key: 'sonarqube-home', localAnchor: '#sonarqube-home', state: 'found', liveUrl: 'https://sonar.example/' },
-        'sonarqube-overall': { key: 'sonarqube-overall', localAnchor: '#sonarqube-overall', state: 'found', liveUrl: 'https://sonar.example/overall' },
-        'sonarqube-issues': { key: 'sonarqube-issues', localAnchor: '#sonarqube-issues', state: 'found', liveUrl: 'https://sonar.example/issues' },
-      },
-      reports: {
-        snyk: {
-          state: 'found',
-          captures: [],
-          navigation: [{ key: 'snyk-report', localAnchor: '#snyk-test-report', state: 'found', liveUrl: 'https://snyk.example/' }],
-          warnings: [],
-          summary: { counts: { critical: 0, high: 0, medium: 0, low: 0 }, detail: { totalObserved: 0, retainedCount: 0, truncated: false, omittedCount: 0 } },
-          findings: [],
-        },
-        sonarqube: {
-          state: 'found',
-          captures: [],
-          navigation: [
-            { key: 'sonarqube-home', localAnchor: '#sonarqube-home', state: 'found', liveUrl: 'https://sonar.example/' },
-            { key: 'sonarqube-overall', localAnchor: '#sonarqube-overall', state: 'found', liveUrl: 'https://sonar.example/overall' },
-            { key: 'sonarqube-issues', localAnchor: '#sonarqube-issues', state: 'found', liveUrl: 'https://sonar.example/issues' },
-          ],
-          warnings: [],
-          facets: { types: [], severities: [] },
-        },
-      },
-      warnings: [],
-    }),
-    'utf8',
-  );
-  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body>Static Report Content</body></html>', 'utf8');
-}
-
-function initReportRoot(reportRoot: string): void {
-  fs.writeFileSync(
-    path.join(reportRoot, 'index.html'),
-    `<!DOCTYPE html><html><head>${AGGREGATE_REPORT_MARKER}</head><body>Index</body></html>`,
-    'utf8',
-  );
-  fs.writeFileSync(
-    path.join(reportRoot, 'aggregate-data.json'),
-    JSON.stringify({ schemaVersion: 3, generatedAt: '2026-09-24T10:00:00.000Z', projects: [], warnings: [] }),
-    'utf8',
-  );
-}
-
-test.describe('Control Final Project Report: PDF Export Integration', () => {
+test.describe('Control Final Project Report: Core PDF Export', () => {
   let configRoot: string;
   let reportRoot: string;
   let serverUrl: string;
@@ -88,7 +24,6 @@ test.describe('Control Final Project Report: PDF Export Integration', () => {
     configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ctl-pdf-cfg-'));
     reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ctl-pdf-rep-'));
     initReportRoot(reportRoot);
-    createValidRunFiles(reportRoot, 'service-a', 'run-1');
 
     fs.writeFileSync(
       path.join(configRoot, 'default.json'),
@@ -112,9 +47,10 @@ test.describe('Control Final Project Report: PDF Export Integration', () => {
     fs.rmSync(reportRoot, { recursive: true, force: true });
   });
 
-  test('renders ReportExportButton and initiates download when clicked', async ({ page }) => {
-    await page.goto(`${serverUrl}reports/service-a/run-1/index.html`);
-    const surface = page.locator('#project-report-surface');
+  test('renders ReportExportButton and initiates download with correct filename', async ({ page }) => {
+    const { projectId, runId } = createRichRunFiles(reportRoot, { projectId: 'service-a', runId: 'run-1' });
+
+    await page.goto(`${serverUrl}reports/${projectId}/${runId}/index.html`);
     const exportBtn = page.locator('#export-pdf-button');
     await expect(exportBtn).toBeVisible();
     await expect(exportBtn).toBeEnabled();
@@ -125,5 +61,69 @@ test.describe('Control Final Project Report: PDF Export Integration', () => {
 
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('service-a-run-1-report.pdf');
+  });
+
+  test('exports complete PDF with selectable Unicode text, embedded screenshots, and clickable links', async ({ page }) => {
+    const { projectId, runId } = createRichRunFiles(reportRoot, {
+      projectId: 'service-vn',
+      runId: '20260926_100000',
+      findingsCount: 2,
+      includeScreenshots: true,
+      includeVietnameseUnicode: true,
+      multipleLinksPerCell: true,
+    });
+
+    await page.goto(`${serverUrl}reports/${projectId}/${runId}/index.html`);
+    const exportBtn = page.locator('#export-pdf-button');
+    await expect(exportBtn).toBeVisible();
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
+    await exportBtn.click();
+
+    const download = await downloadPromise;
+    const downloadPath = path.join(reportRoot, download.suggestedFilename());
+    await download.saveAs(downloadPath);
+
+    const pdfBuffer = fs.readFileSync(downloadPath);
+    fs.unlinkSync(downloadPath);
+
+    const parsed = parsePdf(pdfBuffer);
+
+    // 1. Valid PDF header and A4 portrait dimensions
+    expect(parsed.header).toMatch(/^%PDF-1\./);
+    expect(parsed.pageCount).toBeGreaterThanOrEqual(1);
+    for (const pageItem of parsed.pages) {
+      expect(pageItem.mediaBox[2]).toBeCloseTo(595.28, 1);
+      expect(pageItem.mediaBox[3]).toBeCloseTo(841.89, 1);
+    }
+
+    // 2. Embedded screenshots (Snyk, Sonar overall, Sonar issues)
+    expect(parsed.images.length).toBeGreaterThanOrEqual(1);
+    for (const img of parsed.images) {
+      expect(img.width).toBe(320);
+      expect(img.height).toBe(180);
+    }
+
+    // 3. Selectable text with Vietnamese Unicode characters
+    const allText = parsed.extractedTexts.join(' ').replace(/\s+/g, ' ');
+    expect(allText).toContain('Dự án thanh toán bảo mật (VN-PAY)');
+    expect(allText).toContain('Lỗ hổng bảo mật thực thi mã từ xa');
+    expect(allText).toContain('Nâng cấp phiên bản thư viện');
+    expect(allText).toContain('Snyk test report');
+    expect(allText).toContain('SonarQube Overall');
+    expect(allText).toContain('Generated from normalized schema-v3 evidence');
+
+    // 4. Clickable link annotations for Snyk, Sonar, Jenkins, and references
+    const linkUrls = parsed.links.map((l) => l.url);
+    expect(linkUrls).toContain(FIXTURE_JENKINS_URL);
+    expect(linkUrls).toContain(FIXTURE_SNYK_LIVE_URL);
+    expect(linkUrls).toContain(FIXTURE_SONAR_HOME_URL);
+    expect(linkUrls).toContain(FIXTURE_SONAR_OVERALL_URL);
+    expect(linkUrls).toContain(FIXTURE_SONAR_ISSUES_URL);
+    expect(linkUrls.some((u) => u.includes('https://security.example/advisory/SNYK-JS-FIXTURE-001'))).toBe(true);
+    expect(linkUrls.some((u) => u.includes('https://cve.mitre.org/cve/CVE-2026-1001'))).toBe(true);
+
+    // 5. Distinct link rectangles for multiple links
+    expect(parsed.links.length).toBeGreaterThanOrEqual(7);
   });
 });

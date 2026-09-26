@@ -175,6 +175,16 @@ Open `http://127.0.0.1:4173/` in your browser.
 - **Security**: The control dashboard is strictly restricted to loopback (`127.0.0.1`) and rejects non-loopback bindings and cross-origin state-modifying requests.
 - **Build pipeline**: Bundled via Vite (`vite.control.config.ts`) into `.runner-build/reporting/control-page/` as single-bundle CSS and JS, ensuring strict Content Security Policy (`script-src 'self'`, `style-src 'self'`) compliance without inline styles or eval.
 
+
+## Final-report PDF export
+
+In Control mode, open a saved report at `/reports/<projectId>/<runId>/index.html` and choose **Export PDF**. The browser downloads `<projectId>-<runId>-report.pdf`; export adds no server endpoint and does not alter saved reports.
+
+- Report headings, prose, metadata, lists, tables, captions, and link text remain selectable/searchable Unicode text. Screenshots stay embedded images; pages are not rasterized.
+- The default layout is A4 portrait. Findings-table content wraps and paginates while retaining its columns.
+- Validated evidence links become clickable PDF links. Generation does not visit source sites; it loads only safe local or embedded evidence images.
+- PDF export is verified in Chromium and WebKit. See the [report pipeline](./docs/report-pipeline.md#client-side-pdf-export) and [Phase 03 release snapshot](./docs/release-gates.md#final-report-pdf-export-phase-03-verification-snapshot-2026-09-26).
+
 ## Report server (read-only aggregate preview)
 
 `npm run serve:report` serves an existing static report aggregate under `reports/`. Defaults:

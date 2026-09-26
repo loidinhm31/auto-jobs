@@ -4,7 +4,7 @@
 **Document scope:** schema-v1 report capture, persistent aggregate history,
 bounded execution, Control Page actions/report management, final-report viewer
 and browser PDF export, offline build fixtures, and dynamic credentials.<br>
-**Current milestone:** Final-report PDF export — Phase 01 viewer and Phase 02 browser composition implemented; Phase 03 verification pending (2026-09-26).<br>
+**Current milestone:** Final-report PDF export — shipped and verified (Phases 01–03 DONE 2026-09-26).<br>
 **Previous completed milestone:** Individual report run deletion — complete (3/3 phases; verified 2026-09-25).<br>
 **Earlier completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 approved 2026-09-25).<br>
 **Previous initiative:** Control Page Parallel Auto-Build — complete, 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439 passed; typecheck/build passed; review approved 9.3/10.
@@ -394,7 +394,7 @@ and failure semantics are validated before side effects.
   delivers no PDF generation/download UI; Phase 02 consumes the validated ready
   report surface.
 
-### FR-17: Client-side final-report PDF export (Phase 02)
+### FR-17: Client-side final-report PDF export (Phases 02–03; shipped)
 
 - Add an accessible **Export PDF** action to the Control-only final-report
   viewer. Keep it disabled until the validated report is ready and while an
@@ -404,8 +404,8 @@ and failure semantics are validated before side effects.
   figures/captions, anchors, and footer in document order; omit only export
   chrome and hidden UI.
 - Compose selectable/searchable text and real-text tables with browser-side
-  `jspdf` and `jspdf-autotable`; keep evidence screenshots as images. Prefer
-  A4 portrait layout and wrapped table content.
+  `jspdf` and `jspdf-autotable`; keep evidence screenshots as images. Use A4
+  portrait by default with wrapped table content.
 - Bundle and embed local Noto Sans regular/bold TrueType font data under its
   included SIL Open Font License. Do not request fonts from a remote service.
 - Preserve safe evidence/reference URLs as PDF link annotations and resolve
@@ -416,6 +416,9 @@ and failure semantics are validated before side effects.
   mutation of saved artifacts.
 - Keep duplicate invocation and generation failures visible and retryable;
   preserve the viewer, static report output, and existing CSP.
+- Verify Unicode text, screenshot images, A4 page boxes and pagination, link
+  annotations, mobile export, rapid-click debouncing, missing-asset errors, and
+  saved-report immutability in Chromium and WebKit.
 
 ## Non-functional requirements
 
@@ -662,11 +665,11 @@ report CLI still has no production auto-build command.
 
 ### 0.1.0 (development) — 2026-09-26
 
-- Completed Phase 01's Control-only final-report viewer and Phase 02's
-  browser-side jsPDF/AutoTable export with embedded OFL Noto Sans fonts,
-  semantic report-DOM extraction, safe links/images, and direct PDF download.
-  Phase 02 reports 499/499 unit tests and a 9.5/10 Cycle 2 code review; Phase
-  03 PDF release verification remains ([Phase 02](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md)).
+- Completed Final-report PDF export Phases 01–03 on 2026-09-26: Control-only
+  validated viewer, client-side jsPDF/AutoTable export, and verified Unicode
+  text, embedded screenshots, A4 pagination, and evidence links. Evidence:
+  557/557 checks; typecheck/build passed; focused PDF tests 7/7 in Chromium and
+  7/7 in WebKit; review 9.5/10 ([Phase 03](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md), [review](../plans/reports/code-review-260926-1707-phase-03-verification-and-documentation.md)).
 
 ### 0.1.0 (development) — 2026-09-25
 

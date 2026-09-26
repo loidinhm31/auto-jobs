@@ -8,15 +8,15 @@ Completed initiative: [Persistent project report management](../plans/260924-201
 
 Plan: [Final-report PDF export](../plans/260925-1729-final-report-pdf-export/plan.md)
 
-**Overall status:** **In Progress** · **67%** (2 of 3 phases DONE; Phases 01 and 02 completed 2026-09-26).
+**Overall status:** **DONE** · **100%** (all 3 phases DONE; completed 2026-09-26).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
 |---|---|---:|---:|---|---|
 | 01 — Shared control report viewer | **DONE** | **100%** | — | 2026-09-26 | Delivered the control-only React report viewer and shared report-body rendering. Verification: 35 focused unit tests; typecheck/build and existing Control/report-management E2E suites (20 each) passed ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md), 9.0/10). |
 | 02 — Real-text browser PDF | **DONE** | **100%** | — | 2026-09-26 | Implementation and review complete; 499/499 unit tests passed, Cycle 2 review 9.5/10 ([phase](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md), [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). |
-| 03 — Verification and documentation | Pending | 0% | — | — | [PDF text/image/link/browser proof](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md) |
+| 03 — Verification and documentation | **DONE** | **100%** | — | 2026-09-26 | End-to-end PDF export verified across Chromium and WebKit; selectable Unicode text (Vietnamese diacritics), embedded screenshots, portrait A4 layout, and clickable URI links. Total 557/557 tests passed; review scored 9.5/10 ([phase](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md), [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1707-phase-03-verification-and-documentation.md)). |
 
-Phase 01 review recorded two non-blocking warnings: a case-only duplicate page filename and global `report.css` selectors that may affect control-bar styling. Phase 02 browser PDF implementation and code review are complete; end-to-end PDF/browser verification remains pending in Phase 03.
+All three phases are complete: control-only React viewer, semantic jsPDF generation with local fonts and links, and comprehensive Chromium/WebKit test verification.
 
 ## Individual report run deletion
 

@@ -19,7 +19,7 @@ test-only Playwright routes; unmatched network requests are blocked.
 
 See [system architecture](./system-architecture.md) for the component view; [report pipeline](./report-pipeline.md) covers
 fixtures, aggregate/deletion, and the final-report viewer. [Phase 01](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md) documents the control-only React view.
-[PDF export](./report-pipeline.md#client-side-pdf-export) is browser-side jsPDF/AutoTable composition from the validated React report DOM; persisted static report output remains unchanged.
+[PDF export](./report-pipeline.md#client-side-pdf-export) shipped and passed Phase 03 verification on 2026-09-26: browser-side jsPDF/AutoTable composition from the validated React report DOM; persisted static report output remains unchanged.
 See [multi-project configuration](./multi-project-configuration.md) for field contracts and [release gates](./release-gates.md) for validation.
 
 ## Scope and operating modes
