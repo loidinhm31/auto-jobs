@@ -40,6 +40,11 @@ export function DashboardPage() {
     updateProject,
     setRawJsonString,
     showBanner,
+    replacementRevision,
+    createGroup,
+    renameGroup,
+    deleteGroup,
+    setGroupMembership,
   } = useConfigManager();
 
   const {
@@ -99,6 +104,7 @@ export function DashboardPage() {
           ? currentDoc.defaults.waitTimeoutMs
           : undefined,
       enabled: p.enabled !== false,
+      groupId: p.groupId,
     }));
   }, [currentDoc]);
 
@@ -169,9 +175,15 @@ export function DashboardPage() {
       projectsSection={
         <ProjectsGrid
           projects={projectsData}
-          isDirty={isDirty}
+          groups={currentDoc?.projectGroups ?? []}
+          disabled={isConfigLoading || !currentDoc}
+          replacementRevision={replacementRevision}
           onToggleEnabled={handleToggleEnabled}
           onChangeRunType={handleChangeRunType}
+          onCreateGroup={createGroup}
+          onRenameGroup={renameGroup}
+          onDeleteGroup={deleteGroup}
+          onSetGroupMembership={setGroupMembership}
         />
       }
       formBuilderSection={

@@ -61,6 +61,7 @@ export interface ProjectCardData {
     usernameVariable: string;
     passwordVariable: string;
   };
+  groupId?: string | undefined;
 }
 
 export interface RunStateData {

@@ -10,3 +10,5 @@ export * from './RunStatusCard.js';
 export * from './DeleteReportsConfirmationDialog.js';
 export * from './DeleteRunConfirmationDialog.js';
 export * from './ProjectReportHistoryCard.js';
+export * from './project-group-column.js';
+export * from './project-group-editor-dialog.js';

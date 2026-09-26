@@ -8,12 +8,12 @@ Completed initiative: [Persistent project report management](../plans/260924-201
 
 Plan: [Control page project groups and cloning](../plans/260926-2222-control-project-groups-and-cloning/plan.md)
 
-**Overall status:** **In progress** · **25%** (1 of 4 phases complete by phase count; Phase 01 completed 2026-09-26T23:40:20+07:00).
+**Overall status:** **In progress** · **50%** (2 of 4 phases complete by phase count; Phase 02 completed 2026-09-27T00:45:00+07:00).
 
 | Phase | Status | Progress | Completed | Evidence/detail |
 |---|---|---:|---|---|
 | 01 — Group schema and document state | **DONE** | **100%** | 2026-09-26T23:40:20+07:00 | Delivered optional group metadata validation, immutable membership transitions, and document replacement lifecycle. Verification: 39 focused and 544 full unit tests; typecheck/build passed. API roundtrip and browser integration remain in Phase 04 ([phase](../plans/260926-2222-control-project-groups-and-cloning/phase-01-group-schema-and-document-state.md), [tests](../plans/reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md), [review](../plans/reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md), 9.5/10). |
-| 02 — Compact grouped project board | Pending | 0% | — | Depends on Phase 01. |
+| 02 — Compact grouped project board | **DONE** | **100%** | 2026-09-27T00:45:00+07:00 | Delivered compact project cards, grouped board columns with contained horizontal and per-group vertical scrolling, New Group, Manage Projects checklist, Rename, and Delete flows. Verification: 13 focused unit tests, 557 full unit suite, 22 Control E2E tests passing across Chromium and WebKit; Cycle 2 review 9.5/10 ([phase](../plans/260926-2222-control-project-groups-and-cloning/phase-02-compact-grouped-project-board.md)). |
 | 03 — Clone selected project draft | Pending | 0% | — | Depends on Phase 01. |
 | 04 — Behavioral verification and documentation | Pending | 0% | — | Depends on Phases 01–03; includes API roundtrip and real-browser proof. |
 

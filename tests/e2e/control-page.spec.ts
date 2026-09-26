@@ -982,4 +982,87 @@ test.describe('Control Page Dashboard E2E', () => {
     expect(await resultBox.locator('text=Build Gamma Disabled').count()).toBe(0);
     expect(await resultBox.locator('text=Report Delta Service').count()).toBe(0);
   });
+
+  test('Phase 02: supports grouped project board, group creation, project assignment, rename, delete, and persistence', async ({ page }) => {
+    await page.goto(serverUrl);
+    await expect(page).toHaveTitle('Jenkins Control Dashboard');
+
+    // 1. Board structure: Ungrouped column is rendered by default
+    const board = page.locator('#projects-list');
+    await expect(board).toBeVisible();
+    await expect(board).toHaveAttribute('role', 'region');
+    await expect(board).toHaveAttribute('aria-label', 'Project groups board');
+
+    const ungroupedCol = page.locator('#group-column-ungrouped');
+    await expect(ungroupedCol).toBeVisible();
+    await expect(ungroupedCol.locator('.project-card')).toHaveCount(2);
+
+    // 2. Compact cards inside column
+    const firstCard = ungroupedCol.locator('.project-card').first();
+    await expect(firstCard.locator('.project-card-header')).toBeVisible();
+    await expect(firstCard.getByLabel(/Project ID:/i)).toBeVisible();
+
+    // 3. New Group creation flow
+    const newGroupBtn = page.locator('#btn-new-group');
+    await expect(newGroupBtn).toBeVisible();
+    await newGroupBtn.click();
+
+    const dialog = page.locator('#project-group-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'New Project Group' })).toBeVisible();
+
+    const groupNameInput = dialog.locator('input[type="text"]');
+    await groupNameInput.fill('Platform Core');
+    await dialog.locator('#btn-confirm-create-group').click();
+
+    // Immediately transitions to Manage Projects checklist
+    await expect(dialog.getByRole('heading', { name: /Manage Projects: Platform Core/i })).toBeVisible();
+    const firstProjectCheckbox = dialog.locator('input[type="checkbox"]').first();
+    await firstProjectCheckbox.check();
+    await dialog.locator('#btn-apply-manage-projects').click();
+    await expect(dialog).toBeHidden();
+
+    // Verify columns on board
+    const newCol = page.locator('#group-column-group');
+    await expect(newCol).toBeVisible();
+    await expect(newCol.getByRole('heading', { name: 'Platform Core' })).toBeVisible();
+    await expect(newCol.locator('.project-card')).toHaveCount(1);
+    await expect(ungroupedCol.locator('.project-card')).toHaveCount(1);
+
+    // 4. Rename group flow
+    await newCol.locator('.btn-rename-group').click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Rename Group' })).toBeVisible();
+    const renameInput = dialog.locator('input[type="text"]');
+    await renameInput.fill('Platform Services');
+    await dialog.locator('#btn-confirm-rename-group').click();
+    await expect(dialog).toBeHidden();
+    await expect(newCol.getByRole('heading', { name: 'Platform Services' })).toBeVisible();
+
+    // 5. Persistence across Save and Reload
+    const saveBtn = page.locator('#btn-save');
+    await expect(saveBtn).toBeEnabled();
+    await saveBtn.click();
+    await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
+
+    const reloadBtn = page.locator('#btn-reload');
+    await reloadBtn.click();
+    await expect(newCol.getByRole('heading', { name: 'Platform Services' })).toBeVisible();
+    await expect(newCol.locator('.project-card')).toHaveCount(1);
+
+    // 6. Delete group moves project back to Ungrouped
+    await newCol.locator('.btn-delete-group').click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: /Delete Group: Platform Services/i })).toBeVisible();
+    await dialog.locator('#btn-confirm-delete-group').click();
+    await expect(dialog).toBeHidden();
+
+    // Deleted column gone; Ungrouped has both projects again
+    await expect(newCol).toBeHidden();
+    await expect(ungroupedCol.locator('.project-card')).toHaveCount(2);
+
+    // Save final state
+    await saveBtn.click();
+    await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
+  });
 });

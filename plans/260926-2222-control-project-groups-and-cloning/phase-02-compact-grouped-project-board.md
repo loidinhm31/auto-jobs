@@ -6,7 +6,7 @@
 
 ## Overview
 
-Date: 2026-09-26. Priority P2. Implementation pending; review pending. Compact cards, editable membership, nested scroll layout.
+Date: 2026-09-26. Priority P2. Implementation complete; review complete. Compact cards, editable membership, nested scroll layout.
 
 ## Key Insights
 
@@ -49,10 +49,10 @@ No new export barrel required for private components. Reuse existing organisms e
 
 ## Todo list
 
-- [ ] Compact cards preserve behavior.
-- [ ] Group columns and contained two-axis scrolling.
-- [ ] Create/select/move/ungroup/rename/delete flows.
-- [ ] Replacement reset and keyboard interaction.
+- [x] Compact cards preserve behavior.
+- [x] Group columns and contained two-axis scrolling.
+- [x] Create/select/move/ungroup/rename/delete flows.
+- [x] Replacement reset and keyboard interaction.
 
 ## Success Criteria
 

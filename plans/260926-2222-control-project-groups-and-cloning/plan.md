@@ -27,7 +27,7 @@ User confirmed:
 | Phase | Status | Progress | Dependency | Detail |
 |---|---|---|---|---|
 | 01 Shared group schema and document lifecycle | DONE | 100% | None | Completed 2026-09-26T23:40:20+07:00; [Phase 01](./phase-01-group-schema-and-document-state.md) |
-| 02 Compact grouped project board | Pending | 0% | 01 | [Phase 02](./phase-02-compact-grouped-project-board.md) |
+| 02 Compact grouped project board | DONE | 100% | 01 | Completed 2026-09-27T00:55:00+07:00; [Phase 02](./phase-02-compact-grouped-project-board.md) |
 | 03 Clone selected project draft | Pending | 0% | 01 | [Phase 03](./phase-03-clone-project-draft.md) |
 | 04 Behavioral verification and documentation | Pending | 0% | 01–03 | [Phase 04](./phase-04-verification-and-documentation.md) |
 Phases 02/03 share DashboardPage and editor wiring: integrate sequentially or assign a single owner. Do not have concurrent agents edit those files. Check references through LSP before exported contract changes; migrate all callers in the same cutover.
