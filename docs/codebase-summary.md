@@ -89,6 +89,14 @@ browser PDF export.
   metadata remains outside normalized execution projects, and
   `replacementRevision` changes only on successful document replacement or
   valid raw-JSON Apply, not on edits or Save acknowledgement.
+- Project draft cloning (Phase 03): pure utility `cloneProjectDraft` in
+  `src/reporting/control-page/utils/clone-project-draft.ts` deep-clones raw
+  project inputs (`structuredClone`), generates collision-free bounded IDs
+  (`<base>-copy[-N]`, max 63 chars) and bounded names (` (copy)`, max 200 chars),
+  sets `enabled: false`, and deletes `groupId` so the clone begins as Ungrouped.
+  `ConfigFormBuilder` exposes Clone selected project into the existing local draft
+  editing and validation flow; `replacementRevision` resets pending drafts and
+  errors on document replacement or raw Apply.
 - Stage View completion monitoring: optional auto-build wait (default `true`),
   run and stage parsing, live progress logs, and build-number/result/stage data
   for the Control Page.
@@ -168,6 +176,7 @@ browser PDF export.
 | `src/reporting/control-page/utils/export-report-pdf.ts`, `report-pdf-content.ts`, `report-pdf-layout.ts`, `report-pdf-table-renderer.ts` | Semantic DOM extraction and browser-side jsPDF/AutoTable composition with pagination, links, and images. |
 | `src/reporting/control-page/utils/report-pdf-fonts.ts`, `report-pdf-image-loader.ts`, `src/reporting/control-page/assets/fonts/` | Register embedded OFL Noto Sans regular/bold fonts and load safe report evidence images. |
 | `tests/unit/control-final-report-pdf-export.spec.ts`, `control-final-report-pdf-scenarios.spec.ts` | Real Control-server downloads; verify Unicode text, embedded images, PDF links/page boxes, pagination, mobile viewport, debounce, missing assets, and offline integrity. |
+| `src/reporting/control-page/utils/clone-project-draft.ts` | Deep-clones raw project input, generates suffix-aware bounded ID and name, resets `enabled: false`, and strips `groupId`. |
 | `tests/unit/helpers/pdf-parser.ts` | Inflate FlateDecode streams and decode ToUnicode maps to inspect text, page boxes, image dimensions, and URI annotations in memory. |
 | `tests/unit/helpers/report-pdf-fixture-constants.ts`, `report-pdf-fixtures.ts` | Build isolated report roots with source URLs, screenshots, Unicode content, findings, and scenario options. |
 | `src/reporting/control-page/pages/ReportManagementPage.tsx` | Loads the aggregate independently of active configuration and composes confirmed project/run deletion flows. |
@@ -389,12 +398,22 @@ The Control Dashboard UI uses Atomic Design principles to isolate visual primiti
 ### Control Dashboard config form builder (integrated; Active Config Phase 02–04)
 
 `ConfigFormBuilder` is a document-controlled organism that composes the
-`ConfigProjectEditor` and `ConfigDefaultsEditor` molecules. The project editor
+`ConfigProjectEditor` and `ConfigDefaultsEditor` molecules, with support for
+adding new projects and cloning existing ones via `cloneProjectDraft`. The project editor
 handles project fields and credential environment-variable references, with
 project references inheriting defaults when overrides are absent. The defaults
 editor handles timeout, browser, artifact directory, and default credential
 references. Credential controls accept variable names only, never secret
 values.
+
+Project cloning duplicates the selected project's raw `ProjectConfigInput` with
+`structuredClone` without object aliasing or default resolution. It applies
+suffix-aware bounding to IDs (max 63 characters, `<base>-copy[-N]`) and names
+(max 200 characters, ` (copy)`), defaults `enabled: false`, strips `groupId` to
+start Ungrouped, displays clone source context, and routes through the existing
+draft validation and cancellation lifecycle. Pending drafts and validation errors
+reset on `replacementRevision` increments (file load/switch or raw Apply), but
+persist across routine edits and saves.
 
 For auto-build projects, `ConfigProjectEditor` persists optional
 `waitForCompletion` settings; no per-run modal override remains. The action bar
@@ -502,12 +521,13 @@ set `Cache-Control: no-store`.
 | `src/reporting/control-page/utils/cn.ts` | Merges Tailwind CSS and conditional classes using `clsx` and `twMerge`. |
 | `src/reporting/control-page/utils/discoverCredentialKeys.ts` | Discovers required project credential variables with defaults and fallback resolution. |
 | `src/reporting/control-page/utils/config-selection.ts` | Reads, resolves, and persists the active configuration preference in `localStorage` and the `config` URL parameter. |
+| `src/reporting/control-page/utils/clone-project-draft.ts` | Pure clone utility: deep copies raw project input, applies suffix-aware bounding, sets `enabled: false`, and strips `groupId`. |
 | `src/reporting/control-page/hooks/` | Headless React hooks: `useControlApi`, `useConfigManager` (active configuration plus API/ETag flow), `useConfigDocumentEditor` (document/raw-JSON editing, validation, and replacement revision), `useCredentialsManager`, `useBrowserSettings`, and `useRunPoller`. |
 | `src/reporting/control-page/hooks/config-document-transitions.ts` | Immutable add, update, remove, defaults, and report-worker count transitions for the editor document. |
 | `src/reporting/control-page/hooks/project-group-transitions.ts` | Pure immutable create, rename, delete, and membership transitions; preserves project order and unrelated fields. |
 | `src/reporting/control-page/components/atoms/` | Atomic UI primitives: `Badge`, `Button`, `Input`, `Select`, `StatusBanner`, and `LoadingIndicator` with forwardRef support and variant contracts. |
 | `src/reporting/control-page/components/molecules/` | Compound molecules: `CredentialRow`, `BrowserSettingRow`, `ConfigSelectorBar`, `ConfigProjectEditor`, `ConfigDefaultsEditor`, `LogViewer`, `RunResultBox`, and `BuildProjectOutcomeRow`. |
-| `src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx` | Integrated config-form organism mounted by `DashboardPage` beside `RawJsonSection`; shares document state with the raw editor. |
+| `src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx` | Integrated config-form organism mounted by `DashboardPage` beside `RawJsonSection`; shares document state with the raw editor and supports project draft creation and cloning. |
 | `vite.control.config.ts` | Vite configuration for Control Dashboard: React plugin, Tailwind CSS, single-bundle outputs, and CSP-compliant asset emission. |
 | `scripts/copy-report-assets.mjs` | Asset copy script: stages `src/reporting/report.css` into `.runner-build/reporting/`. |
 | `src/reporting/report-server-run-manager.ts` | Single-active control-run lifecycle and optional SecretStore dependency. |
@@ -526,6 +546,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, ETag-checked report worker count, and auto-build isolation. |
 | `tests/unit/control-hooks-and-types.spec.ts` | Hook/API lifecycles, active-config persistence, and document-level report-worker transition coverage. |
 | `tests/unit/project-group-validation.spec.ts`, `project-group-transitions.spec.ts`, `config-document-editor-groups.spec.ts` | Group schema/reference boundaries, immutable membership transitions, and document replacement versus edit/Save revision behavior. |
+| `tests/unit/clone-project-draft.spec.ts` | Project draft cloning, suffix-aware bounded ID and name generation, nested data independence, capacity guards, and replacementRevision reset. |
 | `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts for the shared Workers/action bar and ordered multi-project plus scalar-fallback result presentation. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |

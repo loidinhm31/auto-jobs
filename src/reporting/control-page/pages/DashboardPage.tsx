@@ -190,6 +190,8 @@ export function DashboardPage() {
         <ConfigFormBuilder
           document={currentDoc}
           validationErrors={validationErrors}
+          isLoading={isConfigLoading}
+          replacementRevision={replacementRevision}
           onAddProject={addProject}
           onUpdateProject={updateProjectAt}
           onRemoveProject={removeProjectAt}

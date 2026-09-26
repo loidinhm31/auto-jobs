@@ -1,29 +1,37 @@
 import { useEffect, useState } from 'react';
+import { ConfigError } from '../../../../config-errors.js';
+import { validateProject } from '../../../../config/project-config-project-validation.js';
+import {
+  PROJECT_CONFIG_LIMITS,
+  assertProjectConfigDocument,
+} from '../../../../config/project-config-schema.js';
 import type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
   ProjectConfigInput,
 } from '../../types/index.js';
+import { cloneProjectDraft } from '../../utils/clone-project-draft.js';
 import { Button } from '../atoms/Button.js';
 import { Select } from '../atoms/Select.js';
 import { ConfigDefaultsEditor } from '../molecules/ConfigDefaultsEditor.js';
 import { ConfigProjectEditor } from '../molecules/ConfigProjectEditor.js';
-import { validateProject } from '../../../../config/project-config-project-validation.js';
-import { PROJECT_CONFIG_LIMITS } from '../../../../config/project-config-schema.js';
 
 export interface ConfigFormBuilderProps {
   document: ProjectConfigDocumentV1 | null;
   validationErrors: readonly string[];
+  isLoading?: boolean;
+  replacementRevision?: number;
   onAddProject(project?: ProjectConfigInput): string | null;
   onUpdateProject(projectIndex: number, update: (previous: ProjectConfigInput) => ProjectConfigInput): void;
   onRemoveProject(projectIndex: number): boolean;
   onUpdateDefaults(update: (previous: ProjectConfigDefaults) => ProjectConfigDefaults): void;
 }
 
-
 export function ConfigFormBuilder({
   document,
   validationErrors,
+  isLoading = false,
+  replacementRevision = 0,
   onAddProject,
   onUpdateProject,
   onRemoveProject,
@@ -35,16 +43,27 @@ export function ConfigFormBuilder({
   const [removeBlocked, setRemoveBlocked] = useState(false);
   const [isAddingProject, setIsAddingProject] = useState(false);
   const [newProjectDraft, setNewProjectDraft] = useState<ProjectConfigInput | null>(null);
+  const [cloneSourceId, setCloneSourceId] = useState<string | null>(null);
   const [draftValidationErrors, setDraftValidationErrors] = useState<string[]>([]);
   const project = projects[selectedIndex];
+  const isAtCapacity = projects.length >= PROJECT_CONFIG_LIMITS.maxProjects;
+
+  useEffect(() => {
+    setIsAddingProject(false);
+    setNewProjectDraft(null);
+    setCloneSourceId(null);
+    setDraftValidationErrors([]);
+    setAddBlocked(false);
+    setSelectedIndex(0);
+  }, [replacementRevision]);
 
   useEffect(() => {
     if (selectedIndex >= projects.length) setSelectedIndex(Math.max(0, projects.length - 1));
   }, [projects.length, selectedIndex]);
 
   const handleStartAddProject = () => {
-    if (!document) return;
-    if (projects.length >= PROJECT_CONFIG_LIMITS.maxProjects) {
+    if (!document || isLoading) return;
+    if (isAtCapacity) {
       setAddBlocked(true);
       return;
     }
@@ -60,18 +79,56 @@ export function ConfigFormBuilder({
       runType: 'report',
       enabled: true,
     });
+    setCloneSourceId(null);
     setIsAddingProject(true);
     setDraftValidationErrors([]);
     setAddBlocked(false);
   };
 
+  const handleStartCloneProject = () => {
+    if (!document || !project || isLoading) return;
+    if (isAtCapacity) {
+      setAddBlocked(true);
+      return;
+    }
+    const cloned = cloneProjectDraft(project, projects);
+    setNewProjectDraft(cloned);
+    setCloneSourceId(project.id);
+    setIsAddingProject(true);
+    setDraftValidationErrors([]);
+    setAddBlocked(false);
+  };
+
+  const validateDraft = (draft: ProjectConfigInput): string[] => {
+    const issues: string[] = [];
+    if (projects.length >= PROJECT_CONFIG_LIMITS.maxProjects) {
+      issues.push(`Configuration cannot exceed ${PROJECT_CONFIG_LIMITS.maxProjects} projects.`);
+    }
+    validateProject(draft, projects.length, issues);
+    if (projects.some((p) => p.id === draft.id)) {
+      issues.push(`projects[${projects.length}].id must be unique; '${draft.id}' is already in use`);
+    }
+    if (issues.length === 0 && document) {
+      const candidateDoc: ProjectConfigDocumentV1 = {
+        ...document,
+        projects: [...document.projects, draft],
+      };
+      try {
+        assertProjectConfigDocument(candidateDoc);
+      } catch (error) {
+        if (error instanceof ConfigError) {
+          issues.push(...error.issues);
+        } else {
+          issues.push(error instanceof Error ? error.message : String(error));
+        }
+      }
+    }
+    return issues;
+  };
+
   const handleSaveNewProject = () => {
     if (!newProjectDraft || !document) return;
-    const issues: string[] = [];
-    validateProject(newProjectDraft, projects.length, issues);
-    if (projects.some((p) => p.id === newProjectDraft.id)) {
-      issues.push(`projects[${projects.length}].id must be unique; '${newProjectDraft.id}' is already in use`);
-    }
+    const issues = validateDraft(newProjectDraft);
     if (issues.length > 0) {
       setDraftValidationErrors(issues);
       return;
@@ -80,6 +137,7 @@ export function ConfigFormBuilder({
     if (id) {
       setIsAddingProject(false);
       setNewProjectDraft(null);
+      setCloneSourceId(null);
       setDraftValidationErrors([]);
       setSelectedIndex(projects.length);
     } else {
@@ -90,6 +148,7 @@ export function ConfigFormBuilder({
   const handleCancelNewProject = () => {
     setIsAddingProject(false);
     setNewProjectDraft(null);
+    setCloneSourceId(null);
     setDraftValidationErrors([]);
   };
 
@@ -108,15 +167,33 @@ export function ConfigFormBuilder({
           <h2 id="config-form-title" className="text-lg font-bold text-slate-900">Project configuration</h2>
           <p className="text-sm text-slate-600">Edit project settings and environment-variable references.</p>
         </div>
-        <Button disabled={!document || isAddingProject} onClick={handleStartAddProject}>
-          Add New Project
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            id="btn-clone-project"
+            disabled={!document || !project || isAddingProject || isAtCapacity || isLoading}
+            onClick={handleStartCloneProject}
+          >
+            Clone selected project
+          </Button>
+          <Button
+            id="btn-add-project"
+            disabled={!document || isAddingProject || isAtCapacity || isLoading}
+            onClick={handleStartAddProject}
+          >
+            Add New Project
+          </Button>
+        </div>
       </header>
       {addBlocked && <p className="text-sm text-red-700" role="status">A project could not be added to this configuration.</p>}
       {isAddingProject && (
         <div className="rounded border border-sky-300 bg-sky-50 p-3 text-sm text-sky-900" role="status">
-          <p className="font-semibold">New project draft</p>
-          <p className="text-xs text-sky-700">Enter project details below and click &quot;Save Project&quot; to apply it to the configuration.</p>
+          <p className="font-semibold">{cloneSourceId ? `Cloned project draft (from '${cloneSourceId}')` : 'New project draft'}</p>
+          <p className="text-xs text-sky-700">
+            {cloneSourceId
+              ? `Cloned from '${cloneSourceId}'. Disabled by default with shared environment-variable credential references and no group assignment. Review copied job URL and settings before enabling.`
+              : 'Enter project details below and click "Save Project" to apply it to the configuration.'}
+          </p>
         </div>
       )}
       {!document && <p className="text-sm text-slate-600">Load a configuration before adding or editing projects.</p>}
@@ -138,6 +215,7 @@ export function ConfigFormBuilder({
               if (isAddingProject) {
                 setIsAddingProject(false);
                 setNewProjectDraft(null);
+                setCloneSourceId(null);
                 setDraftValidationErrors([]);
               }
               setSelectedIndex(Number(event.target.value));
@@ -192,12 +270,7 @@ export function ConfigFormBuilder({
                   if (!previous) return previous;
                   const next = update(previous);
                   if (draftValidationErrors.length > 0) {
-                    const issues: string[] = [];
-                    validateProject(next, projects.length, issues);
-                    if (projects.some((p) => p.id === next.id)) {
-                      issues.push(`projects[${projects.length}].id must be unique; '${next.id}' is already in use`);
-                    }
-                    setDraftValidationErrors(issues);
+                    setDraftValidationErrors(validateDraft(next));
                   }
                   return next;
                 })

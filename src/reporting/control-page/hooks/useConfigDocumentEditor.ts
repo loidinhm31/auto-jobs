@@ -1,6 +1,9 @@
 import { useCallback, useState } from 'react';
 import { ConfigError } from '../../../config-errors.js';
-import { assertProjectConfigDocument } from '../../../config/project-config-schema.js';
+import {
+  PROJECT_CONFIG_LIMITS,
+  assertProjectConfigDocument,
+} from '../../../config/project-config-schema.js';
 import {
   addProjectDraft,
   removeProjectDocumentAt,
@@ -128,7 +131,8 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
   const addProject = useCallback((projectInput?: ProjectConfigInput): string | null => {
     if (!currentDoc) return null;
     if (projectInput) {
-      if (currentDoc.projects.length >= 50) return null;
+      if (currentDoc.projects.length >= PROJECT_CONFIG_LIMITS.maxProjects) return null;
+      if (currentDoc.projects.some((project) => project.id === projectInput.id)) return null;
       const nextDoc: ProjectConfigDocumentV1 = {
         ...currentDoc,
         projects: [...currentDoc.projects, projectInput],

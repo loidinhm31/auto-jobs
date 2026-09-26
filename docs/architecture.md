@@ -131,7 +131,7 @@ flowchart LR
 - `src/reporting/control-page/` contains the Control Dashboard frontend sources:
   server data contracts (`types/index.ts`), shared UI component prop interfaces
   (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
-  Tailwind class merge utility ([`utils/cn.ts`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4)),
+  project clone utility (`utils/clone-project-draft.ts`), Tailwind class merge utility ([`utils/cn.ts`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4)),
   headless React hooks (`hooks/useControlApi.ts`, `hooks/useConfigManager.ts`,
   `hooks/useConfigDocumentEditor.ts` for document/raw-JSON editing and
   validation, `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`,
@@ -158,6 +158,7 @@ flowchart LR
   [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx),
   [`RunStatusCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RunStatusCard.tsx),
   [`RawJsonSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RawJsonSection.tsx),
+  [`ConfigFormBuilder`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx),
   [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx),
   [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx)),
   layout templates ([`components/templates/DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)),
@@ -715,6 +716,14 @@ projects; API callers may still target one ID. The saved count bounds both
 pools, preserves configuration order, and the batch succeeds only if every
 outcome has `exitCode === 0`.
 
+### Project draft cloning design
+
+`ConfigFormBuilder` provides cloning of the selected applied project via pure utility `cloneProjectDraft` (`src/reporting/control-page/utils/clone-project-draft.ts`):
+- **Data independence**: Uses `structuredClone(source)` on the raw `ProjectConfigInput` once on clone action, preserving explicit URLs, selectors, timeouts, credentials env-var references, and omitted overrides without object aliasing or default resolution.
+- **Suffix-aware bounding**: Truncates base source ID to fit within `MAX_PROJECT_ID_LENGTH` (63 characters) before appending `-copy` (or `-copy-${counter}`) to guarantee uniqueness against existing project IDs. Cloned name appends ` (copy)` bounded to `PROJECT_CONFIG_LIMITS.maxNameLength` (200 characters).
+- **Disabled and ungrouped status**: Cloned projects default to `enabled: false` to guard against accidental execution and delete `groupId` so the clone begins in the `Ungrouped` group.
+- **Draft lifecycle and replacementRevision reset**: The clone enters the existing new-project draft form with visible source context and review guidance. Cancelling leaves document and dirty state untouched. Pending drafts, validation errors, and selection index reset only when `replacementRevision` changes on successful document load, config switch, or valid raw-JSON Apply; routine group edits and global Save do not reset the draft.
+
 ## Test and release boundary
 
 The deterministic order is `npm ci`, `npm run install:browsers`,
@@ -778,22 +787,5 @@ expects zero violations at both sizes, and verifies no horizontal overflow.
 Template Servers, template-config loading, production report and auto-build
 flows, and Control Page rendering without CORS/CSP console errors.
 
-The 2026-09-23 Active Config Phase 04 audit recorded
-`npm run test:release` at 371/371 (100%) with typecheck/build passing and code
-review approval at 10/10. This dated snapshot predates bounded-report Phase 03
-and is not evidence for its verification results. Deterministic fixtures do
-not contact live Jenkins or vendor services.
-
-Phase 05 SecretStore/API unit additions are
-`tests/unit/control-secret-store.spec.ts` and
-`tests/unit/control-secrets-api.spec.ts`. The first has seven isolated
-lifecycle checks; the second has ten operation checks. The security suite
-continues to cover plaintext redaction, Host/Origin/Fetch Metadata/CSRF gates,
-bounded JSON validation, content-type handling, unsupported methods, and
-store-availability errors.
-
-Phase 06 legacy cleanup removed all legacy control page files
-(`control-page.js`, `control-page.html`, `control-page.css`). Current release
-validation is recorded above; no live Jenkins controller or vendor service is
-contacted by the deterministic suites.
+The Active Config Phase 04 audit passed `npm run test:release` (371/371, 10/10 review). Phase 05 additions in `tests/unit/control-secret-store.spec.ts` (7 checks) and `control-secrets-api.spec.ts` (10 checks) cover SecretStore lifecycle, API operations, and security gates (redaction, Host/Origin/CSRF, bounded JSON). Phase 06 legacy cleanup removed all legacy control page files (`control-page.js`, `control-page.html`, `control-page.css`). Project cloning Phase 03 unit tests in `tests/unit/clone-project-draft.spec.ts` verify bounded ID/name generation, nested data independence, capacity guards, and replacement revision reset. Deterministic suites contact no live Jenkins or vendor services.
 

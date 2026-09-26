@@ -6,7 +6,7 @@
 
 ## Overview
 
-Date: 2026-09-26. Priority P2. Implementation pending; review pending. Prefill the existing new-project editor safely from a selected project.
+Date: 2026-09-27. Priority P2. Status: DONE. Completed: 2026-09-27T01:55:00+07:00. Implementation complete; review complete. Prefill the existing new-project editor safely from a selected project.
 
 ## Key Insights
 
@@ -47,10 +47,10 @@ Inspect/reuse without new parallel convention:
 
 ## Todo list
 
-- [ ] Clone helper and suffix-aware bounded identity.
-- [ ] Existing draft form integration and review messaging.
-- [ ] Latest-state commit guards and cancellation/replacement behavior.
-- [ ] Clone/source independence and safety cases prepared for Phase 04.
+- [x] Clone helper and suffix-aware bounded identity.
+- [x] Existing draft form integration and review messaging.
+- [x] Latest-state commit guards and cancellation/replacement behavior.
+- [x] Clone/source independence and safety cases prepared for Phase 04.
 
 ## Success Criteria
 
