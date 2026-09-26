@@ -25,6 +25,9 @@ it is not a replacement for schema or security validation.
 | Area | Standard boundary |
 | --- | --- |
 | `src/config/` | Parse, validate, normalize, and select project configuration. No browser side effects. |
+| `src/config/project-group-validation.ts` | Shared browser/server validation for optional group definitions, safe identities, and project references; no execution side effects. |
+| `src/reporting/control-page/hooks/project-group-transitions.ts` | Pure immutable group create/rename/delete/membership transitions on the saved editor document. |
+| `src/reporting/control-page/hooks/useConfigDocumentEditor.ts`, `useConfigManager.ts` | Keep structured edits/raw JSON/validation/dirty state together; distinguish document replacement from Save acknowledgement while retaining the ETag flow. |
 | `src/browser-launcher.ts` | Shared browser selection and environment-derived launch options. |
 | `src/jenkins/` | Jenkins authentication, exact URL identity, scoped locators, and guarded build submission. |
 | `src/project/` | Report and auto-build workflow orchestration, run state, outcomes, and capture. |
@@ -128,6 +131,15 @@ Compiler settings in `tsconfig.json` are the source of truth:
   `runAutoBuildProject` or `executeAutoBuildWorkerPool` explicitly.
 - Preserve one configured `jobUrl` as the sole Jenkins job/branch identity.
   Do not add a second branch field or derive a target from UI text.
+- Treat `projectGroups` and project `groupId` as optional schema-v1 presentation
+  metadata: validate them at the shared document boundary, keep membership on
+  projects, and exclude them from normalized execution types and defaults.
+- Implement group mutations as immutable, pure transitions. Preserve project
+  order and unrelated fields; deleting a group only removes that membership,
+  and no-op/invalid-target changes must not mark the document dirty.
+- Use `replacementRevision` only for successful document replacement or valid
+  raw-JSON Apply. Ordinary edits and Save acknowledgements do not reset
+  transient editor state.
 
 ## Jenkins and browser safety
 
@@ -263,6 +275,10 @@ Tests must defend observable behavior and fail on plausible regressions:
   non-JSON content types, invalid keys/values/bodies, unsupported methods, and
   the unavailable-store response. Use the real loopback server plus a direct
   handler test only for the missing dependency boundary.
+- For project groups, cover schema limits/references, immutable membership
+  moves and deletion, project-order preservation, no-op dirty state, and the
+  distinction between document replacement, raw Apply, and Save acknowledgement
+  in the focused group validation, transition, and editor lifecycle specs.
 - For whole-project report deletion, `tests/unit/control-reports-delete-api.spec.ts`
   covers full-tree preflight, aggregate updates, request validation, and
   removal/publication failure behavior. It also checks the report-only GET/HEAD

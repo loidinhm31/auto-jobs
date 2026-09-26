@@ -16,6 +16,7 @@ import {
 export const ROOT_KEYS: Record<string, true> = {
   schemaVersion: true,
   projects: true,
+  projectGroups: true,
   defaults: true,
   reportWorkers: true,
 };
@@ -23,6 +24,7 @@ export const ROOT_KEYS: Record<string, true> = {
 export const PROJECT_KEYS: Record<string, true> = {
   id: true,
   name: true,
+  groupId: true,
   loginUrl: true,
   jobUrl: true,
   runType: true,
@@ -163,6 +165,12 @@ export function validateProject(value: unknown, index: number, issues: string[])
   stringField(value.id, `${fieldName}.id`, issues, 63);
   if (typeof value.id === 'string' && !/^[a-z0-9][a-z0-9-]{0,62}$/u.test(value.id)) {
     issues.push(`${fieldName}.id must use lowercase safe characters`);
+  }
+  if (value.groupId !== undefined) {
+    stringField(value.groupId, `${fieldName}.groupId`, issues, 63);
+    if (typeof value.groupId === 'string' && !/^[a-z0-9][a-z0-9-]{0,62}$/u.test(value.groupId)) {
+      issues.push(`${fieldName}.groupId must use lowercase safe characters`);
+    }
   }
   stringField(value.name, `${fieldName}.name`, issues, PROJECT_CONFIG_LIMITS.maxNameLength);
   exactUrl(value.loginUrl, `${fieldName}.loginUrl`, issues);

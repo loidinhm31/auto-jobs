@@ -33,6 +33,7 @@ export type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
   ProjectConfigInput,
+  ProjectGroupInput,
   ProjectCredentialReferences,
   ProjectOriginPolicies,
   ProjectSecrets,

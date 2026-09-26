@@ -24,9 +24,15 @@ export type ProjectOriginPolicies = Partial<
   Record<ProjectOriginSourceName, readonly string[]>
 >;
 
+export interface ProjectGroupInput {
+  id: string;
+  name: string;
+}
+
 export interface ProjectConfigInput {
   id: string;
   name: string;
+  groupId?: string;
   loginUrl: string;
   jobUrl: string;
   runType?: RunType;
@@ -60,6 +66,7 @@ export interface ProjectConfigDocumentV1 {
   schemaVersion: 1;
   reportWorkers?: number;
   projects: readonly ProjectConfigInput[];
+  projectGroups?: readonly ProjectGroupInput[];
   defaults?: ProjectConfigDefaults;
 }
 

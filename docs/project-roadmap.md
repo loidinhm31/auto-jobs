@@ -4,6 +4,19 @@ Last updated: 2026-09-26
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
 
+## Control page compact project groups and cloning
+
+Plan: [Control page project groups and cloning](../plans/260926-2222-control-project-groups-and-cloning/plan.md)
+
+**Overall status:** **In progress** · **25%** (1 of 4 phases complete by phase count; Phase 01 completed 2026-09-26T23:40:20+07:00).
+
+| Phase | Status | Progress | Completed | Evidence/detail |
+|---|---|---:|---|---|
+| 01 — Group schema and document state | **DONE** | **100%** | 2026-09-26T23:40:20+07:00 | Delivered optional group metadata validation, immutable membership transitions, and document replacement lifecycle. Verification: 39 focused and 544 full unit tests; typecheck/build passed. API roundtrip and browser integration remain in Phase 04 ([phase](../plans/260926-2222-control-project-groups-and-cloning/phase-01-group-schema-and-document-state.md), [tests](../plans/reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md), [review](../plans/reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md), 9.5/10). |
+| 02 — Compact grouped project board | Pending | 0% | — | Depends on Phase 01. |
+| 03 — Clone selected project draft | Pending | 0% | — | Depends on Phase 01. |
+| 04 — Behavioral verification and documentation | Pending | 0% | — | Depends on Phases 01–03; includes API roundtrip and real-browser proof. |
+
 ## Final-report PDF export
 
 Plan: [Final-report PDF export](../plans/260925-1729-final-report-pdf-export/plan.md)
@@ -186,6 +199,7 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 
 ### 0.1.0 (development) — 2026-09-26
 
+- Completed Phase 01 (Shared group schema and document state) at 2026-09-26T23:40:20+07:00. Delivered optional config group metadata, validation, immutable membership transitions, and document replacement lifecycle. Verification: 39 focused tests, 544/544 unit tests, typecheck/build passed; review approved 9.5/10 with a medium non-blocking DRY recommendation. API roundtrip and integrated browser proof remain in Phase 04; overall initiative is 25% by phase count ([phase](../plans/260926-2222-control-project-groups-and-cloning/phase-01-group-schema-and-document-state.md), [test report](../plans/reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md), [review](../plans/reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md)).
 - Completed Phase 01 (Shared control report viewer) on 2026-09-26; delivered the control-only React final-report viewer and shared report-body rendering. Validation recorded 35 focused unit tests, typecheck/build, and existing Control/report-management E2E suites (20 each) passing; review scored 9.0/10 with no critical findings and two non-blocking warnings ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md)). The overall PDF-export initiative remains in progress; Phase 02 implementation is complete, with end-to-end PDF/browser verification pending in Phase 03.
 - Completed Phase 02 (Real-text browser PDF) on 2026-09-26: delivered semantic report composition, embedded Unicode fonts, portrait-first pagination, clickable evidence/internal links, and accessible download lifecycle. Validation: 499/499 unit tests passed; Cycle 2 code review scored 9.5/10 ([phase](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md), [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). Phase 03 end-to-end PDF/browser verification remains pending.
 

@@ -1,10 +1,10 @@
 # Codebase summary
 
 This summary is based on the refreshed `repomix-output.xml` and current
-source/configuration. It covers report/build execution, retained history,
-Control-only report management and the final-report viewer, including the
-Phase 03-verified browser PDF export. Dedicated parser/fixture tests verify
-Unicode text, embedded images, PDF links, and browser scenarios.
+source/configuration. It covers report/build execution, optional schema-v1
+project-group metadata and Control editor transitions, retained history,
+Control-only report management, and the final-report viewer with its verified
+browser PDF export.
 
 ## Repository profile
 
@@ -83,6 +83,12 @@ Unicode text, embedded images, PDF links, and browser scenarios.
   through shared editor state; dirty/raw-JSON state requires Save before
   report execution. Report POSTs send no `workerCount`; UI and CLI share schema
   validation, and the CLI document loader reads once.
+- Project groups and document lifecycle (Phase 01): optional root
+  `projectGroups` definitions and project-only `groupId` are validated at the
+  shared schema boundary; Control editor transitions are immutable. Group
+  metadata remains outside normalized execution projects, and
+  `replacementRevision` changes only on successful document replacement or
+  valid raw-JSON Apply, not on edits or Save acknowledgement.
 - Stage View completion monitoring: optional auto-build wait (default `true`),
   run and stage parsing, live progress logs, and build-number/result/stage data
   for the Control Page.
@@ -183,6 +189,19 @@ exposes the validated document with normalized projects through
 `loadProjectConfigWithDocument`; `loadProjectConfig` retains its normalized-
 array contract. The browser editor uses the same `assertProjectConfigDocument`
 schema boundary.
+
+The schema-v1 saved document also accepts optional `projectGroups` definitions
+and a single project-level `groupId`. The shared schema validator enforces
+group count/identity/name limits and valid references. These are saved-document
+presentation fields, not normalized runtime project fields; existing configs
+without them remain valid.
+
+The Control editor keeps group changes in the same document/raw-JSON/dirty/ETag
+flow as other config edits. Pure immutable transitions create, rename, delete,
+and replace membership without reordering projects or touching unrelated
+fields. `replacementRevision` identifies successful loads/replacements and
+valid raw-JSON Apply; ordinary edits and Save acknowledgements do not reset
+transient editor state.
 
 Each project requires a safe `id`, display `name`, exact credential-free
 Jenkins `loginUrl`, and exact credential-free `jobUrl` on one Jenkins origin
@@ -452,6 +471,7 @@ set `Cache-Control: no-store`.
 | --- | --- |
 | `src/config/` | Schema validation, field validation, normalization, secret resolution, and project mode selection. |
 | `src/config/project-config-schema.ts` | Browser-safe `assertProjectConfigDocument` boundary shared by runtime config loading and Control Dashboard document editing. |
+| `src/config/project-group-validation.ts` | Validates bounded optional group definitions, safe IDs/names, uniqueness, and project references in the shared document schema. |
 | `src/config-selectors.ts` | Selector kinds, parsing, and immutable selector defaults. |
 | `src/browser-launcher.ts` | Shared browser selection and environment-driven launch options. |
 | `src/jenkins/auth.ts` | Credential submission, authenticated-page validation, and exact job navigation. |
@@ -482,8 +502,9 @@ set `Cache-Control: no-store`.
 | `src/reporting/control-page/utils/cn.ts` | Merges Tailwind CSS and conditional classes using `clsx` and `twMerge`. |
 | `src/reporting/control-page/utils/discoverCredentialKeys.ts` | Discovers required project credential variables with defaults and fallback resolution. |
 | `src/reporting/control-page/utils/config-selection.ts` | Reads, resolves, and persists the active configuration preference in `localStorage` and the `config` URL parameter. |
-| `src/reporting/control-page/hooks/` | Headless React hooks: `useControlApi`, `useConfigManager` (active configuration plus API/ETag flow), `useConfigDocumentEditor` (document/raw-JSON editing and validation), `useCredentialsManager`, `useBrowserSettings`, and `useRunPoller`. |
+| `src/reporting/control-page/hooks/` | Headless React hooks: `useControlApi`, `useConfigManager` (active configuration plus API/ETag flow), `useConfigDocumentEditor` (document/raw-JSON editing, validation, and replacement revision), `useCredentialsManager`, `useBrowserSettings`, and `useRunPoller`. |
 | `src/reporting/control-page/hooks/config-document-transitions.ts` | Immutable add, update, remove, defaults, and report-worker count transitions for the editor document. |
+| `src/reporting/control-page/hooks/project-group-transitions.ts` | Pure immutable create, rename, delete, and membership transitions; preserves project order and unrelated fields. |
 | `src/reporting/control-page/components/atoms/` | Atomic UI primitives: `Badge`, `Button`, `Input`, `Select`, `StatusBanner`, and `LoadingIndicator` with forwardRef support and variant contracts. |
 | `src/reporting/control-page/components/molecules/` | Compound molecules: `CredentialRow`, `BrowserSettingRow`, `ConfigSelectorBar`, `ConfigProjectEditor`, `ConfigDefaultsEditor`, `LogViewer`, `RunResultBox`, and `BuildProjectOutcomeRow`. |
 | `src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx` | Integrated config-form organism mounted by `DashboardPage` beside `RawJsonSection`; shares document state with the raw editor. |
@@ -504,6 +525,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/bounded-auto-build-workers.spec.ts` | Verifies concurrency bounds, configuration-order outcomes, sibling failure isolation, saved-count pool dispatch, and aggregate status. |
 | `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, ETag-checked report worker count, and auto-build isolation. |
 | `tests/unit/control-hooks-and-types.spec.ts` | Hook/API lifecycles, active-config persistence, and document-level report-worker transition coverage. |
+| `tests/unit/project-group-validation.spec.ts`, `project-group-transitions.spec.ts`, `config-document-editor-groups.spec.ts` | Group schema/reference boundaries, immutable membership transitions, and document replacement versus edit/Save revision behavior. |
 | `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts for the shared Workers/action bar and ordered multi-project plus scalar-fallback result presentation. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |

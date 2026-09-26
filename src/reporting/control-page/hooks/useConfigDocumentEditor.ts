@@ -9,6 +9,12 @@ import {
   updateProjectDocumentReportWorkers,
   type ProjectUpdate,
 } from './config-document-transitions.js';
+import {
+  createProjectGroup,
+  deleteProjectGroup,
+  renameProjectGroup,
+  replaceGroupMembership,
+} from './project-group-transitions.js';
 import type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
@@ -23,8 +29,10 @@ export interface UseConfigDocumentEditorResult {
   isDirty: boolean;
   jsonValidationMsg: ValidationStatus;
   validationErrors: string[];
+  replacementRevision: number;
   setRawJsonString: (value: string) => void;
   setDocument: (document: ProjectConfigDocumentV1 | null, dirty?: boolean) => void;
+  replaceDocument: (document: ProjectConfigDocumentV1 | null) => void;
   applyRawJson: (jsonString?: string) => boolean;
   validateCurrentDocument: () => boolean;
   updateProject: (projectId: string, update: ProjectUpdate) => void;
@@ -33,6 +41,10 @@ export interface UseConfigDocumentEditorResult {
   removeProjectAt: (projectIndex: number) => boolean;
   updateDefaults: (update: (previous: ProjectConfigDefaults) => ProjectConfigDefaults) => void;
   updateReportWorkers: (count: number) => void;
+  createGroup: (name?: string) => string | null;
+  renameGroup: (groupId: string, name: string) => void;
+  deleteGroup: (groupId: string) => void;
+  setGroupMembership: (groupId: string, selectedProjectIds: readonly string[]) => void;
 }
 
 function getValidationErrors(document: ProjectConfigDocumentV1 | null): string[] {
@@ -52,6 +64,7 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
   const [isDirty, setIsDirty] = useState(false);
   const [jsonValidationMsg, setJsonValidationMsg] = useState<ValidationStatus>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [replacementRevision, setReplacementRevision] = useState(0);
 
   const setDocument = useCallback((document: ProjectConfigDocumentV1 | null, dirty = false) => {
     const errors = getValidationErrors(document);
@@ -66,6 +79,11 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
         : `Configuration has ${errors.length} validation error(s). Fix them before saving.`,
     } : null);
   }, []);
+  const replaceDocument = useCallback((document: ProjectConfigDocumentV1 | null) => {
+    setDocument(document, false);
+    setReplacementRevision((rev) => rev + 1);
+  }, [setDocument]);
+
 
   const applyRawJson = useCallback((explicitJsonString?: string): boolean => {
     const text = explicitJsonString ?? rawJsonString;
@@ -73,6 +91,7 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     try {
       const document = assertProjectConfigDocument(JSON.parse(text) as unknown);
       setDocument(document as unknown as ProjectConfigDocumentV1, true);
+      setReplacementRevision((rev) => rev + 1);
       setJsonValidationMsg({ isValid: true, message: 'JSON valid and applied to model.' });
       return true;
     } catch (error) {
@@ -137,6 +156,35 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
   const updateReportWorkers = useCallback((count: number): void => {
     if (currentDoc) setDocument(updateProjectDocumentReportWorkers(currentDoc, count), true);
   }, [currentDoc, setDocument]);
+  const createGroup = useCallback((name?: string): string | null => {
+    if (!currentDoc) return null;
+    const result = createProjectGroup(currentDoc, name);
+    if (!result) return null;
+    setDocument(result.document, true);
+    return result.groupId;
+  }, [currentDoc, setDocument]);
+
+  const renameGroup = useCallback((groupId: string, name: string): void => {
+    if (!currentDoc) return;
+    const updated = renameProjectGroup(currentDoc, groupId, name);
+    if (updated === currentDoc) return;
+    setDocument(updated, true);
+  }, [currentDoc, setDocument]);
+
+  const deleteGroup = useCallback((groupId: string): void => {
+    if (!currentDoc) return;
+    const updated = deleteProjectGroup(currentDoc, groupId);
+    if (updated === currentDoc) return;
+    setDocument(updated, true);
+  }, [currentDoc, setDocument]);
+
+  const setGroupMembership = useCallback((groupId: string, selectedProjectIds: readonly string[]): void => {
+    if (!currentDoc) return;
+    const updated = replaceGroupMembership(currentDoc, groupId, selectedProjectIds);
+    if (updated === currentDoc) return;
+    setDocument(updated, true);
+  }, [currentDoc, setDocument]);
+
 
 
   return {
@@ -155,5 +203,11 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     removeProjectAt,
     updateDefaults,
     updateReportWorkers,
+    replacementRevision,
+    replaceDocument,
+    createGroup,
+    renameGroup,
+    deleteGroup,
+    setGroupMembership,
   };
 }

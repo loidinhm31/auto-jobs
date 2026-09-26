@@ -36,6 +36,7 @@ export type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
   ProjectConfigInput,
+  ProjectGroupInput,
   ProjectCredentialReferences,
   ProjectOriginPolicies,
   ProjectSecrets,
@@ -44,7 +45,11 @@ export type {
 } from './config/config-types.js';
 export {
   assertProjectConfigDocument,
+  GROUP_ID_REGEX,
+  GROUP_KEYS,
   PROJECT_CONFIG_LIMITS,
+  validateProjectGroup,
+  validateProjectGroups,
 } from './config/project-config-schema.js';
 
 export {

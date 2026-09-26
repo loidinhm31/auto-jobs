@@ -1,13 +1,21 @@
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
-**Document scope:** schema-v1 report capture, persistent aggregate history,
-bounded execution, Control Page actions/report management, final-report viewer
-and browser PDF export, offline build fixtures, and dynamic credentials.<br>
-**Current milestone:** Final-report PDF export — shipped and verified (Phases 01–03 DONE 2026-09-26).<br>
-**Previous completed milestone:** Individual report run deletion — complete (3/3 phases; verified 2026-09-25).<br>
-**Earlier completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 approved 2026-09-25).<br>
-**Previous initiative:** Control Page Parallel Auto-Build — complete, 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439 passed; typecheck/build passed; review approved 9.3/10.
+**Document scope:** schema-v1 report capture, optional project-group metadata
+and editor lifecycle, persistent aggregate history, bounded execution,
+Control Page actions/report management, final-report viewer/PDF export, offline
+build fixtures, and dynamic credentials.<br>
+**Current milestone:** Control page project groups and cloning — Phase 01 group
+schema/document state DONE; Phases 02–04 pending.<br>
+**Previous completed milestone:** Final-report PDF export — Phases 01–03 complete
+(2026-09-26).<br>
+**Earlier completed milestone:** Individual report run deletion — complete
+(3/3 phases; verified 2026-09-25).<br>
+**Earlier initiative:** Persistent project report management — complete (4/4
+phases; Phase 04 approved 2026-09-25).<br>
+**Previous initiative:** Control Page Parallel Auto-Build — complete, 100%
+(11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439 passed; typecheck/build
+passed; review approved 9.3/10.
 
 ## Product summary
 
@@ -111,6 +119,14 @@ and failure semantics are validated before side effects.
 - Accept optional top-level `reportWorkers` for report batches and Control API
   auto-build batches; save the 1–4 worker bound (default 1) through existing
   schema-v1 validation and ConfigStore ETag flow.
+
+- Accept optional root `projectGroups` and project-only `groupId` as schema-v1
+  presentation metadata. Existing documents without either field remain valid.
+- Validate at most 50 groups, exact group object keys, unique safe group IDs,
+  non-empty safe names of at most 200 characters, and membership references.
+  Reject unknown fields, dangling references, and `groupId` under `defaults`.
+- Keep group metadata out of normalized execution projects; grouping cannot
+  change enabled state, run mode, or configured project order.
 
 ### FR-2: Mode selection
 
@@ -419,6 +435,38 @@ and failure semantics are validated before side effects.
 - Verify Unicode text, screenshot images, A4 page boxes and pagination, link
   annotations, mobile export, rapid-click debouncing, missing-asset errors, and
   saved-report immutability in Chromium and WebKit.
+
+### FR-18: Project groups and configuration document state
+
+- Store optional group definitions on the schema-v1 root as
+  `projectGroups: { id, name }[]`; store optional single membership as
+  `projects[*].groupId`. Do not duplicate project IDs inside group definitions
+  or add `groupId` to defaults or normalized execution types.
+- Allow absent/empty group lists, up to 50 definitions, and at most one group
+  per project. Group IDs are unique within groups and match
+  `/^[a-z0-9][a-z0-9-]{0,62}$/u`; names are non-empty safe strings of at most
+  200 characters. Reject duplicate group IDs, invalid fields, and dangling
+  membership references through the shared browser/server schema validator.
+- Preserve compatibility for documents without group metadata. Persist group
+  changes through the existing configuration document/ETag flow; add no API
+  endpoint or separate storage file.
+- Apply group creation, rename, deletion, and membership replacement through
+  immutable document transitions. Deleting a group only removes its definition
+  and clears its members' `groupId`; it never removes projects. Membership
+  replacement moves selected projects into the target, ungroups unchecked
+  target members, and leaves unrelated assignments and project order intact.
+- Keep no-op or invalid-target transitions from replacing the document or
+  marking it dirty. Synchronize structured edits with raw JSON and validate
+  before saving.
+- Increment `replacementRevision` only after successful document replacement
+  or valid raw-JSON Apply. Do not increment for normal edits or Save
+  acknowledgement; failed loads and invalid Apply do not signal replacement.
+  Expose it so transient form/dialog consumers can reset state on replacement.
+- Cover limits and reference validation, immutable group transitions,
+  membership moves/deletion, no-op dirty behavior, and replacement-vs-save
+  lifecycle in the focused group-validation, group-transition, and editor
+  lifecycle unit contracts.
+
 
 ## Non-functional requirements
 

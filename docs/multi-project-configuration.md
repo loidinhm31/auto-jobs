@@ -59,6 +59,80 @@ until the document has been saved.
 origin policy, credential references, and source settings for `snyk` and
 `sonarqube`.
 
+## Optional project groups
+
+Groups are optional presentation metadata in the saved schema-v1 document; the
+schema version remains `1`.
+They do not define execution modes, enable projects, reorder projects, or
+change report/build selection. Existing schema-v1 documents without group
+fields remain valid.
+
+```json
+{
+  "schemaVersion": 1,
+  "projectGroups": [{ "id": "platform", "name": "Platform" }],
+  "projects": [
+    {
+      "id": "service-a",
+      "name": "Service A",
+      "loginUrl": "https://jenkins.example.invalid/jenkins/login",
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/service-a/",
+      "groupId": "platform"
+    }
+  ]
+}
+```
+
+| Field | Contract |
+| --- | --- |
+| `projectGroups` | Optional root array; omission or `[]` means no groups. At most 50 groups. |
+| `projectGroups[*]` | Object with exactly `id` and `name`; unknown keys are rejected. |
+| Group `id` | Unique among groups; 1–63 characters matching `/^[a-z0-9][a-z0-9-]{0,62}$/u`. Group and project IDs use separate namespaces. |
+| Group `name` | Non-empty safe string without control characters, at most 200 characters. Duplicate display names are allowed. |
+| Project `groupId` | Optional scalar group ID using the same syntax; must reference a group in `projectGroups`. `null`, empty/unsafe values, and dangling references are rejected. It is not accepted in `defaults`. |
+
+A project stores its one optional membership; groups do not contain a second
+list of project IDs. A project without `groupId` is ungrouped. The shared
+`assertProjectConfigDocument` validation boundary checks these fields for both
+the Control editor and configuration loading/saving; unknown root, group, and
+project fields remain errors. Group metadata stays on the saved document and is
+not part of the normalized project execution type.
+The public `src/config.ts` surface exports `ProjectGroupInput` and the updated
+`ProjectConfigDocumentV1` / `ProjectConfigInput` contracts.
+
+The Control editor applies immutable document transitions:
+
+- Creating a group appends a unique generated ID (`group`, `group-2`, …)
+  independent of its display name, uses **New Group** when no name or a blank
+  name is supplied, and refuses creation at 50 groups.
+- Renaming changes only the group name. Deleting removes the group and clears
+  only matching project `groupId` fields; it never deletes projects.
+- Applying a membership selection moves checked projects into the target
+  group, ungroups unchecked members of that target, and leaves unrelated
+  assignments and project order unchanged. A missing target or selected
+  project leaves the document unchanged.
+- No-op transitions return the existing document and do not mark a clean
+  document dirty. Real edits synchronize the structured document and raw JSON,
+  then use the existing ETag-protected configuration save; no new API or
+  sidecar file is introduced.
+
+`replacementRevision` is the editor's signal for consumers with transient
+form/dialog state. It increments after a successful document replacement
+(configuration load, reload, or switch) and a valid raw-JSON Apply. Ordinary
+field/group edits and a successful Save acknowledgement do not increment it.
+Failed loads and invalid raw-JSON Apply do not increment it; consumers can
+reset transient state on replacement without discarding it after every edit or
+save.
+
+The focused contracts are in
+[`project-group-validation.spec.ts`](../tests/unit/project-group-validation.spec.ts),
+[`project-group-transitions.spec.ts`](../tests/unit/project-group-transitions.spec.ts),
+and [`config-document-editor-groups.spec.ts`](../tests/unit/config-document-editor-groups.spec.ts).
+Older application versions whose schema allowlists predate these fields may
+reject a grouped document; restore a pre-group copy or remove the metadata
+before rolling back.
+
+
 ## Run type and selection
 
 Each project may set `runType` to exactly `'report'` or `'auto-build'`.

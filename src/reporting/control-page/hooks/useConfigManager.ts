@@ -48,6 +48,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
   const [banner, setBanner] = useState<BannerMessage | null>(null);
   const editor = useConfigDocumentEditor();
   const { setDocument, validateCurrentDocument, ...publicEditor } = editor;
+  const { replaceDocument } = editor;
 
   const showBanner = useCallback((type: BannerVariant, message: string) => {
     setBanner({ type, message });
@@ -67,7 +68,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
       );
       setActiveConfigName(data.name);
       setEtag(data.etag);
-      setDocument(data.document);
+      replaceDocument(data.document);
       writeStoredActiveConfig(data.name);
       syncUrlActiveConfig(data.name);
     } catch (err) {
@@ -76,7 +77,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
     } finally {
       setIsLoading(false);
     }
-  }, [api, hideBanner, setDocument, showBanner]);
+  }, [api, hideBanner, replaceDocument, showBanner]);
 
   const loadConfigList = useCallback(async (): Promise<void> => {
     setIsLoading(true);
@@ -96,7 +97,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
         syncUrlActiveConfig(null);
         setActiveConfigName('');
         setEtag('');
-        setDocument(null);
+        replaceDocument(null);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -104,7 +105,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
     } finally {
       setIsLoading(false);
     }
-  }, [api, loadConfig, setDocument, showBanner]);
+  }, [api, loadConfig, replaceDocument, showBanner]);
 
   const reloadConfig = useCallback(async (): Promise<void> => {
     if (activeConfigName) await loadConfig(activeConfigName);

@@ -13,9 +13,15 @@ export interface ProjectCredentialReferences {
   passwordVariable: string;
 }
 
+export interface ProjectGroupInput {
+  id: string;
+  name: string;
+}
+
 export interface ProjectConfigInput {
   id: string;
   name: string;
+  groupId?: string;
   loginUrl: string;
   jobUrl: string;
   runType?: RunType;
@@ -45,7 +51,8 @@ export interface ProjectConfigDefaults {
 
 export interface ProjectConfigDocumentV1 {
   schemaVersion: 1;
-  projects: ProjectConfigInput[];
+  projects: readonly ProjectConfigInput[];
+  projectGroups?: readonly ProjectGroupInput[];
   defaults?: ProjectConfigDefaults;
   [key: string]: unknown;
 }

@@ -236,6 +236,7 @@ Legacy structural keys such as `baseUrl`, `jobPath`, `captureFrom`, and
 `buildNumber`, plus structural environment inputs such as `REPORT_SOURCE`,
 `PROJECTS_CONFIG_PATH`, and legacy `JENKINS_*` project settings, are rejected.
 
+Project groups are optional schema-v1 presentation metadata in the saved document; membership lives on each project and does not change normalized execution or project order. See [multi-project configuration](./multi-project-configuration.md#optional-project-groups).
 ### Run mode and selector contract
 
 `runType` accepts exactly `'report'` or `'auto-build'`. Missing input is

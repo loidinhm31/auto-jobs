@@ -126,6 +126,13 @@ plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentatio
 plans/260925-1729-final-report-pdf-export/plan.md
 plans/260925-1729-final-report-pdf-export/research/client-pdf-rendering.md
 plans/260925-1729-final-report-pdf-export/research/report-viewer-integration.md
+plans/260926-2222-control-project-groups-and-cloning/architecture-design.md
+plans/260926-2222-control-project-groups-and-cloning/cmd-plan.md
+plans/260926-2222-control-project-groups-and-cloning/phase-01-group-schema-and-document-state.md
+plans/260926-2222-control-project-groups-and-cloning/phase-02-compact-grouped-project-board.md
+plans/260926-2222-control-project-groups-and-cloning/phase-03-clone-project-draft.md
+plans/260926-2222-control-project-groups-and-cloning/phase-04-verification-and-documentation.md
+plans/260926-2222-control-project-groups-and-cloning/plan.md
 playwright.config.ts
 playwright.control.config.ts
 playwright.template.config.ts
@@ -170,6 +177,7 @@ src/config/project-config-loader.ts
 src/config/project-config-normalization.ts
 src/config/project-config-project-validation.ts
 src/config/project-config-schema.ts
+src/config/project-group-validation.ts
 src/config/project-run-selection.ts
 src/config/report-worker-count.ts
 src/jenkins/auth.ts
@@ -232,6 +240,7 @@ src/reporting/control-page/components/organisms/RawJsonSection.tsx
 src/reporting/control-page/components/organisms/RunStatusCard.tsx
 src/reporting/control-page/components/templates/DashboardLayout.tsx
 src/reporting/control-page/hooks/config-document-transitions.ts
+src/reporting/control-page/hooks/project-group-transitions.ts
 src/reporting/control-page/hooks/use-delete-reports.ts
 src/reporting/control-page/hooks/use-delete-run.ts
 src/reporting/control-page/hooks/use-project-report.ts
@@ -358,6 +367,7 @@ tests/unit/artifact-paths.spec.ts
 tests/unit/auto-build-runner.spec.ts
 tests/unit/bounded-auto-build-workers.spec.ts
 tests/unit/bounded-report-workers.spec.ts
+tests/unit/config-document-editor-groups.spec.ts
 tests/unit/contract-hardening.spec.ts
 tests/unit/control-assets-routing.spec.ts
 tests/unit/control-atomic-components.spec.ts
@@ -386,6 +396,8 @@ tests/unit/jenkins-phase-02.spec.ts
 tests/unit/launch-arguments.spec.ts
 tests/unit/persistent-aggregate-bounds.spec.ts
 tests/unit/project-config.spec.ts
+tests/unit/project-group-transitions.spec.ts
+tests/unit/project-group-validation.spec.ts
 tests/unit/project-report-route.spec.ts
 tests/unit/project-run-state.spec.ts
 tests/unit/report-pdf-content.spec.ts
@@ -643,7 +655,7 @@ test-only Playwright routes; unmatched network requests are blocked.
 
 See [system architecture](./system-architecture.md) for the component view; [report pipeline](./report-pipeline.md) covers
 fixtures, aggregate/deletion, and the final-report viewer. [Phase 01](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md) documents the control-only React view.
-[PDF export](./report-pipeline.md#client-side-pdf-export) is browser-side jsPDF/AutoTable composition from the validated React report DOM; persisted static report output remains unchanged.
+[PDF export](./report-pipeline.md#client-side-pdf-export) shipped and passed Phase 03 verification on 2026-09-26: browser-side jsPDF/AutoTable composition from the validated React report DOM; persisted static report output remains unchanged.
 See [multi-project configuration](./multi-project-configuration.md) for field contracts and [release gates](./release-gates.md) for validation.
 
 ## Scope and operating modes
@@ -860,6 +872,7 @@ Legacy structural keys such as `baseUrl`, `jobPath`, `captureFrom`, and
 `buildNumber`, plus structural environment inputs such as `REPORT_SOURCE`,
 `PROJECTS_CONFIG_PATH`, and legacy `JENKINS_*` project settings, are rejected.
 
+Project groups are optional schema-v1 presentation metadata in the saved document; membership lives on each project and does not change normalized execution or project order. See [multi-project configuration](./multi-project-configuration.md#optional-project-groups).
 ### Run mode and selector contract
 
 `runType` accepts exactly `'report'` or `'auto-build'`. Missing input is
@@ -1449,6 +1462,9 @@ it is not a replacement for schema or security validation.
 | Area | Standard boundary |
 | --- | --- |
 | `src/config/` | Parse, validate, normalize, and select project configuration. No browser side effects. |
+| `src/config/project-group-validation.ts` | Shared browser/server validation for optional group definitions, safe identities, and project references; no execution side effects. |
+| `src/reporting/control-page/hooks/project-group-transitions.ts` | Pure immutable group create/rename/delete/membership transitions on the saved editor document. |
+| `src/reporting/control-page/hooks/useConfigDocumentEditor.ts`, `useConfigManager.ts` | Keep structured edits/raw JSON/validation/dirty state together; distinguish document replacement from Save acknowledgement while retaining the ETag flow. |
 | `src/browser-launcher.ts` | Shared browser selection and environment-derived launch options. |
 | `src/jenkins/` | Jenkins authentication, exact URL identity, scoped locators, and guarded build submission. |
 | `src/project/` | Report and auto-build workflow orchestration, run state, outcomes, and capture. |
@@ -1552,6 +1568,15 @@ Compiler settings in `tsconfig.json` are the source of truth:
   `runAutoBuildProject` or `executeAutoBuildWorkerPool` explicitly.
 - Preserve one configured `jobUrl` as the sole Jenkins job/branch identity.
   Do not add a second branch field or derive a target from UI text.
+- Treat `projectGroups` and project `groupId` as optional schema-v1 presentation
+  metadata: validate them at the shared document boundary, keep membership on
+  projects, and exclude them from normalized execution types and defaults.
+- Implement group mutations as immutable, pure transitions. Preserve project
+  order and unrelated fields; deleting a group only removes that membership,
+  and no-op/invalid-target changes must not mark the document dirty.
+- Use `replacementRevision` only for successful document replacement or valid
+  raw-JSON Apply. Ordinary edits and Save acknowledgements do not reset
+  transient editor state.
 
 ## Jenkins and browser safety
 
@@ -1687,6 +1712,10 @@ Tests must defend observable behavior and fail on plausible regressions:
   non-JSON content types, invalid keys/values/bodies, unsupported methods, and
   the unavailable-store response. Use the real loopback server plus a direct
   handler test only for the missing dependency boundary.
+- For project groups, cover schema limits/references, immutable membership
+  moves and deletion, project-order preservation, no-op dirty state, and the
+  distinction between document replacement, raw Apply, and Save acknowledgement
+  in the focused group validation, transition, and editor lifecycle specs.
 - For whole-project report deletion, `tests/unit/control-reports-delete-api.spec.ts`
   covers full-tree preflight, aggregate updates, request validation, and
   removal/publication failure behavior. It also checks the report-only GET/HEAD
@@ -1757,10 +1786,10 @@ Before opening a change, verify:
 # Codebase summary
 
 This summary is based on the refreshed `repomix-output.xml` and current
-source/configuration. It covers report/build execution, retained history,
-Control-only report management and the final-report viewer, including its
-browser PDF export. The Phase 02 PDF implementation is present; Phase 03
-release-level PDF verification remains pending.
+source/configuration. It covers report/build execution, optional schema-v1
+project-group metadata and Control editor transitions, retained history,
+Control-only report management, and the final-report viewer with its verified
+browser PDF export.
 
 ## Repository profile
 
@@ -1805,11 +1834,11 @@ release-level PDF verification remains pending.
   with post-outcome inventory refresh; Chromium/WebKit E2E verifies cancel,
   selected-run removal, sibling preservation, final-run pruning, and aggregate
   refresh.
-- Final-report viewer and PDF export (Phases 01–02): Control-only React viewer
-  validates saved JSON/manifest identity and shares the escaped body renderer
-  with static output. The browser export uses a semantic DOM adapter, jsPDF and
-  AutoTable, embedded Noto Sans fonts, safe image loading, and text/link
-  annotations; persisted report HTML remains unchanged.
+- Final-report viewer and PDF export (Phases 01–03): Control-only React viewer
+  validates saved JSON/manifest identity and shares the escaped body with static
+  output. Shipped browser export uses semantic DOM extraction, jsPDF/AutoTable,
+  embedded Noto Sans, safe images and links; saved reports remain unchanged.
+  Chromium/WebKit verification and dedicated regression helpers are listed below.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
   testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
@@ -1839,6 +1868,12 @@ release-level PDF verification remains pending.
   through shared editor state; dirty/raw-JSON state requires Save before
   report execution. Report POSTs send no `workerCount`; UI and CLI share schema
   validation, and the CLI document loader reads once.
+- Project groups and document lifecycle (Phase 01): optional root
+  `projectGroups` definitions and project-only `groupId` are validated at the
+  shared schema boundary; Control editor transitions are immutable. Group
+  metadata remains outside normalized execution projects, and
+  `replacementRevision` changes only on successful document replacement or
+  valid raw-JSON Apply, not on edits or Save acknowledgement.
 - Stage View completion monitoring: optional auto-build wait (default `true`),
   run and stage parsing, live progress logs, and build-number/result/stage data
   for the Control Page.
@@ -1870,6 +1905,10 @@ release-level PDF verification remains pending.
   (499 total). Chromium/WebKit browser checks include zero Axe violations,
   cancellation, selected-run/sibling disk state, final-run pruning, and
   aggregate refresh. Coverage metrics were not collected.
+- Final-report PDF Phase 03 snapshot (2026-09-26): 557/557 checks passed
+  (505 unit, 40 Control, 5 report visual, 7 WebKit PDF); typecheck/build passed.
+  Focused PDF scenarios passed 7/7 in Chromium and WebKit; see the
+  [review](../plans/reports/code-review-260926-1707-phase-03-verification-and-documentation.md).
 - Repomix XML compaction refreshed for this summary. Its security check
   excluded `tests/unit/config.spec.ts` and `tests/unit/reporting-renderer.spec.ts`
   because of credential-shaped URL examples.
@@ -1913,6 +1952,9 @@ release-level PDF verification remains pending.
 | `src/reporting/control-page/components/molecules/ReportExportButton.tsx`, `hooks/use-report-pdf-export.ts` | Ready-report toolbar action, export state/re-entry guard, and visible error handling. |
 | `src/reporting/control-page/utils/export-report-pdf.ts`, `report-pdf-content.ts`, `report-pdf-layout.ts`, `report-pdf-table-renderer.ts` | Semantic DOM extraction and browser-side jsPDF/AutoTable composition with pagination, links, and images. |
 | `src/reporting/control-page/utils/report-pdf-fonts.ts`, `report-pdf-image-loader.ts`, `src/reporting/control-page/assets/fonts/` | Register embedded OFL Noto Sans regular/bold fonts and load safe report evidence images. |
+| `tests/unit/control-final-report-pdf-export.spec.ts`, `control-final-report-pdf-scenarios.spec.ts` | Real Control-server downloads; verify Unicode text, embedded images, PDF links/page boxes, pagination, mobile viewport, debounce, missing assets, and offline integrity. |
+| `tests/unit/helpers/pdf-parser.ts` | Inflate FlateDecode streams and decode ToUnicode maps to inspect text, page boxes, image dimensions, and URI annotations in memory. |
+| `tests/unit/helpers/report-pdf-fixture-constants.ts`, `report-pdf-fixtures.ts` | Build isolated report roots with source URLs, screenshots, Unicode content, findings, and scenario options. |
 | `src/reporting/control-page/pages/ReportManagementPage.tsx` | Loads the aggregate independently of active configuration and composes confirmed project/run deletion flows. |
 | `src/reporting/control-page/hooks/use-delete-reports.ts`, `use-delete-run.ts` | Use the shared CSRF-aware client, refresh inventory, and surface mutation feedback. |
 | `ProjectReportHistoryCard.tsx`, `project-runs-table.tsx`, `DeleteReportsConfirmationDialog.tsx`, `DeleteRunConfirmationDialog.tsx` | Compose project history, 20-run pagination, and confirmed deletion controls. |
@@ -1932,6 +1974,19 @@ exposes the validated document with normalized projects through
 `loadProjectConfigWithDocument`; `loadProjectConfig` retains its normalized-
 array contract. The browser editor uses the same `assertProjectConfigDocument`
 schema boundary.
+
+The schema-v1 saved document also accepts optional `projectGroups` definitions
+and a single project-level `groupId`. The shared schema validator enforces
+group count/identity/name limits and valid references. These are saved-document
+presentation fields, not normalized runtime project fields; existing configs
+without them remain valid.
+
+The Control editor keeps group changes in the same document/raw-JSON/dirty/ETag
+flow as other config edits. Pure immutable transitions create, rename, delete,
+and replace membership without reordering projects or touching unrelated
+fields. `replacementRevision` identifies successful loads/replacements and
+valid raw-JSON Apply; ordinary edits and Save acknowledgements do not reset
+transient editor state.
 
 Each project requires a safe `id`, display `name`, exact credential-free
 Jenkins `loginUrl`, and exact credential-free `jobUrl` on one Jenkins origin
@@ -2201,6 +2256,7 @@ set `Cache-Control: no-store`.
 | --- | --- |
 | `src/config/` | Schema validation, field validation, normalization, secret resolution, and project mode selection. |
 | `src/config/project-config-schema.ts` | Browser-safe `assertProjectConfigDocument` boundary shared by runtime config loading and Control Dashboard document editing. |
+| `src/config/project-group-validation.ts` | Validates bounded optional group definitions, safe IDs/names, uniqueness, and project references in the shared document schema. |
 | `src/config-selectors.ts` | Selector kinds, parsing, and immutable selector defaults. |
 | `src/browser-launcher.ts` | Shared browser selection and environment-driven launch options. |
 | `src/jenkins/auth.ts` | Credential submission, authenticated-page validation, and exact job navigation. |
@@ -2231,8 +2287,9 @@ set `Cache-Control: no-store`.
 | `src/reporting/control-page/utils/cn.ts` | Merges Tailwind CSS and conditional classes using `clsx` and `twMerge`. |
 | `src/reporting/control-page/utils/discoverCredentialKeys.ts` | Discovers required project credential variables with defaults and fallback resolution. |
 | `src/reporting/control-page/utils/config-selection.ts` | Reads, resolves, and persists the active configuration preference in `localStorage` and the `config` URL parameter. |
-| `src/reporting/control-page/hooks/` | Headless React hooks: `useControlApi`, `useConfigManager` (active configuration plus API/ETag flow), `useConfigDocumentEditor` (document/raw-JSON editing and validation), `useCredentialsManager`, `useBrowserSettings`, and `useRunPoller`. |
+| `src/reporting/control-page/hooks/` | Headless React hooks: `useControlApi`, `useConfigManager` (active configuration plus API/ETag flow), `useConfigDocumentEditor` (document/raw-JSON editing, validation, and replacement revision), `useCredentialsManager`, `useBrowserSettings`, and `useRunPoller`. |
 | `src/reporting/control-page/hooks/config-document-transitions.ts` | Immutable add, update, remove, defaults, and report-worker count transitions for the editor document. |
+| `src/reporting/control-page/hooks/project-group-transitions.ts` | Pure immutable create, rename, delete, and membership transitions; preserves project order and unrelated fields. |
 | `src/reporting/control-page/components/atoms/` | Atomic UI primitives: `Badge`, `Button`, `Input`, `Select`, `StatusBanner`, and `LoadingIndicator` with forwardRef support and variant contracts. |
 | `src/reporting/control-page/components/molecules/` | Compound molecules: `CredentialRow`, `BrowserSettingRow`, `ConfigSelectorBar`, `ConfigProjectEditor`, `ConfigDefaultsEditor`, `LogViewer`, `RunResultBox`, and `BuildProjectOutcomeRow`. |
 | `src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx` | Integrated config-form organism mounted by `DashboardPage` beside `RawJsonSection`; shares document state with the raw editor. |
@@ -2253,6 +2310,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/bounded-auto-build-workers.spec.ts` | Verifies concurrency bounds, configuration-order outcomes, sibling failure isolation, saved-count pool dispatch, and aggregate status. |
 | `tests/unit/control-run-executor-secrets.spec.ts` | Report/auto-build injection, precedence, non-mutation, redaction, ETag-checked report worker count, and auto-build isolation. |
 | `tests/unit/control-hooks-and-types.spec.ts` | Hook/API lifecycles, active-config persistence, and document-level report-worker transition coverage. |
+| `tests/unit/project-group-validation.spec.ts`, `project-group-transitions.spec.ts`, `config-document-editor-groups.spec.ts` | Group schema/reference boundaries, immutable membership transitions, and document replacement versus edit/Save revision behavior. |
 | `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts for the shared Workers/action bar and ordered multi-project plus scalar-fallback result presentation. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
@@ -2457,6 +2515,80 @@ until the document has been saved.
 `defaults` fields cover `timeoutMs`, `browser`, `artifactDir`, selectors,
 origin policy, credential references, and source settings for `snyk` and
 `sonarqube`.
+
+## Optional project groups
+
+Groups are optional presentation metadata in the saved schema-v1 document; the
+schema version remains `1`.
+They do not define execution modes, enable projects, reorder projects, or
+change report/build selection. Existing schema-v1 documents without group
+fields remain valid.
+
+```json
+{
+  "schemaVersion": 1,
+  "projectGroups": [{ "id": "platform", "name": "Platform" }],
+  "projects": [
+    {
+      "id": "service-a",
+      "name": "Service A",
+      "loginUrl": "https://jenkins.example.invalid/jenkins/login",
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/service-a/",
+      "groupId": "platform"
+    }
+  ]
+}
+```
+
+| Field | Contract |
+| --- | --- |
+| `projectGroups` | Optional root array; omission or `[]` means no groups. At most 50 groups. |
+| `projectGroups[*]` | Object with exactly `id` and `name`; unknown keys are rejected. |
+| Group `id` | Unique among groups; 1–63 characters matching `/^[a-z0-9][a-z0-9-]{0,62}$/u`. Group and project IDs use separate namespaces. |
+| Group `name` | Non-empty safe string without control characters, at most 200 characters. Duplicate display names are allowed. |
+| Project `groupId` | Optional scalar group ID using the same syntax; must reference a group in `projectGroups`. `null`, empty/unsafe values, and dangling references are rejected. It is not accepted in `defaults`. |
+
+A project stores its one optional membership; groups do not contain a second
+list of project IDs. A project without `groupId` is ungrouped. The shared
+`assertProjectConfigDocument` validation boundary checks these fields for both
+the Control editor and configuration loading/saving; unknown root, group, and
+project fields remain errors. Group metadata stays on the saved document and is
+not part of the normalized project execution type.
+The public `src/config.ts` surface exports `ProjectGroupInput` and the updated
+`ProjectConfigDocumentV1` / `ProjectConfigInput` contracts.
+
+The Control editor applies immutable document transitions:
+
+- Creating a group appends a unique generated ID (`group`, `group-2`, …)
+  independent of its display name, uses **New Group** when no name or a blank
+  name is supplied, and refuses creation at 50 groups.
+- Renaming changes only the group name. Deleting removes the group and clears
+  only matching project `groupId` fields; it never deletes projects.
+- Applying a membership selection moves checked projects into the target
+  group, ungroups unchecked members of that target, and leaves unrelated
+  assignments and project order unchanged. A missing target or selected
+  project leaves the document unchanged.
+- No-op transitions return the existing document and do not mark a clean
+  document dirty. Real edits synchronize the structured document and raw JSON,
+  then use the existing ETag-protected configuration save; no new API or
+  sidecar file is introduced.
+
+`replacementRevision` is the editor's signal for consumers with transient
+form/dialog state. It increments after a successful document replacement
+(configuration load, reload, or switch) and a valid raw-JSON Apply. Ordinary
+field/group edits and a successful Save acknowledgement do not increment it.
+Failed loads and invalid raw-JSON Apply do not increment it; consumers can
+reset transient state on replacement without discarding it after every edit or
+save.
+
+The focused contracts are in
+[`project-group-validation.spec.ts`](../tests/unit/project-group-validation.spec.ts),
+[`project-group-transitions.spec.ts`](../tests/unit/project-group-transitions.spec.ts),
+and [`config-document-editor-groups.spec.ts`](../tests/unit/config-document-editor-groups.spec.ts).
+Older application versions whose schema allowlists predate these fields may
+reject a grouped document; restore a pre-group copy or remove the metadata
+before rolling back.
+
 
 ## Run type and selection
 
@@ -2938,13 +3070,21 @@ claim that a live Jenkins or browser execution has been run.
 # Project overview and PDR
 
 **Product:** `auto-jobs`  
-**Document scope:** schema-v1 report capture, persistent aggregate history,
-bounded execution, Control Page actions/report management, final-report viewer
-and browser PDF export, offline build fixtures, and dynamic credentials.<br>
-**Current milestone:** Final-report PDF export — Phase 01 viewer and Phase 02 browser composition implemented; Phase 03 verification pending (2026-09-26).<br>
-**Previous completed milestone:** Individual report run deletion — complete (3/3 phases; verified 2026-09-25).<br>
-**Earlier completed milestone:** Persistent project report management — complete (4/4 phases; Phase 04 approved 2026-09-25).<br>
-**Previous initiative:** Control Page Parallel Auto-Build — complete, 100% (11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439 passed; typecheck/build passed; review approved 9.3/10.
+**Document scope:** schema-v1 report capture, optional project-group metadata
+and editor lifecycle, persistent aggregate history, bounded execution,
+Control Page actions/report management, final-report viewer/PDF export, offline
+build fixtures, and dynamic credentials.<br>
+**Current milestone:** Control page project groups and cloning — Phase 01 group
+schema/document state DONE; Phases 02–04 pending.<br>
+**Previous completed milestone:** Final-report PDF export — Phases 01–03 complete
+(2026-09-26).<br>
+**Earlier completed milestone:** Individual report run deletion — complete
+(3/3 phases; verified 2026-09-25).<br>
+**Earlier initiative:** Persistent project report management — complete (4/4
+phases; Phase 04 approved 2026-09-25).<br>
+**Previous initiative:** Control Page Parallel Auto-Build — complete, 100%
+(11/11h; Phase 04 DONE, 2026-09-24). Release gate 439/439 passed; typecheck/build
+passed; review approved 9.3/10.
 
 ## Product summary
 
@@ -3048,6 +3188,14 @@ and failure semantics are validated before side effects.
 - Accept optional top-level `reportWorkers` for report batches and Control API
   auto-build batches; save the 1–4 worker bound (default 1) through existing
   schema-v1 validation and ConfigStore ETag flow.
+
+- Accept optional root `projectGroups` and project-only `groupId` as schema-v1
+  presentation metadata. Existing documents without either field remain valid.
+- Validate at most 50 groups, exact group object keys, unique safe group IDs,
+  non-empty safe names of at most 200 characters, and membership references.
+  Reject unknown fields, dangling references, and `groupId` under `defaults`.
+- Keep group metadata out of normalized execution projects; grouping cannot
+  change enabled state, run mode, or configured project order.
 
 ### FR-2: Mode selection
 
@@ -3331,7 +3479,7 @@ and failure semantics are validated before side effects.
   delivers no PDF generation/download UI; Phase 02 consumes the validated ready
   report surface.
 
-### FR-17: Client-side final-report PDF export (Phase 02)
+### FR-17: Client-side final-report PDF export (Phases 02–03; shipped)
 
 - Add an accessible **Export PDF** action to the Control-only final-report
   viewer. Keep it disabled until the validated report is ready and while an
@@ -3341,8 +3489,8 @@ and failure semantics are validated before side effects.
   figures/captions, anchors, and footer in document order; omit only export
   chrome and hidden UI.
 - Compose selectable/searchable text and real-text tables with browser-side
-  `jspdf` and `jspdf-autotable`; keep evidence screenshots as images. Prefer
-  A4 portrait layout and wrapped table content.
+  `jspdf` and `jspdf-autotable`; keep evidence screenshots as images. Use A4
+  portrait by default with wrapped table content.
 - Bundle and embed local Noto Sans regular/bold TrueType font data under its
   included SIL Open Font License. Do not request fonts from a remote service.
 - Preserve safe evidence/reference URLs as PDF link annotations and resolve
@@ -3353,6 +3501,41 @@ and failure semantics are validated before side effects.
   mutation of saved artifacts.
 - Keep duplicate invocation and generation failures visible and retryable;
   preserve the viewer, static report output, and existing CSP.
+- Verify Unicode text, screenshot images, A4 page boxes and pagination, link
+  annotations, mobile export, rapid-click debouncing, missing-asset errors, and
+  saved-report immutability in Chromium and WebKit.
+
+### FR-18: Project groups and configuration document state
+
+- Store optional group definitions on the schema-v1 root as
+  `projectGroups: { id, name }[]`; store optional single membership as
+  `projects[*].groupId`. Do not duplicate project IDs inside group definitions
+  or add `groupId` to defaults or normalized execution types.
+- Allow absent/empty group lists, up to 50 definitions, and at most one group
+  per project. Group IDs are unique within groups and match
+  `/^[a-z0-9][a-z0-9-]{0,62}$/u`; names are non-empty safe strings of at most
+  200 characters. Reject duplicate group IDs, invalid fields, and dangling
+  membership references through the shared browser/server schema validator.
+- Preserve compatibility for documents without group metadata. Persist group
+  changes through the existing configuration document/ETag flow; add no API
+  endpoint or separate storage file.
+- Apply group creation, rename, deletion, and membership replacement through
+  immutable document transitions. Deleting a group only removes its definition
+  and clears its members' `groupId`; it never removes projects. Membership
+  replacement moves selected projects into the target, ungroups unchecked
+  target members, and leaves unrelated assignments and project order intact.
+- Keep no-op or invalid-target transitions from replacing the document or
+  marking it dirty. Synchronize structured edits with raw JSON and validate
+  before saving.
+- Increment `replacementRevision` only after successful document replacement
+  or valid raw-JSON Apply. Do not increment for normal edits or Save
+  acknowledgement; failed loads and invalid Apply do not signal replacement.
+  Expose it so transient form/dialog consumers can reset state on replacement.
+- Cover limits and reference validation, immutable group transitions,
+  membership moves/deletion, no-op dirty behavior, and replacement-vs-save
+  lifecycle in the focused group-validation, group-transition, and editor
+  lifecycle unit contracts.
+
 
 ## Non-functional requirements
 
@@ -3599,11 +3782,11 @@ report CLI still has no production auto-build command.
 
 ### 0.1.0 (development) — 2026-09-26
 
-- Completed Phase 01's Control-only final-report viewer and Phase 02's
-  browser-side jsPDF/AutoTable export with embedded OFL Noto Sans fonts,
-  semantic report-DOM extraction, safe links/images, and direct PDF download.
-  Phase 02 reports 499/499 unit tests and a 9.5/10 Cycle 2 code review; Phase
-  03 PDF release verification remains ([Phase 02](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md)).
+- Completed Final-report PDF export Phases 01–03 on 2026-09-26: Control-only
+  validated viewer, client-side jsPDF/AutoTable export, and verified Unicode
+  text, embedded screenshots, A4 pagination, and evidence links. Evidence:
+  557/557 checks; typecheck/build passed; focused PDF tests 7/7 in Chromium and
+  7/7 in WebKit; review 9.5/10 ([Phase 03](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md), [review](../plans/reports/code-review-260926-1707-phase-03-verification-and-documentation.md)).
 
 ### 0.1.0 (development) — 2026-09-25
 
@@ -3658,19 +3841,32 @@ Last updated: 2026-09-26
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
 
+## Control page compact project groups and cloning
+
+Plan: [Control page project groups and cloning](../plans/260926-2222-control-project-groups-and-cloning/plan.md)
+
+**Overall status:** **In progress** · **25%** (1 of 4 phases complete by phase count; Phase 01 completed 2026-09-26T23:40:20+07:00).
+
+| Phase | Status | Progress | Completed | Evidence/detail |
+|---|---|---:|---|---|
+| 01 — Group schema and document state | **DONE** | **100%** | 2026-09-26T23:40:20+07:00 | Delivered optional group metadata validation, immutable membership transitions, and document replacement lifecycle. Verification: 39 focused and 544 full unit tests; typecheck/build passed. API roundtrip and browser integration remain in Phase 04 ([phase](../plans/260926-2222-control-project-groups-and-cloning/phase-01-group-schema-and-document-state.md), [tests](../plans/reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md), [review](../plans/reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md), 9.5/10). |
+| 02 — Compact grouped project board | Pending | 0% | — | Depends on Phase 01. |
+| 03 — Clone selected project draft | Pending | 0% | — | Depends on Phase 01. |
+| 04 — Behavioral verification and documentation | Pending | 0% | — | Depends on Phases 01–03; includes API roundtrip and real-browser proof. |
+
 ## Final-report PDF export
 
 Plan: [Final-report PDF export](../plans/260925-1729-final-report-pdf-export/plan.md)
 
-**Overall status:** **In Progress** · **67%** (2 of 3 phases DONE; Phases 01 and 02 completed 2026-09-26).
+**Overall status:** **DONE** · **100%** (all 3 phases DONE; completed 2026-09-26).
 
 | Phase | Status | Progress | Effort | Completed | Evidence/detail |
 |---|---|---:|---:|---|---|
 | 01 — Shared control report viewer | **DONE** | **100%** | — | 2026-09-26 | Delivered the control-only React report viewer and shared report-body rendering. Verification: 35 focused unit tests; typecheck/build and existing Control/report-management E2E suites (20 each) passed ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md), 9.0/10). |
 | 02 — Real-text browser PDF | **DONE** | **100%** | — | 2026-09-26 | Implementation and review complete; 499/499 unit tests passed, Cycle 2 review 9.5/10 ([phase](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md), [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). |
-| 03 — Verification and documentation | Pending | 0% | — | — | [PDF text/image/link/browser proof](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md) |
+| 03 — Verification and documentation | **DONE** | **100%** | — | 2026-09-26 | End-to-end PDF export verified across Chromium and WebKit; selectable Unicode text (Vietnamese diacritics), embedded screenshots, portrait A4 layout, and clickable URI links. Total 557/557 tests passed; review scored 9.5/10 ([phase](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md), [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1707-phase-03-verification-and-documentation.md)). |
 
-Phase 01 review recorded two non-blocking warnings: a case-only duplicate page filename and global `report.css` selectors that may affect control-bar styling. Phase 02 browser PDF implementation and code review are complete; end-to-end PDF/browser verification remains pending in Phase 03.
+All three phases are complete: control-only React viewer, semantic jsPDF generation with local fonts and links, and comprehensive Chromium/WebKit test verification.
 
 ## Individual report run deletion
 
@@ -3840,6 +4036,7 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 
 ### 0.1.0 (development) — 2026-09-26
 
+- Completed Phase 01 (Shared group schema and document state) at 2026-09-26T23:40:20+07:00. Delivered optional config group metadata, validation, immutable membership transitions, and document replacement lifecycle. Verification: 39 focused tests, 544/544 unit tests, typecheck/build passed; review approved 9.5/10 with a medium non-blocking DRY recommendation. API roundtrip and integrated browser proof remain in Phase 04; overall initiative is 25% by phase count ([phase](../plans/260926-2222-control-project-groups-and-cloning/phase-01-group-schema-and-document-state.md), [test report](../plans/reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md), [review](../plans/reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md)).
 - Completed Phase 01 (Shared control report viewer) on 2026-09-26; delivered the control-only React final-report viewer and shared report-body rendering. Validation recorded 35 focused unit tests, typecheck/build, and existing Control/report-management E2E suites (20 each) passing; review scored 9.0/10 with no critical findings and two non-blocking warnings ([phase](../plans/260925-1729-final-report-pdf-export/phase-01-control-report-viewer.md), [review](../plans/reports/code-review-260926-0624-phase-01-control-report-viewer.md)). The overall PDF-export initiative remains in progress; Phase 02 implementation is complete, with end-to-end PDF/browser verification pending in Phase 03.
 - Completed Phase 02 (Real-text browser PDF) on 2026-09-26: delivered semantic report composition, embedded Unicode fonts, portrait-first pagination, clickable evidence/internal links, and accessible download lifecycle. Validation: 499/499 unit tests passed; Cycle 2 code review scored 9.5/10 ([phase](../plans/260925-1729-final-report-pdf-export/phase-02-browser-pdf-export.md), [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). Phase 03 end-to-end PDF/browser verification remains pending.
 
@@ -4268,6 +4465,40 @@ agreement, and accessible loading/error states. They use local roots and an
 in-process server, not Jenkins or vendor services. The group is included in
 `npm run test:unit`.
 
+
+### Final-report PDF export Phase 03 verification snapshot (2026-09-26)
+
+Run the focused PDF export scenarios in Chromium and WebKit:
+
+```sh
+node scripts/run-playwright.mjs playwright test \
+  tests/unit/control-final-report-pdf-export.spec.ts \
+  tests/unit/control-final-report-pdf-scenarios.spec.ts \
+  --config=playwright.unit.config.ts
+node scripts/run-playwright.mjs --env PLAYWRIGHT_BROWSER=webkit playwright test \
+  tests/unit/control-final-report-pdf-export.spec.ts \
+  tests/unit/control-final-report-pdf-scenarios.spec.ts \
+  --config=playwright.unit.config.ts
+```
+
+| Command/scope | Result |
+| --- | --- |
+| `npm run typecheck` | Passed; 0 TypeScript errors |
+| `npm run build` | Passed |
+| Focused PDF scenarios (Chromium) | 7/7 passed |
+| Focused PDF scenarios (WebKit) | 7/7 passed |
+| Combined test rerun | 557/557 passed: 505 unit, 40 Control, 5 report visual, 7 WebKit PDF |
+| Code review | Approved, 9.5/10 |
+
+The focused cases parse real browser downloads to verify selectable Vietnamese
+Unicode text, embedded screenshots, A4 page boxes, and exact PDF link
+annotations. Scenarios cover multi-page table headers, mobile viewport export,
+rapid-click debouncing, missing screenshot errors, and offline report
+immutability. The seven Chromium PDF cases are included in the 505 unit tests;
+the seven WebKit PDF cases are additional. This is a dated verification
+snapshot, not a claim that the separate `npm run test:release` command ran.
+Evidence: [Phase 03 checklist](../plans/260925-1729-final-report-pdf-export/phase-03-verification-and-documentation.md) · [review](../plans/reports/code-review-260926-1707-phase-03-verification-and-documentation.md).
+
 ### Individual report-run deletion Phase 03 verification snapshot (2026-09-25)
 
 | Command/scope | Result |
@@ -4639,15 +4870,22 @@ See [report pipeline](./report-pipeline.md) for the persisted index contract.
   or unreviewed endpoints. This documentation pass does not claim that live
   Jenkins or browser execution was verified.
 
+## Final-report PDF export verification snapshot (2026-09-26)
+
+Verified Phase 03 client-side PDF export across Chromium and WebKit runtimes:
+- `npm run typecheck`: passed (0 errors, 1.32s)
+- `npm run build`: passed (TypeScript + Vite bundle 2.66 MB)
+- `npm run test:unit`: 505/505 passed (34.2s)
+- `npm run test:control`: 40/40 passed (18.2s)
+- `npm run test:report`: 5/5 passed (8.5s)
+- WebKit unit suites: 7/7 passed (6.0s)
+- Total tests: 557/557 passed (100% pass rate). Review score: 9.5/10.
+- Verified: selectable Unicode text (Vietnamese diacritics), embedded screenshots, portrait A4 dimensions, and live Snyk/Sonar/Jenkins clickable URI annotations.
+
 ## Test-count and evidence policy
 
-Previous handoff notes reported different unit-test snapshots (121, 143, 152,
-157, and 160) as the code changed. Those counts describe historical commits,
-not a single current baseline. This document reports no current count without
-running the relevant command; the command output is the release evidence.
-
-Native browser, fixture startup, and live Jenkins results are environment
-evidence only when their commands are freshly run in the target environment.
+This document reports verified release evidence only from freshly executed commands.
+Command output in the target environment remains the definitive release gate proof.
 </file>
 
 <file path="docs/report-pipeline.md">
@@ -4724,8 +4962,8 @@ The latter wraps that same body in the persisted static document and its report
 CSP. The React page's HTML sink receives only locally generated escaped body
 markup; it never inserts saved report HTML or vendor markup. `.project-report-surface`
 styles and Tailwind-preflight overrides isolate the view without changing the
-standalone stylesheet behavior. Phase 01 added the viewer; Phase 02 adds local
-browser PDF export described below.
+standalone stylesheet behavior. Phases 01–03 deliver the viewer, export, and
+browser-verified PDF behavior described below.
 
 ## Client-side PDF export
 
@@ -4745,6 +4983,9 @@ download; it does not call a PDF server API or modify persisted report files.
 | `utils/report-pdf-fonts.ts`, `assets/fonts/` | Register bundled Noto Sans regular/bold font data with jsPDF. The source TTFs and `OFL.txt` retain the SIL Open Font License notice. |
 | `utils/report-pdf-image-loader.ts` | Accept embedded image data or same-origin report images, load and decode bytes, and fail export on unsafe or unreadable evidence. |
 | `utils/export-report-pdf.ts` | Compose the jsPDF document, produce a Blob, sanitize the identity-based filename, and trigger a browser download. |
+| `tests/unit/control-final-report-pdf-export.spec.ts`, `control-final-report-pdf-scenarios.spec.ts` | Exercise real downloads and inspect Unicode text, images, links, pagination, mobile viewport, debounce, missing assets, and offline integrity. |
+| `tests/unit/helpers/pdf-parser.ts` | Inflate FlateDecode streams and decode ToUnicode maps to inspect PDF text, page boxes, image dimensions, and URI annotations in memory. |
+| `tests/unit/helpers/report-pdf-fixture-constants.ts`, `report-pdf-fixtures.ts` | Build isolated report roots with source URLs, screenshots, Unicode content, findings, and scenario options. |
 
 `extractReportPdfContent()` walks the report surface in DOM order; it does not
 render a screenshot or attempt general HTML/CSS conversion. It captures
@@ -4778,9 +5019,10 @@ Saved report HTML continues to use its existing static/scriptless rendering
 and CSP. The export adds no external renderer, print flow, upload, or server
 publication path.
 
-Phase 02 implementation verification reports 499/499 unit tests and a 9.5/10
-Cycle 2 code review. Phase 03 remains responsible for release-level PDF text,
-image, link, visual-layout, and browser-download verification.
+Phase 03 verification on 2026-09-26 recorded 557/557 checks passing, with
+typecheck and build passing and the focused PDF scenarios passing 7/7 in both
+Chromium and WebKit. See the [release snapshot](./release-gates.md#final-report-pdf-export-phase-03-verification-snapshot-2026-09-26)
+and [review](../plans/reports/code-review-260926-1707-phase-03-verification-and-documentation.md).
 
 `src/artifacts/aggregate-manifest-reader.ts` validates schema-v3 manifests and
 their referenced artifacts before retaining them. Discovery is bounded to at
@@ -4943,17 +5185,6 @@ static snapshot. See [architecture](./architecture.md) for UI behavior and
   contracts, CSRF injection, error code mapping (409/404/500), DOM IDs, and
   accessibility attributes.
 - [Release gates](./release-gates.md) lists the focused test commands.
-
-## Client-side PDF export
-
-In Control mode (`npm run serve:control`), the final individual report viewer (`/reports/<projectId>/<runId>/index.html`) offers a direct client-side PDF download via `ReportExportButton`.
-
-- **Real selectable text & embedded images**: jsPDF and jspdf-autotable render headings, prose, definition lists (`<dl>`), lists, table cells, and captions as selectable vector text; screenshots remain embedded images without full-page rasterization.
-- **Embedded licensed fonts**: Noto Sans Regular and Bold TrueType fonts are bundled locally with full Latin, Vietnamese, punctuation, and Unicode support via VFS/addFont.
-- **Portrait-first layout**: A4 portrait (210 x 297 mm, 10 mm margins) with a 10 pt body font and an 8 pt readability floor for the 7-column Snyk findings table with cell line wrapping.
-- **Interactive evidence links**: Clickable URI annotations open exact validated Snyk and SonarQube source URLs without remote calls during generation; internal anchors (#jenkins-job, #snyk-test-report, #artifacts) resolve to destination pages.
-- **Lifecycle & safety**: State transitions (`idle` → `preparing` → `composing` → `downloading` → `idle`), synchronous reentrancy protection, unmount guards, automatic object URL cleanup, and strict same-origin image validation. Files are named `<projectId>-<runId>-report.pdf`.
-- **Focused tests**: `tests/unit/report-pdf-fonts.spec.ts`, `tests/unit/report-pdf-content.spec.ts`, `tests/unit/report-pdf-layout.spec.ts`, `tests/unit/use-report-pdf-export.spec.ts`, and `tests/unit/control-final-report-pdf-export.spec.ts`.
 </file>
 
 <file path="docs/system-architecture.md">
@@ -4982,14 +5213,15 @@ verification:
   all-enabled report/build actions with one saved Workers selector. The React
   `/reports/index.html` page manages history/deletion; final-report URLs open a
   separate validated-JSON view over the body renderer shared with static output.
-  Its toolbar composes browser PDFs with jsPDF/AutoTable and embedded Noto Sans;
-  both views are Control-only, and persisted report HTML remains static/scriptless.
+  Its toolbar ships a Phase 03-verified jsPDF/AutoTable browser export with
+  embedded Noto Sans, text, images, and links; both views are Control-only and
+  persisted report HTML remains static/scriptless.
 - **Control-run executor:** snapshot stored values per run, merge them over
   the caller environment, pass the merged environment to the selected
   executor, and redact control-run output. Direct callers remain environment-
   driven.
-- **Verification:** isolated contracts cover report deletion, credentials, and
-  auto-build; Chromium/WebKit Control UI scenarios run without Jenkins.
+- **Verification:** isolated contracts cover report deletion, credentials,
+  auto-build, and PDF semantics; Chromium/WebKit scenarios run without Jenkins.
 
 The [architecture](./architecture.md) document contains the field-level runtime
 contract. See [report pipeline](./report-pipeline.md) for aggregate and deletion
@@ -11524,7 +11756,7 @@ Reuse/leave unchanged unless a concrete incompatibility appears:
 - [Release gates](../../docs/release-gates.md), [report pipeline](../../docs/report-pipeline.md).
 
 ## Overview
-- Date: 2026-09-25. Priority: P2. Implementation: in-progress. Review: technical proof verified across Chromium and WebKit (557/557 passing); final documentation update remaining.
+- Date: 2026-09-25. Priority: P2. Implementation: completed. Review: user approved 2026-09-26 (score 9.5/10).
 - Prove real text, embedded screenshots, portrait-first layout, clickable evidence links, and real browser downloads.
 
 ## Key Insights
@@ -11578,7 +11810,7 @@ After smoke passes, update:
 - [x] Complete images/content and portrait-first table pagination inspected.
 - [x] Actual PDF Snyk/Sonar URI annotations and click targets verified.
 - [x] Failure/duplicate/navigation/browser/security/offline scenarios proven.
-- [ ] Shipped documentation updated; temporary scaffolds removed.
+- [x] Shipped documentation updated; temporary scaffolds removed.
 
 ## Success Criteria
 - Final control report directly downloads a complete PDF: text remains text, screenshots remain images, preferred A4 portrait, real evidence links clickable.
@@ -11597,12 +11829,18 @@ After smoke passes, update:
 - Link tests observe destinations without performing privileged Jenkins/vendor actions.
 - Export reads only report evidence; static artifacts and secret stores remain untouched.
 
-## Next steps
-- Update `README.md` and `docs/release-gates.md` with final PDF export workflow, verified browser matrix, and command evidence.
-- Perform final scaffold cleanup and mark Phase 03 complete.
-## Unresolved questions
-- None requiring product input. Font repertoire, table readability and exact browser/PDF behavior remain verification tasks.
+## Verification Results (Completed 2026-09-26)
+- `npm run typecheck`: passed (0 errors, 1.32s).
+- `npm run build`: passed (TypeScript + Vite bundle 2.66 MB).
+- `npm run test:unit`: 505/505 passed (34.2s).
+- `npm run test:control`: 40/40 passed (18.2s).
+- `npm run test:report`: 5/5 passed (8.5s).
+- WebKit unit suites: 7/7 passed (6.0s).
+- Total tests: 557/557 passed (100% pass rate).
+- Code review: scored 9.5/10 with 0 critical issues. User approved.
 
+## Next steps
+Plan complete. All 3 phases landed and verified. Ready for release.
 ## Planned commands (not executed during planning)
 ```sh
 npm run typecheck
@@ -11619,7 +11857,7 @@ Use an unused port and isolated root as appropriate; stop the owned server. Comm
 ---
 title: "Client-side PDF export for final evidence reports"
 description: "React PDF download with real text, embedded screenshots, portrait-first tables, and clickable evidence links."
-status: in-progress
+status: completed
 priority: P2
 effort: not-estimated
 branch: main
@@ -11630,7 +11868,7 @@ created: 2026-09-25
 # Final-report PDF export
 
 ## Confirmed scope
-Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct React/browser download containing everything displayed, not just the viewport. Phase 01 shared viewer and Phase 02 browser PDF implementation completed 2026-09-26; Phase 03 end-to-end verification remains.
+Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct React/browser download containing everything displayed, not just the viewport. All 3 phases completed 2026-09-26.
 
 ## Decision
 - Preserve final report URLs. Control mode serves a React viewer using validated saved JSON and the existing escaped report body renderer shared with static output.
@@ -11647,7 +11885,7 @@ Final individual Snyk/Sonar evidence report in `npm run serve:control`; direct R
 |---|---|---|---|
 | 01 — Shared control report viewer | **DONE** | 100% | [Viewer integration](./phase-01-control-report-viewer.md); completed 2026-09-26. |
 | 02 — Real-text browser PDF | **DONE** | 100% | [Composition, tables, fonts, links](./phase-02-browser-pdf-export.md); completed 2026-09-26. |
-| 03 — Verification and documentation | In Progress | 85% | [PDF text/image/link/browser proof](./phase-03-verification-and-documentation.md); test matrix verified, documentation pending. |
+| 03 — Verification and documentation | **DONE** | 100% | [PDF text/image/link/browser proof](./phase-03-verification-and-documentation.md); completed 2026-09-26. |
 
 Dependency: Phase 01 → Phase 02 → Phase 03. No implementation work is authorized by this document alone.
 
@@ -11673,10 +11911,14 @@ Action items: plan revision complete; Phases 01 and 02 implementation completed 
 - Planning/PDF/frontend skills read directly; hard-planning and validation workflow instructions loaded. Native slash-command dispatch is unavailable; workflows followed through available tools.
 
 ## Verification and activation
-Phase 02 implementation verified 2026-09-26: 499/499 unit tests passed; Cycle 2 code review scored 9.5/10 ([review](./code-review-260926-1423-phase-02-browser-pdf-export-cycle-2.md)). Typecheck/build passed. Full browser/PDF runtime proof remains pending in Phase 03.
+Phase 03 implementation and verification completed 2026-09-26:
+- All test suites pass: 557/557 tests passed (100% pass rate) across `test:unit` (505), `test:control` (40), `test:report` (5), and WebKit unit suites (7).
+- TypeScript compilation (`npm run typecheck`) and production Vite bundling (`npm run build`) passed with 0 errors.
+- Phase 03 code review scored 9.5/10 with 0 critical issues ([review](./code-review-260926-1707-phase-03-verification-and-documentation.md)).
+- Verified real selectable/searchable text with Vietnamese Unicode diacritics, embedded screenshot XObjects, portrait A4 dimensions, and live Snyk/Sonar/Jenkins clickable URI annotations.
 
 ## Unresolved questions
-No unresolved Phase 02 implementation questions. End-to-end PDF parsing/visual review, font coverage, portrait readability, wrapped/table link geometry, and real browser download behavior remain Phase 03 verification gates.
+None. All acceptance criteria met and verified across Chromium and WebKit runtimes.
 </file>
 
 <file path="plans/260925-1729-final-report-pdf-export/research/client-pdf-rendering.md">
@@ -11748,6 +11990,483 @@ Viewer fetches `/reports/<project>/<run>/manifest.json` and `data.json` from the
 
 - Is the existing `/reports/<project>/<run>/` directory URL a required final-report entry point? Explicit requirement names `/index.html`; preserve any currently linked directory URL if users rely on it, with the same file-existence and ID checks.
 - Confirm PDF library's external font/blob/data/worker requirements separately; no weakening of report/static CSP should be proposed merely to support export.
+</file>
+
+<file path="plans/260926-2222-control-project-groups-and-cloning/architecture-design.md">
+# Proposed architecture — not implemented
+
+[Plan](./plan.md) · [Current architecture](../../docs/architecture.md) · [Confirmed request](./reports/planning-request.md)
+
+## Decisions
+
+User confirmed file-persisted groups, one group per project, disabled/ungrouped clones. Keep React, Tailwind, Radix, browser-safe validation, and existing configuration persistence. No new packages, endpoints, sidecar files, drag/drop, nested groups, group execution, cross-file cloning, or report changes.
+
+## Data contract
+
+Extend `ProjectConfigDocumentV1` with optional `projectGroups: readonly ProjectGroupInput[]`; each group has `id: string`, `name: string`. Extend `ProjectConfigInput` with optional `groupId: string`. Omission is Ungrouped; reject null/empty IDs and dangling references. Do not add `groupId` to defaults or normalized execution types.
+
+- Group IDs: same lowercase safe 1–63-character syntax as project IDs, unique within groups; independent namespace from projects. UI generates `group`, `group-2`, etc., never derives IDs from display names.
+- Group names: existing safe nonblank string rule, max 200 characters; trim on form submission. Duplicate display names allowed, distinguished by ID; display ID in management UI when needed.
+- Root group list: absent or empty allowed, up to 50 groups (matches current project cap, bounds empty groups). Unknown group keys rejected using existing field validator.
+- Project membership: optional single group ID referencing the root list. No duplicated project list inside groups. Project ID edits/removal consequently need no group member-reference migration.
+- Group deletion removes that definition and matching `groupId` fields in one immutable document transition; projects themselves, enabled flags, run types, and artifacts remain intact. Rename changes only group name.
+- Group order follows root array; cards in each column follow original project array. No stored card order; no mutation of execution order.
+- Old schema-v1 files remain valid without migration. Older application versions reject newly populated fields; document that rollback requires a backup or deliberate removal of group metadata.
+
+## State and persistence
+
+`ConfigStore GET -> useConfigManager -> useConfigDocumentEditor.currentDoc -> DashboardPage -> ProjectsGrid/group dialogs and ConfigFormBuilder`.
+
+Group changes and confirmed project additions call shared pure transitions, then `setDocument(updated, true)`. Raw JSON mirrors the same model. Global Save validates and sends the existing CSRF-protected, If-Match-guarded PUT. No autosave or automatic conflict merge. Failed save preserves local draft; existing conflict banner and reload workflow stay authoritative.
+
+Add a local monotonically increasing document-replacement revision to editor state. Increment only on successful load/reload/config switch and successful raw-JSON Apply, not ordinary edits or successful persistence of the same document. Expose a narrow replacement operation or explicit replacement flag to existing manager callers. Key only transient form/group-dialog state by this revision (not document object identity, active name alone, or ETag); this clears drafts on reloading the same file as well as switching files without remounting the whole dashboard on every save. Failed load/Apply must not reset local state.
+
+## Compact group board
+
+Reuse `ProjectsGrid.tsx` as the board composition owner and `ProjectCard.tsx` as the compact entry; retain current exported symbols rather than introduce a duplicate board API. Add focused kebab-case group-column and group-editor-dialog components.
+
+Board: no-wrap flex row, `min-width: 0`, `max-width: 100%`, `overflow-x: auto`; scoped to Projects, never body-level horizontal scrolling. Columns about 18rem wide, shrink-disabled, capped to available width on narrow screens. Header/actions outside scrollable card list; list max-height approximately `min(32rem, 65vh)`, `overflow-y: auto`, `min-height: 0`. Cards cannot shrink vertically. Keep native wheel/touch/keyboard behavior and visible focus; no custom wheel interception. Named keyboard-focusable scroll regions. Ungrouped first and always visible, including empty state.
+
+Card: reduced padding and gaps; name/ID compact header, enabled and run-type controls on one wrapping row, truncated job link on another. Full identity/link available by focus/accessibility text, not hover alone. Retain existing control IDs and safe external links where behavior is unchanged. Do not remove controls or introduce run buttons. Project headings move to a sensible level beneath group headings.
+
+New Group: enter name -> create empty group in shared draft -> open project checklist for that group. Manage Projects lists all projects, current membership, and checked target members. Apply sets selected projects to target group (moving them from old groups) and clears target membership for unchecked projects; unrelated assignments unchanged. Cancel leaves document unchanged. Rename/Delete are minimal management actions; delete confirms ungrouping, not project deletion. No document loaded: creation/management unavailable.
+
+## Clone draft
+
+Select an existing project in Project configuration -> Clone selected project -> inspect/edit existing new-project form -> Save Project -> global Save. Source is the current applied raw document, including applied unsaved form edits; unapplied raw text is not a clone source. Clone only within active configuration.
+
+Create independent nested JSON data with `structuredClone(source)` once on the clone action, not during rendering. Replace ID with bounded deterministic `<source>-copy`, then `-copy-2` etc.; truncate base before suffix so ID never exceeds 63. Name uses a bounded ` (copy)` suffix within 200 characters. Set enabled false; delete groupId. Preserve explicit URLs verbatim, runType, timeouts, browser, artifactDir, credentials references, selector objects, origin arrays/policies, Snyk/SonarQube options, and omitted overrides. Shared defaults remain shared defaults; never copy resolved secrets. Preserve artifactDir because report identity is separately project-ID based; verify that invariant in implementation before accepting the clone path.
+
+Use existing local draft validation and add callback; enforce current 50-project cap at start and commit, safe unique ID and full schema validity. Disable clone while adding, loading/replacing the document, or without source/capacity. Cancel causes no currentDoc/raw JSON/dirty mutation. Replacing document clears pending clone. Group edits while a clone is open must not clear it; clone stays ungrouped.
+
+## Invariants and risks
+
+- Groups cannot enable/disable, select, reorder execution, mutate reports, or copy projects.
+- Each project rendered exactly once. Invalid form-stage dangling membership is surfaced in validation and displayed under Ungrouped so entries remain accessible; do not silently repair persisted invalid JSON. Raw JSON Apply/save reject it.
+- Source/clone nested settings independent; disabled clone never enters execution until explicitly enabled and saved.
+- Project and group mutations retain last-enabled-project and capacity constraints.
+- No raw HTML, secret API reads, new networking, credentials storage, or altered security gates.
+- Verify layout in actual Chromium and WebKit with long labels, 50 projects, several columns, small viewport, zoom, and keyboard navigation. DOM snapshots alone cannot prove scrolling.
+
+## Unresolved questions
+
+None blocking. Column dimensions are initial design values, to adjust based on actual browser evidence without changing the agreed scrolling behavior.
+</file>
+
+<file path="plans/260926-2222-control-project-groups-and-cloning/cmd-plan.md">
+# Control project groups and cloning — planning entry point
+
+Status: planned; no implementation started.
+
+[Full plan](./plan.md) · [Architecture](./architecture-design.md) · [Enhanced request](./reports/planning-request.md)
+
+| Phase | Status | Progress | Link |
+|---|---|---|---|
+| Shared group schema and document state | Pending | 0% | [Phase 01](./phase-01-group-schema-and-document-state.md) |
+| Compact grouped project board | Pending | 0% | [Phase 02](./phase-02-compact-grouped-project-board.md) |
+| Clone selected project draft | Pending | 0% | [Phase 03](./phase-03-clone-project-draft.md) |
+| Verification and documentation | Pending | 0% | [Phase 04](./phase-04-verification-and-documentation.md) |
+
+Confirmed: file-persisted groups; one group per project; Ungrouped fallback; disabled, ungrouped clones. Each group scrolls vertically; board scrolls horizontally. No new dependencies or execution behavior.
+
+Workflow: `/cmd-plan__fast` and `/cmd-plan__validate` instructions loaded and followed inline; native slash dispatch unavailable. Planning/frontend-development skills read directly. Architecture doc includes a clearly proposed-design pointer only.
+
+Active-plan persistence unavailable: published helper reports missing `EVCRATE_SESSION_ID`. Use this explicit plan directory.
+
+## Unresolved questions
+
+None. Three-question validation completed: rename/delete groups, clone current applied edits, and retain prefilled URLs confirmed. No plan revisions needed; implementation awaits a separate request.
+</file>
+
+<file path="plans/260926-2222-control-project-groups-and-cloning/phase-01-group-schema-and-document-state.md">
+# Phase 01 — Group schema and document state
+
+## Context links
+
+[Parent plan](./plan.md) · [Architecture](./architecture-design.md) · [Configuration docs](../../docs/multi-project-configuration.md)
+
+## Overview
+
+Date: 2026-09-26. Priority P2. Status: DONE. Completed: 2026-09-26T23:40:20+07:00. Code review: Passed (9.5/10). Establish optional presentation metadata and shared mutation/replacement lifecycle.
+## Key Insights
+
+`assertProjectConfigDocument` is shared by browser and ConfigStore. Root/project allowlists currently reject new fields. Store persists the validated document without reconstructing it; no endpoint needed. Membership on projects avoids fragile project-ID references in group lists.
+
+## Requirements
+
+Backward-compatible optional `projectGroups` and `groupId`; bounded definitions; one membership; unknown keys/dangling refs rejected. Preserve project order, raw JSON, dirty state, existing run gates, ETag conflicts, and normalization behavior.
+
+## Architecture
+
+Use exact contracts in architecture-design.md. Add pure group operations to a focused browser-safe transition module; consume them through useConfigDocumentEditor. Expose a document-replacement revision for resetting transient editors only when the document is successfully replaced.
+
+## Related code files
+
+Modify:
+- `src/config/config-types.ts`: ProjectGroupInput, optional metadata fields.
+- `src/config/project-config-project-validation.ts`: root/project allowlists, groupId field syntax; never defaults.
+- `src/config/project-config-schema.ts`: group-list and cross-reference validation.
+- `src/config/project-config-field-validation.ts`: group count bound, reuse string validation.
+- `src/reporting/control-page/types/index.ts`: shared type exports only as needed.
+- `src/reporting/control-page/hooks/useConfigDocumentEditor.ts`: group actions, replacement revision, shared dirty/validation handling.
+- `src/reporting/control-page/hooks/useConfigManager.ts`: distinguish successful replacement from save acknowledgement.
+
+Create:
+- `src/config/project-group-validation.ts`: pure browser-safe definition/reference validation, called once from shared schema assertion.
+- `src/reporting/control-page/hooks/project-group-transitions.ts`: create, rename, delete, and replace-group-membership operations.
+
+Inspect, intentionally unchanged unless contract migration proves necessary: `report-server-config-store.ts`, `report-server-control-api.ts`, `project-config-loader.ts`, `project-config-normalization.ts`, `project-run-selection.ts`. Existing project update/remove transitions need no group-ID remapping because membership lives on the project.
+
+## Implementation Steps
+
+1. Find all references to affected exported types/hooks with LSP; retain current ESM/type conventions.
+2. Extend raw types and allowlists only; do not extend normalized execution types. Validate up to 50 groups, safe unique 1–63-char IDs, safe 1–200-char names, and resolvable optional groupId. Absent list equals empty; reject null, malformed arrays, unknown keys, invalid definitions/references.
+3. Implement immutable group operations. Generate unique group IDs independently of names. Delete strips membership from surviving projects. Applying a checklist moves selected projects into target, clears only unchecked target members, preserves all unrelated data/order. Reject nonexistent target/selected projects instead of partially mutating.
+4. Wire mutations through setDocument(updated, true), updating validation/raw JSON and leaving existing persistence API untouched. No-ops should not mark a clean document dirty.
+5. Add explicit replacement revision: successful load/reload/switch and valid raw Apply increment; ordinary mutations and Save acknowledgement do not. Failed load/Apply preserve state. Expose minimal revision contract for Phase 02/03 transient state reset.
+6. Update affected callers/contracts in one cutover. No compatibility aliases or duplicate model stores.
+
+## Todo list
+
+- [x] Shared optional metadata types and validation.
+- [x] Immutable membership/group transitions.
+- [x] Editor mutation and replacement lifecycle.
+- [x] Caller migration; behavior cases prepared for Phase 04.
+## Success Criteria
+
+Legacy config still loads; grouped config survives schema and API roundtrip. Invalid group metadata rejected equally in browser and server. Moves never duplicate projects; deletion only ungroups. Runtime selection/order unchanged. Exact verification in Phase 04.
+
+## Risk Assessment
+
+Accidentally adding metadata to defaults or normalized runtime would couple presentation to execution. Resetting on document object/ETag would erase valid local drafts during normal edits/saves. Use explicit replacement revision.
+
+## Security Considerations
+
+Reuse safe string/unknown-key checks, 1 MiB config limit, existing CSRF and ETag gates. No filesystem path built from group names/IDs. Do not log documents or credentials.
+
+## Next steps
+
+Phase 02 consumes shared actions; Phase 03 consumes replacement revision. Ready for Phase 02 implementation.
+## Unresolved questions
+
+None.
+</file>
+
+<file path="plans/260926-2222-control-project-groups-and-cloning/phase-02-compact-grouped-project-board.md">
+# Phase 02 — Compact grouped project board
+
+## Context links
+
+[Parent plan](./plan.md) · [Architecture](./architecture-design.md) · [Dependency: Phase 01](./phase-01-group-schema-and-document-state.md)
+
+## Overview
+
+Date: 2026-09-26. Priority P2. Implementation pending; review pending. Compact cards, editable membership, nested scroll layout.
+
+## Key Insights
+
+Current ProjectsGrid uses responsive 1/2/3-column CSS grid; ProjectCard uses spacious separate field rows. DashboardLayout limits content to 1200px. Keep that page containment; horizontal overflow belongs to the board, not the whole page.
+
+## Requirements
+
+Create group then choose projects; each project shown once. Always render Ungrouped first. Independent vertical scroll per group and horizontal scroll across non-wrapping columns. Preserve enabled/run type/job link, accessibility, raw JSON, and global Save semantics.
+
+## Architecture
+
+ProjectsGrid remains composition owner; group-column component renders header and separate scroll list; group-editor-dialog owns local name/checklist input only. Shared membership remains exclusively in currentDoc. Use existing Radix dialog and Button/Input/Select patterns, not a second component framework.
+
+## Related code files
+
+Modify:
+- `src/reporting/control-page/components/organisms/ProjectsGrid.tsx`: grouped board, toolbar, dialog orchestration.
+- `src/reporting/control-page/components/organisms/ProjectCard.tsx`: compact card, preserve callbacks/IDs and safe link behavior.
+- `src/reporting/control-page/pages/DashboardPage.tsx`: pass metadata/actions and replacement revision; disable editing while loading.
+- `src/reporting/control-page/types/component-contracts.ts`: add optional membership to projected card data if needed.
+- `src/reporting/control-page/components/templates/DashboardLayout.tsx`: minimum-width/overflow containment only where needed.
+- `src/reporting/control-page/styles/globals.css`: scoped board rules only if Tailwind classes cannot express the layout clearly.
+
+Create:
+- `src/reporting/control-page/components/organisms/project-group-column.tsx`.
+- `src/reporting/control-page/components/organisms/project-group-editor-dialog.tsx`.
+
+No new export barrel required for private components. Reuse existing organisms exported names.
+
+## Implementation Steps
+
+1. Build group buckets in one pass using Map; Ungrouped plus root group order. Preserve project order within each bucket. Unknown membership in an invalid form draft displays in Ungrouped with validation retained, never disappears.
+2. Compact card into identity, one wrapping controls row, and job-link row. Reduced spacing; full name/ID accessible at keyboard focus, truncation must not conceal controls. Do not reduce all global input/button sizes or reintroduce per-card run actions.
+3. Create horizontal flex board with no wrap and contained overflow. Fixed-width, nonshrinking columns; bounded vertical lists with nonshrinking cards; headers/actions outside vertical lists. Empty groups and Ungrouped show clear empty state.
+4. New Group dialog submits name to shared document, then opens target membership checklist. The empty group remains valid even if subsequent membership selection is cancelled. State clearly that global Save persists changes.
+5. Manage Projects lists all active-document projects with current group labels and target membership checked. Apply atomically moves selections; Cancel changes nothing. Add minimal rename and confirmation-gated delete-to-Ungrouped management using same shared transitions.
+6. Reset local dialogs on replacement revision, not ordinary group/project edits. Do not apply stale selections to another config; recheck target and project identities before commit.
+7. Keyboard: labelled controls, focus-trapped dialogs, Escape cancel, focus return, named focusable scroll regions and visible outlines. Native scroll behavior; no mouse-only assignment or drag/drop.
+8. Preserve unchanged consumers and update only selectors tied to the changed UI contract. Capture browser proof in Phase 04.
+
+## Todo list
+
+- [ ] Compact cards preserve behavior.
+- [ ] Group columns and contained two-axis scrolling.
+- [ ] Create/select/move/ungroup/rename/delete flows.
+- [ ] Replacement reset and keyboard interaction.
+
+## Success Criteria
+
+Each configured project appears once; all projects reachable at 50 items and many groups. Scrolling one group leaves neighbor scroll position unchanged. Board scroll reveals offscreen groups without page horizontal overflow. Save/reload preserves grouping; enabled/run-type edits still synchronize raw JSON and gate runs.
+
+## Risk Assessment
+
+Nested flex minimum sizing can defeat scroll; specify min-width/min-height and nonshrinking cards. Long names/URLs can expand columns; use wrapping/truncation with accessible full text. Last-group deletion and empty-list states must stay usable.
+
+## Security Considerations
+
+Render labels as React text. Group deletion only edits metadata; never call report deletion endpoints. Membership changes cannot enable projects or trigger execution.
+
+## Next steps
+
+Integrate clone draft in Phase 03; verify actual Chromium/WebKit desktop/mobile/zoom surfaces in Phase 04.
+
+## Unresolved questions
+
+None. Initial column width/height values in architecture-design.md are adjustable after visual proof.
+</file>
+
+<file path="plans/260926-2222-control-project-groups-and-cloning/phase-03-clone-project-draft.md">
+# Phase 03 — Clone selected project draft
+
+## Context links
+
+[Parent plan](./plan.md) · [Architecture](./architecture-design.md) · [Dependency: Phase 01](./phase-01-group-schema-and-document-state.md)
+
+## Overview
+
+Date: 2026-09-26. Priority P2. Implementation pending; review pending. Prefill the existing new-project editor safely from a selected project.
+
+## Key Insights
+
+ConfigFormBuilder already has selectedIndex, newProjectDraft, local validation, Save Project and Cancel. useConfigDocumentEditor.addProject accepts a supplied draft. Clone must use raw ProjectConfigInput, not ProjectCardData or normalized project values, to preserve nested settings and inherited defaults.
+
+## Requirements
+
+Clone the selected applied project within the current configuration. Independent nested data, unique valid ID, distinguishable bounded name, enabled false, no groupId. Preserve explicit settings/credential references and omitted overrides. No document mutation until Save Project; no disk write until global Save. Recheck 50-project and uniqueness limits at commit.
+
+## Architecture
+
+A focused pure clone helper creates one independent editable draft. ConfigFormBuilder invokes it through the existing add-mode state machine and validation path. No clone API, new editor, cross-config picker, secrets lookup, automatic save, or runner integration.
+
+## Related code files
+
+Modify:
+- `src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx`: Clone selected project action, source identity, common draft entry lifecycle, capacity/validation feedback.
+- `src/reporting/control-page/hooks/useConfigDocumentEditor.ts`: supplied-project addition guard, shared maxProjects constant, full-document validation before committing supplied clones if needed.
+- `src/reporting/control-page/pages/DashboardPage.tsx`: loading guard and replacement revision binding established in Phase 01.
+
+Create:
+- `src/reporting/control-page/utils/clone-project-draft.ts`: bounded clone identity and independent nested configuration copy.
+
+Inspect/reuse without new parallel convention:
+- `src/reporting/control-page/components/molecules/ConfigProjectEditor.tsx`.
+- `src/reporting/control-page/hooks/config-document-transitions.ts`.
+- `src/config/project-config-project-validation.ts`, `project-config-schema.ts`, `project-config-field-validation.ts`.
+
+## Implementation Steps
+
+1. Add Clone selected project adjacent to current selection/Add New Project; source is explicitly visible. Disable without source, at capacity, while adding, or during document load. Preserve existing blank-add behavior.
+2. Implement helper using structuredClone of the raw source once per action. Set enabled false and delete groupId. Keep nested selector objects, credentials references, origin arrays/policies, source options, artifactDir, exact URLs and omitted overrides. Never resolve defaults or secrets.
+3. Generate `<source-id>-copy`, then `-copy-2`, etc. Truncate base to make room for full suffix within 63 characters before checking collisions. Name is source name plus bounded ` (copy)` within 200 characters. Do not require unique names; unique IDs are authoritative.
+4. Enter existing local newProjectDraft mode. Explain source, disabled status and shared credential references, and remind user to review copied job URL before enabling. Cancel must leave raw JSON/currentDoc/dirty state exactly as before opening.
+5. Reuse validateProject and ID collision validation. Before Save Project commits, enforce latest document capacity, latest uniqueness, and full document validity; preserve local draft and actionable errors on failure. Do not create dangling membership or change last-enabled-project rules.
+6. Reset draft/errors/selection only on successful document replacement revision, including reload of same file and raw Apply. Normal group edits and global Save must not erase a pending clone. Selecting another project retains the current existing add-draft cancellation behavior.
+7. Remove any obsolete duplicate clone/add handling introduced during this work, but do not refactor unrelated form controls. Keep TypeScript exact optional fields (delete groupId rather than writing undefined).
+
+## Todo list
+
+- [ ] Clone helper and suffix-aware bounded identity.
+- [ ] Existing draft form integration and review messaging.
+- [ ] Latest-state commit guards and cancellation/replacement behavior.
+- [ ] Clone/source independence and safety cases prepared for Phase 04.
+
+## Success Criteria
+
+Nested clone edits never mutate source. Save Project creates exactly one disabled, ungrouped entry with intended fields; global Save/reload preserves it. Cancel, invalid input, cap and collisions do not partially add entries. Omitted credentials still inherit defaults. Enabled source and disabled clone remain independent execution candidates.
+
+## Risk Assessment
+
+Shallow copies alias nested objects. Using normalized data pins inherited defaults and loses raw settings. Naive suffix append exceeds ID bounds. Reusing source identity can alias reports. Verify generated distinct identity and artifact path conventions before browser acceptance.
+
+## Security Considerations
+
+Credentials copied as environment-variable names only; no `/api/secrets` fetch is needed. Do not clone runtime logs, tokens, reports, history, or files. Disabled default prevents accidental inclusion in all-enabled actions, but user must still review copied URLs before enabling.
+
+## Next steps
+
+Phase 04 validates integration, conflicts, persistence, clone independence, and actual browser behavior.
+
+## Unresolved questions
+
+None.
+</file>
+
+<file path="plans/260926-2222-control-project-groups-and-cloning/phase-04-verification-and-documentation.md">
+# Phase 04 — Verification and documentation
+
+## Context links
+
+[Parent plan](./plan.md) · [Architecture](./architecture-design.md) · Dependencies: Phases [01](./phase-01-group-schema-and-document-state.md), [02](./phase-02-compact-grouped-project-board.md), [03](./phase-03-clone-project-draft.md)
+
+## Overview
+
+Date: 2026-09-26. Priority P2. Implementation pending; review pending. Prove persistence, safety, and real UI behavior after integrated implementation. The commands below are planned, not already run.
+
+## Key Insights
+
+Existing tests/e2e/control-page.spec.ts launches the real control server using temporary config/report roots and injected offline executors. playwright.control.config.ts covers Chromium/WebKit. package.json test:control explicitly lists current files, so adding an E2E file without updating that script would skip it.
+
+## Requirements
+
+Run consolidated checks after changes, not mid-flight. Real browser smoke mandatory; test assertions/source snapshots alone do not prove nested scrolling. No live Jenkins calls, production config writes, secret changes, or report deletion. Durable tests only for consumer-visible boundaries and uncertain transitions.
+
+## Architecture
+
+Use existing temporary-directory/in-process server patterns for HTTP persistence contracts. Add behavioral schema/transition coverage to current relevant suites; narrow new unit file only for group/clone transition boundaries. Reuse current E2E fixtures rather than duplicate server scaffolding. Browser smoke may use a throwaway server/scenario and synthetic data, removed after proof.
+
+## Related code files
+
+Inspect/update where contracts changed:
+- `tests/unit/project-config.spec.ts`: legacy/new schema acceptance and invalid group metadata.
+- `tests/unit/control-config-api.spec.ts`: real PUT/GET group roundtrip and stale ETag rejection with preserved disk content.
+- `tests/unit/control-hooks-and-types.spec.ts`: document replacement and mutation behavior if appropriate to existing harness.
+- `tests/unit/control-atomic-components.spec.ts`: remove incidental layout/source-copy expectations encountered, never repin them to new markup.
+- `tests/e2e/control-page.spec.ts`: preserve existing consumer scenarios when locators/contracts change. Extend only where permanent regression coverage is warranted.
+- New `tests/unit/control-project-transitions.spec.ts`: membership move/delete invariants, clone identity bounds, nested mutation independence, latest-state cap/collision rejection.
+
+Documentation after smoke:
+- `README.md`: compact groups and clone operator workflow in current control section.
+- `docs/multi-project-configuration.md`: optional projectGroups/groupId, schema example, limits and rollback caveat.
+- `docs/architecture.md`: replace planned-design pointer with accurate implemented status; stay within 800 LOC.
+- `docs/system-architecture.md`, `docs/codebase-summary.md`: targeted updates to directly changed control model/component descriptions; do not expand unrelated sections or worsen existing size limits.
+- `docs/project-overview-pdr.md`, `docs/release-gates.md`, `docs/project-roadmap.md`: acceptance evidence and status only after behavior is exercised.
+
+No package/dependency change expected. Example configs remain valid ungrouped; show optional metadata in documentation instead of modifying operator files.
+
+## Implementation Steps
+
+1. Review affected suite harnesses; remove tests that only assert source strings/wording/incidental markup. Keep/update actual interaction contracts. Use focused permanent tests for:
+   - Legacy omission, empty groups, safe unique IDs, malformed/null fields, dangling refs, disallowed defaults, group/project capacity limits.
+   - Move A to B, uncheck to Ungrouped, delete occupied group, rename, invalid target/selection; preserve project order, unrelated fields and source input objects.
+   - Max-length clone ID/name, existing copy suffix collisions, full capacity, nested clone/source independence and absent inheritance; disabled ungrouped clone after Save Project.
+   - Config API exact roundtrip, stale If-Match conflict and no lost disk updates. Reuse existing security tests rather than duplicate them.
+2. Run `npm run typecheck`, `npm run build`, `npm run test:unit`, then `npm run test:control` once after integration. Existing scripts include Chromium/WebKit control scenarios. For any reported failure, diagnose observed output rather than rerun merely to confirm.
+3. Launch the actual control CLI against temporary config/report directories using supported options discovered in `report-server-cli.ts`; do not point smoke mutations at user's files. Exercise the built dashboard with the browser tool in addition to automated suites. Verify default `npm run serve:control` launch behavior remains intact without running jobs.
+4. Browser scenario: legacy config shows Ungrouped; create empty group, select projects, move between two groups, cancel edit, rename, delete-to-Ungrouped. Save and reload, open second browser context, confirm persisted membership. Switch between two configs with overlapping project IDs; no metadata/draft leakage. Valid raw Apply updates board; invalid Apply leaves applied model intact. Same-file Reload/valid Apply dismiss pending dialogs and clone drafts.
+5. Layout smoke: 50 projects distributed across 6 groups, include long identities/URLs and empty group. Capture desktop and narrow viewport screenshots plus zoom/keyboard checks. Vertically scroll a full column to its last project; verify neighboring scroll position unchanged. Horizontally reveal last group; page body must not overflow. Verify all controls usable, focus visible, dialogs escape/return focus, no focus trap in scroll lists.
+6. Clone smoke: choose a configured auto-build source with nested options and inherited defaults, open clone, edit then Cancel; confirm source/model/disk unchanged. Clone again, verify unique identity and disabled/ungrouped state, edit fields, Save Project then global Save/reload. Confirm source unchanged and no `/api/run` or secrets-value requests. Exercise cap/duplicate-ID errors and replacement while draft open; ordinary group edits must retain clone draft.
+7. Run existing offline execution-selection checks: grouping cannot change enabled/runType targets or ordering, and disabled clone stays excluded. Keep last-enabled and dirty-config run gates.
+8. After browser proof, update documentation/status with exact observed commands/scenarios and limitations. Remove throwaway smoke scripts/data/services; do not delete user fixtures. Review affected callsites/types/docs, keeping unrelated behavior unchanged.
+
+## Todo list
+
+- [ ] Boundary/transition and persistence regression coverage.
+- [ ] Typecheck/build/unit/control checks after integration.
+- [ ] Actual browser grouping/clone/scroll/accessibility smoke.
+- [ ] Evidence-backed documentation and final review.
+
+## Success Criteria
+
+All parent acceptance criteria exercised, not inferred from compile success. Record commands, browser versions/projects, viewport sizes, screenshots, actual persistence/conflict outcomes, and remaining environmental limits. No accidental external execution or config/report writes outside isolated smoke roots.
+
+## Risk Assessment
+
+Tests passing cannot establish compact layout or scroll usability. Fake forwarding/mocked echoes cannot establish saved group data; assert real server/disk roundtrip. Test script explicit file list can silently omit new E2E suites; prefer current suite or update every relevant invocation if splitting becomes necessary.
+
+## Security Considerations
+
+Use synthetic credential references only. Existing origin/CSRF/If-Match checks must remain active. No real browser credentials, secret values, report history, or network Jenkins interaction in artifacts/screenshots.
+
+## Next steps
+
+Implementation completion requires this gate. Update phase status only with actual evidence; no remaining implementation work is implied complete by this planning deliverable.
+
+## Unresolved questions
+
+None product-related. Runtime verification remains pending until implementation, as requested.
+</file>
+
+<file path="plans/260926-2222-control-project-groups-and-cloning/plan.md">
+---
+title: "Control page compact project groups and cloning"
+description: "Persist single-membership groups, display compact scrollable project columns, and clone existing project settings into safe drafts."
+status: in-progress
+priority: P2
+effort: not-estimated
+branch: main
+tags: [feature, frontend, configuration]
+created: 2026-09-26
+---
+
+# Control page project groups and cloning
+
+## Scope
+
+Phase 01 implementation is complete; focused behavior tests, full unit tests, typecheck/build, and review are recorded in the [Phase 01 test report](../reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md) and [code review](../reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md). Phases 02–04 remain pending.
+
+User confirmed:
+1. Compact project cards; groups saved inside the selected configuration JSON.
+2. One group per project; unassigned items in Ungrouped. Vertical scrolling inside groups; horizontal scrolling across columns.
+3. Clone existing project settings into editable draft; unique identity; disabled and ungrouped initially.
+
+[Architecture and exact contracts](./architecture-design.md) · [Enhanced prompt and answers](./reports/planning-request.md) · [Phase index](./cmd-plan.md)
+
+## Phases
+
+| Phase | Status | Progress | Dependency | Detail |
+|---|---|---|---|---|
+| 01 Shared group schema and document lifecycle | DONE | 100% | None | Completed 2026-09-26T23:40:20+07:00; [Phase 01](./phase-01-group-schema-and-document-state.md) |
+| 02 Compact grouped project board | Pending | 0% | 01 | [Phase 02](./phase-02-compact-grouped-project-board.md) |
+| 03 Clone selected project draft | Pending | 0% | 01 | [Phase 03](./phase-03-clone-project-draft.md) |
+| 04 Behavioral verification and documentation | Pending | 0% | 01–03 | [Phase 04](./phase-04-verification-and-documentation.md) |
+Phases 02/03 share DashboardPage and editor wiring: integrate sequentially or assign a single owner. Do not have concurrent agents edit those files. Check references through LSP before exported contract changes; migrate all callers in the same cutover.
+
+## Main decisions
+
+- Optional root `projectGroups` definitions plus project-only optional `groupId`; existing schema-v1 documents remain valid.
+- Existing document editor, raw JSON, validation, CSRF, ETag, and ConfigStore save pipeline. No new endpoint or personal browser layout storage.
+- Reuse ProjectsGrid/ProjectCard; narrow new group-column/dialog modules. No drag/drop, nested groups, group execution, sort controls, new framework, or new packages.
+- New Group creates an empty column, then opens project selection. Manage Projects moves checked entries atomically; unchecked target members return to Ungrouped. Minimal rename/delete management; deleting a group never deletes projects.
+- Clone selected raw project, not normalized runtime data. Copy nested settings independently; preserve absent inherited fields and exact URLs. Reuse draft editor, Save Project, Cancel, global Save.
+- Clear transient group/clone drafts on successful document replacement, not normal edits or saves.
+
+## Acceptance gate
+
+- Every project appears exactly once; stable project ordering and existing enabled/run-type/job-link functionality.
+- Independent vertical group scrolling and board-only horizontal scrolling in real browser; empty groups and Ungrouped remain usable.
+- Group membership survives global Save, reload, and a second browser; configurations remain isolated.
+- Invalid/dangling group metadata rejected; stale ETag conflicts preserve the local draft rather than overwrite another writer.
+- Clone Cancel changes nothing; Save Project adds an independent disabled/ungrouped entry; global Save persists; original remains unchanged.
+- Collision/max-length/50-project boundaries enforced; no copied secrets, report files, or unintended execution.
+- Existing report/build selection, credentials, raw-JSON Apply, and last-enabled-project safeguards preserved.
+
+## Risks and verification
+
+Schema allowlists currently reject extra metadata. Update the shared browser/server boundary first. Grouping must not leak into execution models. Long IDs need suffix-aware truncation; shallow copies would alias nested clone settings. Local drafts currently outlive some document replacements: make replacement state explicit.
+
+Phase 04 defines commands and actual browser smoke scenarios. Existing source-text/wording-only tests encountered during migration must be removed, not repinned. Keep durable tests focused on membership, validation, persistence conflicts, and clone independence. No live Jenkins execution for these changes.
+
+## Validation Summary
+
+**Validated:** 2026-09-26. **Questions asked:** 3 validation questions, after 3 initial product questions.
+
+### Confirmed Decisions
+- Include group rename/delete; deletion confirms ungrouping only, never deletes projects/reports.
+- Clone current applied form edits, including unsaved changes; ignore unapplied raw JSON.
+- Keep login/job URLs prefilled; disabled clone includes a reminder to review target before enabling.
+
+### Action Items
+- No plan revisions required; all answers match the documented design.
+- Planning check passed: 8 Markdown files, 4 phase files, all relative links resolved and required sections/frontmatter present.
+
+## Planning status and unresolved questions
+
+Product questions resolved and validation interview completed. Phase 01 completed 2026-09-26T23:40:20+07:00; focused/full unit tests, typecheck/build, and review are recorded in the [test report](../reports/phase01-test-suite-260926-2311-group-schema-and-document-state.md) and [code review](../reports/code-review-260926-2315-phase-01-group-schema-and-document-state.md). Phases 02–04, including integrated browser verification, remain pending. Active-plan persistence unavailable: helper reported missing EVCRATE_SESSION_ID; use this plan path explicitly.
 </file>
 
 <file path="playwright.config.ts">
@@ -12175,6 +12894,16 @@ Open `http://127.0.0.1:4173/` in your browser.
 - **Mutual exclusion**: Only one report or auto-build run may be active. The UI disables both actions while a run is queued/running; auto-build submits an immediate batch, while targeted single-project selection remains available to API callers.
 - **Security**: The control dashboard is strictly restricted to loopback (`127.0.0.1`) and rejects non-loopback bindings and cross-origin state-modifying requests.
 - **Build pipeline**: Bundled via Vite (`vite.control.config.ts`) into `.runner-build/reporting/control-page/` as single-bundle CSS and JS, ensuring strict Content Security Policy (`script-src 'self'`, `style-src 'self'`) compliance without inline styles or eval.
+
+
+## Final-report PDF export
+
+In Control mode, open a saved report at `/reports/<projectId>/<runId>/index.html` and choose **Export PDF**. The browser downloads `<projectId>-<runId>-report.pdf`; export adds no server endpoint and does not alter saved reports.
+
+- Report headings, prose, metadata, lists, tables, captions, and link text remain selectable/searchable Unicode text. Screenshots stay embedded images; pages are not rasterized.
+- The default layout is A4 portrait. Findings-table content wraps and paginates while retaining its columns.
+- Validated evidence links become clickable PDF links. Generation does not visit source sites; it loads only safe local or embedded evidence images.
+- PDF export is verified in Chromium and WebKit. See the [report pipeline](./docs/report-pipeline.md#client-side-pdf-export) and [Phase 03 release snapshot](./docs/release-gates.md#final-report-pdf-export-phase-03-verification-snapshot-2026-09-26).
 
 ## Report server (read-only aggregate preview)
 
@@ -16903,6 +17632,7 @@ export type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
   ProjectConfigInput,
+  ProjectGroupInput,
   ProjectCredentialReferences,
   ProjectOriginPolicies,
   ProjectSecrets,
@@ -16911,7 +17641,11 @@ export type {
 } from './config/config-types.js';
 export {
   assertProjectConfigDocument,
+  GROUP_ID_REGEX,
+  GROUP_KEYS,
   PROJECT_CONFIG_LIMITS,
+  validateProjectGroup,
+  validateProjectGroups,
 } from './config/project-config-schema.js';
 
 export {
@@ -16952,9 +17686,15 @@ export type ProjectOriginPolicies = Partial<
   Record<ProjectOriginSourceName, readonly string[]>
 >;
 
+export interface ProjectGroupInput {
+  id: string;
+  name: string;
+}
+
 export interface ProjectConfigInput {
   id: string;
   name: string;
+  groupId?: string;
   loginUrl: string;
   jobUrl: string;
   runType?: RunType;
@@ -16988,6 +17728,7 @@ export interface ProjectConfigDocumentV1 {
   schemaVersion: 1;
   reportWorkers?: number;
   projects: readonly ProjectConfigInput[];
+  projectGroups?: readonly ProjectGroupInput[];
   defaults?: ProjectConfigDefaults;
 }
 
@@ -17098,6 +17839,7 @@ import {
 
 export const PROJECT_CONFIG_LIMITS = {
   maxProjects: 50,
+  maxGroups: 50,
   maxStringLength: 512,
   maxNameLength: 200,
   maxOriginsPerSource: 20,
@@ -17584,6 +18326,7 @@ import {
 export const ROOT_KEYS: Record<string, true> = {
   schemaVersion: true,
   projects: true,
+  projectGroups: true,
   defaults: true,
   reportWorkers: true,
 };
@@ -17591,6 +18334,7 @@ export const ROOT_KEYS: Record<string, true> = {
 export const PROJECT_KEYS: Record<string, true> = {
   id: true,
   name: true,
+  groupId: true,
   loginUrl: true,
   jobUrl: true,
   runType: true,
@@ -17732,6 +18476,12 @@ export function validateProject(value: unknown, index: number, issues: string[])
   if (typeof value.id === 'string' && !/^[a-z0-9][a-z0-9-]{0,62}$/u.test(value.id)) {
     issues.push(`${fieldName}.id must use lowercase safe characters`);
   }
+  if (value.groupId !== undefined) {
+    stringField(value.groupId, `${fieldName}.groupId`, issues, 63);
+    if (typeof value.groupId === 'string' && !/^[a-z0-9][a-z0-9-]{0,62}$/u.test(value.groupId)) {
+      issues.push(`${fieldName}.groupId must use lowercase safe characters`);
+    }
+  }
   stringField(value.name, `${fieldName}.name`, issues, PROJECT_CONFIG_LIMITS.maxNameLength);
   exactUrl(value.loginUrl, `${fieldName}.loginUrl`, issues);
   exactUrl(value.jobUrl, `${fieldName}.jobUrl`, issues);
@@ -17774,8 +18524,15 @@ import {
   validateDefaults,
   validateProject,
 } from './project-config-project-validation.js';
+import { validateProjectGroups } from './project-group-validation.js';
 
 export { PROJECT_CONFIG_LIMITS } from './project-config-field-validation.js';
+export {
+  GROUP_ID_REGEX,
+  GROUP_KEYS,
+  validateProjectGroup,
+  validateProjectGroups,
+} from './project-group-validation.js';
 
 export function assertProjectConfigDocument(value: unknown): ProjectConfigDocumentV1 {
   const issues: string[] = [];
@@ -17806,6 +18563,7 @@ export function assertProjectConfigDocument(value: unknown): ProjectConfigDocume
   if (value.defaults !== undefined) {
     validateDefaults(value.defaults, issues);
   }
+  validateProjectGroups(value.projectGroups, value.projects, issues);
   const ids = new Set<string>();
   if (Array.isArray(value.projects)) {
     for (const item of value.projects) {
@@ -17823,6 +18581,100 @@ export function assertProjectConfigDocument(value: unknown): ProjectConfigDocume
   }
   if (issues.length > 0) throw new ConfigError(issues);
   return value as unknown as ProjectConfigDocumentV1;
+}
+</file>
+
+<file path="src/config/project-group-validation.ts">
+import { isRecord } from '../config-selectors.js';
+import {
+  PROJECT_CONFIG_LIMITS,
+  addUnknownKeys,
+  stringField,
+} from './project-config-field-validation.js';
+
+export const GROUP_KEYS: Record<string, true> = {
+  id: true,
+  name: true,
+};
+
+export const GROUP_ID_REGEX = /^[a-z0-9][a-z0-9-]{0,62}$/u;
+
+export function validateProjectGroup(
+  value: unknown,
+  index: number,
+  issues: string[],
+): void {
+  const fieldName = `config.projectGroups[${index}]`;
+  if (!isRecord(value)) {
+    issues.push(`${fieldName} must be an object`);
+    return;
+  }
+
+  addUnknownKeys(value, GROUP_KEYS, fieldName, issues);
+  stringField(value.id, `${fieldName}.id`, issues, 63);
+  if (typeof value.id === 'string' && !GROUP_ID_REGEX.test(value.id)) {
+    issues.push(`${fieldName}.id must use lowercase safe characters`);
+  }
+  stringField(
+    value.name,
+    `${fieldName}.name`,
+    issues,
+    PROJECT_CONFIG_LIMITS.maxNameLength,
+  );
+}
+
+export function validateProjectGroups(
+  groups: unknown,
+  projects: unknown,
+  issues: string[],
+): void {
+  if (groups === undefined) {
+    if (Array.isArray(projects)) {
+      projects.forEach((project, index) => {
+        if (isRecord(project) && typeof project.groupId === 'string') {
+          issues.push(
+            `projects[${index}].groupId references unknown group: ${project.groupId}`,
+          );
+        }
+      });
+    }
+    return;
+  }
+
+  if (!Array.isArray(groups)) {
+    issues.push('config.projectGroups must be an array');
+    return;
+  }
+
+  if (groups.length > PROJECT_CONFIG_LIMITS.maxGroups) {
+    issues.push(
+      `config.projectGroups must contain at most ${PROJECT_CONFIG_LIMITS.maxGroups} groups`,
+    );
+  }
+
+  groups.forEach((group, index) => validateProjectGroup(group, index, issues));
+
+  const groupIds = new Set<string>();
+  for (const group of groups) {
+    if (isRecord(group) && typeof group.id === 'string') {
+      if (groupIds.has(group.id)) {
+        issues.push(`duplicate group id: ${group.id}`);
+      }
+      groupIds.add(group.id);
+    }
+  }
+
+  if (Array.isArray(projects)) {
+    projects.forEach((project, index) => {
+      if (isRecord(project) && typeof project.groupId === 'string') {
+        if (!groupIds.has(project.groupId)) {
+          issues.push(
+            `projects[${index}].groupId references unknown group: ${project.groupId}`,
+          );
+        }
+      }
+    });
+  }
 }
 </file>
 
@@ -24009,6 +24861,188 @@ export function updateProjectDocumentReportWorkers(
 }
 </file>
 
+<file path="src/reporting/control-page/hooks/project-group-transitions.ts">
+import { PROJECT_CONFIG_LIMITS } from '../../../config/project-config-schema.js';
+import type {
+  ProjectConfigDocumentV1,
+  ProjectConfigInput,
+  ProjectGroupInput,
+} from '../types/index.js';
+
+export function generateGroupId(
+  existingGroupIds: ReadonlySet<string> | readonly string[],
+): string {
+  const ids = existingGroupIds instanceof Set ? existingGroupIds : new Set(existingGroupIds);
+  let id = 'group';
+  for (let suffix = 2; ids.has(id); suffix += 1) {
+    id = `group-${suffix}`;
+  }
+  return id;
+}
+
+export function createProjectGroup(
+  document: ProjectConfigDocumentV1,
+  name?: string,
+): { document: ProjectConfigDocumentV1; groupId: string } | null {
+  const currentGroups = document.projectGroups ?? [];
+  if (currentGroups.length >= PROJECT_CONFIG_LIMITS.maxGroups) {
+    return null;
+  }
+
+  const existingIds = new Set(currentGroups.map((group) => group.id));
+  const groupId = generateGroupId(existingIds);
+  const trimmedName = name?.trim();
+  const groupName =
+    trimmedName && trimmedName.length > 0
+      ? trimmedName.slice(0, PROJECT_CONFIG_LIMITS.maxNameLength)
+      : 'New Group';
+
+  const newGroup: ProjectGroupInput = {
+    id: groupId,
+    name: groupName,
+  };
+
+  return {
+    document: {
+      ...document,
+      projectGroups: [...currentGroups, newGroup],
+    },
+    groupId,
+  };
+}
+
+export function renameProjectGroup(
+  document: ProjectConfigDocumentV1,
+  groupId: string,
+  name: string,
+): ProjectConfigDocumentV1 {
+  const currentGroups = document.projectGroups;
+  if (!currentGroups || currentGroups.length === 0) {
+    return document;
+  }
+
+  const groupIndex = currentGroups.findIndex((group) => group.id === groupId);
+  if (groupIndex === -1) {
+    return document;
+  }
+
+  const trimmedName = name.trim().slice(0, PROJECT_CONFIG_LIMITS.maxNameLength);
+  if (trimmedName.length === 0 || trimmedName === currentGroups[groupIndex]?.name) {
+    return document;
+  }
+
+  const projectGroups = [...currentGroups];
+  const existingGroup = projectGroups[groupIndex];
+  if (!existingGroup) {
+    return document;
+  }
+
+  projectGroups[groupIndex] = {
+    ...existingGroup,
+    name: trimmedName,
+  };
+
+  return {
+    ...document,
+    projectGroups,
+  };
+}
+
+export function deleteProjectGroup(
+  document: ProjectConfigDocumentV1,
+  groupId: string,
+): ProjectConfigDocumentV1 {
+  const currentGroups = document.projectGroups;
+  if (!currentGroups || !currentGroups.some((group) => group.id === groupId)) {
+    return document;
+  }
+
+  const projectGroups = currentGroups.filter((group) => group.id !== groupId);
+  let projectsChanged = false;
+
+  const projects = document.projects.map((project) => {
+    if (project.groupId === groupId) {
+      projectsChanged = true;
+      const { groupId: _, ...rest } = project;
+      return rest as ProjectConfigInput;
+    }
+    return project;
+  });
+
+  return {
+    ...document,
+    projectGroups,
+    projects: projectsChanged ? projects : document.projects,
+  };
+}
+
+export function replaceGroupMembership(
+  document: ProjectConfigDocumentV1,
+  groupId: string,
+  selectedProjectIds: readonly string[],
+): ProjectConfigDocumentV1 {
+  const currentGroups = document.projectGroups;
+  if (!currentGroups || !currentGroups.some((group) => group.id === groupId)) {
+    return document;
+  }
+
+  const projectIdsSet = new Set(document.projects.map((project) => project.id));
+  for (const selectedId of selectedProjectIds) {
+    if (!projectIdsSet.has(selectedId)) {
+      return document;
+    }
+  }
+
+  const selectedSet = new Set(selectedProjectIds);
+  let hasChanges = false;
+
+  const updatedProjects = document.projects.map((project) => {
+    const isSelected = selectedSet.has(project.id);
+    const isCurrentlyInTarget = project.groupId === groupId;
+
+    if (isSelected) {
+      if (!isCurrentlyInTarget) {
+        hasChanges = true;
+        return {
+          ...project,
+          groupId,
+        };
+      }
+      return project;
+    }
+
+    if (isCurrentlyInTarget) {
+      hasChanges = true;
+      const { groupId: _, ...rest } = project;
+      return rest as ProjectConfigInput;
+    }
+
+    return project;
+  });
+
+  if (!hasChanges) {
+    return document;
+  }
+
+  return {
+    ...document,
+    projects: updatedProjects,
+  };
+}
+
+export function getGroupProjects(
+  document: ProjectConfigDocumentV1,
+  groupId: string | null | undefined,
+): readonly ProjectConfigInput[] {
+  if (!groupId) {
+    return document.projects.filter(
+      (project) => !project.groupId || project.groupId.trim().length === 0,
+    );
+  }
+  return document.projects.filter((project) => project.groupId === groupId);
+}
+</file>
+
 <file path="src/reporting/control-page/hooks/use-delete-reports.ts">
 import { useState } from 'react';
 import type { AggregateProjectSummary, ProjectDeletionResult } from '../types/report-management-types.js';
@@ -24649,6 +25683,12 @@ import {
   updateProjectDocumentReportWorkers,
   type ProjectUpdate,
 } from './config-document-transitions.js';
+import {
+  createProjectGroup,
+  deleteProjectGroup,
+  renameProjectGroup,
+  replaceGroupMembership,
+} from './project-group-transitions.js';
 import type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
@@ -24663,8 +25703,10 @@ export interface UseConfigDocumentEditorResult {
   isDirty: boolean;
   jsonValidationMsg: ValidationStatus;
   validationErrors: string[];
+  replacementRevision: number;
   setRawJsonString: (value: string) => void;
   setDocument: (document: ProjectConfigDocumentV1 | null, dirty?: boolean) => void;
+  replaceDocument: (document: ProjectConfigDocumentV1 | null) => void;
   applyRawJson: (jsonString?: string) => boolean;
   validateCurrentDocument: () => boolean;
   updateProject: (projectId: string, update: ProjectUpdate) => void;
@@ -24673,6 +25715,10 @@ export interface UseConfigDocumentEditorResult {
   removeProjectAt: (projectIndex: number) => boolean;
   updateDefaults: (update: (previous: ProjectConfigDefaults) => ProjectConfigDefaults) => void;
   updateReportWorkers: (count: number) => void;
+  createGroup: (name?: string) => string | null;
+  renameGroup: (groupId: string, name: string) => void;
+  deleteGroup: (groupId: string) => void;
+  setGroupMembership: (groupId: string, selectedProjectIds: readonly string[]) => void;
 }
 
 function getValidationErrors(document: ProjectConfigDocumentV1 | null): string[] {
@@ -24692,6 +25738,7 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
   const [isDirty, setIsDirty] = useState(false);
   const [jsonValidationMsg, setJsonValidationMsg] = useState<ValidationStatus>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [replacementRevision, setReplacementRevision] = useState(0);
 
   const setDocument = useCallback((document: ProjectConfigDocumentV1 | null, dirty = false) => {
     const errors = getValidationErrors(document);
@@ -24706,6 +25753,11 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
         : `Configuration has ${errors.length} validation error(s). Fix them before saving.`,
     } : null);
   }, []);
+  const replaceDocument = useCallback((document: ProjectConfigDocumentV1 | null) => {
+    setDocument(document, false);
+    setReplacementRevision((rev) => rev + 1);
+  }, [setDocument]);
+
 
   const applyRawJson = useCallback((explicitJsonString?: string): boolean => {
     const text = explicitJsonString ?? rawJsonString;
@@ -24713,6 +25765,7 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     try {
       const document = assertProjectConfigDocument(JSON.parse(text) as unknown);
       setDocument(document as unknown as ProjectConfigDocumentV1, true);
+      setReplacementRevision((rev) => rev + 1);
       setJsonValidationMsg({ isValid: true, message: 'JSON valid and applied to model.' });
       return true;
     } catch (error) {
@@ -24777,6 +25830,35 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
   const updateReportWorkers = useCallback((count: number): void => {
     if (currentDoc) setDocument(updateProjectDocumentReportWorkers(currentDoc, count), true);
   }, [currentDoc, setDocument]);
+  const createGroup = useCallback((name?: string): string | null => {
+    if (!currentDoc) return null;
+    const result = createProjectGroup(currentDoc, name);
+    if (!result) return null;
+    setDocument(result.document, true);
+    return result.groupId;
+  }, [currentDoc, setDocument]);
+
+  const renameGroup = useCallback((groupId: string, name: string): void => {
+    if (!currentDoc) return;
+    const updated = renameProjectGroup(currentDoc, groupId, name);
+    if (updated === currentDoc) return;
+    setDocument(updated, true);
+  }, [currentDoc, setDocument]);
+
+  const deleteGroup = useCallback((groupId: string): void => {
+    if (!currentDoc) return;
+    const updated = deleteProjectGroup(currentDoc, groupId);
+    if (updated === currentDoc) return;
+    setDocument(updated, true);
+  }, [currentDoc, setDocument]);
+
+  const setGroupMembership = useCallback((groupId: string, selectedProjectIds: readonly string[]): void => {
+    if (!currentDoc) return;
+    const updated = replaceGroupMembership(currentDoc, groupId, selectedProjectIds);
+    if (updated === currentDoc) return;
+    setDocument(updated, true);
+  }, [currentDoc, setDocument]);
+
 
 
   return {
@@ -24795,6 +25877,12 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     removeProjectAt,
     updateDefaults,
     updateReportWorkers,
+    replacementRevision,
+    replaceDocument,
+    createGroup,
+    renameGroup,
+    deleteGroup,
+    setGroupMembership,
   };
 }
 </file>
@@ -24850,6 +25938,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
   const [banner, setBanner] = useState<BannerMessage | null>(null);
   const editor = useConfigDocumentEditor();
   const { setDocument, validateCurrentDocument, ...publicEditor } = editor;
+  const { replaceDocument } = editor;
 
   const showBanner = useCallback((type: BannerVariant, message: string) => {
     setBanner({ type, message });
@@ -24869,7 +25958,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
       );
       setActiveConfigName(data.name);
       setEtag(data.etag);
-      setDocument(data.document);
+      replaceDocument(data.document);
       writeStoredActiveConfig(data.name);
       syncUrlActiveConfig(data.name);
     } catch (err) {
@@ -24878,7 +25967,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
     } finally {
       setIsLoading(false);
     }
-  }, [api, hideBanner, setDocument, showBanner]);
+  }, [api, hideBanner, replaceDocument, showBanner]);
 
   const loadConfigList = useCallback(async (): Promise<void> => {
     setIsLoading(true);
@@ -24898,7 +25987,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
         syncUrlActiveConfig(null);
         setActiveConfigName('');
         setEtag('');
-        setDocument(null);
+        replaceDocument(null);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -24906,7 +25995,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
     } finally {
       setIsLoading(false);
     }
-  }, [api, loadConfig, setDocument, showBanner]);
+  }, [api, loadConfig, replaceDocument, showBanner]);
 
   const reloadConfig = useCallback(async (): Promise<void> => {
     if (activeConfigName) await loadConfig(activeConfigName);
@@ -26751,9 +27840,15 @@ export interface ProjectCredentialReferences {
   passwordVariable: string;
 }
 
+export interface ProjectGroupInput {
+  id: string;
+  name: string;
+}
+
 export interface ProjectConfigInput {
   id: string;
   name: string;
+  groupId?: string;
   loginUrl: string;
   jobUrl: string;
   runType?: RunType;
@@ -26783,7 +27878,8 @@ export interface ProjectConfigDefaults {
 
 export interface ProjectConfigDocumentV1 {
   schemaVersion: 1;
-  projects: ProjectConfigInput[];
+  projects: readonly ProjectConfigInput[];
+  projectGroups?: readonly ProjectGroupInput[];
   defaults?: ProjectConfigDefaults;
   [key: string]: unknown;
 }
@@ -37144,6 +38240,7 @@ export type {
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
   ProjectConfigInput,
+  ProjectGroupInput,
   ProjectCredentialReferences,
   ProjectOriginPolicies,
   ProjectSecrets,
@@ -145861,6 +146958,357 @@ test('subsequent run with same project and same second clock fails safely withou
 });
 </file>
 
+<file path="tests/unit/config-document-editor-groups.spec.ts">
+import { expect, test } from '@playwright/test';
+import React from 'react';
+import type { ProjectConfigDocumentV1 } from '../../src/reporting/control-page/types/index.js';
+import { useConfigDocumentEditor } from '../../src/reporting/control-page/hooks/useConfigDocumentEditor.js';
+import { useConfigManager } from '../../src/reporting/control-page/hooks/useConfigManager.js';
+import type { UseControlApiResult } from '../../src/reporting/control-page/hooks/useControlApi.js';
+
+interface HookRunner<T> {
+  readonly current: T;
+  rerender: () => void;
+}
+
+type ReactInternalsContainer = {
+  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE: {
+    H: Record<string, unknown>;
+  };
+};
+
+function createHookRunner<T>(hookFn: () => T): HookRunner<T> {
+  const states: unknown[] = [];
+  let stateIndex = 0;
+  const result: { current?: T } = {};
+
+  const reactWithInternals = React as unknown as ReactInternalsContainer;
+  const internals =
+    reactWithInternals.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+  const originalDispatcher = internals.H;
+
+  function rerender() {
+    stateIndex = 0;
+    internals.H = {
+      useState(initial: unknown) {
+        const idx = stateIndex++;
+        if (states.length <= idx) {
+          states.push(
+            typeof initial === 'function' ? (initial as () => unknown)() : initial,
+          );
+        }
+        const setState = (action: unknown) => {
+          states[idx] =
+            typeof action === 'function'
+              ? (action as (prev: unknown) => unknown)(states[idx])
+              : action;
+        };
+        return [states[idx], setState];
+      },
+      useCallback(fn: unknown) {
+        return fn;
+      },
+      useMemo(fn: () => unknown) {
+        return fn();
+      },
+      useRef(initial: unknown) {
+        return { current: initial };
+      },
+      useEffect() {},
+    };
+
+    try {
+      result.current = hookFn();
+    } finally {
+      internals.H = originalDispatcher;
+    }
+  }
+
+  rerender();
+  return {
+    get current() {
+      return result.current!;
+    },
+    rerender,
+  };
+}
+
+function sampleDocument(): ProjectConfigDocumentV1 {
+  return {
+    schemaVersion: 1,
+    projects: [
+      {
+        id: 'p1',
+        name: 'Project 1',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/p1/',
+      },
+      {
+        id: 'p2',
+        name: 'Project 2',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/p2/',
+      },
+    ],
+  };
+}
+
+test.describe('useConfigDocumentEditor - group transitions & replacement revision', () => {
+  test('initial state has replacementRevision 0 and isClean', () => {
+    const runner = createHookRunner(() => useConfigDocumentEditor());
+    expect(runner.current.replacementRevision).toBe(0);
+    expect(runner.current.currentDoc).toBeNull();
+    expect(runner.current.isDirty).toBe(false);
+  });
+
+  test('replaceDocument increments replacementRevision, resets dirty flag, and updates document', () => {
+    const runner = createHookRunner(() => useConfigDocumentEditor());
+    runner.current.replaceDocument(sampleDocument());
+    runner.rerender();
+
+    expect(runner.current.replacementRevision).toBe(1);
+    expect(runner.current.isDirty).toBe(false);
+    expect(runner.current.currentDoc?.projects.length).toBe(2);
+    expect(runner.current.rawJsonString).toContain('Project 1');
+  });
+
+  test('createGroup creates group, marks dirty, does NOT increment replacementRevision', () => {
+    const runner = createHookRunner(() => useConfigDocumentEditor());
+    runner.current.replaceDocument(sampleDocument());
+    runner.rerender();
+    expect(runner.current.replacementRevision).toBe(1);
+
+    const groupId = runner.current.createGroup('Frontend Team');
+    runner.rerender();
+
+    expect(groupId).toBe('group');
+    expect(runner.current.isDirty).toBe(true);
+    expect(runner.current.replacementRevision).toBe(1);
+    expect(runner.current.currentDoc?.projectGroups).toEqual([
+      { id: 'group', name: 'Frontend Team' },
+    ]);
+  });
+
+  test('renameGroup renames group, marks dirty, does NOT increment replacementRevision', () => {
+    const runner = createHookRunner(() => useConfigDocumentEditor());
+    runner.current.replaceDocument(sampleDocument());
+    runner.rerender();
+
+    const groupId = runner.current.createGroup('Initial Name');
+    runner.rerender();
+    expect(runner.current.replacementRevision).toBe(1);
+
+    runner.current.renameGroup(groupId!, 'Renamed Group');
+    runner.rerender();
+
+    expect(runner.current.replacementRevision).toBe(1);
+    expect(runner.current.isDirty).toBe(true);
+    expect(runner.current.currentDoc?.projectGroups?.[0]?.name).toBe('Renamed Group');
+  });
+
+  test('renameGroup with no changes does NOT mark a clean document dirty', () => {
+    const docWithGroup: ProjectConfigDocumentV1 = {
+      ...sampleDocument(),
+      projectGroups: [{ id: 'group', name: 'Existing Group' }],
+    };
+    const runner = createHookRunner(() => useConfigDocumentEditor());
+    runner.current.replaceDocument(docWithGroup);
+    runner.rerender();
+    expect(runner.current.isDirty).toBe(false);
+
+    runner.current.renameGroup('group', 'Existing Group');
+    runner.rerender();
+    expect(runner.current.isDirty).toBe(false);
+  });
+
+  test('deleteGroup deletes group and ungroups members, does NOT increment replacementRevision', () => {
+    const runner = createHookRunner(() => useConfigDocumentEditor());
+    runner.current.replaceDocument(sampleDocument());
+    runner.rerender();
+
+    const groupId = runner.current.createGroup('Ops');
+    runner.rerender();
+    runner.current.setGroupMembership(groupId!, ['p1']);
+    runner.rerender();
+    expect(runner.current.currentDoc?.projects[0]?.groupId).toBe('group');
+
+    runner.current.deleteGroup(groupId!);
+    runner.rerender();
+
+    expect(runner.current.replacementRevision).toBe(1);
+    expect(runner.current.isDirty).toBe(true);
+    expect(runner.current.currentDoc?.projectGroups?.length).toBe(0);
+    expect(runner.current.currentDoc?.projects[0]?.groupId).toBeUndefined();
+  });
+
+  test('setGroupMembership moves projects and clears unchecked target members', () => {
+    const runner = createHookRunner(() => useConfigDocumentEditor());
+    runner.current.replaceDocument(sampleDocument());
+    runner.rerender();
+
+    const g1 = runner.current.createGroup('Group 1')!;
+    runner.rerender();
+
+    runner.current.setGroupMembership(g1, ['p1']);
+    runner.rerender();
+    expect(runner.current.currentDoc?.projects.find((p) => p.id === 'p1')?.groupId).toBe(g1);
+    expect(runner.current.currentDoc?.projects.find((p) => p.id === 'p2')?.groupId).toBeUndefined();
+
+    runner.current.setGroupMembership(g1, ['p2']);
+    runner.rerender();
+    expect(runner.current.currentDoc?.projects.find((p) => p.id === 'p1')?.groupId).toBeUndefined();
+    expect(runner.current.currentDoc?.projects.find((p) => p.id === 'p2')?.groupId).toBe(g1);
+    expect(runner.current.replacementRevision).toBe(1);
+  });
+
+  test('applyRawJson increments replacementRevision on success, does NOT increment on error', () => {
+    const runner = createHookRunner(() => useConfigDocumentEditor());
+    runner.current.replaceDocument(sampleDocument());
+    runner.rerender();
+    expect(runner.current.replacementRevision).toBe(1);
+
+    const validRaw = JSON.stringify({
+      schemaVersion: 1,
+      projectGroups: [{ id: 'core', name: 'Core' }],
+      projects: [
+        {
+          id: 'svc-3',
+          name: 'Service 3',
+          groupId: 'core',
+          loginUrl: 'https://jenkins.example/login',
+          jobUrl: 'https://jenkins.example/job/svc-3/',
+        },
+      ],
+    });
+
+    const success = runner.current.applyRawJson(validRaw);
+    runner.rerender();
+
+    expect(success).toBe(true);
+    expect(runner.current.replacementRevision).toBe(2);
+    expect(runner.current.currentDoc?.projects[0]?.id).toBe('svc-3');
+    expect(runner.current.isDirty).toBe(true);
+
+    const invalidRaw = JSON.stringify({
+      schemaVersion: 2,
+      projects: [],
+    });
+
+    const failure = runner.current.applyRawJson(invalidRaw);
+    runner.rerender();
+
+    expect(failure).toBe(false);
+    expect(runner.current.replacementRevision).toBe(2);
+    expect(runner.current.currentDoc?.projects[0]?.id).toBe('svc-3');
+  });
+});
+
+test.describe('useConfigManager - lifecycle and replacement revision', () => {
+  function createMockApi(initialDoc = sampleDocument()) {
+    let currentSavedDoc = initialDoc;
+    let etagCounter = 1;
+
+    const dummyResponse = new Response('{}', { status: 200 });
+    const api: UseControlApiResult = {
+      csrfToken: 'mock-csrf-token',
+      setCsrfToken: () => {},
+      apiFetch: async (_url, init) => {
+        if (init?.method === 'PUT') {
+          currentSavedDoc = JSON.parse(init.body as string) as ProjectConfigDocumentV1;
+          etagCounter += 1;
+          return new Response(
+            JSON.stringify({
+              name: 'test-config.json',
+              etag: `"etag-${etagCounter}"`,
+              document: currentSavedDoc,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        return new Response('{}', { status: 200 });
+      },
+      requestJson: async <T>(url: string): Promise<{ data: T; response: Response }> => {
+        if (url.includes('/api/config?name=')) {
+          return {
+            data: {
+              name: 'test-config.json',
+              etag: `"etag-${etagCounter}"`,
+              document: currentSavedDoc,
+            } as unknown as T,
+            response: dummyResponse,
+          };
+        }
+        if (url === '/api/configs') {
+          return {
+            data: {
+              configs: [{ name: 'test-config.json' }],
+            } as unknown as T,
+            response: dummyResponse,
+          };
+        }
+        return { data: {} as T, response: dummyResponse };
+      },
+    };
+
+    return { api, getSavedDoc: () => currentSavedDoc };
+  }
+
+  test('loadConfig increments replacementRevision; saveConfig does NOT increment replacementRevision', async () => {
+    const { api } = createMockApi();
+    const runner = createHookRunner(() => useConfigManager(api));
+    expect(runner.current.replacementRevision).toBe(0);
+
+    await runner.current.loadConfig('test-config.json');
+    runner.rerender();
+
+    expect(runner.current.replacementRevision).toBe(1);
+    expect(runner.current.isDirty).toBe(false);
+    expect(runner.current.etag).toBe('"etag-1"');
+
+    runner.current.createGroup('New Team');
+    runner.rerender();
+
+    expect(runner.current.replacementRevision).toBe(1);
+    expect(runner.current.isDirty).toBe(true);
+
+    const saved = await runner.current.saveConfig();
+    runner.rerender();
+
+    expect(saved).toBe(true);
+    expect(runner.current.isDirty).toBe(false);
+    expect(runner.current.etag).toBe('"etag-2"');
+    expect(runner.current.replacementRevision).toBe(1);
+
+    await runner.current.reloadConfig();
+    runner.rerender();
+
+    expect(runner.current.replacementRevision).toBe(2);
+    expect(runner.current.isDirty).toBe(false);
+  });
+
+  test('failed loadConfig preserves state and does not increment revision', async () => {
+    const failingApi: UseControlApiResult = {
+      csrfToken: 'mock-csrf-token',
+      setCsrfToken: () => {},
+      apiFetch: async () => new Response('{}', { status: 500 }),
+      requestJson: async () => {
+        throw new Error('Network error');
+      },
+    };
+
+    const runner = createHookRunner(() => useConfigManager(failingApi));
+    expect(runner.current.replacementRevision).toBe(0);
+
+    await runner.current.loadConfig('broken.json');
+    runner.rerender();
+
+    expect(runner.current.replacementRevision).toBe(0);
+    expect(runner.current.banner?.type).toBe('error');
+    expect(runner.current.banner?.message).toContain('Failed to load config');
+  });
+});
+</file>
+
 <file path="tests/unit/contract-hardening.spec.ts">
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -153553,6 +155001,520 @@ test('old schema-v1 JSON without reportWorkers continues to validate and load wi
   } finally {
     fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
   }
+});
+</file>
+
+<file path="tests/unit/project-group-transitions.spec.ts">
+import { expect, test } from '@playwright/test';
+import type { ProjectConfigDocumentV1 } from '../../src/reporting/control-page/types/index.js';
+import {
+  createProjectGroup,
+  deleteProjectGroup,
+  generateGroupId,
+  getGroupProjects,
+  renameProjectGroup,
+  replaceGroupMembership,
+} from '../../src/reporting/control-page/hooks/project-group-transitions.js';
+
+function createSampleDocument(): ProjectConfigDocumentV1 {
+  return {
+    schemaVersion: 1,
+    projectGroups: [
+      { id: 'group-a', name: 'Group A' },
+      { id: 'group-b', name: 'Group B' },
+    ],
+    projects: [
+      {
+        id: 'p1',
+        name: 'Project 1',
+        groupId: 'group-a',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/p1/',
+      },
+      {
+        id: 'p2',
+        name: 'Project 2',
+        groupId: 'group-a',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/p2/',
+      },
+      {
+        id: 'p3',
+        name: 'Project 3',
+        groupId: 'group-b',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/p3/',
+      },
+      {
+        id: 'p4',
+        name: 'Project 4',
+        loginUrl: 'https://jenkins.example/login',
+        jobUrl: 'https://jenkins.example/job/p4/',
+      },
+    ],
+  };
+}
+
+test('generateGroupId generates sequential group IDs and skips existing ones', () => {
+  expect(generateGroupId([])).toBe('group');
+  expect(generateGroupId(['group'])).toBe('group-2');
+  expect(generateGroupId(['group', 'group-2'])).toBe('group-3');
+  expect(generateGroupId(['group', 'group-3'])).toBe('group-2');
+  expect(generateGroupId(new Set(['group', 'group-2', 'group-3']))).toBe('group-4');
+});
+
+test('createProjectGroup adds group immutably with default name', () => {
+  const doc = createSampleDocument();
+  const result = createProjectGroup(doc);
+  expect(result).not.toBeNull();
+  expect(result?.groupId).toBe('group');
+  expect(result?.document.projectGroups?.length).toBe(3);
+  expect(result?.document.projectGroups?.[2]).toEqual({ id: 'group', name: 'New Group' });
+
+  // Original document unchanged
+  expect(doc.projectGroups?.length).toBe(2);
+});
+
+test('createProjectGroup trims custom name and increments id on collisions', () => {
+  const doc: ProjectConfigDocumentV1 = {
+    ...createSampleDocument(),
+    projectGroups: [{ id: 'group', name: 'Existing Group' }],
+  };
+  const result = createProjectGroup(doc, '   Custom Team Name   ');
+  expect(result).not.toBeNull();
+  expect(result?.groupId).toBe('group-2');
+  expect(result?.document.projectGroups?.[1]?.name).toBe('Custom Team Name');
+});
+
+test('createProjectGroup returns null when reaching 50 groups limit', () => {
+  const groups = Array.from({ length: 50 }, (_, i) => ({
+    id: `group-${i + 1}`,
+    name: `Group ${i + 1}`,
+  }));
+  const fullDoc: ProjectConfigDocumentV1 = {
+    ...createSampleDocument(),
+    projectGroups: groups,
+  };
+  const result = createProjectGroup(fullDoc);
+  expect(result).toBeNull();
+});
+
+test('renameProjectGroup updates name immutably and trims input', () => {
+  const doc = createSampleDocument();
+  const updated = renameProjectGroup(doc, 'group-a', '   Renamed Group A   ');
+  expect(updated).not.toBe(doc);
+  expect(updated.projectGroups?.[0]?.name).toBe('Renamed Group A');
+  expect(doc.projectGroups?.[0]?.name).toBe('Group A');
+});
+
+test('renameProjectGroup is a no-op when name is identical or empty', () => {
+  const doc = createSampleDocument();
+  expect(renameProjectGroup(doc, 'group-a', 'Group A')).toBe(doc);
+  expect(renameProjectGroup(doc, 'group-a', '   ')).toBe(doc);
+  expect(renameProjectGroup(doc, 'group-a', '')).toBe(doc);
+  expect(renameProjectGroup(doc, 'nonexistent', 'New Name')).toBe(doc);
+});
+
+test('deleteProjectGroup removes group and ungroups its members without affecting other groups', () => {
+  const doc = createSampleDocument();
+  const updated = deleteProjectGroup(doc, 'group-a');
+
+  expect(updated).not.toBe(doc);
+  expect(updated.projectGroups?.map((g) => g.id)).toEqual(['group-b']);
+
+  // p1 and p2 were in group-a, now ungrouped
+  expect(updated.projects.find((p) => p.id === 'p1')?.groupId).toBeUndefined();
+  expect(updated.projects.find((p) => p.id === 'p2')?.groupId).toBeUndefined();
+
+  // p3 was in group-b, remains in group-b
+  expect(updated.projects.find((p) => p.id === 'p3')?.groupId).toBe('group-b');
+
+  // p4 was ungrouped, remains ungrouped
+  expect(updated.projects.find((p) => p.id === 'p4')?.groupId).toBeUndefined();
+
+  // All project metadata and order preserved
+  expect(updated.projects.map((p) => p.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
+  expect(updated.projects.find((p) => p.id === 'p1')?.name).toBe('Project 1');
+  expect(updated.projects.find((p) => p.id === 'p1')?.loginUrl).toBe('https://jenkins.example/login');
+
+  // Original document untouched
+  expect(doc.projectGroups?.length).toBe(2);
+  expect(doc.projects[0]?.groupId).toBe('group-a');
+});
+
+test('deleteProjectGroup is a no-op when group does not exist', () => {
+  const doc = createSampleDocument();
+  expect(deleteProjectGroup(doc, 'nonexistent')).toBe(doc);
+});
+
+test('replaceGroupMembership atomically moves projects and clears unchecked target members', () => {
+  const doc = createSampleDocument();
+  // Initially: p1 -> group-a, p2 -> group-a, p3 -> group-b, p4 -> ungrouped
+  // Replace membership for group-a with [p1, p4] (p2 unchecked, p4 added)
+  const updated = replaceGroupMembership(doc, 'group-a', ['p1', 'p4']);
+
+  expect(updated).not.toBe(doc);
+  const byId = Object.fromEntries(updated.projects.map((p) => [p.id, p]));
+
+  expect(byId['p1']?.groupId).toBe('group-a');
+  expect(byId['p2']?.groupId).toBeUndefined(); // Cleared from group-a
+  expect(byId['p3']?.groupId).toBe('group-b'); // Unrelated group untouched
+  expect(byId['p4']?.groupId).toBe('group-a'); // Moved into group-a
+
+  // Project order preserved
+  expect(updated.projects.map((p) => p.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
+});
+
+test('replaceGroupMembership moves project from another group into target', () => {
+  const doc = createSampleDocument();
+  // Move p3 (from group-b) into group-a
+  const updated = replaceGroupMembership(doc, 'group-a', ['p1', 'p2', 'p3']);
+
+  const byId = Object.fromEntries(updated.projects.map((p) => [p.id, p]));
+  expect(byId['p1']?.groupId).toBe('group-a');
+  expect(byId['p2']?.groupId).toBe('group-a');
+  expect(byId['p3']?.groupId).toBe('group-a'); // Moved from group-b to group-a
+  expect(byId['p4']?.groupId).toBeUndefined();
+});
+
+test('replaceGroupMembership returns exact document reference when membership is unchanged', () => {
+  const doc = createSampleDocument();
+  // Current group-a members are p1 and p2
+  const updated = replaceGroupMembership(doc, 'group-a', ['p1', 'p2']);
+  expect(updated).toBe(doc);
+});
+
+test('replaceGroupMembership rejects nonexistent target group or nonexistent project id without mutation', () => {
+  const doc = createSampleDocument();
+  // Target group nonexistent
+  expect(replaceGroupMembership(doc, 'nonexistent', ['p1'])).toBe(doc);
+
+  // Nonexistent project id
+  expect(replaceGroupMembership(doc, 'group-a', ['p1', 'nonexistent-project'])).toBe(doc);
+});
+
+test('getGroupProjects filters correctly by group id and ungrouped', () => {
+  const doc = createSampleDocument();
+  expect(getGroupProjects(doc, 'group-a').map((p) => p.id)).toEqual(['p1', 'p2']);
+  expect(getGroupProjects(doc, 'group-b').map((p) => p.id)).toEqual(['p3']);
+  expect(getGroupProjects(doc, undefined).map((p) => p.id)).toEqual(['p4']);
+  expect(getGroupProjects(doc, null).map((p) => p.id)).toEqual(['p4']);
+  expect(getGroupProjects(doc, '').map((p) => p.id)).toEqual(['p4']);
+});
+</file>
+
+<file path="tests/unit/project-group-validation.spec.ts">
+import { expect, test } from '@playwright/test';
+import type { ProjectConfigDocumentV1 } from '../../src/config/config-types.js';
+import {
+  assertProjectConfigDocument,
+  GROUP_ID_REGEX,
+  validateProjectGroup,
+  validateProjectGroups,
+} from '../../src/config.js';
+
+function baseDocument(): ProjectConfigDocumentV1 {
+  return {
+    schemaVersion: 1,
+    projects: [
+      {
+        id: 'service-a',
+        name: 'Service A',
+        loginUrl: 'https://jenkins.example/jenkins/login',
+        jobUrl: 'https://jenkins.example/jenkins/job/service-a/',
+      },
+    ],
+  };
+}
+
+test('accepts legacy documents without projectGroups and projects without groupId', () => {
+  const doc = baseDocument();
+  const parsed = assertProjectConfigDocument(doc);
+  expect(parsed.projectGroups).toBeUndefined();
+  expect(parsed.projects[0]?.groupId).toBeUndefined();
+});
+
+test('accepts document with empty projectGroups array', () => {
+  const doc: ProjectConfigDocumentV1 = {
+    ...baseDocument(),
+    projectGroups: [],
+  };
+  const parsed = assertProjectConfigDocument(doc);
+  expect(parsed.projectGroups).toEqual([]);
+});
+
+test('accepts document with valid groups and assigned projects', () => {
+  const doc: ProjectConfigDocumentV1 = {
+    schemaVersion: 1,
+    projectGroups: [
+      { id: 'backend', name: 'Backend Services' },
+      { id: 'frontend', name: 'Frontend Apps' },
+    ],
+    projects: [
+      {
+        id: 'service-a',
+        name: 'Service A',
+        groupId: 'backend',
+        loginUrl: 'https://jenkins.example/jenkins/login',
+        jobUrl: 'https://jenkins.example/jenkins/job/service-a/',
+      },
+      {
+        id: 'web-app',
+        name: 'Web App',
+        groupId: 'frontend',
+        loginUrl: 'https://jenkins.example/jenkins/login',
+        jobUrl: 'https://jenkins.example/jenkins/job/web-app/',
+      },
+      {
+        id: 'ungrouped-svc',
+        name: 'Ungrouped Service',
+        loginUrl: 'https://jenkins.example/jenkins/login',
+        jobUrl: 'https://jenkins.example/jenkins/job/ungrouped-svc/',
+      },
+    ],
+  };
+  const parsed = assertProjectConfigDocument(doc);
+  expect(parsed.projectGroups?.length).toBe(2);
+  expect(parsed.projects[0]?.groupId).toBe('backend');
+  expect(parsed.projects[1]?.groupId).toBe('frontend');
+  expect(parsed.projects[2]?.groupId).toBeUndefined();
+});
+
+test('allows duplicate display names for different group IDs', () => {
+  const doc: ProjectConfigDocumentV1 = {
+    ...baseDocument(),
+    projectGroups: [
+      { id: 'group-1', name: 'Duplicate Name' },
+      { id: 'group-2', name: 'Duplicate Name' },
+    ],
+  };
+  expect(() => assertProjectConfigDocument(doc)).not.toThrow();
+});
+
+test('rejects non-array projectGroups', () => {
+  for (const invalid of [null, 'backend', 123, true, {}]) {
+    expect(() =>
+      assertProjectConfigDocument({
+        ...baseDocument(),
+        projectGroups: invalid as unknown as ProjectConfigDocumentV1['projectGroups'],
+      }),
+    ).toThrow(/config\.projectGroups must be an array/u);
+  }
+});
+
+test('rejects projectGroups exceeding maximum limit of 50', () => {
+  const groups = Array.from({ length: 51 }, (_, i) => ({
+    id: `group-${i + 1}`,
+    name: `Group ${i + 1}`,
+  }));
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: groups,
+    }),
+  ).toThrow(/must contain at most 50 groups/u);
+});
+
+test('accepts exactly 50 groups boundary', () => {
+  const groups = Array.from({ length: 50 }, (_, i) => ({
+    id: `group-${i + 1}`,
+    name: `Group ${i + 1}`,
+  }));
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: groups,
+    }),
+  ).not.toThrow();
+});
+
+test('rejects group entries that are not objects', () => {
+  for (const item of [null, 'invalid', 42, true, []]) {
+    expect(() =>
+      assertProjectConfigDocument({
+        ...baseDocument(),
+        projectGroups: [item as unknown as { id: string; name: string }],
+      }),
+    ).toThrow(/config\.projectGroups\[0\] must be an object/u);
+  }
+});
+
+test('rejects unsupported keys on group entries', () => {
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [
+        {
+          id: 'backend',
+          name: 'Backend',
+          extraProperty: 'not-allowed',
+        } as unknown as { id: string; name: string },
+      ],
+    }),
+  ).toThrow(/config\.projectGroups\[0\]\.extraProperty is not supported/u);
+});
+
+test('rejects invalid group id syntax and length', () => {
+  for (const badId of [
+    '',
+    '   ',
+    '-leading-hyphen',
+    'UPPERCASE',
+    'with spaces',
+    'special_char',
+    'a'.repeat(64),
+  ]) {
+    expect(() =>
+      assertProjectConfigDocument({
+        ...baseDocument(),
+        projectGroups: [{ id: badId, name: 'Valid Name' }],
+      }),
+    ).toThrow(/config\.projectGroups\[0\]\.id/u);
+  }
+});
+
+test('accepts valid group id syntax and 63-char length boundary', () => {
+  const maxValidId = 'a' + 'b'.repeat(62);
+  expect(maxValidId.length).toBe(63);
+  expect(GROUP_ID_REGEX.test(maxValidId)).toBe(true);
+
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [
+        { id: 'group', name: 'Simple' },
+        { id: 'group-2', name: 'Hyphenated' },
+        { id: '0-number-start', name: 'Numeric' },
+        { id: maxValidId, name: 'Max length' },
+      ],
+    }),
+  ).not.toThrow();
+});
+
+test('rejects invalid group name', () => {
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [{ id: 'backend', name: '' }],
+    }),
+  ).toThrow(/config\.projectGroups\[0\]\.name must be a non-empty string/u);
+
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [{ id: 'backend', name: '   ' }],
+    }),
+  ).toThrow(/config\.projectGroups\[0\]\.name must be a non-empty string/u);
+
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [{ id: 'backend', name: 'a'.repeat(201) }],
+    }),
+  ).toThrow(/config\.projectGroups\[0\]\.name exceeds the safe string limit/u);
+
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [{ id: 'backend', name: 'Bad\x00Control' }],
+    }),
+  ).toThrow(/config\.projectGroups\[0\]\.name exceeds the safe string limit/u);
+});
+
+test('rejects duplicate group ids', () => {
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [
+        { id: 'backend', name: 'Backend 1' },
+        { id: 'backend', name: 'Backend 2' },
+      ],
+    }),
+  ).toThrow(/duplicate group id: backend/u);
+});
+
+test('rejects invalid project groupId syntax', () => {
+  for (const badGroupId of [
+    '',
+    '   ',
+    '-leading-hyphen',
+    'UPPERCASE',
+    'with space',
+    'special!',
+  ]) {
+    expect(() =>
+      assertProjectConfigDocument({
+        ...baseDocument(),
+        projects: [
+          {
+            ...baseDocument().projects[0]!,
+            groupId: badGroupId,
+          },
+        ],
+      }),
+    ).toThrow(/projects\[0\]\.groupId/u);
+  }
+});
+
+test('rejects dangling project groupId referencing nonexistent group', () => {
+  // Case 1: projectGroups undefined
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projects: [
+        {
+          ...baseDocument().projects[0]!,
+          groupId: 'nonexistent-group',
+        },
+      ],
+    }),
+  ).toThrow(/projects\[0\]\.groupId references unknown group: nonexistent-group/u);
+
+  // Case 2: projectGroups empty
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [],
+      projects: [
+        {
+          ...baseDocument().projects[0]!,
+          groupId: 'nonexistent-group',
+        },
+      ],
+    }),
+  ).toThrow(/projects\[0\]\.groupId references unknown group: nonexistent-group/u);
+
+  // Case 3: projectGroups has groups, but not this one
+  expect(() =>
+    assertProjectConfigDocument({
+      ...baseDocument(),
+      projectGroups: [{ id: 'frontend', name: 'Frontend' }],
+      projects: [
+        {
+          ...baseDocument().projects[0]!,
+          groupId: 'backend',
+        },
+      ],
+    }),
+  ).toThrow(/projects\[0\]\.groupId references unknown group: backend/u);
+});
+
+test('validates standalone group and groups helpers directly', () => {
+  const issues: string[] = [];
+  validateProjectGroup({ id: 'valid-id', name: 'Valid' }, 0, issues);
+  expect(issues).toEqual([]);
+
+  const badIssues: string[] = [];
+  validateProjectGroup({ id: 'INVALID', name: '' }, 0, badIssues);
+  expect(badIssues.length).toBeGreaterThan(0);
+
+  const groupIssues: string[] = [];
+  validateProjectGroups(
+    [{ id: 'g1', name: 'G1' }],
+    [{ id: 'p1', groupId: 'g1' }],
+    groupIssues,
+  );
+  expect(groupIssues).toEqual([]);
 });
 </file>
 
