@@ -160,15 +160,14 @@ flowchart LR
   - [`DashboardLayout`](../src/reporting/control-page/components/templates/DashboardLayout.tsx): skip link, 1200px shell, and project/editor/action/run slots; `DashboardPage` uses it.
   - [`ReportManagementLayout`](../src/reporting/control-page/components/templates/ReportManagementLayout.tsx): skip link and header/banner/search/content/history/dialog slots; [`FinalReportLayout`](../src/reporting/control-page/components/templates/FinalReportLayout.tsx): report skip link and toolbar/export/status/body slots.
   Layout slot contracts are in [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts).
-  `ReportManagementPage` and `FinalProjectReportPage` still render inline shells pending Phase 04 template integration.
-  pages ([`DashboardPage`](../src/reporting/control-page/pages/DashboardPage.tsx), [`ReportManagementPage`](../src/reporting/control-page/pages/ReportManagementPage.tsx), and [`FinalProjectReportPage`](../src/reporting/control-page/pages/final-project-report-page.tsx)),
-  error boundary ([`components/ErrorBoundary.tsx`](../src/reporting/control-page/components/ErrorBoundary.tsx)),
-  and application markup (`index.html`, [`App.tsx`](../src/reporting/control-page/App.tsx), `main.tsx`, and
-  `styles/globals.css` with Modern Refined Light tokens for surfaces, text,
-  borders, action/status colors, focus, and monospace, plus global focus-visible
-  and reduced-motion rules),
-  bundled by `vite.control.config.ts` into `.runner-build/reporting/control-page/` with
-  single-bundle JS/CSS and no inline scripts/styles for strict CSP compliance. Legacy imperative
+  The five tiers are atoms → molecules → organisms → templates → pages. Page
+  components (`DashboardPage`, `ReportManagementPage`, `FinalProjectReportPage`)
+  coordinate hooks/local state as page-tier coordinators and fill matching
+  template slots; templates own page shells. `ErrorBoundary` wraps the app;
+  `App.tsx` selects routes and uses atom `Card`/`Button` for `NotFoundView`.
+  `styles/globals.css` provides the Modern Refined Light theme and focus/
+  reduced-motion rules. Vite emits the strict-CSP single JS/CSS bundle.
+  Legacy imperative
   assets (`control-page.js`, `control-page.html`, `control-page.css`) have been removed (Phase 06).
 - `src/reporting/report-server-control-page.ts` reads Vite-built assets from
   `.runner-build/reporting/control-page/`, injects the instance CSRF token into
@@ -692,11 +691,10 @@ The Control Dashboard frontend refactor implements Atomic Design principles, cle
    - **Accessibility**: Includes explicit ARIA roles (`role="status"`, `role="log"`, `role="alert"`), `aria-live="polite"` live regions, and `label[for]` associations.
    - **Zero Leakage**: Credential inputs enforce `type="password"`, `autoComplete="off"`, and input value clearing on submission, clear, and dialog closure.
 
-5. **Organisms and Layout Templates (Atomic Design Phase 03)**:
+5. **Organisms, templates, and page coordinators (Atomic Design Phases 03–04)**:
    - Refined `ProjectCard`, `ProjectGroupColumn`, `ProjectsGrid`, `ConfigFormBuilder`, `RawJsonSection`, `ExecutionSection`, and `RunStatusCard`; project-card control IDs remain stable.
-   - Added slot-based [`DashboardLayout`](../src/reporting/control-page/components/templates/DashboardLayout.tsx), [`ReportManagementLayout`](../src/reporting/control-page/components/templates/ReportManagementLayout.tsx), and [`FinalReportLayout`](../src/reporting/control-page/components/templates/FinalReportLayout.tsx); `DashboardPage` uses `DashboardLayout`.
-   - `ReportManagementPage` and `FinalProjectReportPage` still render inline shells; integration with their templates is planned for Phase 04.
-   - `App` selects the route-specific page, with `ErrorBoundary` providing the application error boundary.
+   - `DashboardPage` uses `DashboardLayout`; `ReportManagementPage` and `FinalProjectReportPage` fill matching slots in `ReportManagementLayout` and `FinalReportLayout`. Pages coordinate hooks/view state; templates own the shells.
+   - `App.tsx` selects routes; `NotFoundView` uses `Card`/`Button` atoms, with `ErrorBoundary` around the selected view.
 
 6. **Phase 06 Legacy Cleanup**:
    - Completely removed legacy imperative files: `src/reporting/control-page/control-page.js`, `control-page.html`, and `control-page.css`.

@@ -1,9 +1,9 @@
 # Codebase summary
 
-This summary is based on the refreshed `repomix-output.xml` and current
+This summary is based on refreshed `repomix-output.xml` and current
 source/configuration. It covers report/build execution, project-group metadata
-and editor transitions, Control UI Atomic Design Phase 03 organisms/layouts,
-retained history and report management, and the final-report viewer/PDF export.
+and editor transitions, the five-tier Control UI Atomic Design structure and
+Phase 04 page integration, retained history, and final-report/PDF export.
 
 ## Repository profile
 
@@ -86,10 +86,12 @@ retained history and report management, and the final-report viewer/PDF export.
   `RawJsonSection` applies JSON and reports validation; `ExecutionSection`
   exposes all-enabled report/build actions and the saved Workers selector;
   `RunStatusCard` composes status, result, and logs.
-- Added typed, slot-based `DashboardLayout`, `ReportManagementLayout`, and
-  `FinalReportLayout`, exported by `components/templates/index.ts`.
-  `DashboardPage` uses `DashboardLayout`; report-management and final-report
-  pages still render inline shells pending Phase 04 integration.
+- Typed slot templates (`DashboardLayout`, `ReportManagementLayout`, and
+  `FinalReportLayout`) are exported from `components/templates/index.ts`.
+- The five tiers are atoms → molecules → organisms → templates → pages. The
+  matching page components coordinate hooks/local state and fill template
+  slots; templates own page shells.
+- `App.tsx` selects routes and composes atom `Card`/`Button` in `NotFoundView`.
 - Phase 06 addition: removal of legacy imperative assets (`control-page.js`,
   `control-page.html`, `control-page.css`); control dashboard frontend is now
   100% React application compiled via Vite with zero legacy assets.
@@ -394,9 +396,13 @@ state, injected-credential execution, input wiping, and absence of test
 secrets from page HTML and run logs. The control configuration uses Chromium
 and WebKit projects, so the four browser scenarios produce eight E2E checks.
 
-### Control UI design tokens and Atomic Design components (Phases 01–03)
+### Control UI design tokens and Atomic Design components (Phases 01–04)
 
-The Control Dashboard follows an Atomic Design hierarchy: atoms provide reusable controls, molecules combine them into focused interactions, and organisms assemble dashboard sections. Existing DOM IDs, classes, data attributes, and ARIA contracts remain covered by Control UI tests.
+The Control UI uses five tiers—atoms (primitives), molecules (focused
+interactions), organisms (page sections), templates (page shells), and pages
+(state/lifecycle coordinators). Pages bind hooks/local state and fill typed
+template slots; templates own outer layout. Existing DOM IDs, classes, data
+attributes, and ARIA contracts remain covered by Control UI tests.
 
 1. **Styling and utility infrastructure**:
    - `styles/globals.css`: Tailwind directives plus Modern Refined Light `:root` tokens for surfaces (`--bg-color`, `--card-bg`, `--surface`, `--subtle-surface`), text (`--text-main`, `--text-secondary`, `--text-muted`), borders (`--border-color`, `--border-default`, `--border-strong`), primary/secondary/danger base-hover-text pairs, semantic status colors, `--focus-ring`, and `--mono-font`. Global `:focus-visible`, skip-link, visually-hidden, and reduced-motion rules live here.
@@ -426,10 +432,10 @@ The Control Dashboard follows an Atomic Design hierarchy: atoms provide reusable
    - [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx): Enables export only for a ready report and exposes progress and accessible error feedback.
    - `types/component-contracts.ts` defines typed molecule props; `components/molecules/index.ts` re-exports the tier. Selected actions and status states use `lucide-react` icons.
 
-4. **Organisms and Layout Templates (Atomic Design Phase 03)**:
+4. **Organisms, templates, and pages (Atomic Design Phases 03–04)**:
    - Project board composition includes `ProjectCard`, `ProjectGroupColumn`, and `ProjectsGrid` (`ProjectGroupBoard` is its named re-export); editing, raw JSON, execution, and run status use `ConfigFormBuilder`, `RawJsonSection`, `ExecutionSection`, and `RunStatusCard`.
-   - Added slot-based `DashboardLayout`, `ReportManagementLayout`, and `FinalReportLayout`. `DashboardPage` consumes `DashboardLayout`; report-management and final-report pages still render inline shells pending Phase 04 integration.
-   - `tests/unit/control-atomic-components.spec.ts` covers atoms/molecules, `ExecutionSection`, and template slots and landmarks through static rendering.
+   - `DashboardPage`, `ReportManagementPage`, and `FinalProjectReportPage` coordinate state/hooks and populate slots in `DashboardLayout`, `ReportManagementLayout`, and `FinalReportLayout`; templates own each page shell.
+   - `App.tsx` selects routes; `NotFoundView` uses the `Card` and `Button` atoms. `tests/unit/control-atomic-components.spec.ts` covers atoms/molecules, `ExecutionSection`, and template slots/landmarks through static rendering.
    - Phase 06 removed the legacy imperative assets (`control-page.js`, `control-page.html`, `control-page.css`); Vite builds the React application into `.runner-build/reporting/control-page/`.
 
 

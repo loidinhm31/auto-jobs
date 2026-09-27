@@ -4,6 +4,11 @@ This document describes offline report fixtures, final-report artifact serving,
 the Control-only React report viewer and client-side PDF export, retained-run
 discovery and deletion, and persistent aggregate-index construction. For broader
 execution details, see [architecture](./architecture.md) and [system architecture](./system-architecture.md).
+The Control UI follows five tiers: atoms, molecules, organisms, templates, and
+pages. Page modules coordinate hooks/view state and fill matching template
+slots; templates own page shells. `App.tsx` routes Dashboard, report history,
+and final-report views; unknown paths use atom `Card` and `Button`. See
+[architecture](./architecture.md) for the component-tier catalog.
 
 ## Offline report fixtures
 
@@ -57,13 +62,16 @@ body, and other methods return 405. Other report paths retain static serving.
 The standalone report server continues to serve immutable scriptless HTML
 under `REPORT_CSP`.
 
-`App.tsx` selects `FinalProjectReportPage` separately from the report-history
-page at `/reports/index.html`. `useProjectReport` fetches `data.json` and
-`manifest.json` concurrently with `cache: 'no-store'`, aborts on unmount, and
-reuses the schema validators. It requires route, data, and manifest project/run
-IDs to agree, plus matching project name, timestamp, state, and Jenkins job
-URL, before exposing a ready view model. Loading, missing, invalid, and
-load-error states remain outside the report body.
+`App.tsx` routes final-report paths to `FinalProjectReportPage`, separately
+from the report-history route at `/reports/index.html`. The page-tier
+coordinator uses `useProjectReport` for fetch/validation state and supplies its
+toolbar, export action, status, and ready report body to `FinalReportLayout`,
+which owns the skip link and outer shell. `useProjectReport` fetches `data.json`
+and `manifest.json` concurrently with `cache: 'no-store'`, aborts on unmount,
+and reuses the schema validators. It requires route, data, and manifest
+project/run IDs to agree, plus matching project name, timestamp, state, and
+Jenkins job URL, before exposing a ready view model. Loading, missing, invalid,
+and load-error states remain outside the report body.
 
 `project-report-body-renderer.ts` owns the escaped report header, sections,
 anchors, and footer shared by the React page and `project-report-renderer.ts`.
@@ -265,7 +273,10 @@ The Control report-management page at `/reports/index.html` reads the published
 aggregate and offers confirmation-gated whole-project deletion plus a per-run
 Delete action. The per-run dialog names the project/run and states that only
 that run and its artifacts will be removed. Success and `404` refresh inventory.
-Browser verification confirms cancellation leaves both run directories intact;
+`ReportManagementPage` coordinates inventory and mutation state/hooks, then
+fills the `ReportManagementLayout` header, banner, content, and dialogs slots;
+the template owns the skip link, main landmark, and outer shell. Browser
+verification confirms cancellation leaves both run directories intact;
 confirmation removes only the selected run, preserves sibling files and the
 sibling row, and refreshes `aggregate-data.json` and `index.html`. Deleting the
 last run removes its project from inventory. Persisted report HTML remains a
