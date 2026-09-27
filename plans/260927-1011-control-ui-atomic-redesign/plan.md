@@ -23,14 +23,14 @@ Comprehensive UI refactoring and modern aesthetic overhaul of the Control Page i
 
 ## Implementation Phases
 
-**Overall status:** **IN PROGRESS** — 2 of 4 phases complete (50% by phase count; 6 of 13 planned hours = 46%). **Next planned phase:** Phase 03 — Organisms & Layout Templates.
+**Overall status:** **IN PROGRESS** — 3 of 4 phases complete (75% by phase count; 10 of 13 planned hours = 77%). **Next planned phase:** Phase 04 — Page Integration & Verification.
 
 | # | Phase | Status | Effort | Phase Plan Link |
 |---|-------|--------|--------|-----------------|
 | 01 | Design System Tokens & Base Atoms | **DONE** (2026-09-27) | 3h | [Phase 01: Atoms](./phase-01-design-system-tokens-and-atoms.md) |
 | 02 | Molecules & Form Composition | **DONE** (2026-09-27) | 3h | [Phase 02: Molecules](./phase-02-molecules-and-form-composition.md) |
-| 03 | Organisms & Layout Templates | **NEXT (PLANNED)** | 4h | [Phase 03: Organisms & Templates](./phase-03-organisms-and-layout-templates.md) |
-| 04 | Page Integration & Verification | Planned | 3h | [Phase 04: Integration & Verification](./phase-04-page-integration-and-verification.md) |
+| 03 | Organisms & Layout Templates | **DONE** (2026-09-27) | 4h | [Phase 03: Organisms & Templates](./phase-03-organisms-and-layout-templates.md) |
+| 04 | Page Integration & Verification | **NEXT (PLANNED)** | 3h | [Phase 04: Integration & Verification](./phase-04-page-integration-and-verification.md) |
 
 ## Dependencies & Precedence
 - **Sequential Execution**: Phase 01 establishes the foundational design tokens and atoms required by Phase 02 molecules. Phase 03 organisms assemble those molecules and atoms and introduce layout templates. Phase 04 connects the live page routes to templates and executes E2E verification suites.

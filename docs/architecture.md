@@ -131,7 +131,7 @@ flowchart LR
 - `src/reporting/control-page/` contains the Control Dashboard frontend sources:
   server data contracts (`types/index.ts`), shared UI component prop interfaces
   (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
-  project clone utility (`utils/clone-project-draft.ts`), Tailwind class merge utility ([`utils/cn.ts`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4)),
+  project clone utility (`utils/clone-project-draft.ts`), Tailwind class merge utility ([`utils/cn.ts`](../src/reporting/control-page/utils/cn.ts#L4)),
   headless React hooks (`hooks/useControlApi.ts`, `hooks/useConfigManager.ts`,
   `hooks/useConfigDocumentEditor.ts` for document/raw-JSON editing and
   validation, `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`,
@@ -150,20 +150,20 @@ flowchart LR
   `ConfigProjectEditor`, `ConfigDefaultsEditor`, [`LogViewer`](../src/reporting/control-page/components/molecules/LogViewer.tsx),
   [`RunResultBox`](../src/reporting/control-page/components/molecules/RunResultBox.tsx), [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx),
   [`ProjectRunsTable`](../src/reporting/control-page/components/molecules/project-runs-table.tsx), [`ProjectReportStatusView`](../src/reporting/control-page/components/molecules/ProjectReportStatusView.tsx), [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx); shared props are in [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts) and exports in [`molecules/index.ts`](../src/reporting/control-page/components/molecules/index.ts); selected actions use `lucide-react`),
-  compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/):
-  [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx),
-  [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx),
-  [`ProjectCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectCard.tsx),
-  [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx),
-  [`RunStatusCard`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RunStatusCard.tsx),
-  [`RawJsonSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/RawJsonSection.tsx),
-  [`ConfigFormBuilder`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx),
-  [`CredentialsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/CredentialsDialog.tsx),
-  [`BrowserSettingsDialog`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx)),
-  layout templates ([`components/templates/DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)),
-  pages ([`DashboardPage`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx), [`ReportManagementPage`](../src/reporting/control-page/pages/ReportManagementPage.tsx), and [`FinalProjectReportPage`](../src/reporting/control-page/pages/final-project-report-page.tsx)),
-  error boundary ([`components/ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)),
-  and application markup (`index.html`, [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), `main.tsx`, and
+  compound organisms exported by [`organisms/index.ts`](../src/reporting/control-page/components/organisms/index.ts):
+  - [`ProjectCard`](../src/reporting/control-page/components/organisms/ProjectCard.tsx): enabled checkbox, run-type selector, HTTP(S) job link, and stable control IDs.
+  - [`ProjectGroupColumn`](../src/reporting/control-page/components/organisms/project-group-column.tsx): group actions/count and scroll-contained cards; [`ProjectsGrid`](../src/reporting/control-page/components/organisms/ProjectsGrid.tsx): grouped-board toolbar/dialog and horizontal scroller; [`ProjectGroupBoard`](../src/reporting/control-page/components/organisms/project-group-board.tsx) re-exports `ProjectsGrid`.
+  - [`ConfigFormBuilder`](../src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx): project/default editing, validation, add/clone drafts, and removal constraints; [`RawJsonSection`](../src/reporting/control-page/components/organisms/RawJsonSection.tsx): apply JSON and validation feedback.
+  - [`ExecutionSection`](../src/reporting/control-page/components/organisms/ExecutionSection.tsx): all-enabled report/build actions and saved 1–4 Workers selector; [`RunStatusCard`](../src/reporting/control-page/components/organisms/RunStatusCard.tsx): status/ID, result, and logs.
+  [`HeaderBar`](../src/reporting/control-page/components/organisms/HeaderBar.tsx), [`CredentialsDialog`](../src/reporting/control-page/components/organisms/CredentialsDialog.tsx), and [`BrowserSettingsDialog`](../src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx) complete this tier.
+  Layout templates are exported by [`templates/index.ts`](../src/reporting/control-page/components/templates/index.ts):
+  - [`DashboardLayout`](../src/reporting/control-page/components/templates/DashboardLayout.tsx): skip link, 1200px shell, and project/editor/action/run slots; `DashboardPage` uses it.
+  - [`ReportManagementLayout`](../src/reporting/control-page/components/templates/ReportManagementLayout.tsx): skip link and header/banner/search/content/history/dialog slots; [`FinalReportLayout`](../src/reporting/control-page/components/templates/FinalReportLayout.tsx): report skip link and toolbar/export/status/body slots.
+  Layout slot contracts are in [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts).
+  `ReportManagementPage` and `FinalProjectReportPage` still render inline shells pending Phase 04 template integration.
+  pages ([`DashboardPage`](../src/reporting/control-page/pages/DashboardPage.tsx), [`ReportManagementPage`](../src/reporting/control-page/pages/ReportManagementPage.tsx), and [`FinalProjectReportPage`](../src/reporting/control-page/pages/final-project-report-page.tsx)),
+  error boundary ([`components/ErrorBoundary.tsx`](../src/reporting/control-page/components/ErrorBoundary.tsx)),
+  and application markup (`index.html`, [`App.tsx`](../src/reporting/control-page/App.tsx), `main.tsx`, and
   `styles/globals.css` with Modern Refined Light tokens for surfaces, text,
   borders, action/status colors, focus, and monospace, plus global focus-visible
   and reduced-motion rules),
@@ -692,10 +692,11 @@ The Control Dashboard frontend refactor implements Atomic Design principles, cle
    - **Accessibility**: Includes explicit ARIA roles (`role="status"`, `role="log"`, `role="alert"`), `aria-live="polite"` live regions, and `label[for]` associations.
    - **Zero Leakage**: Credential inputs enforce `type="password"`, `autoComplete="off"`, and input value clearing on submission, clear, and dialog closure.
 
-5. **Compound Organisms and Page Assembly (Phase 04)**:
-   - Integrates current organisms into dashboard panels: `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, and `BrowserSettingsDialog`.
-   - Layout template ([`DashboardLayout`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)) provides structure with skip links and alert regions.
-   - Page view ([`DashboardPage`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx)) and Root ([`App`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), [`ErrorBoundary`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)) integrate hooks for unified state management.
+5. **Organisms and Layout Templates (Atomic Design Phase 03)**:
+   - Refined `ProjectCard`, `ProjectGroupColumn`, `ProjectsGrid`, `ConfigFormBuilder`, `RawJsonSection`, `ExecutionSection`, and `RunStatusCard`; project-card control IDs remain stable.
+   - Added slot-based [`DashboardLayout`](../src/reporting/control-page/components/templates/DashboardLayout.tsx), [`ReportManagementLayout`](../src/reporting/control-page/components/templates/ReportManagementLayout.tsx), and [`FinalReportLayout`](../src/reporting/control-page/components/templates/FinalReportLayout.tsx); `DashboardPage` uses `DashboardLayout`.
+   - `ReportManagementPage` and `FinalProjectReportPage` still render inline shells; integration with their templates is planned for Phase 04.
+   - `App` selects the route-specific page, with `ErrorBoundary` providing the application error boundary.
 
 6. **Phase 06 Legacy Cleanup**:
    - Completely removed legacy imperative files: `src/reporting/control-page/control-page.js`, `control-page.html`, and `control-page.css`.

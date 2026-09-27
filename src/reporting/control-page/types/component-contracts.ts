@@ -271,3 +271,33 @@ export interface PageHeaderProps {
   titleId?: string;
   level?: 1 | 2;
 }
+
+export interface DashboardLayoutProps {
+  header: ReactNode;
+  banner?: ReactNode;
+  projectsSection: ReactNode;
+  formBuilderSection: ReactNode;
+  rawJsonSection: ReactNode;
+  actionsSection: ReactNode;
+  runSection: ReactNode;
+  dialogs?: ReactNode;
+}
+
+export interface ReportManagementLayoutProps {
+  header: ReactNode;
+  banner?: ReactNode;
+  searchFilter?: ReactNode;
+  content?: ReactNode;
+  historyList?: ReactNode;
+  dialogs?: ReactNode;
+  children?: ReactNode;
+}
+
+export interface FinalReportLayoutProps {
+  header?: ReactNode;
+  toolbar?: ReactNode;
+  exportAction?: ReactNode;
+  statusView?: ReactNode;
+  reportContent?: ReactNode;
+  children?: ReactNode;
+}

@@ -28,7 +28,11 @@ import {
   RunResultBox,
 } from '../../src/reporting/control-page/components/molecules/index.js';
 import { ExecutionSection } from '../../src/reporting/control-page/components/organisms/ExecutionSection.js';
-
+import {
+  DashboardLayout,
+  ReportManagementLayout,
+  FinalReportLayout,
+} from '../../src/reporting/control-page/components/templates/index.js';
 test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
   test.describe('Atoms', () => {
     test.describe('Badge', () => {
@@ -930,6 +934,80 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
         );
         expect(noDocHtml).toMatch(/id="btn-run-reports"[^>]*disabled/);
         expect(noDocHtml).toMatch(/id="btn-run-auto-build"[^>]*disabled/);
+      });
+    });
+  });
+
+  test.describe('Templates', () => {
+    test.describe('DashboardLayout', () => {
+      test('renders standard slots, skip link, and 1200px container', () => {
+        const html = renderToString(
+          React.createElement(DashboardLayout, {
+            header: React.createElement('header', { id: 'test-header' }, 'Header Content'),
+            banner: React.createElement('div', { id: 'test-banner' }, 'Banner Message'),
+            projectsSection: React.createElement('div', { id: 'test-projects' }, 'Projects Board'),
+            formBuilderSection: React.createElement('div', { id: 'test-form' }, 'Form Builder'),
+            rawJsonSection: React.createElement('div', { id: 'test-json' }, 'Raw JSON'),
+            actionsSection: React.createElement('div', { id: 'test-actions' }, 'Actions Bar'),
+            runSection: React.createElement('div', { id: 'test-run' }, 'Run Status'),
+            dialogs: React.createElement('div', { id: 'test-dialogs' }, 'Dialog Overlays'),
+          }),
+        );
+
+        expect(html).toContain('href="#main-content"');
+        expect(html).toContain('class="skip-link"');
+        expect(html).toContain('id="main-content"');
+        expect(html).toContain('max-w-[1200px]');
+        expect(html).toContain('id="test-header"');
+        expect(html).toContain('id="test-banner"');
+        expect(html).toContain('id="test-projects"');
+        expect(html).toContain('id="test-form"');
+        expect(html).toContain('id="test-json"');
+        expect(html).toContain('id="test-actions"');
+        expect(html).toContain('id="test-run"');
+        expect(html).toContain('id="test-dialogs"');
+      });
+    });
+
+    test.describe('ReportManagementLayout', () => {
+      test('renders standard slots, skip link, and 1200px container', () => {
+        const html = renderToString(
+          React.createElement(ReportManagementLayout, {
+            header: React.createElement('header', { id: 'report-header' }, 'Index Header'),
+            banner: React.createElement('div', { id: 'feedback-banner' }, 'Feedback'),
+            content: React.createElement('div', { id: 'report-content' }, 'Reports List'),
+            dialogs: React.createElement('div', { id: 'delete-dialogs' }, 'Delete Modals'),
+          }),
+        );
+
+        expect(html).toContain('href="#main-content"');
+        expect(html).toContain('id="main-content"');
+        expect(html).toContain('max-w-[1200px]');
+        expect(html).toContain('id="report-header"');
+        expect(html).toContain('id="feedback-banner"');
+        expect(html).toContain('id="report-content"');
+        expect(html).toContain('id="delete-dialogs"');
+      });
+    });
+
+    test.describe('FinalReportLayout', () => {
+      test('renders skip link, toolbar, export action, status view, and report content', () => {
+        const html = renderToString(
+          React.createElement(FinalReportLayout, {
+            toolbar: React.createElement('nav', { id: 'report-breadcrumbs' }, 'Breadcrumbs'),
+            exportAction: React.createElement('button', { id: 'btn-export' }, 'Export PDF'),
+            statusView: React.createElement('div', { id: 'status-view' }, 'Loading...'),
+            reportContent: React.createElement('div', { id: 'project-report-surface' }, 'Report Body'),
+          }),
+        );
+
+        expect(html).toContain('href="#project-report-surface"');
+        expect(html).toContain('class="control-report-bar');
+        expect(html).toContain('max-w-[1200px]');
+        expect(html).toContain('id="report-breadcrumbs"');
+        expect(html).toContain('id="btn-export"');
+        expect(html).toContain('id="status-view"');
+        expect(html).toContain('id="project-report-surface"');
       });
     });
   });

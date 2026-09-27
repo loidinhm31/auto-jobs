@@ -1,10 +1,9 @@
 # Codebase summary
 
 This summary is based on the refreshed `repomix-output.xml` and current
-source/configuration. It covers report/build execution, optional schema-v1
-project-group metadata and Control editor transitions, retained history,
-Control-only report management, and the final-report viewer with its verified
-browser PDF export.
+source/configuration. It covers report/build execution, project-group metadata
+and editor transitions, Control UI Atomic Design Phase 03 organisms/layouts,
+retained history and report management, and the final-report viewer/PDF export.
 
 ## Repository profile
 
@@ -55,16 +54,16 @@ browser PDF export.
   embedded Noto Sans, safe images and links; saved reports remain unchanged.
   Chromium/WebKit verification and dedicated regression helpers are listed below.
 - Phase 05 addition (Host Template Mock Server): comprehensive validation and
-  testing suite in [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
+  testing suite in [`tests/e2e/template-server-integration.spec.ts`](../tests/e2e/template-server-integration.spec.ts)
   covering Developer Hub smoke tests, double-encoded URL path preservation,
   SonarQube auth session guard, concurrent execution with Control Server,
   `config/projects.template.json` schema-v1 validation, end-to-end production
   report capture with Snyk/Sonar evidence, auto-build submission, and Control UI
   project card rendering with zero cross-origin errors.
 - React migration (Phase 03 of the React refactor): accessible Atomic Design
-  primitives ([atoms](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/) and
-  [molecules](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/)) and
-  Tailwind styling in [`src/reporting/control-page/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/),
+  primitives ([atoms](../src/reporting/control-page/components/atoms/) and
+  [molecules](../src/reporting/control-page/components/molecules/)) and
+  Tailwind styling in [`src/reporting/control-page/`](../src/reporting/control-page/),
   preserving the active DOM IDs, CSS classes, data attributes, and ARIA contracts.
 - Control UI Atomic Design Phase 01 (2026-09-27): introduced Modern Refined Light
   tokens and expanded the atom tier with `Checkbox`, compound `Card`, and
@@ -79,6 +78,18 @@ browser PDF export.
   icons while preserving DOM contracts. Shared prop types are in
   [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts);
   [`molecules/index.ts`](../src/reporting/control-page/components/molecules/index.ts) exports the tier.
+- Control UI Atomic Design Phase 03 (2026-09-27): refined project, editor, and
+  execution organisms. `ProjectCard` preserves `#checkbox-enabled-*` and
+  `#select-runtype-*`; `ProjectsGrid` and `ProjectGroupColumn` render the
+  contained grouped board, with `ProjectGroupBoard` as a named re-export.
+  `ConfigFormBuilder` edits projects/defaults and add/clone drafts;
+  `RawJsonSection` applies JSON and reports validation; `ExecutionSection`
+  exposes all-enabled report/build actions and the saved Workers selector;
+  `RunStatusCard` composes status, result, and logs.
+- Added typed, slot-based `DashboardLayout`, `ReportManagementLayout`, and
+  `FinalReportLayout`, exported by `components/templates/index.ts`.
+  `DashboardPage` uses `DashboardLayout`; report-management and final-report
+  pages still render inline shells pending Phase 04 integration.
 - Phase 06 addition: removal of legacy imperative assets (`control-page.js`,
   `control-page.html`, `control-page.css`); control dashboard frontend is now
   100% React application compiled via Vite with zero legacy assets.
@@ -166,7 +177,7 @@ browser PDF export.
 | `src/jenkins/stage-view-parser.ts` | Parses the Stage View run rows, stage statuses, names, and durations. |
 | `src/jenkins/stage-view-types.ts` | Defines run identity, overall statuses, completion result, and stage details. |
 | `src/templates/template-report-fixture.ts` | Public fixture facade, HTTP server exports, and template project document builder. |
-| [`src/templates/template-server.ts`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server.ts) | Standalone native Node.js HTTP server serving Developer Hub index page (`/`, `/index.html`) with 9 mock endpoints and offline template fixtures on port 4174. |
+| [`src/templates/template-server.ts`](../src/templates/template-server.ts) | Standalone native Node.js HTTP server serving Developer Hub index page (`/`, `/index.html`) with 9 mock endpoints and offline template fixtures on port 4174. |
 | `src/templates/template-server-cli.ts` | CLI entrypoint and argument parser (`--host`, `--port`) for the standalone template mock HTTP server. |
 | `src/templates/template-fixture-loader.ts` | Loads and validates the complete offline fixture. |
 | `src/templates/template-fixture-routes.ts` | Installs exact default-deny browser routes. |
@@ -181,8 +192,10 @@ browser PDF export.
 | `src/reporting/report-server-control-page.ts` | Loads Vite-built HTML, CSS, and JS assets from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches assets. |
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
 | `src/reporting/control-page/` | Control Dashboard frontend sources (types, utils, headless hooks, components, styles) bundled via Vite into `.runner-build/reporting/control-page/`. |
-| `src/reporting/control-page/types/component-contracts.ts`, `src/reporting/control-page/components/molecules/index.ts` | Shared atom/molecule prop contracts and public molecule exports, including `FormFieldProps` and `PageHeaderProps`. |
-| `tests/unit/control-atomic-components.spec.ts` | Static-rendered contracts for atoms, `FormField`/`PageHeader`, selector/row/log/result behavior, and `ExecutionSection`. |
+| `src/reporting/control-page/types/component-contracts.ts`, `components/molecules/index.ts`, `components/templates/index.ts` | Shared UI/layout contracts and public molecule/template exports, including form-field, page-header, and three layout prop types. |
+| `src/reporting/control-page/components/organisms/` | Project/group, config/raw JSON, execution, and run-result organisms; `project-group-board.tsx` exports `ProjectsGrid` as `ProjectGroupBoard`. |
+| `src/reporting/control-page/components/templates/` | `DashboardLayout`, `ReportManagementLayout`, and `FinalReportLayout` slot-based page skeletons. |
+| `tests/unit/control-atomic-components.spec.ts` | Static-rendered contracts for atoms/molecules, `ExecutionSection`, and the three templates' slots and landmarks. |
 | `src/reporting/control-page/App.tsx`, `HeaderBar.tsx` | Select Dashboard, report history, or final-report view by pathname and provide history navigation. |
 | `src/reporting/project-report-route.ts` | Browser-safe matching and validation for safe final-report route IDs and exact index/directory forms. |
 | `src/reporting/project-report-body-renderer.ts` | Composes the complete escaped evidence body shared by React and static output. |
@@ -381,13 +394,13 @@ state, injected-credential execution, input wiping, and absence of test
 secrets from page HTML and run logs. The control configuration uses Chromium
 and WebKit projects, so the four browser scenarios produce eight E2E checks.
 
-### Control UI design tokens and Atomic Design components (Phases 01–02 redesign; Phase 03 React refactor)
+### Control UI design tokens and Atomic Design components (Phases 01–03)
 
 The Control Dashboard follows an Atomic Design hierarchy: atoms provide reusable controls, molecules combine them into focused interactions, and organisms assemble dashboard sections. Existing DOM IDs, classes, data attributes, and ARIA contracts remain covered by Control UI tests.
 
 1. **Styling and utility infrastructure**:
    - `styles/globals.css`: Tailwind directives plus Modern Refined Light `:root` tokens for surfaces (`--bg-color`, `--card-bg`, `--surface`, `--subtle-surface`), text (`--text-main`, `--text-secondary`, `--text-muted`), borders (`--border-color`, `--border-default`, `--border-strong`), primary/secondary/danger base-hover-text pairs, semantic status colors, `--focus-ring`, and `--mono-font`. Global `:focus-visible`, skip-link, visually-hidden, and reduced-motion rules live here.
-   - [`cn`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4) (`utils/cn.ts`): Wraps `clsx` and `twMerge` to reconcile Tailwind utility classes with legacy class tokens without style precedence collisions.
+   - [`cn`](../src/reporting/control-page/utils/cn.ts#L4) (`utils/cn.ts`): Wraps `clsx` and `twMerge` to reconcile Tailwind utility classes with legacy class tokens without style precedence collisions.
 
 2. **Atomic primitives (`components/atoms/`, exported from `index.ts`):**
    - `Button`: defaults to the secondary variant and standard size; supports `primary`, `secondary`, `danger`, `outline`, and `ghost`, `sm`/`md`/`lg`/`default` sizes, loading feedback, and Radix's slot-based `asChild` composition.
@@ -413,10 +426,11 @@ The Control Dashboard follows an Atomic Design hierarchy: atoms provide reusable
    - [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx): Enables export only for a ready report and exposes progress and accessible error feedback.
    - `types/component-contracts.ts` defines typed molecule props; `components/molecules/index.ts` re-exports the tier. Selected actions and status states use `lucide-react` icons.
 
-4. **Organism Assembly and Phase 06 Legacy Cleanup**:
-   - Compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/)): `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, and `BrowserSettingsDialog`; the per-card build-confirmation flow was removed in Phase 03.
-   - Phase 06 cleanup removed all legacy imperative assets (`control-page.js`, `control-page.html`, `control-page.css`). The application is 100% React compiled into `.runner-build/reporting/control-page/` by Vite.
-   - `tests/unit/control-atomic-components.spec.ts` statically renders the Phase 01 atoms, `FormField`/`PageHeader`, retained selector/credential/browser contracts, log/results, and `ExecutionSection` action and worker states.
+4. **Organisms and Layout Templates (Atomic Design Phase 03)**:
+   - Project board composition includes `ProjectCard`, `ProjectGroupColumn`, and `ProjectsGrid` (`ProjectGroupBoard` is its named re-export); editing, raw JSON, execution, and run status use `ConfigFormBuilder`, `RawJsonSection`, `ExecutionSection`, and `RunStatusCard`.
+   - Added slot-based `DashboardLayout`, `ReportManagementLayout`, and `FinalReportLayout`. `DashboardPage` consumes `DashboardLayout`; report-management and final-report pages still render inline shells pending Phase 04 integration.
+   - `tests/unit/control-atomic-components.spec.ts` covers atoms/molecules, `ExecutionSection`, and template slots and landmarks through static rendering.
+   - Phase 06 removed the legacy imperative assets (`control-page.js`, `control-page.html`, `control-page.css`); Vite builds the React application into `.runner-build/reporting/control-page/`.
 
 
 ### Control Dashboard config form builder (integrated; Active Config Phase 02–04)
@@ -581,9 +595,9 @@ set `Cache-Control: no-store`.
 | `templates/jenkins-template/template-build.html` | Minimal saved-origin build page with canonical URL, `POST` form, `#bottom-sticker`, and classed `Build` button. |
 | `templates/` | Offline Jenkins, Snyk, and SonarQube fixture corpus, including the build detail page. |
 | `tests/unit/template-build-fixture.spec.ts` and `tests/e2e/template-auto-build.spec.ts` | Build fixture drift, exact redirect, route, budget, and production auto-build coverage. |
-| [`tests/unit/template-server.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/template-server.spec.ts) | Loopback binding, Developer Hub index page (`/`, `/index.html`, 9 mock endpoints, HEAD, security headers, XSS prevention), GET/HEAD fixture routing, POST redirects, SonarQube auth guard, 404/405/400 errors, and graceful shutdown coverage. |
+| [`tests/unit/template-server.spec.ts`](../tests/unit/template-server.spec.ts) | Loopback binding, Developer Hub index page (`/`, `/index.html`, 9 mock endpoints, HEAD, security headers, XSS prevention), GET/HEAD fixture routing, POST redirects, SonarQube auth guard, 404/405/400 errors, and graceful shutdown coverage. |
 | `tests/unit/template-server-cli.spec.ts` | CLI argument parsing, environment variable overrides, port validation, help flags, signal cleanup, and process execution tests. |
-| [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts) | End-to-end integration and validation tests for the standalone template mock HTTP server, Developer Hub smoke flows, concurrent Control Server execution, `projects.template.json`, production report capture, and auto-build submission. |
+| [`tests/e2e/template-server-integration.spec.ts`](../tests/e2e/template-server-integration.spec.ts) | End-to-end integration and validation tests for the standalone template mock HTTP server, Developer Hub smoke flows, concurrent Control Server execution, `projects.template.json`, production report capture, and auto-build submission. |
 
 ## Artifacts and test boundaries
 
@@ -619,7 +633,7 @@ checked-in files with default-deny routes and do not contact Jenkins or vendor
 services. `template-build-fixture.spec.ts` validates the ninth file and
 `template-auto-build.spec.ts` proves one build POST without Snyk/Sonar capture.
 The Phase 05 template server validation gate in
-[`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts)
+[`tests/e2e/template-server-integration.spec.ts`](../tests/e2e/template-server-integration.spec.ts)
 extends template test coverage with 11 integration checks, bringing the unified
 template test gate (`npm run test:e2e:templates`) to 13 passing checks across
 navigation, auto-build, and real HTTP mock server execution.

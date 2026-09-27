@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import type { ProjectCardData } from '../../types/component-contracts.js';
 import type { ProjectGroupInput } from '../../types/index.js';
 import { buildProjectGroupColumns } from '../../utils/project-group-board.js';
@@ -79,7 +80,7 @@ export function ProjectsGrid({
               onClick={() => setDialogMode({ type: 'new-group' })}
               className="btn-new-group font-medium text-xs flex items-center gap-1"
             >
-              <span aria-hidden="true">+</span> New Group
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" /> New Group
             </Button>
           </div>
         )}
@@ -92,8 +93,7 @@ export function ProjectsGrid({
         aria-label="Project groups board"
         tabIndex={0}
         className={cn(
-          'projects-grid projects-board flex flex-row items-start gap-4 pb-2 min-w-0 max-w-full overflow-x-auto focus:outline-hidden focus:ring-2 focus:ring-sky-500/50 rounded-lg',
-          className,
+          'projects-grid projects-board flex flex-row items-start gap-4 pb-2 min-w-0 max-w-full overflow-x-auto focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg',
         )}
       >
         {columns.map((column) => (

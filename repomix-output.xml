@@ -234,8 +234,10 @@ src/reporting/control-page/components/molecules/ConfigDefaultsEditor.tsx
 src/reporting/control-page/components/molecules/ConfigProjectEditor.tsx
 src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx
 src/reporting/control-page/components/molecules/CredentialRow.tsx
+src/reporting/control-page/components/molecules/FormField.tsx
 src/reporting/control-page/components/molecules/index.ts
 src/reporting/control-page/components/molecules/LogViewer.tsx
+src/reporting/control-page/components/molecules/PageHeader.tsx
 src/reporting/control-page/components/molecules/project-runs-table.tsx
 src/reporting/control-page/components/molecules/ProjectReportStatusView.tsx
 src/reporting/control-page/components/molecules/ReportExportButton.tsx
@@ -248,6 +250,7 @@ src/reporting/control-page/components/organisms/DeleteRunConfirmationDialog.tsx
 src/reporting/control-page/components/organisms/ExecutionSection.tsx
 src/reporting/control-page/components/organisms/HeaderBar.tsx
 src/reporting/control-page/components/organisms/index.ts
+src/reporting/control-page/components/organisms/project-group-board.tsx
 src/reporting/control-page/components/organisms/project-group-column.tsx
 src/reporting/control-page/components/organisms/project-group-dialog-create.tsx
 src/reporting/control-page/components/organisms/project-group-dialog-delete.tsx
@@ -260,6 +263,9 @@ src/reporting/control-page/components/organisms/ProjectsGrid.tsx
 src/reporting/control-page/components/organisms/RawJsonSection.tsx
 src/reporting/control-page/components/organisms/RunStatusCard.tsx
 src/reporting/control-page/components/templates/DashboardLayout.tsx
+src/reporting/control-page/components/templates/FinalReportLayout.tsx
+src/reporting/control-page/components/templates/index.ts
+src/reporting/control-page/components/templates/ReportManagementLayout.tsx
 src/reporting/control-page/hooks/config-document-transitions.ts
 src/reporting/control-page/hooks/project-group-transitions.ts
 src/reporting/control-page/hooks/use-delete-reports.ts
@@ -581,7 +587,7 @@ File: config/projects.example.json
       "id": "service-a",
       "name": "Service A",
       "enabled": true,
-      "runType": "auto-build",
+      "runType": "report",
       "loginUrl": "https://jenkins.example.invalid/jenkins/login",
       "jobUrl": "https://jenkins.example.invalid/jenkins/job/Container%20Platform/job/service-a/job/release%252Fsit/",
       "sourceOrigins": {
@@ -806,21 +812,20 @@ flowchart LR
   `hooks/useConfigDocumentEditor.ts` for document/raw-JSON editing and
   validation, `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`,
   `hooks/useRunPoller.ts`, `hooks/use-project-report.ts` for validated final reports),
-  atomic design UI primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/):
-  [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31),
-  [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5),
-  [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5),
-  [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5),
-  [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5),
-  [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5)),
-  compound molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/):
-  [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8),
-  [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28),
-  [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7),
-  `ConfigProjectEditor`, `ConfigDefaultsEditor`,
-  [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23),
-  [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5),
-  [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx),
+  Atomic Design atoms exported from `components/atoms/index.ts`: `Button` (Radix
+  `slot`-based Radix `asChild` composition, variants, loading), `Badge` (semantic states, optional dot),
+  `Checkbox`, compound `Card` and its `CardHeader`, `CardTitle`,
+  `CardDescription`, `CardContent`, and `CardFooter`, `IconButton`, `Input`,
+  `Select`, `StatusBanner`, and `LoadingIndicator`;
+  compound molecules ([`components/molecules/`](../src/reporting/control-page/components/molecules/):
+  [`FormField`](../src/reporting/control-page/components/molecules/FormField.tsx),
+  [`PageHeader`](../src/reporting/control-page/components/molecules/PageHeader.tsx),
+  [`CredentialRow`](../src/reporting/control-page/components/molecules/CredentialRow.tsx),
+  [`BrowserSettingRow`](../src/reporting/control-page/components/molecules/BrowserSettingRow.tsx),
+  [`ConfigSelectorBar`](../src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx),
+  `ConfigProjectEditor`, `ConfigDefaultsEditor`, [`LogViewer`](../src/reporting/control-page/components/molecules/LogViewer.tsx),
+  [`RunResultBox`](../src/reporting/control-page/components/molecules/RunResultBox.tsx), [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx),
+  [`ProjectRunsTable`](../src/reporting/control-page/components/molecules/project-runs-table.tsx), [`ProjectReportStatusView`](../src/reporting/control-page/components/molecules/ProjectReportStatusView.tsx), [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx); shared props are in [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts) and exports in [`molecules/index.ts`](../src/reporting/control-page/components/molecules/index.ts); selected actions use `lucide-react`),
   compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/):
   [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx),
   [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx),
@@ -834,7 +839,10 @@ flowchart LR
   layout templates ([`components/templates/DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)),
   pages ([`DashboardPage`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx), [`ReportManagementPage`](../src/reporting/control-page/pages/ReportManagementPage.tsx), and [`FinalProjectReportPage`](../src/reporting/control-page/pages/final-project-report-page.tsx)),
   error boundary ([`components/ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)),
-  and application markup (`index.html`, [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), `main.tsx`, [`styles/globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css)),
+  and application markup (`index.html`, [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), `main.tsx`, and
+  `styles/globals.css` with Modern Refined Light tokens for surfaces, text,
+  borders, action/status colors, focus, and monospace, plus global focus-visible
+  and reduced-motion rules),
   bundled by `vite.control.config.ts` into `.runner-build/reporting/control-page/` with
   single-bundle JS/CSS and no inline scripts/styles for strict CSP compliance. Legacy imperative
   assets (`control-page.js`, `control-page.html`, `control-page.css`) have been removed (Phase 06).
@@ -1421,9 +1429,9 @@ Phase 02 control hooks and interface contracts coverage in
 `tests/unit/control-hooks-and-types.spec.ts` verifies credential variable discovery,
 CSRF auto-injection, run poller exponential backoff and terminal state transitions,
 and end-to-end hook integration with loopback config, secrets, and run APIs.
-Phase 03 atomic-component coverage in `tests/unit/control-atomic-components.spec.ts`
-exercises `ExecutionSection`, including the worker selector's 1–4 options and
-disabled states, alongside DOM, accessibility, and data-attribute contracts.
+Control UI atomic/molecular coverage in `tests/unit/control-atomic-components.spec.ts`
+exercises the atoms, `FormField`/`PageHeader`, retained selector/row contracts,
+log and run-result rendering, and `ExecutionSection` worker options/disabled states.
 Phase 03 run-environment coverage is in
 `tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
 `tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection
@@ -1824,8 +1832,8 @@ browser PDF export.
 - Runtime: Node.js 24 or newer; npm 11.13.0; TypeScript 7.0.2.
 - Browser/runtime library: Playwright Test 1.62.1 with Chromium, Firefox, and
   WebKit adapters. The standard install script provisions Chromium and WebKit.
-- Control browser-PDF dependencies: `jspdf` and `jspdf-autotable` are runtime
-  dependencies bundled with the Control Page.
+- Control Page icon library: `lucide-react`; browser-PDF dependencies `jspdf`
+  and `jspdf-autotable` are runtime packages bundled with the Control Page.
 - Primary output: immutable static vulnerability reports aggregating Jenkins,
   Snyk, and SonarQube evidence.
 - Phase 2 addition: an explicit one-project Jenkins parameterized-build
@@ -1879,6 +1887,19 @@ browser PDF export.
   [molecules](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/)) and
   Tailwind styling in [`src/reporting/control-page/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/),
   preserving the active DOM IDs, CSS classes, data attributes, and ARIA contracts.
+- Control UI Atomic Design Phase 01 (2026-09-27): introduced Modern Refined Light
+  tokens and expanded the atom tier with `Checkbox`, compound `Card`, and
+  `IconButton`; refactored `Button`, `Badge`, `Input`, `Select`, `StatusBanner`,
+  and `LoadingIndicator`. Details below.
+- Control UI Atomic Design Phase 02 (2026-09-27): added reusable
+  [`FormField`](../src/reporting/control-page/components/molecules/FormField.tsx) for labels, required state, and helper/error messaging,
+  plus [`PageHeader`](../src/reporting/control-page/components/molecules/PageHeader.tsx) for titles, navigation, badges, and action slots.
+  Modernized `ConfigSelectorBar`, `CredentialRow`, `BrowserSettingRow`, `LogViewer`,
+  `RunResultBox`, `BuildProjectOutcomeRow`, `ProjectRunsTable`,
+  `ProjectReportStatusView`, and `ReportExportButton` with selective `lucide-react`
+  icons while preserving DOM contracts. Shared prop types are in
+  [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts);
+  [`molecules/index.ts`](../src/reporting/control-page/components/molecules/index.ts) exports the tier.
 - Phase 06 addition: removal of legacy imperative assets (`control-page.js`,
   `control-page.html`, `control-page.css`); control dashboard frontend is now
   100% React application compiled via Vite with zero legacy assets.
@@ -1981,6 +2002,8 @@ browser PDF export.
 | `src/reporting/report-server-control-page.ts` | Loads Vite-built HTML, CSS, and JS assets from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches assets. |
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
 | `src/reporting/control-page/` | Control Dashboard frontend sources (types, utils, headless hooks, components, styles) bundled via Vite into `.runner-build/reporting/control-page/`. |
+| `src/reporting/control-page/types/component-contracts.ts`, `src/reporting/control-page/components/molecules/index.ts` | Shared atom/molecule prop contracts and public molecule exports, including `FormFieldProps` and `PageHeaderProps`. |
+| `tests/unit/control-atomic-components.spec.ts` | Static-rendered contracts for atoms, `FormField`/`PageHeader`, selector/row/log/result behavior, and `ExecutionSection`. |
 | `src/reporting/control-page/App.tsx`, `HeaderBar.tsx` | Select Dashboard, report history, or final-report view by pathname and provide history navigation. |
 | `src/reporting/project-report-route.ts` | Browser-safe matching and validation for safe final-report route IDs and exact index/directory forms. |
 | `src/reporting/project-report-body-renderer.ts` | Composes the complete escaped evidence body shared by React and static output. |
@@ -2179,33 +2202,42 @@ state, injected-credential execution, input wiping, and absence of test
 secrets from page HTML and run logs. The control configuration uses Chromium
 and WebKit projects, so the four browser scenarios produce eight E2E checks.
 
-### Control UI atomic design components and contract fidelity (Phase 03 React refactor)
+### Control UI design tokens and Atomic Design components (Phases 01–02 redesign; Phase 03 React refactor)
 
-The Control Dashboard UI uses Atomic Design principles to isolate visual primitives and compound molecules while guaranteeing 100% contract fidelity with existing Playwright E2E locators:
+The Control Dashboard follows an Atomic Design hierarchy: atoms provide reusable controls, molecules combine them into focused interactions, and organisms assemble dashboard sections. Existing DOM IDs, classes, data attributes, and ARIA contracts remain covered by Control UI tests.
 
 1. **Styling and utility infrastructure**:
-   - [`globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css): Declares Tailwind directives (`@tailwind base; @tailwind components; @tailwind utilities;`), maps CSS variable design tokens (`--bg-color`, `--card-bg`, `--text-main`, `--text-muted`, `--border-color`, `--primary`, `--secondary`, `--danger`, `--focus-ring`, `--mono-font`), sets `:focus-visible` outline rings, and defines critical accessibility utilities (`.skip-link`, `.visually-hidden`, `.hidden`, `@media (prefers-reduced-motion: reduce)`).
+   - `styles/globals.css`: Tailwind directives plus Modern Refined Light `:root` tokens for surfaces (`--bg-color`, `--card-bg`, `--surface`, `--subtle-surface`), text (`--text-main`, `--text-secondary`, `--text-muted`), borders (`--border-color`, `--border-default`, `--border-strong`), primary/secondary/danger base-hover-text pairs, semantic status colors, `--focus-ring`, and `--mono-font`. Global `:focus-visible`, skip-link, visually-hidden, and reduced-motion rules live here.
    - [`cn`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4) (`utils/cn.ts`): Wraps `clsx` and `twMerge` to reconcile Tailwind utility classes with legacy class tokens without style precedence collisions.
 
-2. **Atomic primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/))**:
-   - [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): Renders `<span className="badge badge-{variant}">`. Maps status variants (`idle`, `queued`, `running`, `succeeded`, `failed`, `unknown`, `submission-unknown`), credential states (`configured` -> `badge-configured`, `missing` -> `badge-missing`), and browser setting unconfigured state (`not-set` -> class `badge-missing` with text `'Not Set'`). Supports `forwardRef`.
-   - [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): Renders `<button type="button" className="btn btn-{variant} ...">`. Supports variants (`primary`, `secondary`, `danger`, `outline`), size `sm` (`btn-sm`), disabled state, loading spinner, and arbitrary `data-*` attributes (`data-key`). Supports `forwardRef`.
-   - [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): Accessible input wrapper with `id`, default `type="text"`, optional label via `htmlFor`, error message with `role="alert"` and `aria-invalid="true"`, default `autoComplete="off"` and `spellCheck=false`. Supports `forwardRef`.
-   - [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): Native `<select>` wrapper supporting options or custom children, associated label or `aria-label`, and `forwardRef`.
-   - [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): Notification banner rendering `<div id="status-banner" role="status" aria-live="polite" className="status-banner {variant} ...">`. Toggles `.hidden` when not visible.
-   - [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): Status indicator with `aria-live="polite"`, class `credentials-loading`, and `.hidden` toggle when not visible.
-
-3. **Compound molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))**:
-   - [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): Renders `.credential-row` containing `.credential-field` (`label[for="secret-input-${key}"]` and `Badge`), and `.credential-input-group` (`<input id="secret-input-${key}" type="password" class="credential-input" autocomplete="off" />`). When `isConfigured` is true, renders `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
-   - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls with contract-specified IDs: badges (`#badge-browser-headless`, `#badge-browser-executable-path`), controls (`#browser-headless-select`, `#browser-executable-path-input`), and clear buttons (`#btn-clear-browser-headless`, `#btn-clear-browser-executable-path`).
-   - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Renders configuration selector (`<select id="config-select" aria-label="Select Configuration">`) and toolbar buttons (`#btn-reload`, `#btn-save`, `#btn-credentials`, `#btn-browser-settings`). Enforces `#btn-save` disabled when `!isDirty || isSaving || isLoading`.
-   - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`. Formats strings or `RunLogEntry[]` timestamps (`[${timestamp}] ${message}`), defaults to `"No active run."`, and auto-scrolls on log updates.
-   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Renders report results, ordered `buildProjects` rows, scalar build results for older records, and error messages in `#run-result-box`.
+2. **Atomic primitives (`components/atoms/`, exported from `index.ts`):**
+   - `Button`: defaults to the secondary variant and standard size; supports `primary`, `secondary`, `danger`, `outline`, and `ghost`, `sm`/`md`/`lg`/`default` sizes, loading feedback, and Radix's slot-based `asChild` composition.
+   - `Badge`: maps status, credential, and browser-setting states to semantic classes; supports an optional decorative dot (`aria-hidden`).
+   - `Checkbox`: native controlled/uncontrolled checkbox with optional visible label, accessible-name fallback, and `onCheckedChange`.
+   - `Card`: compound `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, and `CardFooter`; every part supports Radix's slot-based `asChild` composition.
+   - `IconButton`: composes `Button`, accepts an icon node or children, and resolves its accessible name from `aria-label`, `ariaLabel`, `title`, or `tooltip` (fallback: `Action`).
+   - `Input`: native input with optional label/error, `aria-invalid`/`aria-describedby`, and text/off/false defaults for type/autocomplete/spell-check; preserves `credential-input` styling.
+   - `Select`: native select with options or children and optional associated label or accessible name.
+   - `StatusBanner`: info/success/error variants; errors use `role="alert"` and assertive live announcements, other states use polite status announcements.
+   - `LoadingIndicator`: hideable `role="status"` indicator with polite live announcements and a default loading message.
+3. **Compound molecules ([`components/molecules/`](../src/reporting/control-page/components/molecules/))**:
+   - [`FormField`](../src/reporting/control-page/components/molecules/FormField.tsx): Associates a label with its child ID, announces required state, and renders helper text or a `role="alert"` error; errors take precedence over helper text.
+   - [`PageHeader`](../src/reporting/control-page/components/molecules/PageHeader.tsx): Composes an `h1`/`h2` title with an optional subtitle, breadcrumb or back link, badges, and action slot.
+   - [`CredentialRow`](../src/reporting/control-page/components/molecules/CredentialRow.tsx): Renders `.credential-row` containing `.credential-field` (`label[for="secret-input-${key}"]` and `Badge`), and `.credential-input-group` (`<input id="secret-input-${key}" type="password" class="credential-input" autocomplete="off" />`). When `isConfigured` is true, renders `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
+   - [`BrowserSettingRow`](../src/reporting/control-page/components/molecules/BrowserSettingRow.tsx): Renders browser setting controls with contract-specified IDs: badges (`#badge-browser-headless`, `#badge-browser-executable-path`), controls (`#browser-headless-select`, `#browser-executable-path-input`), and clear buttons (`#btn-clear-browser-headless`, `#btn-clear-browser-executable-path`).
+   - [`ConfigSelectorBar`](../src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx): Renders the configuration selector and action buttons, preserves their IDs, and gates Save on dirty/loading/saving state; its actions use selective Lucide icons.
+   - [`LogViewer`](../src/reporting/control-page/components/molecules/LogViewer.tsx): Renders the accessible `#run-logs` log, formats strings or timestamped entries, defaults to `"No active run."`, autoscrolls on updates, and offers a copy action.
+   - [`RunResultBox`](../src/reporting/control-page/components/molecules/RunResultBox.tsx): Renders report results, ordered `buildProjects` rows, scalar build results for older records, and error messages in `#run-result-box`.
+   - [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx): Shows project identity, state/result, build number, valid build link, stages, and errors; omits invalid or empty links.
+   - [`ProjectRunsTable`](../src/reporting/control-page/components/molecules/project-runs-table.tsx): Displays paginated run history with local report/manifest links and optional per-run deletion actions.
+   - [`ProjectReportStatusView`](../src/reporting/control-page/components/molecules/ProjectReportStatusView.tsx): Presents loading, missing, invalid, and load-error states; renders no status content when the report is ready.
+   - [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx): Enables export only for a ready report and exposes progress and accessible error feedback.
+   - `types/component-contracts.ts` defines typed molecule props; `components/molecules/index.ts` re-exports the tier. Selected actions and status states use `lucide-react` icons.
 
 4. **Organism Assembly and Phase 06 Legacy Cleanup**:
    - Compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/)): `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, and `BrowserSettingsDialog`; the per-card build-confirmation flow was removed in Phase 03.
    - Phase 06 cleanup removed all legacy imperative assets (`control-page.js`, `control-page.html`, `control-page.css`). The application is 100% React compiled into `.runner-build/reporting/control-page/` by Vite.
-   - Current component contracts are exercised in `tests/unit/control-atomic-components.spec.ts`, including the new action-bar and multi-result behavior.
+   - `tests/unit/control-atomic-components.spec.ts` statically renders the Phase 01 atoms, `FormField`/`PageHeader`, retained selector/credential/browser contracts, log/results, and `ExecutionSection` action and worker states.
 
 
 ### Control Dashboard config form builder (integrated; Active Config Phase 02–04)
@@ -2361,7 +2393,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/project-group-validation.spec.ts`, `project-group-transitions.spec.ts`, `config-document-editor-groups.spec.ts` | Group schema/reference boundaries, immutable membership transitions, and document replacement versus edit/Save revision behavior. |
 | `tests/unit/clone-project-draft.spec.ts` | Project draft cloning, suffix-aware bounded ID and name generation, nested data independence, capacity guards, and replacementRevision reset. |
 | `tests/unit/control-project-transitions.spec.ts` | Group and clone transition boundaries: membership move/delete invariants, clone identity bounds, nested mutation independence, and capacity/collision guards. |
-| `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts for the shared Workers/action bar and ordered multi-project plus scalar-fallback result presentation. |
+| `tests/unit/control-atomic-components.spec.ts` | Static-rendered contracts for atoms, `FormField`/`PageHeader`, preserved row/selector DOM, logs/results, and `ExecutionSection`. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
 | `tests/unit/report-server-secret-store.spec.ts` | Phase 01 backend contract and control-mode wiring coverage. |
@@ -3834,7 +3866,7 @@ require the environment variables named by project configuration.
 | Run-executor environment injection | `src/reporting/report-server-run-manager.ts`, `src/reporting/report-server-run-executor.ts`, `src/reporting/report-server.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
-| Control actions and results | `ExecutionSection`, `DashboardPage`, `ProjectCard`, `ProjectsGrid`, `RunResultBox`, `BuildProjectOutcomeRow`; `tests/unit/control-atomic-components.spec.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
+| Control UI atoms, molecules, and actions | `FormField`, `PageHeader`, `ConfigSelectorBar`, `CredentialRow`, `BrowserSettingRow`, `LogViewer`, `RunResultBox`, `BuildProjectOutcomeRow`, `ProjectRunsTable`, `ProjectReportStatusView`, `ReportExportButton`, `ExecutionSection`; `tests/unit/control-atomic-components.spec.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, `tests/unit/control-secret-store.spec.ts`, `tests/unit/control-secrets-api.spec.ts`, `tests/e2e/control-page.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect policy | `src/jenkins/build-trigger.ts`, `src/project/auto-build-runner.ts` | [architecture](./architecture.md), [release gates](./release-gates.md) |
 
@@ -3889,7 +3921,7 @@ report CLI still has no production auto-build command.
   history, independent 20-run pagination, and confirmation-gated project
   deletion; persisted report HTML remains static and read-only.
 
-- Focused `control-atomic-components.spec.ts` passed 25/25.
+- Focused `control-atomic-components.spec.ts` passed 44/44 on 2026-09-27 (component-level evidence; not the project-wide release gate).
 - Completed Phase 04 Testing and verification on 2026-09-24; `npm run test:release` passed 439/439, typecheck/build passed, and code review approved 9.3/10 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
 
 ### 0.1.0 (development) — 2026-09-03
@@ -3912,6 +3944,19 @@ File: docs/project-roadmap.md
 Last updated: 2026-09-27  
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
+
+## Control Page UI Atomic Redesign
+
+Plan: [Control Page UI Atomic Redesign](../plans/260927-1011-control-ui-atomic-redesign/plan.md)
+
+**Overall status:** **IN PROGRESS** · **50%** (2 of 4 phases complete; 6 of 13 planned hours = 46%; Phase 03 next).
+
+| Phase | Status | Progress | Completed | Evidence/detail |
+|---|---|---:|---|---|
+| 01 — Design System Tokens & Base Atoms | **DONE** | **100%** | 2026-09-27 | Delivered Modern Refined Light tokens and accessible base atoms. Verification: 37 focused atom tests, 608/608 unit tests, typecheck and build passed; Cycle 2 review approved 9.8/10 ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-01-design-system-tokens-and-atoms.md), [test report](../plans/reports/Phase01TesterCycle2-260927-1153-phase-01-test-validation-after-review.md), [review](../plans/reports/code-review-260927-1157-phase-01-design-system-tokens-and-atoms-cycle-2.md)). |
+| 02 — Molecules & Form Composition | **DONE** | **100%** | 2026-09-27 | Delivered reusable `FormField` and `PageHeader` molecules and modernized existing rows, viewers, and tables. Verification: 615/615 unit tests, typecheck, and 44/44 Control tests passed with 0 Axe violations; review approved 9.5/10 ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-02-molecules-and-form-composition.md), [review](../plans/reports/code-review-260927-1437-phase-02-molecules-and-form-composition.md)). |
+| 03 — Organisms & Layout Templates | **NEXT (PLANNED)** | 0% | — | [Phase 03](../plans/260927-1011-control-ui-atomic-redesign/phase-03-organisms-and-layout-templates.md). |
+| 04 — Page Integration & Verification | PLANNED | 0% | — | [Phase 04](../plans/260927-1011-control-ui-atomic-redesign/phase-04-page-integration-and-verification.md). |
 
 ## Control page compact project groups and cloning
 
@@ -4105,6 +4150,11 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Verified zero dangling references in codebase; updated `docs/codebase-summary.md` and `docs/project-overview-pdr.md`.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-27
+
+- Completed Phase 01 (Design System Tokens & Base Atoms) on 2026-09-27: delivered Modern Refined Light design tokens and accessible base atoms. Verification: 37/37 focused atom tests, 608/608 unit tests, typecheck and build passed; Cycle 2 review approved 9.8/10 with no critical or high findings ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-01-design-system-tokens-and-atoms.md), [test report](../plans/reports/Phase01TesterCycle2-260927-1153-phase-01-test-validation-after-review.md), [review](../plans/reports/code-review-260927-1157-phase-01-design-system-tokens-and-atoms-cycle-2.md)).
+- Completed Phase 02 (Molecules & Form Composition) on 2026-09-27: delivered reusable `FormField` and `PageHeader` molecules and modernized existing molecule components. Verification: 615/615 unit tests, typecheck, and 44/44 Control tests passed with 0 Axe violations; code review approved 9.5/10. The initiative is now 2/4 phases complete (50%; 6/13 planned hours, 46%); Phase 03 — Organisms & Layout Templates is next ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-02-molecules-and-form-composition.md), [review](../plans/reports/code-review-260927-1437-phase-02-molecules-and-form-composition.md)).
 
 ### 0.1.0 (development) — 2026-09-26
 
@@ -4622,7 +4672,7 @@ The `control-hooks-and-types.spec.ts` suite verifies:
 - `useRunPoller` executes exponential backoff on transient errors up to 5 retries, terminates on fatal 4xx errors or terminal states (`succeeded`, `failed`, `submission-unknown`), and cleans up timers and `AbortController` handles;
 - Full lifecycle end-to-end against live loopback control endpoints: config manager list/load/ETag-conflict/save, credential manager presence/patch/delete, browser settings presence/update/clear, and run poller `202 Accepted` execution lifecycle.
 
-### Phase 03 control atomic components gate
+### Control UI atomic and molecular component gate
 
 Run the focused atomic and molecular component contract suite:
 
@@ -4632,23 +4682,17 @@ node scripts/run-playwright.mjs playwright test \
   --config=playwright.unit.config.ts
 ```
 
-The [`control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/control-atomic-components.spec.ts) suite verifies the atomic and molecular component contracts:
-- [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): strictly renders required variant classes (`badge-idle`, `badge-queued`, `badge-running`, `badge-succeeded`, `badge-failed`, `badge-unknown` for `unknown` and `submission-unknown`), credential states (`badge-configured`, `badge-missing`), and browser unconfigured state (`badge-missing` class with `"Not Set"` text);
-- [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): renders variant classes (`btn-primary`, `btn-secondary`, `btn-danger`, `btn-outline`), default `type="button"`, compact `btn-sm` sizing, disabled state, and loading spinner;
-- [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): associates label via `htmlFor`, displays error with `role="alert"` and `aria-invalid="true"`, and defaults `type="password"` with `autoComplete="off"`;
-- [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): renders native `<select>` with options array, value binding, and `aria-label`;
-- [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): renders `role="status"` and `aria-live="polite"`, variant classes (`info`, `success`, `error`), and toggles `.hidden` on visibility changes;
-- [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): renders `aria-live="polite"`, `.credentials-loading` class, and `.hidden` toggle;
-- [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): verifies exact DOM structure (`.credential-row`, `label[for="secret-input-${key}"]`, `Badge`, password `<input id="secret-input-${key}" class="credential-input" autocomplete="off">`, and `.btn-clear-credential[data-key="${key}"]` rendered only when configured);
-- [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): verifies exact element IDs for headless selection (`#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless`) and binary path input (`#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path`);
-- [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): verifies element IDs (`#config-select`, `#btn-reload`, `#btn-save`, `#btn-credentials`, `#btn-browser-settings`) and ensures `#btn-save` is disabled when not dirty;
-- [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, handles string logs and timestamped `RunLogEntry[]` entries, and defaults to `"No active run."`;
-- [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): keeps `#run-result-box`, renders report results and ordered `buildProjects` rows, and preserves scalar build-result fallback and errors.
-- [`BuildProjectOutcomeRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/build-project-outcome-row.tsx): renders each project's identity, result/state badge, optional build number/link, stages, and error without an empty link.
-- [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx): verifies the exact all-enabled action labels/IDs, one `Workers` selector (`#select-workers`, 1–4), and disabled states.
+`tests/unit/control-atomic-components.spec.ts` verifies the current component contracts:
+- Atoms: `Badge`, `Button`, `Input`, `Select`, `StatusBanner`, `LoadingIndicator`, `Checkbox`, compound `Card`, and `IconButton`.
+- `FormField`: associated label, required announcement, `role="alert"` error and ID, and helper-text suppression when an error is present.
+- `PageHeader`: default/custom heading levels, back-link destination/label, subtitle, and action slot.
+- `CredentialRow`, `BrowserSettingRow`, and `ConfigSelectorBar`: retained IDs/classes, configuration states, clear controls, and dirty-state Save gating.
+- `LogViewer`: `#run-logs` log semantics, empty state, plain-string logs, and timestamped entries.
+- `RunResultBox`: report/build links, error messages, ordered per-project outcomes, stage details, and omission of empty build links.
+- `ExecutionSection`: all-enabled action labels/IDs, the 1–4 Workers selector, and disabled states.
 
-The 2026-09-24 focused run passed 25/25 checks; this is component-level proof,
-not the project-wide release gate.
+The focused run on 2026-09-27 passed 44/44 checks; this is component-level
+proof, not the project-wide release gate.
 
 ### Phase 04 credential dialog gate
 
@@ -12848,16 +12892,16 @@ File: plans/260927-1011-control-ui-atomic-redesign/cmd-plan.md
 ================
 # Control Page UI Atomic Redesign — Planning Entry Point
 
-Status: In Progress; 1 of 4 phases completed (23% complete, 13h total).
+Status: IN PROGRESS; 2 of 4 phases complete (50% by phase count; 6 of 13h planned effort = 46%). Next planned phase: Phase 03 — Organisms & Layout Templates.
 
 [Master Plan](./plan.md) · [Architecture Design](./architecture-design.md) · [Planning Request](./reports/planning-request.md)
 
-| Phase | Status | Progress | Effort | Link |
-|---|---|---|---|---|
-| Phase 01: Design System Tokens & Base Atoms | COMPLETED | 100% | 3h | [Phase 01](./phase-01-design-system-tokens-and-atoms.md) |
-| Phase 02: Molecules & Form Composition | PENDING | 0% | 3h | [Phase 02](./phase-02-molecules-and-form-composition.md) |
-| Phase 03: Organisms & Layout Templates | PENDING | 0% | 4h | [Phase 03](./phase-03-organisms-and-layout-templates.md) |
-| Phase 04: Page Integration & Verification | PENDING | 0% | 3h | [Phase 04](./phase-04-page-integration-and-verification.md) |
+| Phase | Status | Progress | Effort | Completed | Link |
+|---|---|---|---|---|---|
+| Phase 01: Design System Tokens & Base Atoms | **DONE** | **100%** | 3h | 2026-09-27 | [Phase 01](./phase-01-design-system-tokens-and-atoms.md) |
+| Phase 02: Molecules & Form Composition | **DONE** | **100%** | 3h | 2026-09-27 | [Phase 02](./phase-02-molecules-and-form-composition.md) |
+| Phase 03: Organisms & Layout Templates | **NEXT (PLANNED)** | 0% | 4h | — | [Phase 03](./phase-03-organisms-and-layout-templates.md) |
+| Phase 04: Page Integration & Verification | PLANNED | 0% | 3h | — | [Phase 04](./phase-04-page-integration-and-verification.md) |
 
 ## Implementation Boundaries Confirmed
 - **Theme**: Modern Refined Light (sleek slate/zinc palette, subtle borders, high-contrast focus rings, clean cards, modern developer console feel).
@@ -12894,8 +12938,10 @@ File: plans/260927-1011-control-ui-atomic-redesign/phase-01-design-system-tokens
 - Date: 2026-09-27
 - Description: Establish Modern Refined Light design tokens in Tailwind/CSS and implement standardized, accessible Atomic Design base primitives (`Button`, `Input`, `Select`, `Badge`, `Checkbox`, `Card`, `IconButton`, `StatusBanner`, `LoadingIndicator`).
 - Priority: P2
-- Implementation Status: Completed
+- Implementation Status: DONE (100%)
 - Review Status: Approved (Score: 9.8/10)
+- Completed: 2026-09-27
+
 ## Key Insights
 - Existing atoms (`Button`, `Input`, `Select`, `Badge`, `StatusBanner`, `LoadingIndicator`) use a mix of CSS classes and inline Tailwind styles.
 - Missing dedicated `Checkbox` atom forces `ProjectCard` and `build-project-outcome-row` to use raw `<input type="checkbox">`.
@@ -13014,8 +13060,9 @@ File: plans/260927-1011-control-ui-atomic-redesign/phase-02-molecules-and-form-c
 - Date: 2026-09-27
 - Description: Refactor and standardize composite UI molecules in `components/molecules/`, introducing reusable `FormField` and `PageHeader` molecules, and modernizing existing rows, tables, viewers, and action bars.
 - Priority: P2
-- Implementation Status: Pending
-- Review Status: Not Started
+- Implementation Status: DONE (100%)
+- Review Status: Approved (Score: 9.5/10)
+- Completed: 2026-09-27
 
 ## Key Insights
 - Current form fields interweave label, input, and error logic inside atoms or inline in organisms, creating duplication.
@@ -13088,16 +13135,16 @@ components/molecules/
 10. Verify TypeScript compilation and Vite build.
 
 ## Todo List
-- [ ] Create `FormField.tsx` molecule
-- [ ] Create `PageHeader.tsx` molecule
-- [ ] Modernize `ConfigSelectorBar.tsx`
-- [ ] Modernize `CredentialRow.tsx` and preserve test contracts
-- [ ] Modernize `BrowserSettingRow.tsx` and preserve badges
-- [ ] Modernize `LogViewer.tsx` with terminal styling and copy action icon
-- [ ] Modernize `RunResultBox.tsx` and `BuildProjectOutcomeRow.tsx`
-- [ ] Modernize `ProjectRunsTable.tsx` and `ReportExportButton.tsx` with selective Lucide icons
-- [ ] Update `components/molecules/index.ts`
-- [ ] Verify build and typecheck
+- [x] Create `FormField.tsx` molecule
+- [x] Create `PageHeader.tsx` molecule
+- [x] Modernize `ConfigSelectorBar.tsx`
+- [x] Modernize `CredentialRow.tsx` and preserve test contracts
+- [x] Modernize `BrowserSettingRow.tsx` and preserve badges
+- [x] Modernize `LogViewer.tsx` with terminal styling and copy action icon
+- [x] Modernize `RunResultBox.tsx` and `BuildProjectOutcomeRow.tsx`
+- [x] Modernize `ProjectRunsTable.tsx` and `ReportExportButton.tsx` with selective Lucide icons
+- [x] Update `components/molecules/index.ts`
+- [x] Verify build and typecheck
 
 ## Success Criteria
 - All molecules cleanly compose atoms and render with Modern Refined Light styling.
@@ -13135,8 +13182,8 @@ File: plans/260927-1011-control-ui-atomic-redesign/phase-03-organisms-and-layout
 - Date: 2026-09-27
 - Description: Restructure organisms into cohesive domain sections, modernize project cards, group columns, and execution panels, and introduce dedicated layout templates (`DashboardLayout`, `ReportManagementLayout`, `FinalReportLayout`) in `components/templates/`.
 - Priority: P2
-- Implementation Status: Pending
-- Review Status: Not Started
+- Implementation Status: Completed
+- Review Status: Completed
 
 ## Key Insights
 - Layout markup is currently mixed into page containers (`ReportManagementPage` and `final-project-report-page` have inline `header`, `skip-link`, `main`), violating Atomic Design template separation.
@@ -13221,16 +13268,16 @@ components/
 10. Verify TypeScript compilation and Vite build.
 
 ## Todo List
-- [ ] Modernize `ProjectCard.tsx` and preserve interactive IDs
-- [ ] Modernize `project-group-column.tsx` and `project-group-board.tsx` with contained 1200px horizontal scroll
-- [ ] Modernize `ConfigFormBuilder.tsx` and `RawJsonSection.tsx`
-- [ ] Modernize `ExecutionSection.tsx` and `RunStatusCard.tsx` with selective Lucide action icons
-- [ ] Modernize modal dialogs with Radix UI Dialog focus trap and escape dismissal
-- [ ] Refactor `DashboardLayout.tsx` enforcing max-w-[1200px] alignment
-- [ ] Create `ReportManagementLayout.tsx`
-- [ ] Create `FinalReportLayout.tsx`
-- [ ] Create `components/templates/index.ts`
-- [ ] Verify build and typecheck
+- [x] Modernize `ProjectCard.tsx` and preserve interactive IDs
+- [x] Modernize `project-group-column.tsx` and `project-group-board.tsx` with contained 1200px horizontal scroll
+- [x] Modernize `ConfigFormBuilder.tsx` and `RawJsonSection.tsx`
+- [x] Modernize `ExecutionSection.tsx` and `RunStatusCard.tsx` with selective Lucide action icons
+- [x] Modernize modal dialogs with Radix UI Dialog focus trap and escape dismissal
+- [x] Refactor `DashboardLayout.tsx` enforcing max-w-[1200px] alignment
+- [x] Create `ReportManagementLayout.tsx`
+- [x] Create `FinalReportLayout.tsx`
+- [x] Create `components/templates/index.ts`
+- [x] Verify build and typecheck
 
 ## Success Criteria
 - Organisms cleanly assemble atoms and molecules using modern styling.
@@ -13384,7 +13431,7 @@ File: plans/260927-1011-control-ui-atomic-redesign/plan.md
 ---
 title: "Control Page UI Atomic Redesign"
 description: "Refactor Control Page UI across all views with Atomic Design taxonomy and Modern Refined Light aesthetic while preserving Axe WCAG AA compliance and E2E behavioral contracts."
-status: pending
+status: in-progress
 priority: P2
 effort: 13h
 branch: main
@@ -13406,12 +13453,14 @@ Comprehensive UI refactoring and modern aesthetic overhaul of the Control Page i
 
 ## Implementation Phases
 
+**Overall status:** **IN PROGRESS** — 2 of 4 phases complete (50% by phase count; 6 of 13 planned hours = 46%). **Next planned phase:** Phase 03 — Organisms & Layout Templates.
+
 | # | Phase | Status | Effort | Phase Plan Link |
 |---|-------|--------|--------|-----------------|
-| 01 | Design System Tokens & Base Atoms | Completed | 3h | [Phase 01: Atoms](./phase-01-design-system-tokens-and-atoms.md) |
-| 02 | Molecules & Form Composition | Pending | 3h | [Phase 02: Molecules](./phase-02-molecules-and-form-composition.md) |
-| 03 | Organisms & Layout Templates | Pending | 4h | [Phase 03: Organisms & Templates](./phase-03-organisms-and-layout-templates.md) |
-| 04 | Page Integration & Verification | Pending | 3h | [Phase 04: Integration & Verification](./phase-04-page-integration-and-verification.md) |
+| 01 | Design System Tokens & Base Atoms | **DONE** (2026-09-27) | 3h | [Phase 01: Atoms](./phase-01-design-system-tokens-and-atoms.md) |
+| 02 | Molecules & Form Composition | **DONE** (2026-09-27) | 3h | [Phase 02: Molecules](./phase-02-molecules-and-form-composition.md) |
+| 03 | Organisms & Layout Templates | **NEXT (PLANNED)** | 4h | [Phase 03: Organisms & Templates](./phase-03-organisms-and-layout-templates.md) |
+| 04 | Page Integration & Verification | Planned | 3h | [Phase 04: Integration & Verification](./phase-04-page-integration-and-verification.md) |
 
 ## Dependencies & Precedence
 - **Sequential Execution**: Phase 01 establishes the foundational design tokens and atoms required by Phase 02 molecules. Phase 03 organisms assemble those molecules and atoms and introduce layout templates. Phase 04 connects the live page routes to templates and executes E2E verification suites.
@@ -23512,6 +23561,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 File: src/reporting/control-page/components/molecules/BrowserSettingRow.tsx
 ================
 import React, { forwardRef } from 'react';
+import { X } from 'lucide-react';
 import { Badge } from '../atoms/Badge.js';
 import { Button } from '../atoms/Button.js';
 import { Input } from '../atoms/Input.js';
@@ -23624,6 +23674,7 @@ export const BrowserSettingRow = forwardRef<HTMLDivElement, BrowserSettingRowPro
       React.createElement(
         Button,
         {
+          key: 'clear-btn',
           type: 'button',
           id: meta.clearBtnId,
           variant: 'secondary',
@@ -23633,6 +23684,10 @@ export const BrowserSettingRow = forwardRef<HTMLDivElement, BrowserSettingRowPro
           'aria-label': `Clear ${key}`,
           onClick: handleClear,
         },
+        React.createElement(X, {
+          className: 'w-3.5 h-3.5 mr-1 inline-block',
+          'aria-hidden': true,
+        }),
         'Clear',
       ),
     );
@@ -23747,7 +23802,8 @@ export function BuildProjectOutcomeRow({ project, className }: BuildProjectOutco
           href: targetUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
-          className: 'text-emerald-700 font-semibold underline hover:text-emerald-800 text-xs',
+          className:
+            'text-emerald-700 font-semibold underline hover:text-emerald-800 text-xs',
         },
         'Open Jenkins Build',
       ),
@@ -24091,7 +24147,9 @@ export function ConfigProjectEditor({
 ================
 File: src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx
 ================
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
+import React from 'react';
+import { KeyRound, RotateCcw, Save, Settings } from 'lucide-react';
 import { Button } from '../atoms/Button.js';
 import { Select } from '../atoms/Select.js';
 import type { ConfigSelectorBarProps } from '../../types/component-contracts.js';
@@ -24123,7 +24181,7 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
       'label',
       {
         htmlFor: 'config-select',
-        className: 'text-sm font-semibold text-slate-700',
+        className: 'text-sm font-semibold text-slate-700 whitespace-nowrap',
       },
       'Active Configuration:',
     );
@@ -24132,8 +24190,10 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
       id: 'config-select',
       ariaLabel: 'Select Configuration',
       value: activeConfig,
+      disabled: isLoading,
       onChange: (e: React.ChangeEvent<HTMLSelectElement>) => onSelectConfig(e.target.value),
       options: normalizedOptions,
+      className: 'min-w-[160px]',
     });
 
     const reloadBtn = React.createElement(
@@ -24142,9 +24202,12 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         type: 'button',
         id: 'btn-reload',
         variant: 'secondary',
+        disabled: isLoading,
         onClick: onReload,
+        className: 'inline-flex items-center gap-1.5',
       },
-      'Reload',
+      React.createElement(RotateCcw, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Reload'),
     );
 
     const saveBtn = React.createElement(
@@ -24153,12 +24216,19 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         type: 'button',
         id: 'btn-save',
         variant: 'primary',
-        disabled: !isDirty || isSaving,
+        disabled: !isDirty || isSaving || isLoading,
         loading: isSaving,
         onClick: onSave,
+        className: 'inline-flex items-center gap-1.5',
       },
-      'Save Config',
+      React.createElement(Save, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Save Config'),
     );
+
+    const divider = React.createElement('div', {
+      className: 'h-5 w-px bg-slate-300 mx-1 hidden sm:block',
+      'aria-hidden': true,
+    });
 
     const credsBtn = React.createElement(
       Button,
@@ -24167,8 +24237,10 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         id: 'btn-credentials',
         variant: 'secondary',
         onClick: onOpenCredentials,
+        className: 'inline-flex items-center gap-1.5',
       },
-      'Credentials',
+      React.createElement(KeyRound, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Credentials'),
     );
 
     const browserBtn = React.createElement(
@@ -24178,8 +24250,10 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         id: 'btn-browser-settings',
         variant: 'secondary',
         onClick: onOpenBrowserSettings,
+        className: 'inline-flex items-center gap-1.5',
       },
-      'Browser Settings',
+      React.createElement(Settings, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Browser Settings'),
     );
 
     return React.createElement(
@@ -24193,6 +24267,7 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
       selectElement,
       reloadBtn,
       saveBtn,
+      divider,
       credsBtn,
       browserBtn,
     );
@@ -24205,6 +24280,7 @@ ConfigSelectorBar.displayName = 'ConfigSelectorBar';
 File: src/reporting/control-page/components/molecules/CredentialRow.tsx
 ================
 import React, { forwardRef } from 'react';
+import { X } from 'lucide-react';
 import { Badge } from '../atoms/Badge.js';
 import { Button } from '../atoms/Button.js';
 import { Input } from '../atoms/Input.js';
@@ -24241,9 +24317,13 @@ export const CredentialRow = forwardRef<HTMLDivElement, CredentialRowProps>(
       { className: 'credential-field' },
       React.createElement('label', { htmlFor: inputId }, key),
       React.createElement(
-        Badge,
-        { variant: isConfigured ? 'configured' : 'missing' },
-        isConfigured ? 'Configured' : 'Missing',
+        'div',
+        { className: 'credential-badges' },
+        React.createElement(
+          Badge,
+          { variant: isConfigured ? 'configured' : 'missing' },
+          isConfigured ? 'Configured' : 'Missing',
+        ),
       ),
     );
 
@@ -24279,6 +24359,10 @@ export const CredentialRow = forwardRef<HTMLDivElement, CredentialRowProps>(
             'aria-label': `Clear ${key}`,
             onClick: handleClear,
           },
+          React.createElement(X, {
+            className: 'w-3.5 h-3.5 mr-1 inline-block',
+            'aria-hidden': true,
+          }),
           'Clear',
         ),
       );
@@ -24306,8 +24390,108 @@ export const CredentialRow = forwardRef<HTMLDivElement, CredentialRowProps>(
 CredentialRow.displayName = 'CredentialRow';
 
 ================
+File: src/reporting/control-page/components/molecules/FormField.tsx
+================
+import React, { forwardRef } from 'react';
+import type { FormFieldProps } from '../../types/component-contracts.js';
+import { cn } from '../../utils/cn.js';
+
+export const FormField = forwardRef<HTMLDivElement, FormFieldProps>(
+  function FormField(
+    {
+      id,
+      label,
+      required = false,
+      helperText,
+      error,
+      className,
+      labelClassName,
+      orientation = 'vertical',
+      children,
+    },
+    ref,
+  ) {
+    const childrenNodes: React.ReactNode[] = [];
+
+    if (label) {
+      const labelChildren: React.ReactNode[] = [label];
+      if (required) {
+        labelChildren.push(
+          React.createElement(
+            'span',
+            { key: 'asterisk', className: 'text-red-600 font-bold ml-0.5', 'aria-hidden': true },
+            '*',
+          ),
+          React.createElement('span', { key: 'sr-required', className: 'sr-only' }, ' (required)'),
+        );
+      }
+      childrenNodes.push(
+        React.createElement(
+          'label',
+          {
+            key: 'label',
+            htmlFor: id,
+            className: cn(
+              'text-sm font-semibold text-slate-700 flex items-center gap-1 select-none',
+              labelClassName,
+            ),
+          },
+          ...labelChildren,
+        ),
+      );
+    }
+
+    childrenNodes.push(children);
+
+    if (error) {
+      childrenNodes.push(
+        React.createElement(
+          'p',
+          {
+            key: 'error',
+            id: `${id}-error`,
+            role: 'alert',
+            className: 'text-xs font-medium text-red-600 m-0 flex items-center gap-1',
+          },
+          error,
+        ),
+      );
+    } else if (helperText) {
+      childrenNodes.push(
+        React.createElement(
+          'p',
+          {
+            key: 'helper',
+            id: `${id}-helper`,
+            className: 'text-xs text-slate-500 m-0',
+          },
+          helperText,
+        ),
+      );
+    }
+
+    return React.createElement(
+      'div',
+      {
+        ref,
+        className: cn(
+          'form-field flex flex-col gap-1.5',
+          orientation === 'horizontal' && 'sm:flex-row sm:items-center sm:gap-4',
+          className,
+        ),
+      },
+      ...childrenNodes,
+    );
+  },
+);
+
+FormField.displayName = 'FormField';
+
+================
 File: src/reporting/control-page/components/molecules/index.ts
 ================
+export * from './FormField.js';
+export * from './PageHeader.js';
 export * from './CredentialRow.js';
 export * from './BrowserSettingRow.js';
 export * from './ConfigSelectorBar.js';
@@ -24316,11 +24500,22 @@ export * from './RunResultBox.js';
 export * from './build-project-outcome-row.js';
 export * from './ProjectReportStatusView.js';
 export * from './ReportExportButton.js';
+export * from './project-runs-table.js';
+export * from './ConfigProjectEditor.js';
+export * from './ConfigDefaultsEditor.js';
 
 ================
 File: src/reporting/control-page/components/molecules/LogViewer.tsx
 ================
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
+import { Check, Copy, Terminal } from 'lucide-react';
 import type { LogViewerProps } from '../../types/component-contracts.js';
 import type { RunLogEntry } from '../../types/index.js';
 import { cn } from '../../utils/cn.js';
@@ -24347,6 +24542,7 @@ export const LogViewer = forwardRef<HTMLPreElement, LogViewerProps>(function Log
   ref,
 ) {
   const localRef = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState(false);
   useImperativeHandle(ref, () => localRef.current!);
 
   const content = formatLogContent(logs);
@@ -24357,7 +24553,59 @@ export const LogViewer = forwardRef<HTMLPreElement, LogViewerProps>(function Log
     }
   }, [content]);
 
-  return React.createElement(
+  const handleCopy = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(content);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Fallback or ignore
+      }
+    }
+  }, [content]);
+
+  const headerLeft = React.createElement(
+    'div',
+    { className: 'flex items-center gap-2' },
+    React.createElement(Terminal, {
+      className: 'w-3.5 h-3.5 text-slate-400',
+      'aria-hidden': true,
+    }),
+    React.createElement(
+      'span',
+      { className: 'font-mono text-xs font-semibold text-slate-300' },
+      'Console Output',
+    ),
+  );
+
+  const copyButton = React.createElement(
+    'button',
+    {
+      type: 'button',
+      onClick: handleCopy,
+      'aria-label': copied ? 'Copied logs to clipboard' : 'Copy logs to clipboard',
+      className:
+        'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors focus:outline-none focus:ring-1 focus:ring-sky-500',
+    },
+    React.createElement(copied ? Check : Copy, {
+      className: 'w-3 h-3',
+      'aria-hidden': true,
+    }),
+    React.createElement('span', null, copied ? 'Copied' : 'Copy'),
+  );
+
+  const headerBar = React.createElement(
+    'div',
+    {
+      className:
+        'log-viewer-header flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 rounded-t-md',
+    },
+    headerLeft,
+    copyButton,
+  );
+
+  const preElement = React.createElement(
     'pre',
     {
       ref: localRef,
@@ -24369,14 +24617,164 @@ export const LogViewer = forwardRef<HTMLPreElement, LogViewerProps>(function Log
     },
     content,
   );
+
+  return React.createElement(
+    'div',
+    {
+      className:
+        'log-viewer-container flex flex-col rounded-md overflow-hidden border border-slate-800 shadow-sm bg-slate-950',
+    },
+    headerBar,
+    preElement,
+  );
 });
 
 LogViewer.displayName = 'LogViewer';
 
 ================
+File: src/reporting/control-page/components/molecules/PageHeader.tsx
+================
+import React, { forwardRef } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import type { PageHeaderProps } from '../../types/component-contracts.js';
+import { cn } from '../../utils/cn.js';
+
+export const PageHeader = forwardRef<HTMLElement, PageHeaderProps>(
+  function PageHeader(
+    {
+      title,
+      subtitle,
+      backLink,
+      breadcrumbs,
+      badges,
+      actions,
+      className,
+      containerClassName,
+      id,
+      titleId,
+      level = 1,
+    },
+    ref,
+  ) {
+    const HeadingTag = level === 2 ? 'h2' : 'h1';
+
+    const leadingChildren: React.ReactNode[] = [];
+
+    if (breadcrumbs) {
+      leadingChildren.push(breadcrumbs);
+    } else if (backLink) {
+      leadingChildren.push(
+        React.createElement(
+          'nav',
+          { key: 'nav', 'aria-label': 'Navigation', className: 'mb-1' },
+          React.createElement(
+            'a',
+            {
+              id: backLink.id,
+              href: backLink.href,
+              className: cn(
+                'inline-flex items-center gap-1.5 text-sm font-semibold text-sky-700 hover:text-sky-900 underline focus:outline-none focus:ring-2 focus:ring-sky-500 rounded transition-colors',
+                backLink.className,
+              ),
+            },
+            React.createElement(ArrowLeft, {
+              className: 'w-4 h-4 flex-shrink-0',
+              'aria-hidden': true,
+            }),
+            React.createElement('span', null, backLink.label),
+          ),
+        ),
+      );
+    }
+
+    const titleRowChildren: React.ReactNode[] = [
+      React.createElement(
+        HeadingTag,
+        {
+          key: 'heading',
+          id: titleId,
+          className: cn(
+            'm-0 font-bold text-slate-900 tracking-tight',
+            level === 2 ? 'text-xl' : 'text-2xl',
+          ),
+        },
+        title,
+      ),
+    ];
+
+    if (badges) {
+      titleRowChildren.push(badges);
+    }
+
+    leadingChildren.push(
+      React.createElement(
+        'div',
+        { key: 'title-row', className: 'flex items-center gap-3 flex-wrap' },
+        ...titleRowChildren,
+      ),
+    );
+
+    if (subtitle) {
+      leadingChildren.push(
+        React.createElement(
+          'p',
+          { key: 'subtitle', className: 'text-sm text-slate-500 m-0' },
+          subtitle,
+        ),
+      );
+    }
+
+    const leadingSection = React.createElement(
+      'div',
+      { key: 'leading', className: 'flex flex-col gap-1 min-w-0' },
+      ...leadingChildren,
+    );
+
+    const containerChildren: React.ReactNode[] = [leadingSection];
+
+    if (actions) {
+      containerChildren.push(
+        React.createElement(
+          'div',
+          {
+            key: 'actions',
+            className: 'page-header-actions flex items-center gap-2 flex-wrap',
+          },
+          actions,
+        ),
+      );
+    }
+
+    const container = React.createElement(
+      'div',
+      {
+        className: cn(
+          'page-header-container max-w-[1200px] mx-auto flex flex-wrap justify-between items-center gap-4',
+          containerClassName,
+        ),
+      },
+      ...containerChildren,
+    );
+
+    return React.createElement(
+      'header',
+      {
+        ref,
+        id,
+        className: cn('page-header bg-white border-b border-slate-200 py-4 px-6', className),
+      },
+      container,
+    );
+  },
+);
+
+PageHeader.displayName = 'PageHeader';
+
+================
 File: src/reporting/control-page/components/molecules/project-runs-table.tsx
 ================
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, ExternalLink, FileText, Trash2 } from 'lucide-react';
 import type { AggregateRunSummary } from '../../types/report-management-types.js';
 import { localManifestHref, localReportHref } from '../../../report-links.js';
 import { stateClass, stateLabel } from '../../../report-view-model.js';
@@ -24391,47 +24789,68 @@ export interface ProjectRunsTableProps {
 
 const RUNS_PER_PAGE = 20;
 
-function renderArtifactLinks(run: AggregateRunSummary) {
+function renderArtifactLinks(run: AggregateRunSummary): React.ReactNode {
   const reportHref = localReportHref(run.reportPath);
   const manifestHref = localManifestHref(run.manifestPath);
 
   const links: React.ReactNode[] = [];
   if (reportHref) {
     links.push(
-      <a
-        key="report"
-        href={reportHref}
-        className="text-sky-700 hover:text-sky-900 underline"
-      >
-        Open report
-      </a>,
+      React.createElement(
+        'a',
+        {
+          key: 'report',
+          href: reportHref,
+          className:
+            'inline-flex items-center gap-1 text-sky-700 hover:text-sky-900 underline font-medium text-xs',
+        },
+        React.createElement(ExternalLink, { className: 'w-3 h-3', 'aria-hidden': true }),
+        'Open report',
+      ),
     );
   }
   if (manifestHref) {
     links.push(
-      <a
-        key="manifest"
-        href={manifestHref}
-        className="text-sky-700 hover:text-sky-900 underline"
-      >
-        Manifest
-      </a>,
+      React.createElement(
+        'a',
+        {
+          key: 'manifest',
+          href: manifestHref,
+          className:
+            'inline-flex items-center gap-1 text-sky-700 hover:text-sky-900 underline font-medium text-xs',
+        },
+        React.createElement(FileText, { className: 'w-3 h-3', 'aria-hidden': true }),
+        'Manifest',
+      ),
     );
   }
 
   if (links.length === 0) {
-    return <span className="text-slate-400">No local artifact link</span>;
+    return React.createElement(
+      'span',
+      { className: 'text-slate-400 text-xs italic' },
+      'No local artifact link',
+    );
   }
 
-  return (
-    <span className="flex items-center gap-2">
-      {links.map((link, idx) => (
-        <span key={idx} className="flex items-center gap-2">
-          {idx > 0 && <span className="text-slate-300">·</span>}
-          {link}
-        </span>
-      ))}
-    </span>
+  const items: React.ReactNode[] = [];
+  links.forEach((link, idx) => {
+    if (idx > 0) {
+      items.push(
+        React.createElement(
+          'span',
+          { key: `sep-${idx}`, className: 'text-slate-300', 'aria-hidden': true },
+          '·',
+        ),
+      );
+    }
+    items.push(link);
+  });
+
+  return React.createElement(
+    'span',
+    { className: 'flex items-center gap-2 flex-wrap' },
+    ...items,
   );
 }
 
@@ -24445,106 +24864,197 @@ export function ProjectRunsTable({ runs, projectName, onDeleteRun }: ProjectRuns
   }, [totalPages]);
 
   if (totalRuns === 0) {
-    return (
-      <p className="empty-state text-sm text-slate-500 my-4 italic">
-        No validated historical run manifest.
-      </p>
+    return React.createElement(
+      'p',
+      { className: 'empty-state text-sm text-slate-500 my-4 italic' },
+      'No validated historical run manifest.',
     );
   }
 
   const startIndex = (currentPage - 1) * RUNS_PER_PAGE;
   const visibleRuns = runs.slice(startIndex, startIndex + RUNS_PER_PAGE);
 
-  return (
-    <div className="project-runs-container my-4">
-      <div className="table-scroll overflow-x-auto">
-        <table className="compact-table w-full text-left border-collapse text-sm">
-          <caption className="sr-only">Historical runs for {projectName}</caption>
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-slate-700 font-semibold">
-              <th scope="col" className="p-2.5">Run</th>
-              <th scope="col" className="p-2.5">Job ID</th>
-              <th scope="col" className="p-2.5">Branch</th>
-              <th scope="col" className="p-2.5">State</th>
-              <th scope="col" className="p-2.5">Artifacts</th>
-              <th scope="col" className="p-2.5 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRuns.map((run: AggregateRunSummary) => (
-              <tr key={run.runId} className="border-b border-slate-100 hover:bg-slate-50">
-                <th scope="row" className="p-2.5 font-normal">
-                  <code className="text-xs font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded">
-                    {run.runId}
-                  </code>
-                </th>
-                <td className="p-2.5 text-slate-600">
-                  {run.jobId ?? <span className="text-slate-400">Unavailable</span>}
-                </td>
-                <td className="p-2.5 text-slate-600">
-                  {run.branch ?? <span className="text-slate-400">Unavailable</span>}
-                </td>
-                <td className="p-2.5">
-                  <span className={cn('state-badge', stateClass(run.state))}>
-                    {stateLabel(run.state)}
-                  </span>
-                </td>
-                <td className="p-2.5">
-                  {renderArtifactLinks(run)}
-                  {run.warnings.length > 0 ? (
-                    <ul className="inline-warnings text-xs text-amber-700 list-disc list-inside mt-1">
-                      {run.warnings.map((warning: string, wIdx: number) => (
-                        <li key={wIdx}>{warning}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </td>
-                <td className="p-2.5 text-right">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    id={`delete-run-${run.runId}-btn`}
-                    onClick={() => onDeleteRun?.(run.runId)}
-                    aria-label={`Delete report run ${run.runId} for ${projectName}`}
-                  >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  const captionElement = React.createElement(
+    'caption',
+    { className: 'sr-only' },
+    `Historical runs for ${projectName}`,
+  );
 
-      {totalPages > 1 ? (
-        <nav
-          aria-label={`Pagination for ${projectName}`}
-          className="pagination flex justify-between items-center pt-3 border-t border-slate-200 text-sm"
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            aria-label={`Previous page for ${projectName}`}
-          >
-            Previous
-          </Button>
-          <span className="text-slate-600 font-medium">
-            Page {currentPage} of {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={currentPage >= totalPages}
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            aria-label={`Next page for ${projectName}`}
-          >
-            Next
-          </Button>
-        </nav>
-      ) : null}
-    </div>
+  const tableHeader = React.createElement(
+    'thead',
+    null,
+    React.createElement(
+      'tr',
+      { className: 'border-b border-slate-200 bg-slate-50 text-slate-700 font-semibold' },
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'Run'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'Job ID'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'Branch'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'State'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'Artifacts'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-right font-semibold' }, 'Actions'),
+    ),
+  );
+
+  const rows = visibleRuns.map((run: AggregateRunSummary) => {
+    const runIdCell = React.createElement(
+      'th',
+      { scope: 'row', className: 'p-2.5 font-normal text-left' },
+      React.createElement(
+        'code',
+        { className: 'text-xs font-mono text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200' },
+        run.runId,
+      ),
+    );
+
+    const jobIdCell = React.createElement(
+      'td',
+      { className: 'p-2.5 text-slate-600' },
+      run.jobId ?? React.createElement('span', { className: 'text-slate-400' }, 'Unavailable'),
+    );
+
+    const branchCell = React.createElement(
+      'td',
+      { className: 'p-2.5 text-slate-600 font-mono text-xs' },
+      run.branch ?? React.createElement('span', { className: 'text-slate-400 font-sans' }, 'Unavailable'),
+    );
+
+    const stateCell = React.createElement(
+      'td',
+      { className: 'p-2.5' },
+      React.createElement(
+        'span',
+        { className: cn('state-badge', stateClass(run.state)) },
+        stateLabel(run.state),
+      ),
+    );
+
+    const artifactsChildren: React.ReactNode[] = [renderArtifactLinks(run)];
+    if (run.warnings.length > 0) {
+      artifactsChildren.push(
+        React.createElement(
+          'ul',
+          {
+            key: 'warnings',
+            className: 'inline-warnings text-xs text-amber-700 list-disc list-inside mt-1',
+          },
+          run.warnings.map((warning: string, wIdx: number) =>
+            React.createElement('li', { key: wIdx }, warning),
+          ),
+        ),
+      );
+    }
+
+    const artifactsCell = React.createElement(
+      'td',
+      { className: 'p-2.5' },
+      ...artifactsChildren,
+    );
+
+    const actionsCell = React.createElement(
+      'td',
+      { className: 'p-2.5 text-right' },
+      React.createElement(
+        Button,
+        {
+          variant: 'danger',
+          size: 'sm',
+          id: `delete-run-${run.runId}-btn`,
+          onClick: () => onDeleteRun?.(run.runId),
+          'aria-label': `Delete report run ${run.runId} for ${projectName}`,
+          className: 'inline-flex items-center gap-1',
+        },
+        React.createElement(Trash2, { className: 'w-3 h-3', 'aria-hidden': true }),
+        React.createElement('span', null, 'Delete'),
+      ),
+    );
+
+    return React.createElement(
+      'tr',
+      {
+        key: run.runId,
+        className: 'border-b border-slate-100 hover:bg-slate-50 transition-colors',
+      },
+      runIdCell,
+      jobIdCell,
+      branchCell,
+      stateCell,
+      artifactsCell,
+      actionsCell,
+    );
+  });
+
+  const tableBody = React.createElement('tbody', null, ...rows);
+
+  const tableElement = React.createElement(
+    'table',
+    { className: 'compact-table w-full text-left border-collapse text-sm' },
+    captionElement,
+    tableHeader,
+    tableBody,
+  );
+
+  const scrollWrapper = React.createElement(
+    'div',
+    { className: 'table-scroll overflow-x-auto rounded border border-slate-200' },
+    tableElement,
+  );
+
+  const containerChildren: React.ReactNode[] = [scrollWrapper];
+
+  if (totalPages > 1) {
+    const prevButton = React.createElement(
+      Button,
+      {
+        variant: 'secondary',
+        size: 'sm',
+        disabled: currentPage <= 1,
+        onClick: () => setCurrentPage((p) => Math.max(1, p - 1)),
+        'aria-label': `Previous page for ${projectName}`,
+        className: 'inline-flex items-center gap-1',
+      },
+      React.createElement(ChevronLeft, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Previous'),
+    );
+
+    const pageIndicator = React.createElement(
+      'span',
+      { className: 'text-slate-600 font-medium text-xs' },
+      `Page ${currentPage} of ${totalPages}`,
+    );
+
+    const nextButton = React.createElement(
+      Button,
+      {
+        variant: 'secondary',
+        size: 'sm',
+        disabled: currentPage >= totalPages,
+        onClick: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+        'aria-label': `Next page for ${projectName}`,
+        className: 'inline-flex items-center gap-1',
+      },
+      React.createElement('span', null, 'Next'),
+      React.createElement(ChevronRight, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+    );
+
+    const paginationNav = React.createElement(
+      'nav',
+      {
+        'aria-label': `Pagination for ${projectName}`,
+        className:
+          'pagination flex justify-between items-center pt-3 border-t border-slate-200 text-sm',
+      },
+      prevButton,
+      pageIndicator,
+      nextButton,
+    );
+
+    containerChildren.push(paginationNav);
+  }
+
+  return React.createElement(
+    'div',
+    { className: 'project-runs-container my-4' },
+    ...containerChildren,
   );
 }
 
@@ -24552,6 +25062,7 @@ export function ProjectRunsTable({ runs, projectName, onDeleteRun }: ProjectRuns
 File: src/reporting/control-page/components/molecules/ProjectReportStatusView.tsx
 ================
 import React from 'react';
+import { AlertCircle, AlertTriangle, FileQuestion, RotateCcw } from 'lucide-react';
 import type { ProjectReportState } from '../../hooks/use-project-report.js';
 
 interface ProjectReportStatusViewProps {
@@ -24570,32 +25081,43 @@ export function ProjectReportStatusView({ state, onReload }: ProjectReportStatus
       {
         role: 'status',
         'aria-live': 'polite',
-        className: 'flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-lg shadow-sm text-slate-700',
+        className:
+          'flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-lg shadow-sm text-slate-700',
       },
       React.createElement('div', {
         className: 'w-5 h-5 border-2 border-sky-600 border-t-transparent rounded-full animate-spin',
         'aria-hidden': 'true',
       }),
-      React.createElement('span', { className: 'text-sm font-medium' }, 'Loading report evidence...'),
+      React.createElement(
+        'span',
+        { className: 'text-sm font-medium text-slate-800' },
+        'Loading report evidence...',
+      ),
     );
   } else if (state.status === 'missing') {
     content = React.createElement(
       'div',
       {
         role: 'alert',
-        className: 'p-6 bg-white border border-amber-300 rounded-lg shadow-sm space-y-3',
+        className:
+          'p-6 bg-white border border-amber-300 rounded-lg shadow-sm space-y-3 text-slate-900',
       },
-      React.createElement('h2', { className: 'text-lg font-bold text-amber-900 m-0' }, 'Report Not Found'),
+      React.createElement(
+        'div',
+        { className: 'flex items-center gap-2 text-amber-900' },
+        React.createElement(FileQuestion, { className: 'w-5 h-5 flex-shrink-0', 'aria-hidden': true }),
+        React.createElement('h2', { className: 'text-lg font-bold m-0' }, 'Report Not Found'),
+      ),
       React.createElement('p', { className: 'text-sm text-amber-800 m-0' }, state.message),
       React.createElement(
         'div',
-        null,
+        { className: 'pt-1' },
         React.createElement(
           'a',
           {
             href: '/reports/index.html',
             className:
-              'inline-block px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white text-sm font-medium rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500',
+              'inline-block px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white text-sm font-medium rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors',
           },
           'Return to Report Index',
         ),
@@ -24606,19 +25128,25 @@ export function ProjectReportStatusView({ state, onReload }: ProjectReportStatus
       'div',
       {
         role: 'alert',
-        className: 'p-6 bg-white border border-red-300 rounded-lg shadow-sm space-y-3',
+        className:
+          'p-6 bg-white border border-red-300 rounded-lg shadow-sm space-y-3 text-slate-900',
       },
-      React.createElement('h2', { className: 'text-lg font-bold text-red-900 m-0' }, 'Invalid Report Evidence'),
+      React.createElement(
+        'div',
+        { className: 'flex items-center gap-2 text-red-900' },
+        React.createElement(AlertTriangle, { className: 'w-5 h-5 flex-shrink-0', 'aria-hidden': true }),
+        React.createElement('h2', { className: 'text-lg font-bold m-0' }, 'Invalid Report Evidence'),
+      ),
       React.createElement('p', { className: 'text-sm text-red-800 m-0' }, state.message),
       React.createElement(
         'div',
-        null,
+        { className: 'pt-1' },
         React.createElement(
           'a',
           {
             href: '/reports/index.html',
             className:
-              'inline-block px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-500',
+              'inline-block px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-500 transition-colors',
           },
           'Return to Report Index',
         ),
@@ -24629,21 +25157,28 @@ export function ProjectReportStatusView({ state, onReload }: ProjectReportStatus
       'div',
       {
         role: 'alert',
-        className: 'p-6 bg-white border border-red-300 rounded-lg shadow-sm space-y-3',
+        className:
+          'p-6 bg-white border border-red-300 rounded-lg shadow-sm space-y-3 text-slate-900',
       },
-      React.createElement('h2', { className: 'text-lg font-bold text-red-900 m-0' }, 'Error Loading Report'),
+      React.createElement(
+        'div',
+        { className: 'flex items-center gap-2 text-red-900' },
+        React.createElement(AlertCircle, { className: 'w-5 h-5 flex-shrink-0', 'aria-hidden': true }),
+        React.createElement('h2', { className: 'text-lg font-bold m-0' }, 'Error Loading Report'),
+      ),
       React.createElement('p', { className: 'text-sm text-red-800 m-0' }, state.message),
       React.createElement(
         'div',
-        { className: 'flex items-center gap-3' },
+        { className: 'flex items-center gap-3 pt-1 flex-wrap' },
         React.createElement(
           'button',
           {
             type: 'button',
             onClick: onReload,
             className:
-              'px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white text-sm font-medium rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500',
+              'inline-flex items-center gap-1.5 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white text-sm font-medium rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 transition-colors',
           },
+          React.createElement(RotateCcw, { className: 'w-4 h-4', 'aria-hidden': true }),
           'Retry',
         ),
         React.createElement(
@@ -24651,7 +25186,7 @@ export function ProjectReportStatusView({ state, onReload }: ProjectReportStatus
           {
             href: '/reports/index.html',
             className:
-              'px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium rounded focus:outline-none focus:ring-2 focus:ring-slate-400',
+              'inline-block px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium rounded focus:outline-none focus:ring-2 focus:ring-slate-400 transition-colors',
           },
           'Return to Report Index',
         ),
@@ -24666,6 +25201,7 @@ export function ProjectReportStatusView({ state, onReload }: ProjectReportStatus
 File: src/reporting/control-page/components/molecules/ReportExportButton.tsx
 ================
 import React, { useCallback } from 'react';
+import { Download, Loader2 } from 'lucide-react';
 import { useReportPdfExport } from '../../hooks/use-report-pdf-export.js';
 
 export interface ReportExportButtonProps {
@@ -24701,47 +25237,15 @@ export function ReportExportButton({
 
   const disabled = !isReady || isExporting;
 
-  const spinnerSvg = React.createElement(
-    'svg',
-    {
-      className: 'animate-spin h-3.5 w-3.5 text-current',
-      xmlns: 'http://www.w3.org/2000/svg',
-      fill: 'none',
-      viewBox: '0 0 24 24',
-      'aria-hidden': 'true',
-    },
-    React.createElement('circle', {
-      className: 'opacity-25',
-      cx: 12,
-      cy: 12,
-      r: 10,
-      stroke: 'currentColor',
-      strokeWidth: 4,
-    }),
-    React.createElement('path', {
-      className: 'opacity-75',
-      fill: 'currentColor',
-      d: 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z',
-    }),
-  );
-
-  const downloadSvg = React.createElement(
-    'svg',
-    {
-      className: 'h-3.5 w-3.5 text-current',
-      xmlns: 'http://www.w3.org/2000/svg',
-      fill: 'none',
-      viewBox: '0 0 24 24',
-      stroke: 'currentColor',
-      strokeWidth: 2,
-      'aria-hidden': 'true',
-    },
-    React.createElement('path', {
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4',
-    }),
-  );
+  const iconElement = isExporting
+    ? React.createElement(Loader2, {
+        className: 'animate-spin h-3.5 w-3.5 text-current',
+        'aria-hidden': 'true',
+      })
+    : React.createElement(Download, {
+        className: 'h-3.5 w-3.5 text-current',
+        'aria-hidden': 'true',
+      });
 
   const errorAlert =
     state.status === 'error' && state.errorMessage
@@ -24780,7 +25284,7 @@ export function ReportExportButton({
           : 'bg-sky-600 text-white hover:bg-sky-700 active:bg-sky-800 cursor-pointer'
       }`,
     },
-    isExporting ? spinnerSvg : downloadSvg,
+    iconElement,
     React.createElement('span', null, buttonText),
   );
 
@@ -25833,7 +26337,6 @@ import { Button } from '../atoms/Button.js';
 import { Select } from '../atoms/Select.js';
 import type { SelectOption } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
-
 export interface ExecutionSectionProps {
   isDirty?: boolean;
   isLoading?: boolean;
@@ -25970,6 +26473,13 @@ export * from './DeleteRunConfirmationDialog.js';
 export * from './ProjectReportHistoryCard.js';
 export * from './project-group-column.js';
 export * from './project-group-editor-dialog.js';
+export * from './project-group-board.js';
+
+================
+File: src/reporting/control-page/components/organisms/project-group-board.tsx
+================
+export { ProjectsGrid as ProjectGroupBoard } from './ProjectsGrid.js';
+export type { ProjectsGridProps as ProjectGroupBoardProps } from './ProjectsGrid.js';
 
 ================
 File: src/reporting/control-page/components/organisms/project-group-column.tsx
@@ -26009,7 +26519,7 @@ export function ProjectGroupColumn({
     <div
       id={columnId}
       data-group-id={groupId ?? 'ungrouped'}
-      className="project-group-column flex flex-col shrink-0 w-72 max-w-full bg-slate-100/90 border border-slate-200 rounded-lg p-3 shadow-2xs"
+      className="project-group-column flex flex-col shrink-0 w-72 max-w-full bg-slate-50 border border-slate-200 rounded-lg p-3 shadow-xs"
     >
       <div className="group-column-header flex flex-col gap-1 pb-2 mb-2 border-b border-slate-200">
         <div className="flex items-center justify-between gap-2 min-w-0">
@@ -26044,7 +26554,7 @@ export function ProjectGroupColumn({
               onClick={() => onManageProjects?.(groupId)}
               disabled={disabled}
               aria-label={`Manage projects for ${groupName}`}
-              className="btn-manage-group-projects px-2 py-0.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-xs shadow-2xs hover:border-slate-400 focus:outline-hidden focus:ring-1 focus:ring-sky-500 disabled:opacity-50 cursor-pointer"
+              className="btn-manage-group-projects px-2 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-md shadow-xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-50 cursor-pointer"
             >
               Manage Projects
             </button>
@@ -26053,7 +26563,7 @@ export function ProjectGroupColumn({
               onClick={() => onRenameGroup?.(groupId)}
               disabled={disabled}
               aria-label={`Rename group ${groupName}`}
-              className="btn-rename-group px-2 py-0.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-xs shadow-2xs hover:border-slate-400 focus:outline-hidden focus:ring-1 focus:ring-sky-500 disabled:opacity-50 cursor-pointer"
+              className="btn-rename-group px-2 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-md shadow-xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-50 cursor-pointer"
             >
               Rename
             </button>
@@ -26062,7 +26572,7 @@ export function ProjectGroupColumn({
               onClick={() => onDeleteGroup?.(groupId)}
               disabled={disabled}
               aria-label={`Delete group ${groupName}`}
-              className="btn-delete-group px-2 py-0.5 text-xs font-medium text-rose-700 bg-white hover:bg-rose-50 border border-rose-300 rounded-xs shadow-2xs hover:border-rose-400 focus:outline-hidden focus:ring-1 focus:ring-rose-500 disabled:opacity-50 cursor-pointer"
+              className="btn-delete-group px-2 py-1 text-xs font-medium text-rose-700 bg-white hover:bg-rose-50 border border-rose-300 rounded-md shadow-xs hover:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-500 disabled:opacity-50 cursor-pointer"
             >
               Delete
             </button>
@@ -26074,7 +26584,7 @@ export function ProjectGroupColumn({
         role="region"
         aria-label={scrollRegionLabel}
         tabIndex={0}
-        className="group-projects-list flex flex-col gap-2 overflow-y-auto max-h-[min(32rem,65vh)] min-h-0 p-1 rounded-md focus:outline-hidden focus:ring-2 focus:ring-sky-500/50"
+        className="group-projects-list flex flex-col gap-2 overflow-y-auto max-h-[min(32rem,65vh)] min-h-0 p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500"
       >
         {projects.length === 0 ? (
           <p className="text-xs text-slate-500 italic py-6 px-2 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-md m-0">
@@ -26617,7 +27127,10 @@ export function ProjectGroupEditorDialog({
 File: src/reporting/control-page/components/organisms/ProjectCard.tsx
 ================
 import React from 'react';
+import { ExternalLink } from 'lucide-react';
 import type { ProjectCardData } from '../../types/component-contracts.js';
+import { Card } from '../atoms/Card.js';
+import { Checkbox } from '../atoms/Checkbox.js';
 import { Select } from '../atoms/Select.js';
 
 export interface ProjectCardProps {
@@ -26638,17 +27151,17 @@ export function ProjectCard({
   const trimmedJobUrl = typeof project.jobUrl === 'string' ? project.jobUrl.trim() : '';
   const isSafeJobUrl = /^https?:\/\//i.test(trimmedJobUrl);
   return (
-    <div className="project-card border border-slate-300 rounded-lg p-3 bg-slate-50 shadow-xs flex flex-col gap-2 shrink-0">
+    <Card className="project-card border-slate-300 bg-white p-3.5 shadow-xs flex flex-col gap-2 shrink-0 hover:border-slate-400 transition-colors">
       <div className="project-card-header flex items-baseline justify-between gap-2 min-w-0">
         <h4
-          className="m-0 text-sm font-bold text-slate-900 truncate focus:outline-hidden focus:ring-1 focus:ring-sky-500 rounded-xs"
+          className="m-0 text-sm font-bold text-slate-900 truncate focus:outline-none focus:ring-2 focus:ring-sky-500 rounded"
           tabIndex={0}
           title={project.name || project.id}
         >
           {project.name || project.id}
         </h4>
         <span
-          className="mono font-mono text-xs text-slate-700 bg-slate-200/70 px-1.5 py-0.5 rounded-xs shrink-0 max-w-[120px] truncate"
+          className="mono font-mono text-xs text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded shrink-0 max-w-[120px] truncate"
           tabIndex={0}
           title={project.id}
           aria-label={`Project ID: ${project.id}`}
@@ -26659,18 +27172,12 @@ export function ProjectCard({
 
       <div className="project-card-fields flex flex-col gap-2 text-xs">
         <div className="field-row flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              id={checkboxId}
-              checked={isEnabled}
-              onChange={(e) => onToggleEnabled(project.id, e.target.checked)}
-              className="h-4 w-4 rounded-xs border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer"
-            />
-            <label htmlFor={checkboxId} className="text-slate-700 font-medium cursor-pointer select-none">
-              Enabled
-            </label>
-          </div>
+          <Checkbox
+            id={checkboxId}
+            checked={isEnabled}
+            onChange={(e) => onToggleEnabled(project.id, e.target.checked)}
+            label="Enabled"
+          />
 
           <div className="flex items-center gap-1.5">
             <label htmlFor={runTypeSelectId} className="text-slate-600 font-medium shrink-0">
@@ -26692,18 +27199,18 @@ export function ProjectCard({
           </div>
         </div>
 
-        <div className="field-row flex items-center justify-between gap-2 pt-1 border-t border-slate-200">
+        <div className="field-row flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200">
           <span className="text-slate-500 font-medium shrink-0">Job URL:</span>
           {isSafeJobUrl ? (
             <a
               href={trimmedJobUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mono font-mono text-xs text-sky-700 underline hover:text-sky-900 truncate focus:outline-hidden focus:ring-1 focus:ring-sky-500 rounded-xs"
-              title={trimmedJobUrl}
+              className="mono font-mono text-xs text-sky-700 underline hover:text-sky-900 truncate inline-flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-sky-500 rounded"
               aria-label={`Job URL for ${project.name || project.id}: ${trimmedJobUrl}`}
             >
-              {trimmedJobUrl}
+              <span className="truncate">{trimmedJobUrl}</span>
+              <ExternalLink className="w-3 h-3 shrink-0 text-sky-600" aria-hidden="true" />
             </a>
           ) : trimmedJobUrl ? (
             <span
@@ -26717,7 +27224,7 @@ export function ProjectCard({
           )}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -26815,6 +27322,7 @@ export function ProjectReportHistoryCard({
 File: src/reporting/control-page/components/organisms/ProjectsGrid.tsx
 ================
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import type { ProjectCardData } from '../../types/component-contracts.js';
 import type { ProjectGroupInput } from '../../types/index.js';
 import { buildProjectGroupColumns } from '../../utils/project-group-board.js';
@@ -26895,7 +27403,7 @@ export function ProjectsGrid({
               onClick={() => setDialogMode({ type: 'new-group' })}
               className="btn-new-group font-medium text-xs flex items-center gap-1"
             >
-              <span aria-hidden="true">+</span> New Group
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" /> New Group
             </Button>
           </div>
         )}
@@ -26908,8 +27416,7 @@ export function ProjectsGrid({
         aria-label="Project groups board"
         tabIndex={0}
         className={cn(
-          'projects-grid projects-board flex flex-row items-start gap-4 pb-2 min-w-0 max-w-full overflow-x-auto focus:outline-hidden focus:ring-2 focus:ring-sky-500/50 rounded-lg',
-          className,
+          'projects-grid projects-board flex flex-row items-start gap-4 pb-2 min-w-0 max-w-full overflow-x-auto focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg',
         )}
       >
         {columns.map((column) => (
@@ -26949,8 +27456,10 @@ export function ProjectsGrid({
 File: src/reporting/control-page/components/organisms/RawJsonSection.tsx
 ================
 import React, { useEffect, useRef } from 'react';
+import { CheckCheck } from 'lucide-react';
 import type { JsonValidationStatus } from '../../hooks/useConfigManager.js';
 import { Button } from '../atoms/Button.js';
+import { Card } from '../atoms/Card.js';
 import { cn } from '../../utils/cn.js';
 
 export interface RawJsonSectionProps {
@@ -26977,13 +27486,14 @@ export function RawJsonSection({
   }, [rawJson]);
 
   return (
-    <details id="json-editor-details" className={cn('group', className)} open>
-      <summary
-        id="section-editor-title"
-        className="cursor-pointer font-bold text-slate-800 hover:text-slate-950 py-1"
-      >
-        Advanced: Raw JSON Configuration
-      </summary>
+    <Card className={cn('p-4 sm:p-6 border-slate-300 shadow-xs', className)}>
+      <details id="json-editor-details" className="group" open>
+        <summary
+          id="section-editor-title"
+          className="cursor-pointer font-bold text-slate-800 hover:text-slate-950 py-1 select-none"
+        >
+          Advanced: Raw JSON Configuration
+        </summary>
       <div className="editor-container flex flex-col gap-3 mt-3">
         <label htmlFor="raw-json-textarea" className="visually-hidden">
           Raw JSON configuration editor
@@ -26995,15 +27505,17 @@ export function RawJsonSection({
           spellCheck={false}
           aria-label="Raw JSON configuration editor"
           onChange={(e) => onChange(e.target.value)}
-          className="w-full font-mono text-xs sm:text-sm p-3 border border-slate-300 rounded bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+          className="w-full font-mono text-xs sm:text-sm p-3 border border-slate-300 rounded-md bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-xs"
         />
-        <div className="editor-actions flex items-center gap-4">
+        <div className="editor-actions flex items-center gap-4 flex-wrap">
           <Button
             type="button"
             id="btn-apply-json"
             variant="secondary"
             onClick={onApply}
+            className="inline-flex items-center gap-1.5"
           >
+            <CheckCheck className="w-3.5 h-3.5" aria-hidden="true" />
             Apply & Validate
           </Button>
           <span
@@ -27018,7 +27530,8 @@ export function RawJsonSection({
           </span>
         </div>
       </div>
-    </details>
+      </details>
+    </Card>
   );
 }
 
@@ -27049,13 +27562,15 @@ export function RunStatusCard({
 }: RunStatusCardProps) {
   return (
     <div id="run-status-card" className={cn('run-card flex flex-col gap-4', className)}>
-      <div className="run-card-header flex items-center gap-4">
-        <Badge id="run-status-badge" variant={status}>
-          {status}
-        </Badge>
-        <span id="run-id-display" className="run-id font-mono text-xs text-slate-500">
-          {runId ? `ID: ${runId}` : ''}
-        </span>
+      <div className="run-card-header flex items-center justify-between gap-4 flex-wrap bg-slate-50 border border-slate-200 rounded-lg p-3">
+        <div className="flex items-center gap-3">
+          <Badge id="run-status-badge" variant={status}>
+            {status}
+          </Badge>
+          <span id="run-id-display" className="run-id font-mono text-xs font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded">
+            {runId ? `ID: ${runId}` : ''}
+          </span>
+        </div>
       </div>
 
       <RunResultBox id="run-result-box" result={result} />
@@ -27073,16 +27588,8 @@ File: src/reporting/control-page/components/templates/DashboardLayout.tsx
 ================
 import React from 'react';
 
-export interface DashboardLayoutProps {
-  header: React.ReactNode;
-  banner?: React.ReactNode;
-  projectsSection: React.ReactNode;
-  formBuilderSection: React.ReactNode;
-  rawJsonSection: React.ReactNode;
-  actionsSection: React.ReactNode;
-  runSection: React.ReactNode;
-  dialogs?: React.ReactNode;
-}
+import type { DashboardLayoutProps } from '../../types/component-contracts.js';
+export type { DashboardLayoutProps };
 
 export function DashboardLayout({
   header,
@@ -27094,69 +27601,202 @@ export function DashboardLayout({
   runSection,
   dialogs,
 }: DashboardLayoutProps) {
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <a href="#main-content" className="skip-link">
-        Skip to main content
-      </a>
+  const skipLink = React.createElement(
+    'a',
+    { href: '#main-content', className: 'skip-link' },
+    'Skip to main content',
+  );
 
-      {header}
+  const projectsHeader = React.createElement(
+    'h2',
+    {
+      id: 'section-projects-title',
+      className: 'text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200',
+    },
+    'Projects',
+  );
 
-      <main id="main-content" className="main-container max-w-[1200px] mx-auto py-6 px-4">
-        {banner}
+  const projectsContainer = React.createElement(
+    'section',
+    {
+      'aria-labelledby': 'section-projects-title',
+      className: 'dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm',
+    },
+    projectsHeader,
+    projectsSection,
+  );
 
-        <section
-          aria-labelledby="section-projects-title"
-          className="dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm"
-        >
-          <h2
-            id="section-projects-title"
-            className="text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200"
-          >
-            Projects
-          </h2>
-          {projectsSection}
-        </section>
+  const editorGrid = React.createElement(
+    'div',
+    { className: 'grid grid-cols-1 lg:grid-cols-2 gap-6' },
+    formBuilderSection,
+    rawJsonSection,
+  );
 
-        <section
-          aria-labelledby="section-editor-title"
-          className="dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm"
-        >
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {formBuilderSection}
-            {rawJsonSection}
-          </div>
-        </section>
+  const editorContainer = React.createElement(
+    'section',
+    {
+      'aria-labelledby': 'section-editor-title',
+      className: 'dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm',
+    },
+    editorGrid,
+  );
 
-        <section
-          aria-labelledby="section-actions-title"
-          className="dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm"
-        >
-          <h2
-            id="section-actions-title"
-            className="text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200"
-          >
-            Execute Actions
-          </h2>
-          {actionsSection}
-        </section>
+  const actionsHeader = React.createElement(
+    'h2',
+    {
+      id: 'section-actions-title',
+      className: 'text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200',
+    },
+    'Execute Actions',
+  );
 
-        <section
-          aria-labelledby="section-run-title"
-          className="dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm"
-        >
-          <h2
-            id="section-run-title"
-            className="text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200"
-          >
-            Current / Recent Run
-          </h2>
-          {runSection}
-        </section>
-      </main>
+  const actionsContainer = React.createElement(
+    'section',
+    {
+      'aria-labelledby': 'section-actions-title',
+      className: 'dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm',
+    },
+    actionsHeader,
+    actionsSection,
+  );
 
-      {dialogs}
-    </div>
+  const runHeader = React.createElement(
+    'h2',
+    {
+      id: 'section-run-title',
+      className: 'text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200',
+    },
+    'Current / Recent Run',
+  );
+
+  const runContainer = React.createElement(
+    'section',
+    {
+      'aria-labelledby': 'section-run-title',
+      className: 'dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm',
+    },
+    runHeader,
+    runSection,
+  );
+
+  const mainContent = React.createElement(
+    'main',
+    {
+      id: 'main-content',
+      className: 'main-container max-w-[1200px] mx-auto py-6 px-4',
+    },
+    banner,
+    projectsContainer,
+    editorContainer,
+    actionsContainer,
+    runContainer,
+  );
+
+  return React.createElement(
+    'div',
+    { className: 'min-h-screen bg-slate-50 text-slate-900' },
+    skipLink,
+    header,
+    mainContent,
+    dialogs,
+  );
+}
+
+================
+File: src/reporting/control-page/components/templates/FinalReportLayout.tsx
+================
+import React from 'react';
+
+import type { FinalReportLayoutProps } from '../../types/component-contracts.js';
+export type { FinalReportLayoutProps };
+export function FinalReportLayout({
+  header,
+  toolbar,
+  exportAction,
+  statusView,
+  reportContent,
+  children,
+}: FinalReportLayoutProps) {
+  const skipLink = React.createElement(
+    'a',
+    { href: '#project-report-surface', className: 'skip-link' },
+    'Skip to report content',
+  );
+
+  const defaultHeader = (toolbar || exportAction)
+    ? React.createElement(
+        'header',
+        { className: 'control-report-bar bg-white border-b border-slate-300 py-3 px-6 shadow-sm' },
+        React.createElement(
+          'div',
+          { className: 'max-w-[1200px] mx-auto flex flex-wrap justify-between items-center gap-4' },
+          toolbar,
+          exportAction,
+        ),
+      )
+    : null;
+
+  return React.createElement(
+    'div',
+    { className: 'final-project-report-viewer min-h-screen bg-[#f4f7fb] text-[#172033]' },
+    skipLink,
+    header ?? defaultHeader,
+    statusView,
+    reportContent,
+    children,
+  );
+}
+
+================
+File: src/reporting/control-page/components/templates/index.ts
+================
+export * from './DashboardLayout.js';
+export * from './ReportManagementLayout.js';
+export * from './FinalReportLayout.js';
+
+================
+File: src/reporting/control-page/components/templates/ReportManagementLayout.tsx
+================
+import React from 'react';
+
+import type { ReportManagementLayoutProps } from '../../types/component-contracts.js';
+export type { ReportManagementLayoutProps };
+export function ReportManagementLayout({
+  header,
+  banner,
+  searchFilter,
+  content,
+  historyList,
+  dialogs,
+  children,
+}: ReportManagementLayoutProps) {
+  const skipLink = React.createElement(
+    'a',
+    { href: '#main-content', className: 'skip-link' },
+    'Skip to main content',
+  );
+
+  const mainContent = React.createElement(
+    'main',
+    {
+      id: 'main-content',
+      className: 'main-container max-w-[1200px] mx-auto py-6 px-4',
+    },
+    banner,
+    searchFilter,
+    content,
+    historyList,
+    children,
+  );
+
+  return React.createElement(
+    'div',
+    { className: 'min-h-screen bg-slate-50 text-slate-900' },
+    skipLink,
+    header,
+    mainContent,
+    dialogs,
   );
 }
 
@@ -30407,6 +31047,67 @@ export interface RunResultBoxProps {
   visible?: boolean;
   className?: string;
   id?: string;
+}
+
+export interface FormFieldProps {
+  id: string;
+  label?: ReactNode;
+  required?: boolean;
+  helperText?: ReactNode;
+  error?: ReactNode;
+  className?: string;
+  labelClassName?: string;
+  orientation?: 'vertical' | 'horizontal';
+  children?: ReactNode;
+}
+
+export interface PageHeaderProps {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  backLink?: {
+    href: string;
+    label: string;
+    id?: string;
+    className?: string;
+  };
+  breadcrumbs?: ReactNode;
+  badges?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+  containerClassName?: string;
+  id?: string;
+  titleId?: string;
+  level?: 1 | 2;
+}
+
+export interface DashboardLayoutProps {
+  header: ReactNode;
+  banner?: ReactNode;
+  projectsSection: ReactNode;
+  formBuilderSection: ReactNode;
+  rawJsonSection: ReactNode;
+  actionsSection: ReactNode;
+  runSection: ReactNode;
+  dialogs?: ReactNode;
+}
+
+export interface ReportManagementLayoutProps {
+  header: ReactNode;
+  banner?: ReactNode;
+  searchFilter?: ReactNode;
+  content?: ReactNode;
+  historyList?: ReactNode;
+  dialogs?: ReactNode;
+  children?: ReactNode;
+}
+
+export interface FinalReportLayoutProps {
+  header?: ReactNode;
+  toolbar?: ReactNode;
+  exportAction?: ReactNode;
+  statusView?: ReactNode;
+  reportContent?: ReactNode;
+  children?: ReactNode;
 }
 
 ================
@@ -151377,6 +152078,8 @@ import {
   LoadingIndicator,
 } from '../../src/reporting/control-page/components/atoms/index.js';
 import {
+  FormField,
+  PageHeader,
   CredentialRow,
   BrowserSettingRow,
   ConfigSelectorBar,
@@ -151384,7 +152087,11 @@ import {
   RunResultBox,
 } from '../../src/reporting/control-page/components/molecules/index.js';
 import { ExecutionSection } from '../../src/reporting/control-page/components/organisms/ExecutionSection.js';
-
+import {
+  DashboardLayout,
+  ReportManagementLayout,
+  FinalReportLayout,
+} from '../../src/reporting/control-page/components/templates/index.js';
 test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
   test.describe('Atoms', () => {
     test.describe('Badge', () => {
@@ -151790,6 +152497,133 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
   });
 
   test.describe('Molecules', () => {
+    test.describe('FormField', () => {
+      test('renders label with htmlFor matching field id and child element', () => {
+        const html = renderToString(
+          React.createElement(
+            FormField,
+            { id: 'user-field', label: 'Username' },
+            React.createElement('input', { id: 'user-field', type: 'text' }),
+          ),
+        );
+        expect(html).toContain('for="user-field"');
+        expect(html).toContain('Username');
+        expect(html).toContain('id="user-field"');
+        expect(html).toContain('form-field');
+      });
+
+      test('renders required indicator when required is true', () => {
+        const html = renderToString(
+          React.createElement(
+            FormField,
+            { id: 'email-field', label: 'Email', required: true },
+            React.createElement('input', { id: 'email-field', type: 'email' }),
+          ),
+        );
+        expect(html).toContain('*');
+        expect(html).toContain('(required)');
+      });
+
+      test('renders error with role="alert" and id error suffix', () => {
+        const html = renderToString(
+          React.createElement(
+            FormField,
+            {
+              id: 'password-field',
+              label: 'Password',
+              error: 'Password must be at least 8 characters',
+            },
+            React.createElement('input', { id: 'password-field', type: 'password' }),
+          ),
+        );
+        expect(html).toContain('id="password-field-error"');
+        expect(html).toContain('role="alert"');
+        expect(html).toContain('Password must be at least 8 characters');
+      });
+
+      test('renders helper text when provided and suppresses helper text when error is present', () => {
+        const withHelper = renderToString(
+          React.createElement(
+            FormField,
+            {
+              id: 'host-field',
+              label: 'Host',
+              helperText: 'Enter hostname or IP address',
+            },
+            React.createElement('input', { id: 'host-field' }),
+          ),
+        );
+        expect(withHelper).toContain('id="host-field-helper"');
+        expect(withHelper).toContain('Enter hostname or IP address');
+
+        const withBoth = renderToString(
+          React.createElement(
+            FormField,
+            {
+              id: 'host-field',
+              label: 'Host',
+              helperText: 'Enter hostname or IP address',
+              error: 'Invalid hostname format',
+            },
+            React.createElement('input', { id: 'host-field' }),
+          ),
+        );
+        expect(withBoth).toContain('id="host-field-error"');
+        expect(withBoth).toContain('Invalid hostname format');
+        expect(withBoth).not.toContain('Enter hostname or IP address');
+      });
+    });
+
+    test.describe('PageHeader', () => {
+      test('renders title with default h1 and custom h2 level', () => {
+        const h1Html = renderToString(
+          React.createElement(PageHeader, {
+            title: 'Control Dashboard',
+          }),
+        );
+        expect(h1Html).toContain('<h1');
+        expect(h1Html).toContain('Control Dashboard');
+
+        const h2Html = renderToString(
+          React.createElement(PageHeader, {
+            title: 'Reports Overview',
+            level: 2,
+          }),
+        );
+        expect(h2Html).toContain('<h2');
+        expect(h2Html).toContain('Reports Overview');
+      });
+
+      test('renders back link with icon, label, and href', () => {
+        const html = renderToString(
+          React.createElement(PageHeader, {
+            title: 'Project Details',
+            backLink: {
+              id: 'back-link',
+              href: '/reports',
+              label: 'Back to Reports',
+            },
+          }),
+        );
+        expect(html).toContain('id="back-link"');
+        expect(html).toContain('href="/reports"');
+        expect(html).toContain('Back to Reports');
+      });
+
+      test('renders subtitle and action slot', () => {
+        const html = renderToString(
+          React.createElement(PageHeader, {
+            title: 'Settings',
+            subtitle: 'Manage system-wide configuration',
+            actions: React.createElement('button', { id: 'btn-export' }, 'Export'),
+          }),
+        );
+        expect(html).toContain('Manage system-wide configuration');
+        expect(html).toContain('id="btn-export"');
+        expect(html).toContain('Export');
+      });
+    });
+
     test.describe('CredentialRow', () => {
       test('renders exact contract DOM structure for unconfigured credential', () => {
         const rowHtml = renderToString(
@@ -152159,6 +152993,80 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
         );
         expect(noDocHtml).toMatch(/id="btn-run-reports"[^>]*disabled/);
         expect(noDocHtml).toMatch(/id="btn-run-auto-build"[^>]*disabled/);
+      });
+    });
+  });
+
+  test.describe('Templates', () => {
+    test.describe('DashboardLayout', () => {
+      test('renders standard slots, skip link, and 1200px container', () => {
+        const html = renderToString(
+          React.createElement(DashboardLayout, {
+            header: React.createElement('header', { id: 'test-header' }, 'Header Content'),
+            banner: React.createElement('div', { id: 'test-banner' }, 'Banner Message'),
+            projectsSection: React.createElement('div', { id: 'test-projects' }, 'Projects Board'),
+            formBuilderSection: React.createElement('div', { id: 'test-form' }, 'Form Builder'),
+            rawJsonSection: React.createElement('div', { id: 'test-json' }, 'Raw JSON'),
+            actionsSection: React.createElement('div', { id: 'test-actions' }, 'Actions Bar'),
+            runSection: React.createElement('div', { id: 'test-run' }, 'Run Status'),
+            dialogs: React.createElement('div', { id: 'test-dialogs' }, 'Dialog Overlays'),
+          }),
+        );
+
+        expect(html).toContain('href="#main-content"');
+        expect(html).toContain('class="skip-link"');
+        expect(html).toContain('id="main-content"');
+        expect(html).toContain('max-w-[1200px]');
+        expect(html).toContain('id="test-header"');
+        expect(html).toContain('id="test-banner"');
+        expect(html).toContain('id="test-projects"');
+        expect(html).toContain('id="test-form"');
+        expect(html).toContain('id="test-json"');
+        expect(html).toContain('id="test-actions"');
+        expect(html).toContain('id="test-run"');
+        expect(html).toContain('id="test-dialogs"');
+      });
+    });
+
+    test.describe('ReportManagementLayout', () => {
+      test('renders standard slots, skip link, and 1200px container', () => {
+        const html = renderToString(
+          React.createElement(ReportManagementLayout, {
+            header: React.createElement('header', { id: 'report-header' }, 'Index Header'),
+            banner: React.createElement('div', { id: 'feedback-banner' }, 'Feedback'),
+            content: React.createElement('div', { id: 'report-content' }, 'Reports List'),
+            dialogs: React.createElement('div', { id: 'delete-dialogs' }, 'Delete Modals'),
+          }),
+        );
+
+        expect(html).toContain('href="#main-content"');
+        expect(html).toContain('id="main-content"');
+        expect(html).toContain('max-w-[1200px]');
+        expect(html).toContain('id="report-header"');
+        expect(html).toContain('id="feedback-banner"');
+        expect(html).toContain('id="report-content"');
+        expect(html).toContain('id="delete-dialogs"');
+      });
+    });
+
+    test.describe('FinalReportLayout', () => {
+      test('renders skip link, toolbar, export action, status view, and report content', () => {
+        const html = renderToString(
+          React.createElement(FinalReportLayout, {
+            toolbar: React.createElement('nav', { id: 'report-breadcrumbs' }, 'Breadcrumbs'),
+            exportAction: React.createElement('button', { id: 'btn-export' }, 'Export PDF'),
+            statusView: React.createElement('div', { id: 'status-view' }, 'Loading...'),
+            reportContent: React.createElement('div', { id: 'project-report-surface' }, 'Report Body'),
+          }),
+        );
+
+        expect(html).toContain('href="#project-report-surface"');
+        expect(html).toContain('class="control-report-bar');
+        expect(html).toContain('max-w-[1200px]');
+        expect(html).toContain('id="report-breadcrumbs"');
+        expect(html).toContain('id="btn-export"');
+        expect(html).toContain('id="status-view"');
+        expect(html).toContain('id="project-report-surface"');
       });
     });
   });

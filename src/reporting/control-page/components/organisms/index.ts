@@ -12,3 +12,4 @@ export * from './DeleteRunConfirmationDialog.js';
 export * from './ProjectReportHistoryCard.js';
 export * from './project-group-column.js';
 export * from './project-group-editor-dialog.js';
+export * from './project-group-board.js';
