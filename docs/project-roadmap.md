@@ -4,6 +4,19 @@ Last updated: 2026-09-27
 Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
 Completed initiative: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
 
+## Control Page UI Atomic Redesign
+
+Plan: [Control Page UI Atomic Redesign](../plans/260927-1011-control-ui-atomic-redesign/plan.md)
+
+**Overall status:** **IN PROGRESS** · **25%** (1 of 4 phases complete; 3 of 13 planned hours = 23%; Phase 02 next).
+
+| Phase | Status | Progress | Completed | Evidence/detail |
+|---|---|---:|---|---|
+| 01 — Design System Tokens & Base Atoms | **DONE** | **100%** | 2026-09-27 | Delivered Modern Refined Light tokens and accessible base atoms. Verification: 37 focused atom tests, 608/608 unit tests, typecheck and build passed; Cycle 2 review approved 9.8/10 ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-01-design-system-tokens-and-atoms.md), [test report](../plans/reports/Phase01TesterCycle2-260927-1153-phase-01-test-validation-after-review.md), [review](../plans/reports/code-review-260927-1157-phase-01-design-system-tokens-and-atoms-cycle-2.md)). |
+| 02 — Molecules & Form Composition | **NEXT (PLANNED)** | 0% | — | Next planned phase ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-02-molecules-and-form-composition.md)). |
+| 03 — Organisms & Layout Templates | PLANNED | 0% | — | [Phase 03](../plans/260927-1011-control-ui-atomic-redesign/phase-03-organisms-and-layout-templates.md). |
+| 04 — Page Integration & Verification | PLANNED | 0% | — | [Phase 04](../plans/260927-1011-control-ui-atomic-redesign/phase-04-page-integration-and-verification.md). |
+
 ## Control page compact project groups and cloning
 
 Plan: [Control page project groups and cloning](../plans/260926-2222-control-project-groups-and-cloning/plan.md)
@@ -196,6 +209,10 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Verified zero dangling references in codebase; updated `docs/codebase-summary.md` and `docs/project-overview-pdr.md`.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-27
+
+- Completed Phase 01 (Design System Tokens & Base Atoms) on 2026-09-27: delivered Modern Refined Light design tokens and accessible base atoms. Verification: 37/37 focused atom tests, 608/608 unit tests, typecheck and build passed; Cycle 2 review approved 9.8/10 with no critical or high findings. Phase 02 is next; the initiative is 1/4 phases complete (25%; 3/13 planned hours, 23%) ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-01-design-system-tokens-and-atoms.md), [test report](../plans/reports/Phase01TesterCycle2-260927-1153-phase-01-test-validation-after-review.md), [review](../plans/reports/code-review-260927-1157-phase-01-design-system-tokens-and-atoms-cycle-2.md)).
 
 ### 0.1.0 (development) — 2026-09-26
 

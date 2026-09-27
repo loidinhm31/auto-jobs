@@ -12,13 +12,13 @@ export const LoadingIndicator = forwardRef<HTMLDivElement, LoadingIndicatorProps
       {
         ref,
         id,
+        role: 'status',
         'aria-live': 'polite',
-        className: cn('credentials-loading', !visible && 'hidden', className),
+        className: cn('credentials-loading loading-indicator', !visible && 'hidden', className),
         ...rest,
       },
       message,
     );
   },
 );
-
 LoadingIndicator.displayName = 'LoadingIndicator';

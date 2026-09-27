@@ -66,6 +66,10 @@ browser PDF export.
   [molecules](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/)) and
   Tailwind styling in [`src/reporting/control-page/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/),
   preserving the active DOM IDs, CSS classes, data attributes, and ARIA contracts.
+- Control UI Atomic Design Phase 01 (2026-09-27): introduced Modern Refined Light
+  tokens and expanded the atom tier with `Checkbox`, compound `Card`, and
+  `IconButton`; refactored `Button`, `Badge`, `Input`, `Select`, `StatusBanner`,
+  and `LoadingIndicator`. Details below.
 - Phase 06 addition: removal of legacy imperative assets (`control-page.js`,
   `control-page.html`, `control-page.css`); control dashboard frontend is now
   100% React application compiled via Vite with zero legacy assets.
@@ -366,22 +370,24 @@ state, injected-credential execution, input wiping, and absence of test
 secrets from page HTML and run logs. The control configuration uses Chromium
 and WebKit projects, so the four browser scenarios produce eight E2E checks.
 
-### Control UI atomic design components and contract fidelity (Phase 03 React refactor)
+### Control UI design tokens and Atomic Design components (Phase 01 redesign; Phase 03 React refactor)
 
-The Control Dashboard UI uses Atomic Design principles to isolate visual primitives and compound molecules while guaranteeing 100% contract fidelity with existing Playwright E2E locators:
+The Control Dashboard follows an Atomic Design hierarchy: atoms provide reusable controls, molecules combine them into focused interactions, and organisms assemble dashboard sections. Existing DOM IDs, classes, data attributes, and ARIA contracts remain covered by Control UI tests.
 
 1. **Styling and utility infrastructure**:
-   - [`globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css): Declares Tailwind directives (`@tailwind base; @tailwind components; @tailwind utilities;`), maps CSS variable design tokens (`--bg-color`, `--card-bg`, `--text-main`, `--text-muted`, `--border-color`, `--primary`, `--secondary`, `--danger`, `--focus-ring`, `--mono-font`), sets `:focus-visible` outline rings, and defines critical accessibility utilities (`.skip-link`, `.visually-hidden`, `.hidden`, `@media (prefers-reduced-motion: reduce)`).
+   - `styles/globals.css`: Tailwind directives plus Modern Refined Light `:root` tokens for surfaces (`--bg-color`, `--card-bg`, `--surface`, `--subtle-surface`), text (`--text-main`, `--text-secondary`, `--text-muted`), borders (`--border-color`, `--border-default`, `--border-strong`), primary/secondary/danger base-hover-text pairs, semantic status colors, `--focus-ring`, and `--mono-font`. Global `:focus-visible`, skip-link, visually-hidden, and reduced-motion rules live here.
    - [`cn`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4) (`utils/cn.ts`): Wraps `clsx` and `twMerge` to reconcile Tailwind utility classes with legacy class tokens without style precedence collisions.
 
-2. **Atomic primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/))**:
-   - [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): Renders `<span className="badge badge-{variant}">`. Maps status variants (`idle`, `queued`, `running`, `succeeded`, `failed`, `unknown`, `submission-unknown`), credential states (`configured` -> `badge-configured`, `missing` -> `badge-missing`), and browser setting unconfigured state (`not-set` -> class `badge-missing` with text `'Not Set'`). Supports `forwardRef`.
-   - [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): Renders `<button type="button" className="btn btn-{variant} ...">`. Supports variants (`primary`, `secondary`, `danger`, `outline`), size `sm` (`btn-sm`), disabled state, loading spinner, and arbitrary `data-*` attributes (`data-key`). Supports `forwardRef`.
-   - [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): Accessible input wrapper with `id`, default `type="text"`, optional label via `htmlFor`, error message with `role="alert"` and `aria-invalid="true"`, default `autoComplete="off"` and `spellCheck=false`. Supports `forwardRef`.
-   - [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): Native `<select>` wrapper supporting options or custom children, associated label or `aria-label`, and `forwardRef`.
-   - [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): Notification banner rendering `<div id="status-banner" role="status" aria-live="polite" className="status-banner {variant} ...">`. Toggles `.hidden` when not visible.
-   - [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): Status indicator with `aria-live="polite"`, class `credentials-loading`, and `.hidden` toggle when not visible.
-
+2. **Atomic primitives (`components/atoms/`, exported from `index.ts`):**
+   - `Button`: defaults to the secondary variant and standard size; supports `primary`, `secondary`, `danger`, `outline`, and `ghost`, `sm`/`md`/`lg`/`default` sizes, loading feedback, and Radix's slot-based `asChild` composition.
+   - `Badge`: maps status, credential, and browser-setting states to semantic classes; supports an optional decorative dot (`aria-hidden`).
+   - `Checkbox`: native controlled/uncontrolled checkbox with optional visible label, accessible-name fallback, and `onCheckedChange`.
+   - `Card`: compound `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, and `CardFooter`; every part supports Radix's slot-based `asChild` composition.
+   - `IconButton`: composes `Button`, accepts an icon node or children, and resolves its accessible name from `aria-label`, `ariaLabel`, `title`, or `tooltip` (fallback: `Action`).
+   - `Input`: native input with optional label/error, `aria-invalid`/`aria-describedby`, and text/off/false defaults for type/autocomplete/spell-check; preserves `credential-input` styling.
+   - `Select`: native select with options or children and optional associated label or accessible name.
+   - `StatusBanner`: info/success/error variants; errors use `role="alert"` and assertive live announcements, other states use polite status announcements.
+   - `LoadingIndicator`: hideable `role="status"` indicator with polite live announcements and a default loading message.
 3. **Compound molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))**:
    - [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): Renders `.credential-row` containing `.credential-field` (`label[for="secret-input-${key}"]` and `Badge`), and `.credential-input-group` (`<input id="secret-input-${key}" type="password" class="credential-input" autocomplete="off" />`). When `isConfigured` is true, renders `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
    - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls with contract-specified IDs: badges (`#badge-browser-headless`, `#badge-browser-executable-path`), controls (`#browser-headless-select`, `#browser-executable-path-input`), and clear buttons (`#btn-clear-browser-headless`, `#btn-clear-browser-executable-path`).
@@ -392,7 +398,7 @@ The Control Dashboard UI uses Atomic Design principles to isolate visual primiti
 4. **Organism Assembly and Phase 06 Legacy Cleanup**:
    - Compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/)): `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, and `BrowserSettingsDialog`; the per-card build-confirmation flow was removed in Phase 03.
    - Phase 06 cleanup removed all legacy imperative assets (`control-page.js`, `control-page.html`, `control-page.css`). The application is 100% React compiled into `.runner-build/reporting/control-page/` by Vite.
-   - Current component contracts are exercised in `tests/unit/control-atomic-components.spec.ts`, including the new action-bar and multi-result behavior.
+   - `tests/unit/control-atomic-components.spec.ts` exercises atom and molecule contracts, including the Phase 01 atoms, plus action-bar and multi-result behavior.
 
 
 ### Control Dashboard config form builder (integrated; Active Config Phase 02–04)

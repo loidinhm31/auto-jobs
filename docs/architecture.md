@@ -136,13 +136,11 @@ flowchart LR
   `hooks/useConfigDocumentEditor.ts` for document/raw-JSON editing and
   validation, `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`,
   `hooks/useRunPoller.ts`, `hooks/use-project-report.ts` for validated final reports),
-  atomic design UI primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/):
-  [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31),
-  [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5),
-  [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5),
-  [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5),
-  [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5),
-  [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5)),
+  Atomic Design atoms exported from `components/atoms/index.ts`: `Button` (Radix
+  `slot`-based Radix `asChild` composition, variants, loading), `Badge` (semantic states, optional dot),
+  `Checkbox`, compound `Card` and its `CardHeader`, `CardTitle`,
+  `CardDescription`, `CardContent`, and `CardFooter`, `IconButton`, `Input`,
+  `Select`, `StatusBanner`, and `LoadingIndicator`;
   compound molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/):
   [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8),
   [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28),
@@ -164,7 +162,10 @@ flowchart LR
   layout templates ([`components/templates/DashboardLayout.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/templates/DashboardLayout.tsx)),
   pages ([`DashboardPage`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/pages/DashboardPage.tsx), [`ReportManagementPage`](../src/reporting/control-page/pages/ReportManagementPage.tsx), and [`FinalProjectReportPage`](../src/reporting/control-page/pages/final-project-report-page.tsx)),
   error boundary ([`components/ErrorBoundary.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/ErrorBoundary.tsx)),
-  and application markup (`index.html`, [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), `main.tsx`, [`styles/globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css)),
+  and application markup (`index.html`, [`App.tsx`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/App.tsx), `main.tsx`, and
+  `styles/globals.css` with Modern Refined Light tokens for surfaces, text,
+  borders, action/status colors, focus, and monospace, plus global focus-visible
+  and reduced-motion rules),
   bundled by `vite.control.config.ts` into `.runner-build/reporting/control-page/` with
   single-bundle JS/CSS and no inline scripts/styles for strict CSP compliance. Legacy imperative
   assets (`control-page.js`, `control-page.html`, `control-page.css`) have been removed (Phase 06).

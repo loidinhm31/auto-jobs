@@ -20,6 +20,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = ariaDescribedby ?? errorId;
 
+  const isCredentialInput = className && className.includes('credential-input');
+  const baseClasses = isCredentialInput
+    ? ''
+    : 'border border-slate-300 rounded px-2.5 py-1 text-sm text-slate-900 bg-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 disabled:opacity-50 disabled:bg-slate-50 transition-colors';
+
   const inputElement = React.createElement('input', {
     ref,
     id,
@@ -28,7 +33,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     autoComplete,
     'aria-invalid': ariaInvalid ?? Boolean(error),
     'aria-describedby': describedBy,
-    className: cn(className),
+    className: cn(baseClasses, className),
     ...rest,
   });
 

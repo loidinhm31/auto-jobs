@@ -7,6 +7,14 @@ import {
   Button,
   Input,
   Select,
+  Checkbox,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+  IconButton,
   StatusBanner,
   LoadingIndicator,
 } from '../../src/reporting/control-page/components/atoms/index.js';
@@ -91,8 +99,15 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
         expect(customHtml).toContain('id="run-status-badge"');
         expect(customHtml).toContain('running');
       });
+      test('supports dot indicator variant', () => {
+        const dotHtml = renderToString(
+          React.createElement(Badge, { variant: 'running', dot: true }, 'In Progress'),
+        );
+        expect(dotHtml).toContain('class="badge badge-running"');
+        expect(dotHtml).toContain('rounded-full');
+        expect(dotHtml).toContain('In Progress');
+      });
     });
-
     test.describe('Button', () => {
       test('renders variant classes and default button type', () => {
         const primaryHtml = renderToString(
@@ -116,8 +131,40 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
           React.createElement(Button, { variant: 'outline' }, 'Options'),
         );
         expect(outlineHtml).toContain('class="btn btn-outline"');
+        const ghostHtml = renderToString(
+          React.createElement(Button, { variant: 'ghost' }, 'Dismiss'),
+        );
+        expect(ghostHtml).toContain('class="btn btn-ghost"');
+        expect(ghostHtml).toContain('Dismiss');
       });
 
+      test('supports asChild polymorphism via Radix Slot', () => {
+        const linkButtonHtml = renderToString(
+          React.createElement(
+            Button,
+            { asChild: true, variant: 'primary' },
+            React.createElement('a', { href: '/dashboard' }, 'Dashboard Link'),
+          ),
+        );
+        expect(linkButtonHtml).toContain('href="/dashboard"');
+        expect(linkButtonHtml).toContain('class="btn btn-primary"');
+        expect(linkButtonHtml).toContain('Dashboard Link');
+        expect(linkButtonHtml).not.toContain('<button');
+      });
+
+      test('supports asChild with loading state without crashing Radix Slot', () => {
+        const loadingSlotHtml = renderToString(
+          React.createElement(
+            Button,
+            { asChild: true, loading: true },
+            React.createElement('a', { href: '/reports' }, 'Reports'),
+          ),
+        );
+        expect(loadingSlotHtml).toContain('href="/reports"');
+        expect(loadingSlotHtml).toContain('aria-disabled="true"');
+        expect(loadingSlotHtml).toContain('aria-busy="true"');
+        expect(loadingSlotHtml).toContain('Reports');
+      });
       test('renders size sm and disabled state', () => {
         const smDisabledHtml = renderToString(
           React.createElement(
@@ -160,6 +207,19 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
         expect(fieldHtml).toContain('role="alert"');
         expect(fieldHtml).toContain('Value is required');
         expect(fieldHtml).toContain('aria-invalid="true"');
+      });
+
+      test('merges baseClasses with custom className like w-full', () => {
+        const customInputHtml = renderToString(
+          React.createElement(Input, {
+            id: 'custom-input',
+            className: 'w-full custom-focus',
+          }),
+        );
+        expect(customInputHtml).toContain('id="custom-input"');
+        expect(customInputHtml).toContain('border-slate-300');
+        expect(customInputHtml).toContain('w-full');
+        expect(customInputHtml).toContain('custom-focus');
       });
     });
 
@@ -210,6 +270,20 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
         );
         expect(hiddenBannerHtml).toContain('hidden');
       });
+
+      test('renders role="alert" and aria-live="assertive" for error variant', () => {
+        const errorBannerHtml = renderToString(
+          React.createElement(StatusBanner, {
+            id: 'error-banner',
+            variant: 'error',
+            message: 'Failed to save configuration',
+            visible: true,
+          }),
+        );
+        expect(errorBannerHtml).toContain('role="alert"');
+        expect(errorBannerHtml).toContain('aria-live="assertive"');
+        expect(errorBannerHtml).toContain('status-banner error');
+      });
     });
 
     test.describe('LoadingIndicator', () => {
@@ -222,8 +296,10 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
           }),
         );
         expect(loadingHtml).toContain('id="credentials-loading"');
+        expect(loadingHtml).toContain('role="status"');
         expect(loadingHtml).toContain('aria-live="polite"');
         expect(loadingHtml).toContain('credentials-loading');
+        expect(loadingHtml).toContain('loading-indicator');
         expect(loadingHtml).toContain('Loading credentials...');
         expect(loadingHtml).not.toContain('hidden');
 
@@ -234,6 +310,123 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
           }),
         );
         expect(hiddenHtml).toContain('hidden');
+      });
+    });
+
+    test.describe('Checkbox', () => {
+      test('renders standalone checkbox with id and effective aria-label', () => {
+        const checkboxHtml = renderToString(
+          React.createElement(Checkbox, {
+            id: 'standalone-checkbox',
+            ariaLabel: 'Enable option',
+          }),
+        );
+        expect(checkboxHtml).toContain('id="standalone-checkbox"');
+        expect(checkboxHtml).toContain('type="checkbox"');
+        expect(checkboxHtml).toContain('aria-label="Enable option"');
+        expect(checkboxHtml).toContain('accent-sky-600');
+      });
+
+      test('associates label via htmlFor and handles disabled state', () => {
+        const labeledHtml = renderToString(
+          React.createElement(Checkbox, {
+            id: 'checkbox-enabled-proj1',
+            label: 'Enable Project',
+            disabled: true,
+          }),
+        );
+        expect(labeledHtml).toContain('id="checkbox-enabled-proj1"');
+        expect(labeledHtml).toContain('for="checkbox-enabled-proj1"');
+        expect(labeledHtml).toContain('Enable Project');
+        expect(labeledHtml).toContain('disabled=""');
+      });
+    });
+
+    test.describe('Card', () => {
+      test('renders compound Card structure with semantic elements', () => {
+        const cardHtml = renderToString(
+          React.createElement(
+            Card,
+            { id: 'test-card' },
+            React.createElement(
+              CardHeader,
+              null,
+              React.createElement(CardTitle, null, 'Project Alpha'),
+              React.createElement(CardDescription, null, 'Active pipeline configuration'),
+            ),
+            React.createElement(CardContent, null, 'Card body content'),
+            React.createElement(CardFooter, null, 'Card footer action'),
+          ),
+        );
+        expect(cardHtml).toContain('id="test-card"');
+        expect(cardHtml).toContain('card');
+        expect(cardHtml).toContain('card-header');
+        expect(cardHtml).toContain('<h3');
+        expect(cardHtml).toContain('Project Alpha');
+        expect(cardHtml).toContain('Active pipeline configuration');
+        expect(cardHtml).toContain('Card body content');
+        expect(cardHtml).toContain('Card footer action');
+      });
+
+      test('supports asChild polymorphism on Card container', () => {
+        const sectionCardHtml = renderToString(
+          React.createElement(
+            Card,
+            { asChild: true },
+            React.createElement('section', { 'aria-label': 'Metrics panel' }, 'Metrics Content'),
+          ),
+        );
+        expect(sectionCardHtml).toContain('<section');
+        expect(sectionCardHtml).toContain('aria-label="Metrics panel"');
+        expect(sectionCardHtml).toContain('card');
+      });
+    });
+
+    test.describe('IconButton', () => {
+      test('renders button with accessible name, title, and btn-icon styling', () => {
+        const iconButtonHtml = renderToString(
+          React.createElement(
+            IconButton,
+            {
+              id: 'btn-copy-logs',
+              ariaLabel: 'Copy logs to clipboard',
+              variant: 'ghost',
+              size: 'sm',
+            },
+            React.createElement('span', { className: 'lucide-copy' }),
+          ),
+        );
+        expect(iconButtonHtml).toContain('id="btn-copy-logs"');
+        expect(iconButtonHtml).toContain('aria-label="Copy logs to clipboard"');
+        expect(iconButtonHtml).toContain('title="Copy logs to clipboard"');
+        expect(iconButtonHtml).toContain('btn-icon');
+        expect(iconButtonHtml).toContain('btn-ghost');
+        expect(iconButtonHtml).toContain('btn-sm');
+      });
+
+      test('provides fallback accessible name if neither aria-label nor title is given', () => {
+        const fallbackHtml = renderToString(
+          React.createElement(IconButton, { id: 'btn-generic' }),
+        );
+        expect(fallbackHtml).toContain('aria-label="Action"');
+        expect(fallbackHtml).toContain('title="Action"');
+      });
+
+      test('renders centered spinner replacing icon and sets aria-busy on loading', () => {
+        const loadingIconHtml = renderToString(
+          React.createElement(
+            IconButton,
+            {
+              id: 'btn-reload-icon',
+              ariaLabel: 'Reload config',
+              loading: true,
+            },
+            React.createElement('span', { className: 'lucide-refresh' }),
+          ),
+        );
+        expect(loadingIconHtml).toContain('aria-busy="true"');
+        expect(loadingIconHtml).toContain('animate-spin');
+        expect(loadingIconHtml).not.toContain('lucide-refresh');
       });
     });
   });

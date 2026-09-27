@@ -13,13 +13,17 @@ export const StatusBanner = forwardRef<HTMLDivElement, StatusBannerProps>(functi
   },
   ref,
 ) {
+  const isError = variant === 'error';
+  const role = isError ? 'alert' : 'status';
+  const ariaLive = isError ? 'assertive' : 'polite';
+
   return React.createElement(
     'div',
     {
       ref,
       id,
-      role: 'status',
-      'aria-live': 'polite',
+      role,
+      'aria-live': ariaLive,
       className: cn('status-banner', variant, !visible && 'hidden', className),
       ...rest,
     },

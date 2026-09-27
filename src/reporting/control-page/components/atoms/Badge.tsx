@@ -29,11 +29,22 @@ const defaultLabelMap: Record<BadgeVariant, string> = {
 };
 
 export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(function Badge(
-  { variant, id, className, children, ...rest },
+  { variant, id, className, children, dot, ...rest },
   ref,
 ) {
   const variantClass = variantClassMap[variant] || `badge-${variant}`;
-  const content = children ?? defaultLabelMap[variant] ?? variant;
+  const baseContent = children ?? defaultLabelMap[variant] ?? variant;
+
+  const content = dot
+    ? [
+        React.createElement('span', {
+          key: 'dot',
+          className: 'inline-block w-1.5 h-1.5 rounded-full mr-1.5 bg-current opacity-80',
+          'aria-hidden': true,
+        }),
+        baseContent,
+      ]
+    : baseContent;
 
   return React.createElement(
     'span',

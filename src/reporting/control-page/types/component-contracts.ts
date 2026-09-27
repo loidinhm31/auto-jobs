@@ -22,7 +22,7 @@ export type BadgeVariant =
 
 export type BannerVariant = 'info' | 'success' | 'error';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'outline';
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
 
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'default';
 
@@ -74,27 +74,88 @@ export interface RunStateData {
 export interface BadgeProps {
   variant: BadgeVariant;
   children?: ReactNode;
-  className?: string;
-  id?: string;
+  className?: string | undefined;
+  id?: string | undefined;
+  dot?: boolean | undefined;
 }
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  disabled?: boolean;
-  loading?: boolean;
-  className?: string;
-  id?: string;
+  variant?: ButtonVariant | undefined;
+  size?: ButtonSize | undefined;
+  disabled?: boolean | undefined;
+  loading?: boolean | undefined;
+  asChild?: boolean | undefined;
+  className?: string | undefined;
+  id?: string | undefined;
   children?: ReactNode;
-  'data-key'?: string;
+  'data-key'?: string | undefined;
   [key: `data-${string}`]: unknown;
+}
+
+export interface CheckboxProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
+  id: string;
+  checked?: boolean | undefined;
+  defaultChecked?: boolean | undefined;
+  onCheckedChange?: ((checked: boolean) => void) | undefined;
+  label?: ReactNode;
+  ariaLabel?: string | undefined;
+  className?: string | undefined;
+  disabled?: boolean | undefined;
+}
+
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  asChild?: boolean | undefined;
+  className?: string | undefined;
+  children?: ReactNode;
+}
+
+export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  asChild?: boolean | undefined;
+  className?: string | undefined;
+  children?: ReactNode;
+}
+
+export interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
+  asChild?: boolean | undefined;
+  className?: string | undefined;
+  children?: ReactNode;
+}
+
+export interface CardDescriptionProps extends React.HTMLAttributes<HTMLParagraphElement> {
+  asChild?: boolean | undefined;
+  className?: string | undefined;
+  children?: ReactNode;
+}
+
+export interface CardContentProps extends React.HTMLAttributes<HTMLDivElement> {
+  asChild?: boolean | undefined;
+  className?: string | undefined;
+  children?: ReactNode;
+}
+
+export interface CardFooterProps extends React.HTMLAttributes<HTMLDivElement> {
+  asChild?: boolean | undefined;
+  className?: string | undefined;
+  children?: ReactNode;
+}
+
+export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  icon?: ReactNode;
+  ariaLabel?: string | undefined;
+  variant?: ButtonVariant | undefined;
+  size?: ButtonSize | undefined;
+  loading?: boolean | undefined;
+  tooltip?: string | undefined;
+  asChild?: boolean | undefined;
+  className?: string | undefined;
 }
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   id: string;
-  label?: string;
-  error?: string;
-  className?: string;
+  label?: string | undefined;
+  error?: string | undefined;
+  className?: string | undefined;
 }
 
 export interface SelectOption {
@@ -104,25 +165,25 @@ export interface SelectOption {
 
 export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   id: string;
-  options?: SelectOption[];
-  label?: string;
-  ariaLabel?: string;
-  className?: string;
+  options?: SelectOption[] | undefined;
+  label?: string | undefined;
+  ariaLabel?: string | undefined;
+  className?: string | undefined;
 }
 
 export interface StatusBannerProps {
   variant: BannerVariant;
   message: string;
-  visible?: boolean;
-  className?: string;
-  id?: string;
+  visible?: boolean | undefined;
+  className?: string | undefined;
+  id?: string | undefined;
 }
 
 export interface LoadingIndicatorProps {
-  visible?: boolean;
-  id?: string;
-  message?: string;
-  className?: string;
+  visible?: boolean | undefined;
+  id?: string | undefined;
+  message?: string | undefined;
+  className?: string | undefined;
 }
 
 export interface CredentialRowProps {

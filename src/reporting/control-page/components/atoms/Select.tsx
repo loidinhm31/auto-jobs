@@ -30,7 +30,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       id,
       'aria-label': effectiveAriaLabel,
       className: cn(
-        'bg-white border border-slate-300 rounded px-2 py-1 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-600',
+        'bg-white border border-slate-300 rounded px-2.5 py-1 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors',
         className,
       ),
       ...rest,
@@ -44,7 +44,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
 
   return React.createElement(
     'div',
-    { className: 'flex flex-col gap-1' },
+    { className: 'flex flex-col gap-1 w-full' },
     React.createElement(
       'label',
       { htmlFor: id, className: 'text-xs font-semibold text-slate-800' },
