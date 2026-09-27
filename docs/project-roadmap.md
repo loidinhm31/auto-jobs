@@ -8,13 +8,13 @@ Completed initiative: [Persistent project report management](../plans/260924-201
 
 Plan: [Control Page UI Atomic Redesign](../plans/260927-1011-control-ui-atomic-redesign/plan.md)
 
-**Overall status:** **IN PROGRESS** · **25%** (1 of 4 phases complete; 3 of 13 planned hours = 23%; Phase 02 next).
+**Overall status:** **IN PROGRESS** · **50%** (2 of 4 phases complete; 6 of 13 planned hours = 46%; Phase 03 next).
 
 | Phase | Status | Progress | Completed | Evidence/detail |
 |---|---|---:|---|---|
 | 01 — Design System Tokens & Base Atoms | **DONE** | **100%** | 2026-09-27 | Delivered Modern Refined Light tokens and accessible base atoms. Verification: 37 focused atom tests, 608/608 unit tests, typecheck and build passed; Cycle 2 review approved 9.8/10 ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-01-design-system-tokens-and-atoms.md), [test report](../plans/reports/Phase01TesterCycle2-260927-1153-phase-01-test-validation-after-review.md), [review](../plans/reports/code-review-260927-1157-phase-01-design-system-tokens-and-atoms-cycle-2.md)). |
-| 02 — Molecules & Form Composition | **NEXT (PLANNED)** | 0% | — | Next planned phase ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-02-molecules-and-form-composition.md)). |
-| 03 — Organisms & Layout Templates | PLANNED | 0% | — | [Phase 03](../plans/260927-1011-control-ui-atomic-redesign/phase-03-organisms-and-layout-templates.md). |
+| 02 — Molecules & Form Composition | **DONE** | **100%** | 2026-09-27 | Delivered reusable `FormField` and `PageHeader` molecules and modernized existing rows, viewers, and tables. Verification: 615/615 unit tests, typecheck, and 44/44 Control tests passed with 0 Axe violations; review approved 9.5/10 ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-02-molecules-and-form-composition.md), [review](../plans/reports/code-review-260927-1437-phase-02-molecules-and-form-composition.md)). |
+| 03 — Organisms & Layout Templates | **NEXT (PLANNED)** | 0% | — | [Phase 03](../plans/260927-1011-control-ui-atomic-redesign/phase-03-organisms-and-layout-templates.md). |
 | 04 — Page Integration & Verification | PLANNED | 0% | — | [Phase 04](../plans/260927-1011-control-ui-atomic-redesign/phase-04-page-integration-and-verification.md). |
 
 ## Control page compact project groups and cloning
@@ -212,7 +212,8 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 
 ### 0.1.0 (development) — 2026-09-27
 
-- Completed Phase 01 (Design System Tokens & Base Atoms) on 2026-09-27: delivered Modern Refined Light design tokens and accessible base atoms. Verification: 37/37 focused atom tests, 608/608 unit tests, typecheck and build passed; Cycle 2 review approved 9.8/10 with no critical or high findings. Phase 02 is next; the initiative is 1/4 phases complete (25%; 3/13 planned hours, 23%) ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-01-design-system-tokens-and-atoms.md), [test report](../plans/reports/Phase01TesterCycle2-260927-1153-phase-01-test-validation-after-review.md), [review](../plans/reports/code-review-260927-1157-phase-01-design-system-tokens-and-atoms-cycle-2.md)).
+- Completed Phase 01 (Design System Tokens & Base Atoms) on 2026-09-27: delivered Modern Refined Light design tokens and accessible base atoms. Verification: 37/37 focused atom tests, 608/608 unit tests, typecheck and build passed; Cycle 2 review approved 9.8/10 with no critical or high findings ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-01-design-system-tokens-and-atoms.md), [test report](../plans/reports/Phase01TesterCycle2-260927-1153-phase-01-test-validation-after-review.md), [review](../plans/reports/code-review-260927-1157-phase-01-design-system-tokens-and-atoms-cycle-2.md)).
+- Completed Phase 02 (Molecules & Form Composition) on 2026-09-27: delivered reusable `FormField` and `PageHeader` molecules and modernized existing molecule components. Verification: 615/615 unit tests, typecheck, and 44/44 Control tests passed with 0 Axe violations; code review approved 9.5/10. The initiative is now 2/4 phases complete (50%; 6/13 planned hours, 46%); Phase 03 — Organisms & Layout Templates is next ([phase](../plans/260927-1011-control-ui-atomic-redesign/phase-02-molecules-and-form-composition.md), [review](../plans/reports/code-review-260927-1437-phase-02-molecules-and-form-composition.md)).
 
 ### 0.1.0 (development) — 2026-09-26
 

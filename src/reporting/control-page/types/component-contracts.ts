@@ -240,3 +240,34 @@ export interface RunResultBoxProps {
   className?: string;
   id?: string;
 }
+
+export interface FormFieldProps {
+  id: string;
+  label?: ReactNode;
+  required?: boolean;
+  helperText?: ReactNode;
+  error?: ReactNode;
+  className?: string;
+  labelClassName?: string;
+  orientation?: 'vertical' | 'horizontal';
+  children?: ReactNode;
+}
+
+export interface PageHeaderProps {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  backLink?: {
+    href: string;
+    label: string;
+    id?: string;
+    className?: string;
+  };
+  breadcrumbs?: ReactNode;
+  badges?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+  containerClassName?: string;
+  id?: string;
+  titleId?: string;
+  level?: 1 | 2;
+}

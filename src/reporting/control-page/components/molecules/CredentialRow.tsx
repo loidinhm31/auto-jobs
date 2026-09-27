@@ -1,4 +1,5 @@
 import React, { forwardRef } from 'react';
+import { X } from 'lucide-react';
 import { Badge } from '../atoms/Badge.js';
 import { Button } from '../atoms/Button.js';
 import { Input } from '../atoms/Input.js';
@@ -35,9 +36,13 @@ export const CredentialRow = forwardRef<HTMLDivElement, CredentialRowProps>(
       { className: 'credential-field' },
       React.createElement('label', { htmlFor: inputId }, key),
       React.createElement(
-        Badge,
-        { variant: isConfigured ? 'configured' : 'missing' },
-        isConfigured ? 'Configured' : 'Missing',
+        'div',
+        { className: 'credential-badges' },
+        React.createElement(
+          Badge,
+          { variant: isConfigured ? 'configured' : 'missing' },
+          isConfigured ? 'Configured' : 'Missing',
+        ),
       ),
     );
 
@@ -73,6 +78,10 @@ export const CredentialRow = forwardRef<HTMLDivElement, CredentialRowProps>(
             'aria-label': `Clear ${key}`,
             onClick: handleClear,
           },
+          React.createElement(X, {
+            className: 'w-3.5 h-3.5 mr-1 inline-block',
+            'aria-hidden': true,
+          }),
           'Clear',
         ),
       );

@@ -1,4 +1,6 @@
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
+import React from 'react';
+import { KeyRound, RotateCcw, Save, Settings } from 'lucide-react';
 import { Button } from '../atoms/Button.js';
 import { Select } from '../atoms/Select.js';
 import type { ConfigSelectorBarProps } from '../../types/component-contracts.js';
@@ -30,7 +32,7 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
       'label',
       {
         htmlFor: 'config-select',
-        className: 'text-sm font-semibold text-slate-700',
+        className: 'text-sm font-semibold text-slate-700 whitespace-nowrap',
       },
       'Active Configuration:',
     );
@@ -39,8 +41,10 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
       id: 'config-select',
       ariaLabel: 'Select Configuration',
       value: activeConfig,
+      disabled: isLoading,
       onChange: (e: React.ChangeEvent<HTMLSelectElement>) => onSelectConfig(e.target.value),
       options: normalizedOptions,
+      className: 'min-w-[160px]',
     });
 
     const reloadBtn = React.createElement(
@@ -49,9 +53,12 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         type: 'button',
         id: 'btn-reload',
         variant: 'secondary',
+        disabled: isLoading,
         onClick: onReload,
+        className: 'inline-flex items-center gap-1.5',
       },
-      'Reload',
+      React.createElement(RotateCcw, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Reload'),
     );
 
     const saveBtn = React.createElement(
@@ -60,12 +67,19 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         type: 'button',
         id: 'btn-save',
         variant: 'primary',
-        disabled: !isDirty || isSaving,
+        disabled: !isDirty || isSaving || isLoading,
         loading: isSaving,
         onClick: onSave,
+        className: 'inline-flex items-center gap-1.5',
       },
-      'Save Config',
+      React.createElement(Save, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Save Config'),
     );
+
+    const divider = React.createElement('div', {
+      className: 'h-5 w-px bg-slate-300 mx-1 hidden sm:block',
+      'aria-hidden': true,
+    });
 
     const credsBtn = React.createElement(
       Button,
@@ -74,8 +88,10 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         id: 'btn-credentials',
         variant: 'secondary',
         onClick: onOpenCredentials,
+        className: 'inline-flex items-center gap-1.5',
       },
-      'Credentials',
+      React.createElement(KeyRound, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Credentials'),
     );
 
     const browserBtn = React.createElement(
@@ -85,8 +101,10 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         id: 'btn-browser-settings',
         variant: 'secondary',
         onClick: onOpenBrowserSettings,
+        className: 'inline-flex items-center gap-1.5',
       },
-      'Browser Settings',
+      React.createElement(Settings, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Browser Settings'),
     );
 
     return React.createElement(
@@ -100,6 +118,7 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
       selectElement,
       reloadBtn,
       saveBtn,
+      divider,
       credsBtn,
       browserBtn,
     );

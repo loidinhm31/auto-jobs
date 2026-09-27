@@ -141,14 +141,15 @@ flowchart LR
   `Checkbox`, compound `Card` and its `CardHeader`, `CardTitle`,
   `CardDescription`, `CardContent`, and `CardFooter`, `IconButton`, `Input`,
   `Select`, `StatusBanner`, and `LoadingIndicator`;
-  compound molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/):
-  [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8),
-  [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28),
-  [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7),
-  `ConfigProjectEditor`, `ConfigDefaultsEditor`,
-  [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23),
-  [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5),
-  [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx),
+  compound molecules ([`components/molecules/`](../src/reporting/control-page/components/molecules/):
+  [`FormField`](../src/reporting/control-page/components/molecules/FormField.tsx),
+  [`PageHeader`](../src/reporting/control-page/components/molecules/PageHeader.tsx),
+  [`CredentialRow`](../src/reporting/control-page/components/molecules/CredentialRow.tsx),
+  [`BrowserSettingRow`](../src/reporting/control-page/components/molecules/BrowserSettingRow.tsx),
+  [`ConfigSelectorBar`](../src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx),
+  `ConfigProjectEditor`, `ConfigDefaultsEditor`, [`LogViewer`](../src/reporting/control-page/components/molecules/LogViewer.tsx),
+  [`RunResultBox`](../src/reporting/control-page/components/molecules/RunResultBox.tsx), [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx),
+  [`ProjectRunsTable`](../src/reporting/control-page/components/molecules/project-runs-table.tsx), [`ProjectReportStatusView`](../src/reporting/control-page/components/molecules/ProjectReportStatusView.tsx), [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx); shared props are in [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts) and exports in [`molecules/index.ts`](../src/reporting/control-page/components/molecules/index.ts); selected actions use `lucide-react`),
   compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/):
   [`HeaderBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/HeaderBar.tsx),
   [`ProjectsGrid`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ProjectsGrid.tsx),
@@ -752,9 +753,9 @@ Phase 02 control hooks and interface contracts coverage in
 `tests/unit/control-hooks-and-types.spec.ts` verifies credential variable discovery,
 CSRF auto-injection, run poller exponential backoff and terminal state transitions,
 and end-to-end hook integration with loopback config, secrets, and run APIs.
-Phase 03 atomic-component coverage in `tests/unit/control-atomic-components.spec.ts`
-exercises `ExecutionSection`, including the worker selector's 1–4 options and
-disabled states, alongside DOM, accessibility, and data-attribute contracts.
+Control UI atomic/molecular coverage in `tests/unit/control-atomic-components.spec.ts`
+exercises the atoms, `FormField`/`PageHeader`, retained selector/row contracts,
+log and run-result rendering, and `ExecutionSection` worker options/disabled states.
 Phase 03 run-environment coverage is in
 `tests/unit/control-run-executor-secrets.spec.ts`; its fixture helpers are in
 `tests/unit/control-run-executor-fixture.ts`. It proves SecretStore injection

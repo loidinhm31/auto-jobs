@@ -11,8 +11,8 @@ browser PDF export.
 - Runtime: Node.js 24 or newer; npm 11.13.0; TypeScript 7.0.2.
 - Browser/runtime library: Playwright Test 1.62.1 with Chromium, Firefox, and
   WebKit adapters. The standard install script provisions Chromium and WebKit.
-- Control browser-PDF dependencies: `jspdf` and `jspdf-autotable` are runtime
-  dependencies bundled with the Control Page.
+- Control Page icon library: `lucide-react`; browser-PDF dependencies `jspdf`
+  and `jspdf-autotable` are runtime packages bundled with the Control Page.
 - Primary output: immutable static vulnerability reports aggregating Jenkins,
   Snyk, and SonarQube evidence.
 - Phase 2 addition: an explicit one-project Jenkins parameterized-build
@@ -70,6 +70,15 @@ browser PDF export.
   tokens and expanded the atom tier with `Checkbox`, compound `Card`, and
   `IconButton`; refactored `Button`, `Badge`, `Input`, `Select`, `StatusBanner`,
   and `LoadingIndicator`. Details below.
+- Control UI Atomic Design Phase 02 (2026-09-27): added reusable
+  [`FormField`](../src/reporting/control-page/components/molecules/FormField.tsx) for labels, required state, and helper/error messaging,
+  plus [`PageHeader`](../src/reporting/control-page/components/molecules/PageHeader.tsx) for titles, navigation, badges, and action slots.
+  Modernized `ConfigSelectorBar`, `CredentialRow`, `BrowserSettingRow`, `LogViewer`,
+  `RunResultBox`, `BuildProjectOutcomeRow`, `ProjectRunsTable`,
+  `ProjectReportStatusView`, and `ReportExportButton` with selective `lucide-react`
+  icons while preserving DOM contracts. Shared prop types are in
+  [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts);
+  [`molecules/index.ts`](../src/reporting/control-page/components/molecules/index.ts) exports the tier.
 - Phase 06 addition: removal of legacy imperative assets (`control-page.js`,
   `control-page.html`, `control-page.css`); control dashboard frontend is now
   100% React application compiled via Vite with zero legacy assets.
@@ -172,6 +181,8 @@ browser PDF export.
 | `src/reporting/report-server-control-page.ts` | Loads Vite-built HTML, CSS, and JS assets from `.runner-build/reporting/control-page/`, injects CSRF tokens, and caches assets. |
 | `src/reporting/report-server.ts` | Creates the store in control mode, passes it to the run manager, and exposes it on the server handle. |
 | `src/reporting/control-page/` | Control Dashboard frontend sources (types, utils, headless hooks, components, styles) bundled via Vite into `.runner-build/reporting/control-page/`. |
+| `src/reporting/control-page/types/component-contracts.ts`, `src/reporting/control-page/components/molecules/index.ts` | Shared atom/molecule prop contracts and public molecule exports, including `FormFieldProps` and `PageHeaderProps`. |
+| `tests/unit/control-atomic-components.spec.ts` | Static-rendered contracts for atoms, `FormField`/`PageHeader`, selector/row/log/result behavior, and `ExecutionSection`. |
 | `src/reporting/control-page/App.tsx`, `HeaderBar.tsx` | Select Dashboard, report history, or final-report view by pathname and provide history navigation. |
 | `src/reporting/project-report-route.ts` | Browser-safe matching and validation for safe final-report route IDs and exact index/directory forms. |
 | `src/reporting/project-report-body-renderer.ts` | Composes the complete escaped evidence body shared by React and static output. |
@@ -370,7 +381,7 @@ state, injected-credential execution, input wiping, and absence of test
 secrets from page HTML and run logs. The control configuration uses Chromium
 and WebKit projects, so the four browser scenarios produce eight E2E checks.
 
-### Control UI design tokens and Atomic Design components (Phase 01 redesign; Phase 03 React refactor)
+### Control UI design tokens and Atomic Design components (Phases 01–02 redesign; Phase 03 React refactor)
 
 The Control Dashboard follows an Atomic Design hierarchy: atoms provide reusable controls, molecules combine them into focused interactions, and organisms assemble dashboard sections. Existing DOM IDs, classes, data attributes, and ARIA contracts remain covered by Control UI tests.
 
@@ -388,17 +399,24 @@ The Control Dashboard follows an Atomic Design hierarchy: atoms provide reusable
    - `Select`: native select with options or children and optional associated label or accessible name.
    - `StatusBanner`: info/success/error variants; errors use `role="alert"` and assertive live announcements, other states use polite status announcements.
    - `LoadingIndicator`: hideable `role="status"` indicator with polite live announcements and a default loading message.
-3. **Compound molecules ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))**:
-   - [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): Renders `.credential-row` containing `.credential-field` (`label[for="secret-input-${key}"]` and `Badge`), and `.credential-input-group` (`<input id="secret-input-${key}" type="password" class="credential-input" autocomplete="off" />`). When `isConfigured` is true, renders `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
-   - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls with contract-specified IDs: badges (`#badge-browser-headless`, `#badge-browser-executable-path`), controls (`#browser-headless-select`, `#browser-executable-path-input`), and clear buttons (`#btn-clear-browser-headless`, `#btn-clear-browser-executable-path`).
-   - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Renders configuration selector (`<select id="config-select" aria-label="Select Configuration">`) and toolbar buttons (`#btn-reload`, `#btn-save`, `#btn-credentials`, `#btn-browser-settings`). Enforces `#btn-save` disabled when `!isDirty || isSaving || isLoading`.
-   - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`. Formats strings or `RunLogEntry[]` timestamps (`[${timestamp}] ${message}`), defaults to `"No active run."`, and auto-scrolls on log updates.
-   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Renders report results, ordered `buildProjects` rows, scalar build results for older records, and error messages in `#run-result-box`.
+3. **Compound molecules ([`components/molecules/`](../src/reporting/control-page/components/molecules/))**:
+   - [`FormField`](../src/reporting/control-page/components/molecules/FormField.tsx): Associates a label with its child ID, announces required state, and renders helper text or a `role="alert"` error; errors take precedence over helper text.
+   - [`PageHeader`](../src/reporting/control-page/components/molecules/PageHeader.tsx): Composes an `h1`/`h2` title with an optional subtitle, breadcrumb or back link, badges, and action slot.
+   - [`CredentialRow`](../src/reporting/control-page/components/molecules/CredentialRow.tsx): Renders `.credential-row` containing `.credential-field` (`label[for="secret-input-${key}"]` and `Badge`), and `.credential-input-group` (`<input id="secret-input-${key}" type="password" class="credential-input" autocomplete="off" />`). When `isConfigured` is true, renders `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
+   - [`BrowserSettingRow`](../src/reporting/control-page/components/molecules/BrowserSettingRow.tsx): Renders browser setting controls with contract-specified IDs: badges (`#badge-browser-headless`, `#badge-browser-executable-path`), controls (`#browser-headless-select`, `#browser-executable-path-input`), and clear buttons (`#btn-clear-browser-headless`, `#btn-clear-browser-executable-path`).
+   - [`ConfigSelectorBar`](../src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx): Renders the configuration selector and action buttons, preserves their IDs, and gates Save on dirty/loading/saving state; its actions use selective Lucide icons.
+   - [`LogViewer`](../src/reporting/control-page/components/molecules/LogViewer.tsx): Renders the accessible `#run-logs` log, formats strings or timestamped entries, defaults to `"No active run."`, autoscrolls on updates, and offers a copy action.
+   - [`RunResultBox`](../src/reporting/control-page/components/molecules/RunResultBox.tsx): Renders report results, ordered `buildProjects` rows, scalar build results for older records, and error messages in `#run-result-box`.
+   - [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx): Shows project identity, state/result, build number, valid build link, stages, and errors; omits invalid or empty links.
+   - [`ProjectRunsTable`](../src/reporting/control-page/components/molecules/project-runs-table.tsx): Displays paginated run history with local report/manifest links and optional per-run deletion actions.
+   - [`ProjectReportStatusView`](../src/reporting/control-page/components/molecules/ProjectReportStatusView.tsx): Presents loading, missing, invalid, and load-error states; renders no status content when the report is ready.
+   - [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx): Enables export only for a ready report and exposes progress and accessible error feedback.
+   - `types/component-contracts.ts` defines typed molecule props; `components/molecules/index.ts` re-exports the tier. Selected actions and status states use `lucide-react` icons.
 
 4. **Organism Assembly and Phase 06 Legacy Cleanup**:
    - Compound organisms ([`components/organisms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/)): `HeaderBar`, `ProjectsGrid`, `ProjectCard`, `ExecutionSection`, `RunStatusCard`, `RawJsonSection`, `CredentialsDialog`, and `BrowserSettingsDialog`; the per-card build-confirmation flow was removed in Phase 03.
    - Phase 06 cleanup removed all legacy imperative assets (`control-page.js`, `control-page.html`, `control-page.css`). The application is 100% React compiled into `.runner-build/reporting/control-page/` by Vite.
-   - `tests/unit/control-atomic-components.spec.ts` exercises atom and molecule contracts, including the Phase 01 atoms, plus action-bar and multi-result behavior.
+   - `tests/unit/control-atomic-components.spec.ts` statically renders the Phase 01 atoms, `FormField`/`PageHeader`, retained selector/credential/browser contracts, log/results, and `ExecutionSection` action and worker states.
 
 
 ### Control Dashboard config form builder (integrated; Active Config Phase 02–04)
@@ -554,7 +572,7 @@ set `Cache-Control: no-store`.
 | `tests/unit/project-group-validation.spec.ts`, `project-group-transitions.spec.ts`, `config-document-editor-groups.spec.ts` | Group schema/reference boundaries, immutable membership transitions, and document replacement versus edit/Save revision behavior. |
 | `tests/unit/clone-project-draft.spec.ts` | Project draft cloning, suffix-aware bounded ID and name generation, nested data independence, capacity guards, and replacementRevision reset. |
 | `tests/unit/control-project-transitions.spec.ts` | Group and clone transition boundaries: membership move/delete invariants, clone identity bounds, nested mutation independence, and capacity/collision guards. |
-| `tests/unit/control-atomic-components.spec.ts` | Atomic/molecular contracts for the shared Workers/action bar and ordered multi-project plus scalar-fallback result presentation. |
+| `tests/unit/control-atomic-components.spec.ts` | Static-rendered contracts for atoms, `FormField`/`PageHeader`, preserved row/selector DOM, logs/results, and `ExecutionSection`. |
 | `src/templates/template-fixture-loader.ts` | Reads nine files and assembles synthetic URLs and rewritten HTML. |
 | `src/templates/template-fixture-routes.ts` | Exact response lookup, login/SonarQube/build POST exceptions, and sanitized miss recording. |
 | `tests/unit/report-server-secret-store.spec.ts` | Phase 01 backend contract and control-mode wiring coverage. |

@@ -90,7 +90,8 @@ export function BuildProjectOutcomeRow({ project, className }: BuildProjectOutco
           href: targetUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
-          className: 'text-emerald-700 font-semibold underline hover:text-emerald-800 text-xs',
+          className:
+            'text-emerald-700 font-semibold underline hover:text-emerald-800 text-xs',
         },
         'Open Jenkins Build',
       ),

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, ExternalLink, FileText, Trash2 } from 'lucide-react';
 import type { AggregateRunSummary } from '../../types/report-management-types.js';
 import { localManifestHref, localReportHref } from '../../../report-links.js';
 import { stateClass, stateLabel } from '../../../report-view-model.js';
@@ -13,47 +14,68 @@ export interface ProjectRunsTableProps {
 
 const RUNS_PER_PAGE = 20;
 
-function renderArtifactLinks(run: AggregateRunSummary) {
+function renderArtifactLinks(run: AggregateRunSummary): React.ReactNode {
   const reportHref = localReportHref(run.reportPath);
   const manifestHref = localManifestHref(run.manifestPath);
 
   const links: React.ReactNode[] = [];
   if (reportHref) {
     links.push(
-      <a
-        key="report"
-        href={reportHref}
-        className="text-sky-700 hover:text-sky-900 underline"
-      >
-        Open report
-      </a>,
+      React.createElement(
+        'a',
+        {
+          key: 'report',
+          href: reportHref,
+          className:
+            'inline-flex items-center gap-1 text-sky-700 hover:text-sky-900 underline font-medium text-xs',
+        },
+        React.createElement(ExternalLink, { className: 'w-3 h-3', 'aria-hidden': true }),
+        'Open report',
+      ),
     );
   }
   if (manifestHref) {
     links.push(
-      <a
-        key="manifest"
-        href={manifestHref}
-        className="text-sky-700 hover:text-sky-900 underline"
-      >
-        Manifest
-      </a>,
+      React.createElement(
+        'a',
+        {
+          key: 'manifest',
+          href: manifestHref,
+          className:
+            'inline-flex items-center gap-1 text-sky-700 hover:text-sky-900 underline font-medium text-xs',
+        },
+        React.createElement(FileText, { className: 'w-3 h-3', 'aria-hidden': true }),
+        'Manifest',
+      ),
     );
   }
 
   if (links.length === 0) {
-    return <span className="text-slate-400">No local artifact link</span>;
+    return React.createElement(
+      'span',
+      { className: 'text-slate-400 text-xs italic' },
+      'No local artifact link',
+    );
   }
 
-  return (
-    <span className="flex items-center gap-2">
-      {links.map((link, idx) => (
-        <span key={idx} className="flex items-center gap-2">
-          {idx > 0 && <span className="text-slate-300">·</span>}
-          {link}
-        </span>
-      ))}
-    </span>
+  const items: React.ReactNode[] = [];
+  links.forEach((link, idx) => {
+    if (idx > 0) {
+      items.push(
+        React.createElement(
+          'span',
+          { key: `sep-${idx}`, className: 'text-slate-300', 'aria-hidden': true },
+          '·',
+        ),
+      );
+    }
+    items.push(link);
+  });
+
+  return React.createElement(
+    'span',
+    { className: 'flex items-center gap-2 flex-wrap' },
+    ...items,
   );
 }
 
@@ -67,105 +89,196 @@ export function ProjectRunsTable({ runs, projectName, onDeleteRun }: ProjectRuns
   }, [totalPages]);
 
   if (totalRuns === 0) {
-    return (
-      <p className="empty-state text-sm text-slate-500 my-4 italic">
-        No validated historical run manifest.
-      </p>
+    return React.createElement(
+      'p',
+      { className: 'empty-state text-sm text-slate-500 my-4 italic' },
+      'No validated historical run manifest.',
     );
   }
 
   const startIndex = (currentPage - 1) * RUNS_PER_PAGE;
   const visibleRuns = runs.slice(startIndex, startIndex + RUNS_PER_PAGE);
 
-  return (
-    <div className="project-runs-container my-4">
-      <div className="table-scroll overflow-x-auto">
-        <table className="compact-table w-full text-left border-collapse text-sm">
-          <caption className="sr-only">Historical runs for {projectName}</caption>
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-slate-700 font-semibold">
-              <th scope="col" className="p-2.5">Run</th>
-              <th scope="col" className="p-2.5">Job ID</th>
-              <th scope="col" className="p-2.5">Branch</th>
-              <th scope="col" className="p-2.5">State</th>
-              <th scope="col" className="p-2.5">Artifacts</th>
-              <th scope="col" className="p-2.5 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRuns.map((run: AggregateRunSummary) => (
-              <tr key={run.runId} className="border-b border-slate-100 hover:bg-slate-50">
-                <th scope="row" className="p-2.5 font-normal">
-                  <code className="text-xs font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded">
-                    {run.runId}
-                  </code>
-                </th>
-                <td className="p-2.5 text-slate-600">
-                  {run.jobId ?? <span className="text-slate-400">Unavailable</span>}
-                </td>
-                <td className="p-2.5 text-slate-600">
-                  {run.branch ?? <span className="text-slate-400">Unavailable</span>}
-                </td>
-                <td className="p-2.5">
-                  <span className={cn('state-badge', stateClass(run.state))}>
-                    {stateLabel(run.state)}
-                  </span>
-                </td>
-                <td className="p-2.5">
-                  {renderArtifactLinks(run)}
-                  {run.warnings.length > 0 ? (
-                    <ul className="inline-warnings text-xs text-amber-700 list-disc list-inside mt-1">
-                      {run.warnings.map((warning: string, wIdx: number) => (
-                        <li key={wIdx}>{warning}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </td>
-                <td className="p-2.5 text-right">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    id={`delete-run-${run.runId}-btn`}
-                    onClick={() => onDeleteRun?.(run.runId)}
-                    aria-label={`Delete report run ${run.runId} for ${projectName}`}
-                  >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  const captionElement = React.createElement(
+    'caption',
+    { className: 'sr-only' },
+    `Historical runs for ${projectName}`,
+  );
 
-      {totalPages > 1 ? (
-        <nav
-          aria-label={`Pagination for ${projectName}`}
-          className="pagination flex justify-between items-center pt-3 border-t border-slate-200 text-sm"
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            aria-label={`Previous page for ${projectName}`}
-          >
-            Previous
-          </Button>
-          <span className="text-slate-600 font-medium">
-            Page {currentPage} of {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={currentPage >= totalPages}
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            aria-label={`Next page for ${projectName}`}
-          >
-            Next
-          </Button>
-        </nav>
-      ) : null}
-    </div>
+  const tableHeader = React.createElement(
+    'thead',
+    null,
+    React.createElement(
+      'tr',
+      { className: 'border-b border-slate-200 bg-slate-50 text-slate-700 font-semibold' },
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'Run'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'Job ID'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'Branch'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'State'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-left font-semibold' }, 'Artifacts'),
+      React.createElement('th', { scope: 'col', className: 'p-2.5 text-right font-semibold' }, 'Actions'),
+    ),
+  );
+
+  const rows = visibleRuns.map((run: AggregateRunSummary) => {
+    const runIdCell = React.createElement(
+      'th',
+      { scope: 'row', className: 'p-2.5 font-normal text-left' },
+      React.createElement(
+        'code',
+        { className: 'text-xs font-mono text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200' },
+        run.runId,
+      ),
+    );
+
+    const jobIdCell = React.createElement(
+      'td',
+      { className: 'p-2.5 text-slate-600' },
+      run.jobId ?? React.createElement('span', { className: 'text-slate-400' }, 'Unavailable'),
+    );
+
+    const branchCell = React.createElement(
+      'td',
+      { className: 'p-2.5 text-slate-600 font-mono text-xs' },
+      run.branch ?? React.createElement('span', { className: 'text-slate-400 font-sans' }, 'Unavailable'),
+    );
+
+    const stateCell = React.createElement(
+      'td',
+      { className: 'p-2.5' },
+      React.createElement(
+        'span',
+        { className: cn('state-badge', stateClass(run.state)) },
+        stateLabel(run.state),
+      ),
+    );
+
+    const artifactsChildren: React.ReactNode[] = [renderArtifactLinks(run)];
+    if (run.warnings.length > 0) {
+      artifactsChildren.push(
+        React.createElement(
+          'ul',
+          {
+            key: 'warnings',
+            className: 'inline-warnings text-xs text-amber-700 list-disc list-inside mt-1',
+          },
+          run.warnings.map((warning: string, wIdx: number) =>
+            React.createElement('li', { key: wIdx }, warning),
+          ),
+        ),
+      );
+    }
+
+    const artifactsCell = React.createElement(
+      'td',
+      { className: 'p-2.5' },
+      ...artifactsChildren,
+    );
+
+    const actionsCell = React.createElement(
+      'td',
+      { className: 'p-2.5 text-right' },
+      React.createElement(
+        Button,
+        {
+          variant: 'danger',
+          size: 'sm',
+          id: `delete-run-${run.runId}-btn`,
+          onClick: () => onDeleteRun?.(run.runId),
+          'aria-label': `Delete report run ${run.runId} for ${projectName}`,
+          className: 'inline-flex items-center gap-1',
+        },
+        React.createElement(Trash2, { className: 'w-3 h-3', 'aria-hidden': true }),
+        React.createElement('span', null, 'Delete'),
+      ),
+    );
+
+    return React.createElement(
+      'tr',
+      {
+        key: run.runId,
+        className: 'border-b border-slate-100 hover:bg-slate-50 transition-colors',
+      },
+      runIdCell,
+      jobIdCell,
+      branchCell,
+      stateCell,
+      artifactsCell,
+      actionsCell,
+    );
+  });
+
+  const tableBody = React.createElement('tbody', null, ...rows);
+
+  const tableElement = React.createElement(
+    'table',
+    { className: 'compact-table w-full text-left border-collapse text-sm' },
+    captionElement,
+    tableHeader,
+    tableBody,
+  );
+
+  const scrollWrapper = React.createElement(
+    'div',
+    { className: 'table-scroll overflow-x-auto rounded border border-slate-200' },
+    tableElement,
+  );
+
+  const containerChildren: React.ReactNode[] = [scrollWrapper];
+
+  if (totalPages > 1) {
+    const prevButton = React.createElement(
+      Button,
+      {
+        variant: 'secondary',
+        size: 'sm',
+        disabled: currentPage <= 1,
+        onClick: () => setCurrentPage((p) => Math.max(1, p - 1)),
+        'aria-label': `Previous page for ${projectName}`,
+        className: 'inline-flex items-center gap-1',
+      },
+      React.createElement(ChevronLeft, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+      React.createElement('span', null, 'Previous'),
+    );
+
+    const pageIndicator = React.createElement(
+      'span',
+      { className: 'text-slate-600 font-medium text-xs' },
+      `Page ${currentPage} of ${totalPages}`,
+    );
+
+    const nextButton = React.createElement(
+      Button,
+      {
+        variant: 'secondary',
+        size: 'sm',
+        disabled: currentPage >= totalPages,
+        onClick: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+        'aria-label': `Next page for ${projectName}`,
+        className: 'inline-flex items-center gap-1',
+      },
+      React.createElement('span', null, 'Next'),
+      React.createElement(ChevronRight, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
+    );
+
+    const paginationNav = React.createElement(
+      'nav',
+      {
+        'aria-label': `Pagination for ${projectName}`,
+        className:
+          'pagination flex justify-between items-center pt-3 border-t border-slate-200 text-sm',
+      },
+      prevButton,
+      pageIndicator,
+      nextButton,
+    );
+
+    containerChildren.push(paginationNav);
+  }
+
+  return React.createElement(
+    'div',
+    { className: 'project-runs-container my-4' },
+    ...containerChildren,
   );
 }

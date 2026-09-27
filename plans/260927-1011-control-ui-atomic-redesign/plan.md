@@ -23,13 +23,13 @@ Comprehensive UI refactoring and modern aesthetic overhaul of the Control Page i
 
 ## Implementation Phases
 
-**Overall status:** **IN PROGRESS** — 1 of 4 phases complete (25% by phase count; 3 of 13 planned hours = 23%). **Next planned phase:** Phase 02 — Molecules & Form Composition.
+**Overall status:** **IN PROGRESS** — 2 of 4 phases complete (50% by phase count; 6 of 13 planned hours = 46%). **Next planned phase:** Phase 03 — Organisms & Layout Templates.
 
 | # | Phase | Status | Effort | Phase Plan Link |
 |---|-------|--------|--------|-----------------|
 | 01 | Design System Tokens & Base Atoms | **DONE** (2026-09-27) | 3h | [Phase 01: Atoms](./phase-01-design-system-tokens-and-atoms.md) |
-| 02 | Molecules & Form Composition | **NEXT (PLANNED)** | 3h | [Phase 02: Molecules](./phase-02-molecules-and-form-composition.md) |
-| 03 | Organisms & Layout Templates | Planned | 4h | [Phase 03: Organisms & Templates](./phase-03-organisms-and-layout-templates.md) |
+| 02 | Molecules & Form Composition | **DONE** (2026-09-27) | 3h | [Phase 02: Molecules](./phase-02-molecules-and-form-composition.md) |
+| 03 | Organisms & Layout Templates | **NEXT (PLANNED)** | 4h | [Phase 03: Organisms & Templates](./phase-03-organisms-and-layout-templates.md) |
 | 04 | Page Integration & Verification | Planned | 3h | [Phase 04: Integration & Verification](./phase-04-page-integration-and-verification.md) |
 
 ## Dependencies & Precedence

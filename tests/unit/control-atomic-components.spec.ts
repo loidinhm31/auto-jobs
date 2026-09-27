@@ -19,6 +19,8 @@ import {
   LoadingIndicator,
 } from '../../src/reporting/control-page/components/atoms/index.js';
 import {
+  FormField,
+  PageHeader,
   CredentialRow,
   BrowserSettingRow,
   ConfigSelectorBar,
@@ -432,6 +434,133 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
   });
 
   test.describe('Molecules', () => {
+    test.describe('FormField', () => {
+      test('renders label with htmlFor matching field id and child element', () => {
+        const html = renderToString(
+          React.createElement(
+            FormField,
+            { id: 'user-field', label: 'Username' },
+            React.createElement('input', { id: 'user-field', type: 'text' }),
+          ),
+        );
+        expect(html).toContain('for="user-field"');
+        expect(html).toContain('Username');
+        expect(html).toContain('id="user-field"');
+        expect(html).toContain('form-field');
+      });
+
+      test('renders required indicator when required is true', () => {
+        const html = renderToString(
+          React.createElement(
+            FormField,
+            { id: 'email-field', label: 'Email', required: true },
+            React.createElement('input', { id: 'email-field', type: 'email' }),
+          ),
+        );
+        expect(html).toContain('*');
+        expect(html).toContain('(required)');
+      });
+
+      test('renders error with role="alert" and id error suffix', () => {
+        const html = renderToString(
+          React.createElement(
+            FormField,
+            {
+              id: 'password-field',
+              label: 'Password',
+              error: 'Password must be at least 8 characters',
+            },
+            React.createElement('input', { id: 'password-field', type: 'password' }),
+          ),
+        );
+        expect(html).toContain('id="password-field-error"');
+        expect(html).toContain('role="alert"');
+        expect(html).toContain('Password must be at least 8 characters');
+      });
+
+      test('renders helper text when provided and suppresses helper text when error is present', () => {
+        const withHelper = renderToString(
+          React.createElement(
+            FormField,
+            {
+              id: 'host-field',
+              label: 'Host',
+              helperText: 'Enter hostname or IP address',
+            },
+            React.createElement('input', { id: 'host-field' }),
+          ),
+        );
+        expect(withHelper).toContain('id="host-field-helper"');
+        expect(withHelper).toContain('Enter hostname or IP address');
+
+        const withBoth = renderToString(
+          React.createElement(
+            FormField,
+            {
+              id: 'host-field',
+              label: 'Host',
+              helperText: 'Enter hostname or IP address',
+              error: 'Invalid hostname format',
+            },
+            React.createElement('input', { id: 'host-field' }),
+          ),
+        );
+        expect(withBoth).toContain('id="host-field-error"');
+        expect(withBoth).toContain('Invalid hostname format');
+        expect(withBoth).not.toContain('Enter hostname or IP address');
+      });
+    });
+
+    test.describe('PageHeader', () => {
+      test('renders title with default h1 and custom h2 level', () => {
+        const h1Html = renderToString(
+          React.createElement(PageHeader, {
+            title: 'Control Dashboard',
+          }),
+        );
+        expect(h1Html).toContain('<h1');
+        expect(h1Html).toContain('Control Dashboard');
+
+        const h2Html = renderToString(
+          React.createElement(PageHeader, {
+            title: 'Reports Overview',
+            level: 2,
+          }),
+        );
+        expect(h2Html).toContain('<h2');
+        expect(h2Html).toContain('Reports Overview');
+      });
+
+      test('renders back link with icon, label, and href', () => {
+        const html = renderToString(
+          React.createElement(PageHeader, {
+            title: 'Project Details',
+            backLink: {
+              id: 'back-link',
+              href: '/reports',
+              label: 'Back to Reports',
+            },
+          }),
+        );
+        expect(html).toContain('id="back-link"');
+        expect(html).toContain('href="/reports"');
+        expect(html).toContain('Back to Reports');
+      });
+
+      test('renders subtitle and action slot', () => {
+        const html = renderToString(
+          React.createElement(PageHeader, {
+            title: 'Settings',
+            subtitle: 'Manage system-wide configuration',
+            actions: React.createElement('button', { id: 'btn-export' }, 'Export'),
+          }),
+        );
+        expect(html).toContain('Manage system-wide configuration');
+        expect(html).toContain('id="btn-export"');
+        expect(html).toContain('Export');
+      });
+    });
+
     test.describe('CredentialRow', () => {
       test('renders exact contract DOM structure for unconfigured credential', () => {
         const rowHtml = renderToString(

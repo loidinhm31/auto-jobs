@@ -1,4 +1,5 @@
 import React, { forwardRef } from 'react';
+import { X } from 'lucide-react';
 import { Badge } from '../atoms/Badge.js';
 import { Button } from '../atoms/Button.js';
 import { Input } from '../atoms/Input.js';
@@ -111,6 +112,7 @@ export const BrowserSettingRow = forwardRef<HTMLDivElement, BrowserSettingRowPro
       React.createElement(
         Button,
         {
+          key: 'clear-btn',
           type: 'button',
           id: meta.clearBtnId,
           variant: 'secondary',
@@ -120,6 +122,10 @@ export const BrowserSettingRow = forwardRef<HTMLDivElement, BrowserSettingRowPro
           'aria-label': `Clear ${key}`,
           onClick: handleClear,
         },
+        React.createElement(X, {
+          className: 'w-3.5 h-3.5 mr-1 inline-block',
+          'aria-hidden': true,
+        }),
         'Clear',
       ),
     );

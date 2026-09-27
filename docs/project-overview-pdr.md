@@ -703,7 +703,7 @@ require the environment variables named by project configuration.
 | Run-executor environment injection | `src/reporting/report-server-run-manager.ts`, `src/reporting/report-server-run-executor.ts`, `src/reporting/report-server.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Template fixture loading and routes | `src/templates/template-fixture-*.ts`, `src/templates/template-report-fixture.ts` | [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Build fixture contract | `templates/jenkins-template/template-build.html`, `tests/unit/template-build-fixture.spec.ts`, `tests/e2e/template-auto-build.spec.ts` | [architecture](./architecture.md) |
-| Control actions and results | `ExecutionSection`, `DashboardPage`, `ProjectCard`, `ProjectsGrid`, `RunResultBox`, `BuildProjectOutcomeRow`; `tests/unit/control-atomic-components.spec.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
+| Control UI atoms, molecules, and actions | `FormField`, `PageHeader`, `ConfigSelectorBar`, `CredentialRow`, `BrowserSettingRow`, `LogViewer`, `RunResultBox`, `BuildProjectOutcomeRow`, `ProjectRunsTable`, `ProjectReportStatusView`, `ReportExportButton`, `ExecutionSection`; `tests/unit/control-atomic-components.spec.ts` | [architecture](./architecture.md), [system architecture](./system-architecture.md), [release gates](./release-gates.md) |
 | Release evidence | `tests/unit/jenkins-build-trigger.spec.ts`, `tests/unit/auto-build-runner.spec.ts`, `tests/unit/sequential-runner.spec.ts`, `tests/unit/control-run-executor-secrets.spec.ts`, `tests/unit/control-secret-store.spec.ts`, `tests/unit/control-secrets-api.spec.ts`, `tests/e2e/control-page.spec.ts`, and Phase 3 fixture tests | [release gates](./release-gates.md) |
 | Side-effect policy | `src/jenkins/build-trigger.ts`, `src/project/auto-build-runner.ts` | [architecture](./architecture.md), [release gates](./release-gates.md) |
 
@@ -758,7 +758,7 @@ report CLI still has no production auto-build command.
   history, independent 20-run pagination, and confirmation-gated project
   deletion; persisted report HTML remains static and read-only.
 
-- Focused `control-atomic-components.spec.ts` passed 25/25.
+- Focused `control-atomic-components.spec.ts` passed 44/44 on 2026-09-27 (component-level evidence; not the project-wide release gate).
 - Completed Phase 04 Testing and verification on 2026-09-24; `npm run test:release` passed 439/439, typecheck/build passed, and code review approved 9.3/10 ([phase plan](../plans/260924-1158-control-page-parallel-auto-build/phase-04-testing-and-verification.md), [test report](../plans/reports/phase04-tester-260924-1548-phase04-testing-and-verification.md), [review](../plans/reports/code-review-260924-1552-phase-04-testing-and-verification.md)).
 
 ### 0.1.0 (development) — 2026-09-03

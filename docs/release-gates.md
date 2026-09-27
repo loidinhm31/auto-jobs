@@ -436,7 +436,7 @@ The `control-hooks-and-types.spec.ts` suite verifies:
 - `useRunPoller` executes exponential backoff on transient errors up to 5 retries, terminates on fatal 4xx errors or terminal states (`succeeded`, `failed`, `submission-unknown`), and cleans up timers and `AbortController` handles;
 - Full lifecycle end-to-end against live loopback control endpoints: config manager list/load/ETag-conflict/save, credential manager presence/patch/delete, browser settings presence/update/clear, and run poller `202 Accepted` execution lifecycle.
 
-### Phase 03 control atomic components gate
+### Control UI atomic and molecular component gate
 
 Run the focused atomic and molecular component contract suite:
 
@@ -446,23 +446,17 @@ node scripts/run-playwright.mjs playwright test \
   --config=playwright.unit.config.ts
 ```
 
-The [`control-atomic-components.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/unit/control-atomic-components.spec.ts) suite verifies the atomic and molecular component contracts:
-- [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): strictly renders required variant classes (`badge-idle`, `badge-queued`, `badge-running`, `badge-succeeded`, `badge-failed`, `badge-unknown` for `unknown` and `submission-unknown`), credential states (`badge-configured`, `badge-missing`), and browser unconfigured state (`badge-missing` class with `"Not Set"` text);
-- [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): renders variant classes (`btn-primary`, `btn-secondary`, `btn-danger`, `btn-outline`), default `type="button"`, compact `btn-sm` sizing, disabled state, and loading spinner;
-- [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): associates label via `htmlFor`, displays error with `role="alert"` and `aria-invalid="true"`, and defaults `type="password"` with `autoComplete="off"`;
-- [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): renders native `<select>` with options array, value binding, and `aria-label`;
-- [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): renders `role="status"` and `aria-live="polite"`, variant classes (`info`, `success`, `error`), and toggles `.hidden` on visibility changes;
-- [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): renders `aria-live="polite"`, `.credentials-loading` class, and `.hidden` toggle;
-- [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): verifies exact DOM structure (`.credential-row`, `label[for="secret-input-${key}"]`, `Badge`, password `<input id="secret-input-${key}" class="credential-input" autocomplete="off">`, and `.btn-clear-credential[data-key="${key}"]` rendered only when configured);
-- [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): verifies exact element IDs for headless selection (`#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless`) and binary path input (`#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path`);
-- [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): verifies element IDs (`#config-select`, `#btn-reload`, `#btn-save`, `#btn-credentials`, `#btn-browser-settings`) and ensures `#btn-save` is disabled when not dirty;
-- [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): renders `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, handles string logs and timestamped `RunLogEntry[]` entries, and defaults to `"No active run."`;
-- [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): keeps `#run-result-box`, renders report results and ordered `buildProjects` rows, and preserves scalar build-result fallback and errors.
-- [`BuildProjectOutcomeRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/build-project-outcome-row.tsx): renders each project's identity, result/state badge, optional build number/link, stages, and error without an empty link.
-- [`ExecutionSection`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/organisms/ExecutionSection.tsx): verifies the exact all-enabled action labels/IDs, one `Workers` selector (`#select-workers`, 1–4), and disabled states.
+`tests/unit/control-atomic-components.spec.ts` verifies the current component contracts:
+- Atoms: `Badge`, `Button`, `Input`, `Select`, `StatusBanner`, `LoadingIndicator`, `Checkbox`, compound `Card`, and `IconButton`.
+- `FormField`: associated label, required announcement, `role="alert"` error and ID, and helper-text suppression when an error is present.
+- `PageHeader`: default/custom heading levels, back-link destination/label, subtitle, and action slot.
+- `CredentialRow`, `BrowserSettingRow`, and `ConfigSelectorBar`: retained IDs/classes, configuration states, clear controls, and dirty-state Save gating.
+- `LogViewer`: `#run-logs` log semantics, empty state, plain-string logs, and timestamped entries.
+- `RunResultBox`: report/build links, error messages, ordered per-project outcomes, stage details, and omission of empty build links.
+- `ExecutionSection`: all-enabled action labels/IDs, the 1–4 Workers selector, and disabled states.
 
-The 2026-09-24 focused run passed 25/25 checks; this is component-level proof,
-not the project-wide release gate.
+The focused run on 2026-09-27 passed 44/44 checks; this is component-level
+proof, not the project-wide release gate.
 
 ### Phase 04 credential dialog gate
 

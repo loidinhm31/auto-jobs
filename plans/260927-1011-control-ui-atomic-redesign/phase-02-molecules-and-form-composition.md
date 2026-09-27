@@ -12,8 +12,9 @@
 - Date: 2026-09-27
 - Description: Refactor and standardize composite UI molecules in `components/molecules/`, introducing reusable `FormField` and `PageHeader` molecules, and modernizing existing rows, tables, viewers, and action bars.
 - Priority: P2
-- Implementation Status: Pending
-- Review Status: Not Started
+- Implementation Status: DONE (100%)
+- Review Status: Approved (Score: 9.5/10)
+- Completed: 2026-09-27
 
 ## Key Insights
 - Current form fields interweave label, input, and error logic inside atoms or inline in organisms, creating duplication.
@@ -86,16 +87,16 @@ components/molecules/
 10. Verify TypeScript compilation and Vite build.
 
 ## Todo List
-- [ ] Create `FormField.tsx` molecule
-- [ ] Create `PageHeader.tsx` molecule
-- [ ] Modernize `ConfigSelectorBar.tsx`
-- [ ] Modernize `CredentialRow.tsx` and preserve test contracts
-- [ ] Modernize `BrowserSettingRow.tsx` and preserve badges
-- [ ] Modernize `LogViewer.tsx` with terminal styling and copy action icon
-- [ ] Modernize `RunResultBox.tsx` and `BuildProjectOutcomeRow.tsx`
-- [ ] Modernize `ProjectRunsTable.tsx` and `ReportExportButton.tsx` with selective Lucide icons
-- [ ] Update `components/molecules/index.ts`
-- [ ] Verify build and typecheck
+- [x] Create `FormField.tsx` molecule
+- [x] Create `PageHeader.tsx` molecule
+- [x] Modernize `ConfigSelectorBar.tsx`
+- [x] Modernize `CredentialRow.tsx` and preserve test contracts
+- [x] Modernize `BrowserSettingRow.tsx` and preserve badges
+- [x] Modernize `LogViewer.tsx` with terminal styling and copy action icon
+- [x] Modernize `RunResultBox.tsx` and `BuildProjectOutcomeRow.tsx`
+- [x] Modernize `ProjectRunsTable.tsx` and `ReportExportButton.tsx` with selective Lucide icons
+- [x] Update `components/molecules/index.ts`
+- [x] Verify build and typecheck
 
 ## Success Criteria
 - All molecules cleanly compose atoms and render with Modern Refined Light styling.
