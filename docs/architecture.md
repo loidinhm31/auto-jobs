@@ -22,16 +22,16 @@ fixtures, aggregate/deletion, and the final-report viewer. [Phase 01](../plans/2
 [PDF export](./report-pipeline.md#client-side-pdf-export) shipped and passed Phase 03 verification on 2026-09-26: browser-side jsPDF/AutoTable composition from the validated React report DOM; persisted static report output remains unchanged.
 See [multi-project configuration](./multi-project-configuration.md) for field contracts and [release gates](./release-gates.md) for validation.
 
-Phase 01 added schema-v1 matrix fields (`jobColumns`, project `jobs`, and
-`selectedJobColumns`) plus pure `projectLegacyMatrixDocument`; Phase 02 adds
-the flat spreadsheet editor. `useConfigManager` projects legacy documents in
-memory on Control Page load and after save; loading alone does not rewrite the
-file, while explicit Save persists matrix fields. The runtime loader still
-normalizes to scalar `jobUrl`, and the report CLI executes that target, not
-selected columns. The current Control run request carries mode/config identity,
-not row/column coordinates, so matrix selections do not yet drive execution;
-multi-job API/runner work belongs to Phase 04. See the
-[matrix contract](./multi-project-configuration.md#job-matrix-configuration-expanded-schema-v1).
+Phase 01 defined schema-v1 matrix fields and pure legacy projection; Phase 02 added
+the flat editor. Phase 03 keeps the saved document as sole editor state: pure
+transitions cover projects, columns, cells, selections, and primary URL mirrors.
+Clones copy URL cells, reset `selectedJobColumns` to `[]`, and start disabled
+and ungrouped; edits sync raw JSON, validation, and dirty state.
+schema errors are extracted to `utils/config-document-validation.ts`.
+`replacementRevision` increments on successful load/switch or valid raw Apply,
+not normal edits or Save acknowledgement. Loads use sequence guards; complete
+Saves use `If-Match`; 409/412 preserve unsaved edits. Runtime/report CLI still
+execute scalar `jobUrl`; matrix execution remains Phase 04 (see [contract](./multi-project-configuration.md#job-matrix-configuration-expanded-schema-v1)).
 
 ## Scope and operating modes
 
@@ -140,10 +140,13 @@ flowchart LR
 - `src/reporting/report-server-control.ts` validates Host, preflights final-
   report indexes, and serves a control shell before static report fallback.
 - `src/reporting/control-page/` contains the Control Dashboard React frontend:
-  `types/index.ts` re-exports schema contracts; `useConfigManager.ts` and
-  `useConfigDocumentEditor.ts` own config I/O, structured/raw-JSON sync,
-  validation, dirty state, and ETag-protected saves. Immutable table edits live
-  in `hooks/matrix-document-transitions.ts`.
+  `types/index.ts` re-exports schema contracts; `useConfigManager.ts` owns config
+  I/O, sequence-guarded loads, `If-Match` saves, and conflict recovery.
+  `useConfigDocumentEditor.ts` owns shared document/raw-JSON/dirty/replacement
+  state; schema issue extraction lives in `utils/config-document-validation.ts`.
+  Project/default and matrix transition modules own pure edits, dispatched by
+  `use-matrix-editor-handlers.ts`; legacy group operations stay isolated in
+  `use-legacy-group-handlers.ts`.
   - [`ProjectsJobMatrix`](../src/reporting/control-page/components/organisms/projects-job-matrix.tsx)
     renders one row per project with enabled, ID/name, shared job columns, URL
     cells, fixed per-row target checkboxes, and row actions. Its toolbar adds
@@ -160,11 +163,12 @@ flowchart LR
     [`MatrixRowSettings`](../src/reporting/control-page/components/molecules/matrix-row-settings.tsx),
     and [`ConfigDefaultsDialog`](../src/reporting/control-page/components/molecules/config-defaults-dialog.tsx)
     provide column, URL, target, project-settings, and defaults controls.
-  - `DashboardPage` supplies the matrix, raw JSON, action, and run sections to
-    `DashboardLayout`. `ExecutionSection` exposes report/build actions and the
-    saved 1–4 Workers selector; credentials and browser settings remain in
-    dialogs. `ReportManagementPage` and `FinalProjectReportPage` use their own
-    templates. `App.tsx` routes views; `ErrorBoundary` wraps them.
+  - `DashboardPage` supplies matrix, raw JSON, action, and run sections to
+    `DashboardLayout`; runs require a clean, valid saved document and selected
+    nonblank targets. `ExecutionSection` exposes report/build actions and the
+    saved 1–4 Workers selector; credentials and browser settings remain dialogs.
+    `ReportManagementPage` and `FinalProjectReportPage` use separate templates;
+    `App.tsx` routes views and `ErrorBoundary` wraps them.
   - The clean cutover deleted `ProjectsGrid`, `ProjectCard`, the project-group
     board/column/dialog components, `ConfigFormBuilder`, and
     `ConfigProjectEditor`, with no compatibility aliases. Optional

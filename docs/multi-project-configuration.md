@@ -203,15 +203,27 @@ pre-matrix backup before saving matrix configuration where older strict
 executables may need rollback.
 
 
-## Project draft cloning
+## Project cloning in the matrix editor
 
-Operators can clone any configured project in the Control editor using **Clone selected project**:
+The **Clone project** row action adds a copy directly to the current schema-v1
+document. It is a normal dirty editor change, not a temporary draft requiring a
+separate commit; there is no autosave. Global Save validates and persists the
+complete document through the existing ETag-protected config API.
 
-- **Pure utility**: `cloneProjectDraft` in `src/reporting/control-page/utils/clone-project-draft.ts` creates an independent copy via `structuredClone(source)` without mutational aliasing of nested objects (`selectors`, `credentials`, `autoBuild`).
-- **Safe bounded identities**: Generates unique IDs appending `-copy` (then `-copy-2`, `-copy-3`, …) while truncating the base ID so the total length never exceeds 63 characters (`/^[a-z0-9][a-z0-9-]{0,62}$/u`). Names append ` (copy)` capped at 200 characters.
-- **Disabled and ungrouped**: Clones default to `enabled: false` to guard against unintended execution, and remove `groupId` so the project begins in the `Ungrouped` column.
-- **Draft lifecycle**: Cancelling the draft leaves the document intact. Clicking "Save Project" commits the draft to the board; global Save persists it to the configuration file on disk.
-- **Verification contracts**: Covered in [`clone-project-draft.spec.ts`](../tests/unit/clone-project-draft.spec.ts) and [`control-project-transitions.spec.ts`](../tests/unit/control-project-transitions.spec.ts).
+- **Independent copy and identity**: `cloneProjectDraft` in
+  [`clone-project-draft.ts`](../src/reporting/control-page/utils/clone-project-draft.ts)
+  uses `structuredClone`, then generates a unique safe ID with `-copy`,
+  `-copy-2`, etc. (maximum 63 characters) and a bounded name ending in
+  ` (copy)`. Nested settings do not alias the source.
+- **Safe initial state**: The clone starts disabled and has no `groupId`; other
+  explicit settings are retained.
+- **Matrix cells and targets**: `cloneProjectMatrixDraft` copies each declared
+  column's URL, recomputes the scalar `jobUrl` mirror, and sets
+  `selectedJobColumns: []`. A clone never inherits the source row's selected
+  targets.
+- **Verification contracts**: [`clone-project-draft.spec.ts`](../tests/unit/clone-project-draft.spec.ts)
+  and [`matrix-document-transitions.spec.ts`](../tests/unit/matrix-document-transitions.spec.ts)
+  cover the clone identity, copied cells, reset selection, and disabled/ungrouped state.
 
 
 ## Run type and selection

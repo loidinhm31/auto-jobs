@@ -42,6 +42,18 @@ export function updateProjectDocumentAt(
   const previous = document.projects[projectIndex];
   if (!previous) return document;
   const project = typeof update === 'function' ? update(previous) : { ...previous, ...update };
+  const prevKeys = Object.keys(previous) as (keyof ProjectConfigInput)[];
+  const nextKeys = Object.keys(project) as (keyof ProjectConfigInput)[];
+  if (prevKeys.length === nextKeys.length) {
+    let changed = false;
+    for (const key of nextKeys) {
+      if (previous[key] !== project[key]) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) return document;
+  }
   const projects = [...document.projects];
   projects[projectIndex] = project;
   return { ...document, projects };

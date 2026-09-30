@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ConfigFileListResponse, ConfigResponse, ConfigSummary } from '../types/index.js';
 import type { BannerMessage, BannerVariant } from '../types/component-contracts.js';
 import { useControlApi, type UseControlApiResult } from './useControlApi.js';
@@ -48,10 +48,10 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
  const [etag, setEtag] = useState('');
  const [isLoading, setIsLoading] = useState(false);
  const [banner, setBanner] = useState<BannerMessage | null>(null);
+ const loadSequenceRef = useRef(0);
  const editor = useConfigDocumentEditor();
  const { setDocument, validateCurrentDocument, ...publicEditor } = editor;
  const { replaceDocument } = editor;
-
  const showBanner = useCallback((type: BannerVariant, message: string) => {
   setBanner({ type, message });
  }, []);
@@ -64,20 +64,25 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
   if (!name) return;
   hideBanner();
   setIsLoading(true);
+  const seq = ++loadSequenceRef.current;
   try {
    const { data } = await api.requestJson<ConfigResponse>(
     `/api/config?name=${encodeURIComponent(name)}`,
    );
+   if (seq !== loadSequenceRef.current) return;
    setActiveConfigName(data.name);
    setEtag(data.etag);
    replaceDocument(projectLegacyMatrixDocument(data.document));
    writeStoredActiveConfig(data.name);
    syncUrlActiveConfig(data.name);
   } catch (err) {
+   if (seq !== loadSequenceRef.current) return;
    const message = err instanceof Error ? err.message : String(err);
    showBanner('error', `Failed to load config: ${message}`);
   } finally {
-   setIsLoading(false);
+   if (seq === loadSequenceRef.current) {
+    setIsLoading(false);
+   }
   }
  }, [api, hideBanner, replaceDocument, showBanner]);
 
@@ -163,20 +168,13 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
   } finally {
    setIsLoading(false);
   }
- }, [
-  activeConfigName,
-  api,
-  etag,
-  hideBanner,
-  publicEditor.currentDoc,
-  setDocument,
-  showBanner,
-  validateCurrentDocument,
- ]);
+ }, [activeConfigName, api, etag, hideBanner, publicEditor.currentDoc, setDocument, showBanner, validateCurrentDocument]);
 
  const updateDocument = useCallback((nextDoc: ProjectConfigDocumentV1) => {
-  setDocument(nextDoc, true);
- }, [setDocument]);
+  if (nextDoc !== publicEditor.currentDoc) {
+   setDocument(nextDoc, true);
+  }
+ }, [publicEditor.currentDoc, setDocument]);
 
  return {
   ...publicEditor,

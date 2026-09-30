@@ -119,11 +119,19 @@ history/PDF export, offline fixtures, and verification boundaries.
   never writes the file, and explicit Save persists the expanded document.
   Runtime loading and the report CLI still execute scalar `jobUrl`, not the
   selected columns.
-- Flat-matrix UI Phase 02: `ProjectsJobMatrix` edits projects, columns, job
-  cells, and selections through immutable transitions. Clone deep-copies the
-  project plus its matrix cells/selections, appends a disabled row with a
-  bounded unique identity, and removes `groupId`; Raw JSON remains the escape
-  hatch for other schema fields.
+- Flat-matrix UI Phase 02: `ProjectsJobMatrix` renders project rows, shared
+  columns and URL cells, target controls, and row/column actions; Raw JSON is the
+  escape hatch for other schema fields.
+- Flat-matrix state Phase 03: pure project/default and matrix transition modules
+  feed one editor model; dedicated hooks dispatch matrix and legacy-group edits.
+  Clones deep-copy settings and column URLs, recompute `jobUrl`, start disabled
+  and ungrouped, and reset `selectedJobColumns` to `[]`. Schema issue collection
+  is extracted to `src/reporting/control-page/utils/config-document-validation.ts`.
+  Edits sync raw JSON, validation, and dirty state. Only successful document
+  replacement or valid raw Apply advances `replacementRevision`; ordinary edits
+  and Save acknowledgement do not. Config-load sequence guards discard stale
+  responses. Validated full-document Saves use `If-Match`; 409/412 preserve the
+  draft, while success adopts the returned document and ETag.
 - Stage View completion monitoring: optional auto-build wait (default `true`),
   run and stage parsing, live progress logs, and build-number/result/stage data
   for the Control Page.
@@ -159,8 +167,7 @@ history/PDF export, offline fixtures, and verification boundaries.
   (505 unit, 40 Control, 5 report visual, 7 WebKit PDF); typecheck/build passed.
   Focused PDF scenarios passed 7/7 in Chromium and WebKit; see the
   [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1707-phase-03-verification-and-documentation.md).
-- Refreshed `repomix-output.xml` for this summary: 428 files packed; Repomix's
-  security check reported no suspicious files.
+- Refreshed `repomix-output.xml` for this summary: 434 files and 3,128,686 tokens packed; Repomix reported no suspicious files.
 
 ## Entry points and scripts
 
@@ -196,6 +203,9 @@ history/PDF export, offline fixtures, and verification boundaries.
 | `src/reporting/control-page/` | Control Dashboard frontend sources (types, utils, headless hooks, components, styles) bundled via Vite into `.runner-build/reporting/control-page/`. |
 | `src/reporting/control-page/types/component-contracts.ts`, `components/molecules/index.ts`, `components/templates/index.ts` | Shared UI/layout contracts and public molecule/template exports, including form-field, page-header, and three layout prop types. |
 | `src/reporting/control-page/hooks/matrix-document-transitions.ts` | Immutable project, column, cell, selection, and matrix-clone transitions. |
+| `src/reporting/control-page/hooks/config-document-transitions.ts` | Pure project/default add, update, remove, and report-worker transitions. |
+| `src/reporting/control-page/hooks/useConfigDocumentEditor.ts`, `use-matrix-editor-handlers.ts`, `use-legacy-group-handlers.ts` | Shared editor lifecycle plus dedicated matrix and legacy-group transition dispatch. |
+| `src/reporting/control-page/hooks/useConfigManager.ts`, `src/reporting/control-page/utils/config-document-validation.ts` | Sequence-guarded config loads, schema issue extraction, and validated `If-Match` saves/conflicts. |
 | `src/reporting/control-page/components/organisms/projects-job-matrix.tsx`, `matrix-row.tsx`, `matrix-toolbar.tsx`, `add-column-dialog.tsx` | Spreadsheet-style project rows, actions, column creation, and table composition. |
 | `src/reporting/control-page/components/molecules/job-column-header.tsx`, `project-job-cell.tsx`, `project-job-selection.tsx`, `matrix-row-settings.tsx`, `config-defaults-dialog.tsx` | Matrix column, URL, target-selection, per-project settings, and defaults controls. |
 | `tests/unit/control-matrix-components.spec.ts`, `tests/unit/project-job-matrix.spec.ts` | Matrix UI behavior and schema projection/validation contracts. |

@@ -1,4 +1,7 @@
-import { PROJECT_CONFIG_LIMITS } from '../../../config/project-config-schema.js';
+import {
+  COLUMN_ID_REGEX,
+  PROJECT_CONFIG_LIMITS,
+} from '../../../config/project-config-schema.js';
 import { DEFAULT_JOB_COLUMN } from '../../../config/project-job-matrix-upgrade.js';
 import type {
   JobColumnInput,
@@ -7,15 +10,33 @@ import type {
 } from '../types/index.js';
 import { cloneProjectDraft } from '../utils/clone-project-draft.js';
 
-function computePrimaryJobUrl(
-  jobs: Record<string, string>,
+export function computePrimaryJobUrl(
+  jobs: Record<string, string> | undefined,
   columns: readonly JobColumnInput[],
 ): string {
+  if (!jobs) return '';
   for (const col of columns) {
-    const val = jobs[col.id]?.trim();
-    if (val && val.length > 0) return val;
+    const val = jobs[col.id];
+    if (typeof val === 'string' && val.trim().length > 0) return val;
   }
   return '';
+}
+
+export function generateJobColumnId(
+  existingColumns: readonly (JobColumnInput | string)[],
+): string {
+  const existingIds = new Set<string>();
+  for (const col of existingColumns) {
+    if (typeof col === 'string') existingIds.add(col.toLowerCase());
+    else if (col && typeof col.id === 'string') existingIds.add(col.id.toLowerCase());
+  }
+  if (!existingIds.has('job')) return 'job';
+  let counter = 2;
+  while (true) {
+    const candidate = `job-${counter}`;
+    if (!existingIds.has(candidate)) return candidate;
+    counter += 1;
+  }
 }
 
 export function addJobColumn(
@@ -23,11 +44,16 @@ export function addJobColumn(
   column: JobColumnInput,
 ): ProjectConfigDocumentV1 {
   const currentColumns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
-  if (currentColumns.some((col) => col.id === column.id)) return document;
-  const nextColumns = [...currentColumns, { id: column.id, name: column.name.trim() }];
+  if (currentColumns.length >= PROJECT_CONFIG_LIMITS.maxJobColumns) return document;
+  const trimmedId = column.id.trim().toLowerCase();
+  const trimmedName = column.name.trim();
+  if (!trimmedId || !trimmedName) return document;
+  if (!COLUMN_ID_REGEX.test(trimmedId)) return document;
+  if (currentColumns.some((col) => col.id === trimmedId)) return document;
+  const nextColumns = [...currentColumns, { id: trimmedId, name: trimmedName }];
   const projects = document.projects.map((p) => ({
     ...p,
-    jobs: { ...(p.jobs ?? {}), [column.id]: '' },
+    jobs: { ...(p.jobs ?? {}), [trimmedId]: '' },
   }));
   return { ...document, jobColumns: nextColumns, projects };
 }
@@ -38,8 +64,13 @@ export function renameJobColumn(
   newName: string,
 ): ProjectConfigDocumentV1 {
   const currentColumns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
+  const target = currentColumns.find((col) => col.id === columnId);
+  if (!target) return document;
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed.length > PROJECT_CONFIG_LIMITS.maxNameLength) return document;
+  if (target.name === trimmed) return document;
   const nextColumns = currentColumns.map((col) =>
-    col.id === columnId ? { ...col, name: newName.trim() } : col,
+    col.id === columnId ? { ...col, name: trimmed } : col,
   );
   return { ...document, jobColumns: nextColumns };
 }
@@ -50,6 +81,7 @@ export function removeJobColumn(
 ): ProjectConfigDocumentV1 | null {
   const currentColumns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
   if (currentColumns.length <= 1) return null;
+  if (!currentColumns.some((col) => col.id === columnId)) return document;
   const nextColumns = currentColumns.filter((col) => col.id !== columnId);
   const projects = document.projects.map((p) => {
     const { [columnId]: _removed, ...restJobs } = p.jobs ?? {};
@@ -73,6 +105,7 @@ export function updateJobCell(
 ): ProjectConfigDocumentV1 {
   const previous = document.projects[projectIndex];
   if (!previous) return document;
+  if (previous.jobs?.[columnId] === url) return document;
   const columns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
   const nextJobs = { ...(previous.jobs ?? {}), [columnId]: url };
   const nextPrimary = computePrimaryJobUrl(nextJobs, columns);
@@ -95,11 +128,12 @@ export function toggleProjectJobSelection(
   const previous = document.projects[projectIndex];
   if (!previous) return document;
   const currentSelections = previous.selectedJobColumns ?? [];
+  const has = currentSelections.includes(columnId);
+  if (selected === has) return document;
+
   let nextSelections: string[];
   if (selected) {
-    nextSelections = currentSelections.includes(columnId)
-      ? [...currentSelections]
-      : [...currentSelections, columnId];
+    nextSelections = [...currentSelections, columnId];
   } else {
     nextSelections = currentSelections.filter((id) => id !== columnId);
   }
@@ -119,8 +153,7 @@ export function addProjectMatrixDraft(document: ProjectConfigDocumentV1): {
 
   const columns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
   const initialJobs: Record<string, string> = {};
-  const firstCol = columns[0];
-  const initialSelections = firstCol ? [firstCol.id] : [];
+  for (const col of columns) initialJobs[col.id] = '';
 
   const newProject: ProjectConfigInput = {
     id: projectId,
@@ -128,16 +161,13 @@ export function addProjectMatrixDraft(document: ProjectConfigDocumentV1): {
     loginUrl: '',
     jobUrl: '',
     jobs: initialJobs,
-    selectedJobColumns: initialSelections,
+    selectedJobColumns: [],
     runType: 'report',
     enabled: true,
   };
 
   return {
-    document: {
-      ...document,
-      projects: [...document.projects, newProject],
-    },
+    document: { ...document, projects: [...document.projects, newProject] },
     projectId,
   };
 }
@@ -150,19 +180,13 @@ export function cloneProjectMatrixDraft(
   const cloned = cloneProjectDraft(sourceProject, document.projects);
   const columns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
   const jobs: Record<string, string> = {};
-  for (const col of columns) {
-    jobs[col.id] = sourceProject.jobs?.[col.id] ?? '';
-  }
+  for (const col of columns) jobs[col.id] = sourceProject.jobs?.[col.id] ?? '';
   cloned.jobs = jobs;
-  cloned.selectedJobColumns = sourceProject.selectedJobColumns
-    ? [...sourceProject.selectedJobColumns]
-    : [];
+  cloned.jobUrl = computePrimaryJobUrl(jobs, columns);
+  cloned.selectedJobColumns = [];
 
   return {
-    document: {
-      ...document,
-      projects: [...document.projects, cloned],
-    },
+    document: { ...document, projects: [...document.projects, cloned] },
     projectId: cloned.id,
   };
 }

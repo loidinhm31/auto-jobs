@@ -336,7 +336,7 @@ test.describe('useConfigDocumentEditor addProject supplied clone guards', () => 
 });
 
 test.describe('Matrix clone lifecycle and transitions', () => {
-  test('cloneProjectMatrixDraft copies jobs map, selected columns, and generates -copy suffix', () => {
+  test('cloneProjectMatrixDraft copies jobs map, resets selected columns to [], and generates -copy suffix', () => {
     const docWithMatrix: ProjectConfigDocumentV1 = {
       schemaVersion: 1,
       jobColumns: [
@@ -370,7 +370,7 @@ test.describe('Matrix clone lifecycle and transitions', () => {
       'job-1': 'https://ci.example.com/job/core-1',
       'job-2': 'https://ci.example.com/job/core-2',
     });
-    expect(cloned.selectedJobColumns).toEqual(['job-1', 'job-2']);
+    expect(cloned.selectedJobColumns).toEqual([]);
   });
 
   test('cloneProjectMatrixDraft handles numeric suffixes for repeated clones', () => {

@@ -19,6 +19,7 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
       isDirty = false,
       isSaving = false,
       isLoading = false,
+      isInvalid = false,
       className,
       ...rest
     },
@@ -66,7 +67,6 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
       {
         type: 'button',
         id: 'btn-save',
-        variant: 'primary',
         disabled: !isDirty || isSaving || isLoading,
         loading: isSaving,
         onClick: onSave,

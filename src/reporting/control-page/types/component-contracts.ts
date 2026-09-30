@@ -224,6 +224,7 @@ export interface ConfigSelectorBarProps {
   isDirty?: boolean;
   isSaving?: boolean;
   isLoading?: boolean;
+  isInvalid?: boolean;
   className?: string;
 }
 

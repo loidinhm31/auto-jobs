@@ -6,7 +6,7 @@
 
 ## Overview
 
-- Priority: P2 · Status: Pending · Estimate: 6h.
+- Priority: P2 · Status: DONE — 2026-09-30 · Estimate: 6h.
 - Keep one saved document/editor state across table cells, row/column mutations, raw JSON and guarded Save. Define pure immutable transitions preserving every unrelated schema-v1 field; use existing replacement revision and ETag handling rather than a second matrix store.
 
 ## Key insights
@@ -53,11 +53,19 @@
 
 ## Todo list
 
-- [ ] Pure immutable column, row, cell, mirror, selection transitions with no-op behavior.
-- [ ] ID-safe row editing, matrix-aware clone and preserved advanced/default/group metadata.
-- [ ] One editor model for raw JSON, migration, Save, ETag conflicts and dirty/replacement revision.
-- [ ] Disabled Save/Execute for invalid or stale drafts; explicit column deletion confirmation.
-- [ ] Unit evidence for V1 projection, multi-cell persistence, ID rename and conflict recovery.
+- [x] Pure immutable column, row, cell, mirror, selection transitions with no-op behavior.
+- [x] ID-safe row editing, matrix-aware clone and preserved advanced/default/group metadata.
+- [x] One editor model for raw JSON, migration, Save, ETag conflicts and dirty/replacement revision.
+- [x] Disabled Save/Execute for invalid or stale drafts; explicit column deletion confirmation.
+- [x] Unit evidence for V1 projection, multi-cell persistence, ID rename and conflict recovery.
+
+## Completion
+
+**Status:** DONE — 2026-09-30.
+
+**Evidence:** 212/212 tests passed (190 unit, 22 Chromium E2E). Cycle 2 code review: 9.8/10, 0 critical issues, 0 warnings; typecheck and build passed ([review](./code-review-260930-1130-phase-03-state-management-and-document-transitions.md), [completion report](../reports/Phase03PM-260930-1154-flat-project-job-matrix-phase-03-completion.md)).
+
+Cycle 2 resolved the prior Save-button validation finding. Its remaining suggestions are non-blocking: assert clone `jobUrl` mirror recalculation explicitly, and retire legacy group handlers after Phases 04/05 caller migration.
 
 ## Success criteria
 
@@ -77,7 +85,7 @@
 
 ## Next steps
 
-- Phase 02 plugs controls into these transitions; Phase 04 resolves saved selected coordinates, not raw draft URL strings. Phase 05 validates lifecycle/browser and conflict scenarios.
+- Proceed to Phase 04: multi-job execution engine and API (`phase-04-multi-job-execution-engine-and-api.md`).
 
 ## Real remaining decisions
 

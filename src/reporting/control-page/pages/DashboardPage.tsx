@@ -85,10 +85,14 @@ export function DashboardPage() {
   }, [currentDoc]);
 
   const handleRunAutoBuild = async () => {
-    if (activeConfigName && etag) await triggerRun(activeConfigName, etag, 'auto-build');
+    if (activeConfigName && etag && !isDirty && validationErrors.length === 0 && executableTargetCount > 0) {
+      await triggerRun(activeConfigName, etag, 'auto-build');
+    }
   };
   const handleRunReports = async () => {
-    if (activeConfigName && etag) await triggerRun(activeConfigName, etag, 'report');
+    if (activeConfigName && etag && !isDirty && validationErrors.length === 0 && executableTargetCount > 0) {
+      await triggerRun(activeConfigName, etag, 'report');
+    }
   };
   const handleSaveCredentials = async (secretsMap: Record<string, string>): Promise<boolean> => {
     const success = await saveCredentials(secretsMap);
@@ -116,6 +120,7 @@ export function DashboardPage() {
           onOpenBrowserSettings={() => void openBrowserDialog()}
           isDirty={isDirty}
           isLoading={isConfigLoading}
+          isInvalid={validationErrors.length > 0}
         />
       }
       banner={

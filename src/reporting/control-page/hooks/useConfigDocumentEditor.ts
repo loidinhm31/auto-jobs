@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
-import { ConfigError } from '../../../config-errors.js';
 import {
   PROJECT_CONFIG_LIMITS,
   assertProjectConfigDocument,
 } from '../../../config/project-config-schema.js';
+import { projectLegacyMatrixDocument } from '../../../config/project-job-matrix-upgrade.js';
 import {
   addProjectDraft,
   removeProjectDocumentAt,
@@ -12,20 +12,18 @@ import {
   updateProjectDocumentReportWorkers,
   type ProjectUpdate,
 } from './config-document-transitions.js';
+import { useMatrixEditorHandlers } from './use-matrix-editor-handlers.js';
+import { useLegacyGroupHandlers } from './use-legacy-group-handlers.js';
 import {
-  createProjectGroup,
-  deleteProjectGroup,
-  renameProjectGroup,
-  replaceGroupMembership,
-} from './project-group-transitions.js';
+  getValidationErrors,
+  type ValidationStatus,
+} from '../utils/config-document-validation.js';
 import type {
+  JobColumnInput,
   ProjectConfigDefaults,
   ProjectConfigDocumentV1,
   ProjectConfigInput,
 } from '../types/index.js';
-
-type ValidationStatus = { isValid: boolean; message: string } | null;
-
 export interface UseConfigDocumentEditorResult {
   currentDoc: ProjectConfigDocumentV1 | null;
   rawJsonString: string;
@@ -44,21 +42,17 @@ export interface UseConfigDocumentEditorResult {
   removeProjectAt: (projectIndex: number) => boolean;
   updateDefaults: (update: (previous: ProjectConfigDefaults) => ProjectConfigDefaults) => void;
   updateReportWorkers: (count: number) => void;
+  addJobColumn: (column: JobColumnInput) => void;
+  renameJobColumn: (columnId: string, newName: string) => void;
+  removeJobColumn: (columnId: string) => boolean;
+  updateJobCell: (projectIndex: number, columnId: string, url: string) => void;
+  toggleProjectJobSelection: (projectIndex: number, columnId: string, selected: boolean) => void;
+  addProjectMatrixDraft: () => string | null;
+  cloneProjectMatrixDraft: (sourceProject: ProjectConfigInput) => string | null;
   createGroup: (name?: string) => string | null;
   renameGroup: (groupId: string, name: string) => void;
   deleteGroup: (groupId: string) => void;
   setGroupMembership: (groupId: string, selectedProjectIds: readonly string[]) => void;
-}
-
-function getValidationErrors(document: ProjectConfigDocumentV1 | null): string[] {
-  if (!document) return [];
-  try {
-    assertProjectConfigDocument(document);
-    return [];
-  } catch (error) {
-    if (error instanceof ConfigError) return [...error.issues];
-    return [error instanceof Error ? error.message : String(error)];
-  }
 }
 
 export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
@@ -92,8 +86,10 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     const text = explicitJsonString ?? rawJsonString;
     if (explicitJsonString !== undefined) setRawJsonString(explicitJsonString);
     try {
-      const document = assertProjectConfigDocument(JSON.parse(text) as unknown);
-      setDocument(document as unknown as ProjectConfigDocumentV1, true);
+      const parsed = JSON.parse(text) as unknown;
+      const validated = assertProjectConfigDocument(parsed);
+      const projected = projectLegacyMatrixDocument(validated as unknown as ProjectConfigDocumentV1);
+      setDocument(projected, true);
       setReplacementRevision((rev) => rev + 1);
       setJsonValidationMsg({ isValid: true, message: 'JSON valid and applied to model.' });
       return true;
@@ -107,6 +103,11 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
   }, [rawJsonString, setDocument]);
 
   const validateCurrentDocument = useCallback((): boolean => {
+    if (!currentDoc) {
+      setValidationErrors([]);
+      setJsonValidationMsg(null);
+      return false;
+    }
     const errors = getValidationErrors(currentDoc);
     setValidationErrors(errors);
     if (errors.length > 0) {
@@ -114,7 +115,7 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
       return false;
     }
     setJsonValidationMsg({ isValid: true, message: 'Configuration is valid.' });
-    return currentDoc !== null;
+    return true;
   }, [currentDoc]);
 
   const updateProjectAt = useCallback((projectIndex: number, update: ProjectUpdate): void => {
@@ -160,36 +161,8 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
   const updateReportWorkers = useCallback((count: number): void => {
     if (currentDoc) setDocument(updateProjectDocumentReportWorkers(currentDoc, count), true);
   }, [currentDoc, setDocument]);
-  const createGroup = useCallback((name?: string): string | null => {
-    if (!currentDoc) return null;
-    const result = createProjectGroup(currentDoc, name);
-    if (!result) return null;
-    setDocument(result.document, true);
-    return result.groupId;
-  }, [currentDoc, setDocument]);
-
-  const renameGroup = useCallback((groupId: string, name: string): void => {
-    if (!currentDoc) return;
-    const updated = renameProjectGroup(currentDoc, groupId, name);
-    if (updated === currentDoc) return;
-    setDocument(updated, true);
-  }, [currentDoc, setDocument]);
-
-  const deleteGroup = useCallback((groupId: string): void => {
-    if (!currentDoc) return;
-    const updated = deleteProjectGroup(currentDoc, groupId);
-    if (updated === currentDoc) return;
-    setDocument(updated, true);
-  }, [currentDoc, setDocument]);
-
-  const setGroupMembership = useCallback((groupId: string, selectedProjectIds: readonly string[]): void => {
-    if (!currentDoc) return;
-    const updated = replaceGroupMembership(currentDoc, groupId, selectedProjectIds);
-    if (updated === currentDoc) return;
-    setDocument(updated, true);
-  }, [currentDoc, setDocument]);
-
-
+  const groupHandlers = useLegacyGroupHandlers(currentDoc, setDocument);
+  const matrixHandlers = useMatrixEditorHandlers(currentDoc, setDocument);
 
   return {
     currentDoc,
@@ -209,9 +182,7 @@ export function useConfigDocumentEditor(): UseConfigDocumentEditorResult {
     updateReportWorkers,
     replacementRevision,
     replaceDocument,
-    createGroup,
-    renameGroup,
-    deleteGroup,
-    setGroupMembership,
+    ...matrixHandlers,
+    ...groupHandlers,
   };
 }
