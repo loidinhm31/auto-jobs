@@ -31,6 +31,7 @@ export {
 } from './config/report-worker-count.js';
 
 export type {
+  JobColumnInput,
   NormalizedProjectConfig,
   NormalizedSourceConfig,
   ProjectConfigDefaults,
@@ -45,12 +46,21 @@ export type {
 } from './config/config-types.js';
 export {
   assertProjectConfigDocument,
+  COLUMN_ID_REGEX,
+  COLUMN_KEYS,
   GROUP_ID_REGEX,
   GROUP_KEYS,
   PROJECT_CONFIG_LIMITS,
+  validateJobColumn,
+  validateJobMatrix,
   validateProjectGroup,
   validateProjectGroups,
+  validateProjectJobMatrix,
 } from './config/project-config-schema.js';
+export {
+  DEFAULT_JOB_COLUMN,
+  projectLegacyMatrixDocument,
+} from './config/project-job-matrix-upgrade.js';
 
 export {
   assertAllowedUrl,

@@ -22,6 +22,12 @@ fixtures, aggregate/deletion, and the final-report viewer. [Phase 01](../plans/2
 [PDF export](./report-pipeline.md#client-side-pdf-export) shipped and passed Phase 03 verification on 2026-09-26: browser-side jsPDF/AutoTable composition from the validated React report DOM; persisted static report output remains unchanged.
 See [multi-project configuration](./multi-project-configuration.md) for field contracts and [release gates](./release-gates.md) for validation.
 
+Phase 01 ships schema-v1 matrix fields (`jobColumns`, project `jobs`, and
+`selectedJobColumns`) plus pure `projectLegacyMatrixDocument`; this helper is
+opt-in and non-persistent. The loader normalizes validated documents to scalar
+`jobUrl`, and the report CLI executes that target, not column selections; see
+the [matrix contract](./multi-project-configuration.md#job-matrix-configuration-expanded-schema-v1).
+
 ## Scope and operating modes
 
 Production and tests use the same schema-v1 configuration shape:
@@ -213,11 +219,12 @@ flowchart LR
 
 ### Schema-v1 file mode
 
-The root object has `schemaVersion: 1`, `projects`, optional `defaults`, and
-optional top-level `reportWorkers` (integer 1–4; omission defaults to 1). It
-sets concurrency for report batches and bounds Control API auto-build batches;
-nested placements are rejected.
-There must be one to 50 projects and at least one enabled entry. Each project
+The root has `schemaVersion: 1`, `projects`, optional `defaults`, optional
+`reportWorkers` (1–4, default 1), and optional `jobColumns`.
+Matrix documents require project `jobs` and `selectedJobColumns`; scalar
+`jobUrl` mirrors the first nonblank cell. `reportWorkers` bounds report and
+Control API auto-build batches; nested placement is rejected.
+There must be 1–50 projects and at least one enabled entry. Each project
 requires a unique safe ID, display name, exact Jenkins `loginUrl` and `jobUrl`
 on the same canonical Jenkins origin and base context.
 

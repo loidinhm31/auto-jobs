@@ -1,8 +1,22 @@
 # Project roadmap
 
-Last updated: 2026-09-27  
-Plan: [Control Page React Refactor with Atomic Design](../plans/260904-1640-control-page-react-refactor/plan.md)
+Last updated: 2026-09-30
+Plan: [Flat project job matrix](../plans/260930-0250-flat-project-job-matrix/plan.md)
 Completed initiative: [Persistent project report management](../plans/260924-2019-persistent-project-report-management/plan.md)
+
+## Flat project job matrix
+
+Plan: [Flat project job matrix](../plans/260930-0250-flat-project-job-matrix/plan.md)
+
+**Overall status:** **IN PROGRESS** · **20%** (1 of 5 phases complete; 6 of 32 planned hours = 19%).
+
+| Phase | Status | Progress | Effort | Completed | Evidence/detail |
+|---|---|---:|---:|---|---|
+| 01 — Schema, data model & migration | **DONE** | **100%** | 6h | 2026-09-30 | Added strict schema-v1 matrix validation, deterministic legacy projection, and the `jobUrl` compatibility mirror. Evidence: 31 matrix/API tests and 18 config tests; typecheck had 0 errors; review scored 9.2/10. The review's prototype-chain finding is addressed with own-property checks; duplicate column IDs are rejected, but per-cell diagnostics can repeat ([phase](../plans/260930-0250-flat-project-job-matrix/phase-01-schema-data-model-and-migration.md), [review](../plans/260930-0250-flat-project-job-matrix/code-review-260930-0710-phase-01-schema-data-model-and-migration.md)). |
+| 02 — Spreadsheet matrix UI components | **PENDING** | **0%** | 7h | — | [Phase 02](../plans/260930-0250-flat-project-job-matrix/phase-02-spreadsheet-matrix-ui-components.md) |
+| 03 — State management and document transitions | **PENDING** | **0%** | 6h | — | [Phase 03](../plans/260930-0250-flat-project-job-matrix/phase-03-state-management-and-document-transitions.md) |
+| 04 — Multi-job execution engine and API | **PENDING** | **0%** | 8h | — | [Phase 04](../plans/260930-0250-flat-project-job-matrix/phase-04-multi-job-execution-engine-and-api.md) |
+| 05 — Testing, verification and release audit | **PENDING** | **0%** | 5h | — | [Phase 05](../plans/260930-0250-flat-project-job-matrix/phase-05-testing-verification-and-release-audit.md) |
 
 ## Control Page UI Atomic Redesign
 
@@ -209,6 +223,10 @@ Completed legacy cleanup, dependency verification, and architecture documentatio
 - Verified zero dangling references in codebase; updated `docs/codebase-summary.md` and `docs/project-overview-pdr.md`.
 
 ## Changelog
+
+### 0.1.0 (development) — 2026-09-30
+
+- Completed Phase 01 (Schema, data model, and lossless migration) of Flat project job matrix on 2026-09-30. Added strict schema-v1 job-column/cell/selection validation, deterministic in-memory legacy projection, and scalar `jobUrl` compatibility. Evidence: 31 matrix/API tests and 18 config tests passed; `tsc --noEmit` reported 0 errors; review scored 9.2/10. The prototype-chain finding is addressed; duplicate-column cell diagnostics may repeat ([phase](../plans/260930-0250-flat-project-job-matrix/phase-01-schema-data-model-and-migration.md), [review](../plans/260930-0250-flat-project-job-matrix/code-review-260930-0710-phase-01-schema-data-model-and-migration.md)).
 
 ### 0.1.0 (development) — 2026-09-27
 

@@ -132,6 +132,77 @@ Older application versions whose schema allowlists predate these fields may
 reject a grouped document; restore a pre-group copy or remove the metadata
 before rolling back.
 
+## Job matrix configuration (expanded schema-v1)
+
+The saved schema-v1 document can optionally declare shared job columns, per-project job URL cells, and per-project selected columns. These are additional saved fields; `schemaVersion` remains `1`. Existing scalar-only examples, including [`projects.example.json`](../config/projects.example.json), remain valid unchanged.
+
+```json
+{
+  "schemaVersion": 1,
+  "jobColumns": [
+    { "id": "deploy", "name": "Deploy Job" },
+    { "id": "smoke", "name": "Smoke Test Job" }
+  ],
+  "projects": [
+    {
+      "id": "service-a",
+      "name": "Service A",
+      "loginUrl": "https://jenkins.example.invalid/jenkins/login",
+      "jobUrl": "https://jenkins.example.invalid/jenkins/job/service-a-deploy/",
+      "jobs": {
+        "deploy": "https://jenkins.example.invalid/jenkins/job/service-a-deploy/",
+        "smoke": "https://jenkins.example.invalid/jenkins/job/service-a-smoke/"
+      },
+      "selectedJobColumns": ["deploy", "smoke"]
+    }
+  ]
+}
+```
+
+| Field | Contract |
+| --- | --- |
+| `jobColumns` | Optional root array; omitted in a legacy single-job document. If present, contains 1–50 columns. Without it, project `jobs` and `selectedJobColumns` are rejected. |
+| `jobColumns[*]` | Object with exactly `id` and `name`; unknown keys are rejected. |
+| Column `id` | Unique among columns; 1–16 characters matching `/^[a-z0-9][a-z0-9-]{0,15}$/u`. |
+| Column `name` | Non-empty string without control characters, at most 200 characters. |
+| Project `jobs` | Required when `jobColumns` is present; one own string entry per declared column ID, with no undeclared keys. A value is empty/whitespace or an exact credential-free HTTP(S) URL in the Jenkins login context. Inherited properties cannot satisfy an entry; `__proto__` is rejected. Each project needs at least one nonblank cell. |
+| Project `selectedJobColumns` | Required when `jobColumns` is present; array of unique declared column IDs. `[]` is permitted for an explicit non-selection. |
+| Primary `jobUrl` mirror | Required in matrix documents; it must exactly mirror the first nonblank cell in declared column order. |
+
+### Pure in-memory legacy projection
+
+`projectLegacyMatrixDocument(document)`, exported from `src/config.ts`, is a pure,
+synchronous helper. For a legacy schema-v1 document with no matrix fields, it
+returns an expanded document with one shared `{ id: 'default', name: 'Job URL' }`
+column, maps each existing scalar `jobUrl` to `jobs.default`, and sets
+`selectedJobColumns: ['default']` on each project. It retains all other root and
+project fields and does not mutate the input. Applying it again is idempotent.
+If `jobColumns` is already present, it returns that document unchanged, including
+an explicit `selectedJobColumns: []`.
+
+The projection is opt-in: schema validation, file loading, and the report CLI do
+not call it automatically. It performs no I/O or persistence; reading a legacy
+file does not rewrite it or change its ETag. Persisting expanded fields requires
+an explicit valid save. Focused validation, projection, and CLI-loader contracts
+are in [`project-job-matrix.spec.ts`](../tests/unit/project-job-matrix.spec.ts).
+
+### CLI compatibility and rollback caveat
+
+The current repository report CLI accepts and validates a complete matrix
+document, but normalization and report execution still use each project's
+scalar `jobUrl`; `selectedJobColumns` is not a CLI target list. The validated
+mirror therefore preserves the existing single-target CLI contract.
+`selectedJobColumns: []` likewise does not suppress CLI execution of the
+mirrored `jobUrl`.
+
+Older binaries or external tools with strict unknown-key validation reject
+saved matrix documents containing `jobColumns`, `jobs`, or
+`selectedJobColumns`, even though `schemaVersion` remains `1`. Keeping the
+scalar `jobUrl` mirror does not make those versions compatible. Keep a
+pre-matrix backup before saving matrix configuration where older strict
+executables may need rollback.
+
+
 ## Project draft cloning
 
 Operators can clone any configured project in the Control editor using **Clone selected project**:

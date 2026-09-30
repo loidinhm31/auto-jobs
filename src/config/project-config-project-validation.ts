@@ -14,32 +14,14 @@ import {
 } from './project-config-field-validation.js';
 
 export const ROOT_KEYS: Record<string, true> = {
-  schemaVersion: true,
-  projects: true,
-  projectGroups: true,
-  defaults: true,
-  reportWorkers: true,
+  schemaVersion: true, projects: true, projectGroups: true, defaults: true, reportWorkers: true, jobColumns: true,
 };
 
 export const PROJECT_KEYS: Record<string, true> = {
-  id: true,
-  name: true,
-  groupId: true,
-  loginUrl: true,
-  jobUrl: true,
-  runType: true,
-  waitForCompletion: true,
-  waitTimeoutMs: true,
-  enabled: true,
-  timeoutMs: true,
-  browser: true,
-  artifactDir: true,
-  credentials: true,
-  selectors: true,
-  allowedOrigins: true,
-  sourceOrigins: true,
-  snyk: true,
-  sonarqube: true,
+  id: true, name: true, groupId: true, loginUrl: true, jobUrl: true, jobs: true, selectedJobColumns: true,
+  runType: true, waitForCompletion: true, waitTimeoutMs: true, enabled: true, timeoutMs: true,
+  browser: true, artifactDir: true, credentials: true, selectors: true, allowedOrigins: true,
+  sourceOrigins: true, snyk: true, sonarqube: true,
 };
 
 export const DEFAULT_KEYS: Record<string, true> = {

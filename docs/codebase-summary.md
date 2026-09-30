@@ -2,8 +2,8 @@
 
 This summary is based on refreshed `repomix-output.xml` and current
 source/configuration. It covers report/build execution, project-group metadata
-and editor transitions, the five-tier Control UI Atomic Design structure and
-Phase 04 page integration, retained history, and final-report/PDF export.
+and editor transitions, five-tier Control UI/Phase 04 integration, retained
+history, final-report/PDF export, and the Phase 01 matrix schema/projection.
 
 ## Repository profile
 
@@ -115,6 +115,12 @@ Phase 04 page integration, retained history, and final-report/PDF export.
   metadata remains outside normalized execution projects, and
   `replacementRevision` changes only on successful document replacement or
   valid raw-JSON Apply, not on edits or Save acknowledgement.
+- Phase 01 job-matrix schema: optional root `jobColumns` plus project `jobs`
+  cells and `selectedJobColumns` are validated as expanded schema-v1 fields;
+  `jobUrl` mirrors the first nonblank column. Pure
+  `projectLegacyMatrixDocument` projects legacy documents in memory without
+  writes. The loader normalizes to scalar `jobUrl`; the report CLI executes
+  that target, not column selections.
 - Project draft cloning (Phase 03): pure utility `cloneProjectDraft` in
   `src/reporting/control-page/utils/clone-project-draft.ts` deep-clones raw
   project inputs (`structuredClone`), generates collision-free bounded IDs
@@ -158,9 +164,8 @@ Phase 04 page integration, retained history, and final-report/PDF export.
   (505 unit, 40 Control, 5 report visual, 7 WebKit PDF); typecheck/build passed.
   Focused PDF scenarios passed 7/7 in Chromium and WebKit; see the
   [review](../plans/reports/code-review-260926-1707-phase-03-verification-and-documentation.md).
-- Repomix XML compaction refreshed for this summary. Its security check
-  excluded `tests/unit/config.spec.ts` and `tests/unit/reporting-renderer.spec.ts`
-  because of credential-shaped URL examples.
+- Refreshed `repomix-output.xml` for this summary: 428 files packed; Repomix's
+  security check reported no suspicious files.
 
 ## Entry points and scripts
 
@@ -168,7 +173,7 @@ Phase 04 page integration, retained history, and final-report/PDF export.
 | --- | --- |
 | `scripts/run-report.mjs` | Builds the report launcher and invokes the report CLI. |
 | `src/cli.ts` | Parses the explicit `--config` path and reports project outcomes. |
-| `src/config.ts` | Public configuration exports, single-read document loader, worker-count policy, types, validation, normalization, and `selectReportProjects`, `selectAutoBuildProjects`, and `selectAutoBuildProject`. |
+| `src/config.ts` | Public config types/loaders, worker policy, strict schema and job-matrix validation, pure legacy projection, and project selectors. |
 | `src/runner.ts` | Saved-count report dispatch, bounded multi-project execution, and aggregate publication. |
 | `src/artifacts/aggregate-index-builder.ts` | Builds the validated aggregate from current outcomes and retained manifests without file I/O. |
 | `src/project/report-worker-pool.ts` | Fixed in-process loops with indexed outcomes and per-project failure isolation. |
@@ -241,6 +246,13 @@ and replace membership without reordering projects or touching unrelated
 fields. `replacementRevision` identifies successful loads/replacements and
 valid raw-JSON Apply; ordinary edits and Save acknowledgements do not reset
 transient editor state.
+
+The same schema-v1 document may include shared `jobColumns` and per-project
+`jobs`/`selectedJobColumns`. Validation requires complete declared cells, safe
+unique column IDs, exact URLs in the login context, valid unique selections,
+and a scalar `jobUrl` mirror of the first nonblank cell. The legacy projection
+is not part of file loading; the report CLI continues to execute scalar
+`jobUrl`.
 
 Each project requires a safe `id`, display `name`, exact credential-free
 Jenkins `loginUrl`, and exact credential-free `jobUrl` on one Jenkins origin

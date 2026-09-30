@@ -12,6 +12,9 @@ import {
   validateProject,
 } from './project-config-project-validation.js';
 import { validateProjectGroups } from './project-group-validation.js';
+import {
+  validateJobMatrix,
+} from './project-job-matrix-validation.js';
 
 export { PROJECT_CONFIG_LIMITS } from './project-config-field-validation.js';
 export {
@@ -20,6 +23,13 @@ export {
   validateProjectGroup,
   validateProjectGroups,
 } from './project-group-validation.js';
+export {
+  COLUMN_ID_REGEX,
+  COLUMN_KEYS,
+  validateJobColumn,
+  validateProjectJobMatrix,
+  validateJobMatrix,
+} from './project-job-matrix-validation.js';
 
 export function assertProjectConfigDocument(value: unknown): ProjectConfigDocumentV1 {
   const issues: string[] = [];
@@ -51,6 +61,7 @@ export function assertProjectConfigDocument(value: unknown): ProjectConfigDocume
     validateDefaults(value.defaults, issues);
   }
   validateProjectGroups(value.projectGroups, value.projects, issues);
+  validateJobMatrix(value.jobColumns, value.projects, issues);
   const ids = new Set<string>();
   if (Array.isArray(value.projects)) {
     for (const item of value.projects) {

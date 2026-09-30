@@ -9,6 +9,8 @@ import {
 export const PROJECT_CONFIG_LIMITS = {
   maxProjects: 50,
   maxGroups: 50,
+  maxJobColumns: 50,
+  maxColumnIdLength: 16,
   maxStringLength: 512,
   maxNameLength: 200,
   maxOriginsPerSource: 20,

@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import { createReportServer } from '../../src/reporting/report-server.js';
+import { loadProjectConfig } from '../../src/config.js';
 import { calculateEtag } from '../../src/reporting/report-server-config-store.js';
 
 const VALID_CONFIG = {
@@ -350,6 +351,104 @@ test.describe('Control Config API', () => {
     expect(body.error.message).toContain('non-existent-group-id');
 
     // Preserves disk content
+    const diskAfter = fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8');
+    expect(diskAfter).toBe(diskBefore);
+  });
+  test('PUT /api/config?name= saves valid job matrix document with ETag and round-trips to GET and CLI', async ({ request }) => {
+    const getRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const initial = await getRes.json();
+
+    const parsedServerUrl = new URL(serverUrl);
+    const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+    const matrixDocument = {
+      schemaVersion: 1,
+      jobColumns: [
+        { id: 'main', name: 'Main Job' },
+        { id: 'perf', name: 'Performance Job' },
+      ],
+      projects: [
+        {
+          id: 'demo-service',
+          name: 'Demo Service',
+          runType: 'report',
+          enabled: true,
+          loginUrl: 'https://jenkins.example.com/login',
+          jobUrl: 'https://jenkins.example.com/job/demo-service/job/main/',
+          jobs: {
+            main: 'https://jenkins.example.com/job/demo-service/job/main/',
+            perf: 'https://jenkins.example.com/job/demo-service/job/perf/',
+          },
+          selectedJobColumns: ['main', 'perf'],
+        },
+      ],
+    };
+
+    const putRes = await request.put(`${serverUrl}api/config?name=default.json`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'if-match': initial.etag,
+        'content-type': 'application/json',
+      },
+      data: matrixDocument,
+    });
+
+    expect(putRes.status()).toBe(200);
+    const saved = await putRes.json();
+    expect(saved.etag).not.toBe(initial.etag);
+    expect(saved.document.jobColumns).toHaveLength(2);
+
+    const getAfter = await request.get(`${serverUrl}api/config?name=default.json`);
+    const afterBody = await getAfter.json();
+    expect(afterBody.etag).toBe(saved.etag);
+    expect(afterBody.document.jobColumns).toEqual(matrixDocument.jobColumns);
+    expect(afterBody.document.projects[0].jobs).toEqual(matrixDocument.projects[0]?.jobs);
+
+    const cliLoaded = loadProjectConfig(path.join(configRoot, 'default.json'), {
+      JENKINS_USERNAME: 'user',
+      JENKINS_PASSWORD: 'pw',
+    });
+    expect(cliLoaded).toHaveLength(1);
+    expect(cliLoaded[0]?.jobUrl).toBe('https://jenkins.example.com/job/demo-service/job/main/');
+  });
+
+  test('PUT /api/config?name= rejects job matrix mirror mismatch with 422 SCHEMA_ERROR and preserves disk', async ({ request }) => {
+    const getRes = await request.get(`${serverUrl}api/config?name=default.json`);
+    const initial = await getRes.json();
+    const diskBefore = fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8');
+
+    const parsedServerUrl = new URL(serverUrl);
+    const origin = `${parsedServerUrl.protocol}//${parsedServerUrl.host}`;
+
+    const putRes = await request.put(`${serverUrl}api/config?name=default.json`, {
+      headers: {
+        'x-csrf-token': csrfToken,
+        origin,
+        'if-match': initial.etag,
+        'content-type': 'application/json',
+      },
+      data: {
+        schemaVersion: 1,
+        jobColumns: [{ id: 'col1', name: 'Column 1' }],
+        projects: [
+          {
+            ...initial.document.projects[0],
+            jobUrl: 'https://jenkins.example.com/job/mismatched/',
+            jobs: {
+              col1: 'https://jenkins.example.com/job/demo-service/job/main/',
+            },
+            selectedJobColumns: ['col1'],
+          },
+        ],
+      },
+    });
+
+    expect(putRes.status()).toBe(422);
+    const body = await putRes.json();
+    expect(body.error.code).toBe('SCHEMA_ERROR');
+    expect(body.error.message).toContain('jobUrl must mirror first nonblank job column URL (col1)');
+
     const diskAfter = fs.readFileSync(path.join(configRoot, 'default.json'), 'utf8');
     expect(diskAfter).toBe(diskBefore);
   });

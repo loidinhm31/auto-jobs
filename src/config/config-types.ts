@@ -28,6 +28,11 @@ export interface ProjectGroupInput {
   id: string;
   name: string;
 }
+export interface JobColumnInput {
+  id: string;
+  name: string;
+}
+
 
 export interface ProjectConfigInput {
   id: string;
@@ -35,6 +40,8 @@ export interface ProjectConfigInput {
   groupId?: string;
   loginUrl: string;
   jobUrl: string;
+  jobs?: Record<string, string>;
+  selectedJobColumns?: readonly string[];
   runType?: RunType;
   waitForCompletion?: boolean;
   waitTimeoutMs?: number;
@@ -65,6 +72,7 @@ export interface ProjectConfigDefaults {
 export interface ProjectConfigDocumentV1 {
   schemaVersion: 1;
   reportWorkers?: number;
+  jobColumns?: readonly JobColumnInput[];
   projects: readonly ProjectConfigInput[];
   projectGroups?: readonly ProjectGroupInput[];
   defaults?: ProjectConfigDefaults;
