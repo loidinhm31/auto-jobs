@@ -275,14 +275,14 @@ export interface PageHeaderProps {
 export interface DashboardLayoutProps {
   header: ReactNode;
   banner?: ReactNode;
-  projectsSection: ReactNode;
-  formBuilderSection: ReactNode;
+  matrixSection?: ReactNode;
+  projectsSection?: ReactNode;
+  formBuilderSection?: ReactNode;
   rawJsonSection: ReactNode;
   actionsSection: ReactNode;
   runSection: ReactNode;
   dialogs?: ReactNode;
 }
-
 export interface ReportManagementLayoutProps {
   header: ReactNode;
   banner?: ReactNode;

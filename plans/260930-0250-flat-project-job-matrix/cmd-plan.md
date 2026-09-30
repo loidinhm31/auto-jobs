@@ -7,7 +7,7 @@ Replace grouped board **and** form with one editable project/column matrix. Keep
 | Phase | Status | Progress | Detail |
 | --- | --- | --- | --- |
 | 01 Schema and migration | DONE — 2026-09-30 | 100% | [Read](./phase-01-schema-data-model-and-migration.md) |
-| 02 Matrix UI | Pending | 0% | [Read](./phase-02-spreadsheet-matrix-ui-components.md) |
+| 02 Matrix UI | DONE — 2026-09-30 | 100% | [Read](./phase-02-spreadsheet-matrix-ui-components.md); 110/110 selected checks; review 9.3/10 |
 | 03 Document state | Pending | 0% | [Read](./phase-03-state-management-and-document-transitions.md) |
 | 04 Engine and API | Pending | 0% | [Read](./phase-04-multi-job-execution-engine-and-api.md) |
 | 05 Verification | Pending | 0% | [Read](./phase-05-testing-verification-and-release-audit.md) |

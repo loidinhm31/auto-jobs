@@ -6,7 +6,8 @@ import {
   generateCloneProjectName,
   MAX_PROJECT_ID_LENGTH,
 } from '../../src/reporting/control-page/utils/clone-project-draft.js';
-import { ConfigFormBuilder } from '../../src/reporting/control-page/components/organisms/ConfigFormBuilder.js';
+import { cloneProjectMatrixDraft } from '../../src/reporting/control-page/hooks/matrix-document-transitions.js';
+import { ProjectsJobMatrix } from '../../src/reporting/control-page/components/organisms/projects-job-matrix.js';
 import { useConfigDocumentEditor } from '../../src/reporting/control-page/hooks/useConfigDocumentEditor.js';
 import type {
   ProjectConfigDocumentV1,
@@ -334,320 +335,93 @@ test.describe('useConfigDocumentEditor addProject supplied clone guards', () => 
   });
 });
 
-test.describe('ConfigFormBuilder clone and draft lifecycle', () => {
-  test('renders Clone selected project button with correct initial enabled state', () => {
-    const runner = createHookRunner(() => {
-      return ConfigFormBuilder({
-        document: sampleDoc,
-        validationErrors: [],
-        isLoading: false,
-        replacementRevision: 0,
-        onAddProject: () => 'new-id',
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
-      });
-    });
+test.describe('Matrix clone lifecycle and transitions', () => {
+  test('cloneProjectMatrixDraft copies jobs map, selected columns, and generates -copy suffix', () => {
+    const docWithMatrix: ProjectConfigDocumentV1 = {
+      schemaVersion: 1,
+      jobColumns: [
+        { id: 'job-1', name: 'Job 1' },
+        { id: 'job-2', name: 'Job 2' },
+      ],
+      projects: [
+        {
+          ...sampleProject,
+          jobs: {
+            'job-1': 'https://ci.example.com/job/core-1',
+            'job-2': 'https://ci.example.com/job/core-2',
+          },
+          selectedJobColumns: ['job-1', 'job-2'],
+          groupId: 'core-team',
+        },
+      ],
+    };
 
-    const cloneButton = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    expect(cloneButton).toBeTruthy();
-    expect(getProps(cloneButton).children).toBe('Clone selected project');
-    expect(getProps(cloneButton).disabled).toBe(false);
+    const result = cloneProjectMatrixDraft(docWithMatrix, docWithMatrix.projects[0]!);
+    expect(result).not.toBeNull();
+    expect(result!.projectId).toBe('jenkins-core-copy');
+    expect(result!.document.projects.length).toBe(2);
+
+    const cloned = result!.document.projects[1]!;
+    expect(cloned.id).toBe('jenkins-core-copy');
+    expect(cloned.name).toBe('Jenkins Core Build (copy)');
+    expect(cloned.enabled).toBe(false);
+    expect('groupId' in cloned).toBe(false);
+    expect(cloned.jobs).toEqual({
+      'job-1': 'https://ci.example.com/job/core-1',
+      'job-2': 'https://ci.example.com/job/core-2',
+    });
+    expect(cloned.selectedJobColumns).toEqual(['job-1', 'job-2']);
   });
 
-  test('disables Clone and Add buttons when document is loading or missing', () => {
-    const runnerLoading = createHookRunner(() => {
-      return ConfigFormBuilder({
-        document: sampleDoc,
-        validationErrors: [],
-        isLoading: true,
-        replacementRevision: 0,
-        onAddProject: () => null,
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
-      });
-    });
+  test('cloneProjectMatrixDraft handles numeric suffixes for repeated clones', () => {
+    const docWithCopies: ProjectConfigDocumentV1 = {
+      schemaVersion: 1,
+      projects: [
+        sampleProject,
+        { ...sampleProject, id: 'jenkins-core-copy', name: 'Jenkins Core (copy)' },
+      ],
+    };
 
-    const cloneButton = findNode(runnerLoading.current, (p) => p.id === 'btn-clone-project');
-    const addButton = findNode(runnerLoading.current, (p) => p.id === 'btn-add-project');
-    expect(getProps(cloneButton).disabled).toBe(true);
-    expect(getProps(addButton).disabled).toBe(true);
+    const result = cloneProjectMatrixDraft(docWithCopies, sampleProject);
+    expect(result).not.toBeNull();
+    expect(result!.projectId).toBe('jenkins-core-copy-2');
   });
 
-  test('disables Clone and Add buttons when at maximum capacity (50 projects)', () => {
+  test('cloneProjectMatrixDraft returns null when at maximum capacity (50 projects)', () => {
     const fiftyProjects: ProjectConfigInput[] = Array.from({ length: 50 }, (_, i) => ({
       id: `proj-${i}`,
       name: `Proj ${i}`,
       loginUrl: 'https://ci.example.com/login',
       jobUrl: `https://ci.example.com/job/${i}`,
       runType: 'report',
-      enabled: i === 0,
+      enabled: true,
     }));
     const fullDoc: ProjectConfigDocumentV1 = {
       schemaVersion: 1,
       projects: fiftyProjects,
     };
 
-    const runner = createHookRunner(() => {
-      return ConfigFormBuilder({
-        document: fullDoc,
-        validationErrors: [],
-        isLoading: false,
-        replacementRevision: 0,
-        onAddProject: () => null,
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
-      });
-    });
-
-    const cloneButton = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    const addButton = findNode(runner.current, (p) => p.id === 'btn-add-project');
-    expect(getProps(cloneButton).disabled).toBe(true);
-    expect(getProps(addButton).disabled).toBe(true);
+    const result = cloneProjectMatrixDraft(fullDoc, fiftyProjects[0]!);
+    expect(result).toBeNull();
   });
 
-  test('clicking Clone opens draft with cloneSourceId, explanation banner, and disabled clone', () => {
+  test('ProjectsJobMatrix renders and executes clone action via onUpdateDocument', () => {
+    let updatedDoc: ProjectConfigDocumentV1 | null = null;
     const runner = createHookRunner(() => {
-      return ConfigFormBuilder({
+      return ProjectsJobMatrix({
         document: sampleDoc,
-        validationErrors: [],
-        isLoading: false,
-        replacementRevision: 0,
-        onAddProject: () => 'jenkins-core-copy',
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
-      });
-    });
-
-    // Find and click the clone button
-    const cloneButton = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    expect(cloneButton).toBeTruthy();
-    getProps(cloneButton).onClick();
-    runner.rerender();
-
-    // After clicking clone, verify banner appears
-    const banner = findNode(runner.current, (p) => p.role === 'status' && p.className?.includes('bg-sky-50'));
-    expect(banner).toBeTruthy();
-    const bannerTitle = getProps(getProps(banner).children[0]).children;
-    const bannerDesc = getProps(getProps(banner).children[1]).children;
-    expect(bannerTitle).toBe("Cloned project draft (from 'jenkins-core')");
-    expect(bannerDesc).toContain("Cloned from 'jenkins-core'");
-    expect(bannerDesc).toContain('Disabled by default');
-    expect(bannerDesc).toContain('Review copied job URL and settings before enabling');
-
-    // Verify Add and Clone buttons are now disabled while adding
-    const updatedCloneBtn = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    const updatedAddBtn = findNode(runner.current, (p) => p.id === 'btn-add-project');
-    expect(getProps(updatedCloneBtn).disabled).toBe(true);
-    expect(getProps(updatedAddBtn).disabled).toBe(true);
-  });
-
-  test('canceling a clone draft restores normal view without modifying document', () => {
-    let addedCount = 0;
-    const runner = createHookRunner(() => {
-      return ConfigFormBuilder({
-        document: sampleDoc,
-        validationErrors: [],
-        isLoading: false,
-        replacementRevision: 0,
-        onAddProject: () => {
-          addedCount += 1;
-          return 'added';
+        onUpdateDocument: (nextDoc) => {
+          updatedDoc = nextDoc;
         },
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
       });
     });
 
-    // Start clone
-    const cloneButton = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    getProps(cloneButton).onClick();
-    runner.rerender();
-
-    // Find Cancel button
-    const cancelButton = findNode(runner.current, (p) => p.id === 'btn-cancel-project');
-    expect(cancelButton).toBeTruthy();
-    getProps(cancelButton).onClick();
-    runner.rerender();
-
-    // Verify draft mode is closed
-    const updatedCloneBtn = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    expect(getProps(updatedCloneBtn).disabled).toBe(false);
-    expect(addedCount).toBe(0);
-  });
-
-  test('replacementRevision increment clears pending clone draft', () => {
-    let revision = 0;
-    const runner = createHookRunner(() => {
-      return ConfigFormBuilder({
-        document: sampleDoc,
-        validationErrors: [],
-        isLoading: false,
-        replacementRevision: revision,
-        onAddProject: () => 'added',
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
-      });
-    });
-
-    // Open clone draft
-    const cloneButton = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    getProps(cloneButton).onClick();
-    runner.rerender();
-
-    // Verify draft banner is present
-    const banner = findNode(runner.current, (p) => p.role === 'status' && p.className?.includes('bg-sky-50'));
-    expect(banner).toBeTruthy();
-
-    // Simulate document replacement (e.g. reload or raw JSON apply)
-    revision = 1;
-    runner.rerender();
-    runner.rerender();
-
-    // Verify draft is reset and clone button enabled again
-    const updatedCloneBtn = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    expect(getProps(updatedCloneBtn).disabled).toBe(false);
-    const updatedBanner = findNode(runner.current, (p) => p.role === 'status' && p.className?.includes('bg-sky-50'));
-    expect(updatedBanner).toBeNull();
-  });
-  test('Save Project commits valid clone draft via onAddProject', () => {
-    let committedProject: ProjectConfigInput | null = null;
-    const runner = createHookRunner(() => {
-      return ConfigFormBuilder({
-        document: sampleDoc,
-        validationErrors: [],
-        isLoading: false,
-        replacementRevision: 0,
-        onAddProject: (proj) => {
-          committedProject = proj ?? null;
-          return proj?.id ?? 'added';
-        },
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
-      });
-    });
-
-    // Open clone draft
-    const cloneButton = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    getProps(cloneButton).onClick();
-    runner.rerender();
-
-    // Click Save Project
-    const saveButton = findNode(runner.current, (p) => p.id === 'btn-save-project');
-    expect(saveButton).toBeTruthy();
-    getProps(saveButton).onClick();
-    runner.rerender();
-
-    // Verify onAddProject was called with cloned project input
-    expect(committedProject).not.toBeNull();
-    expect((committedProject as any).id).toBe('jenkins-core-copy');
-    expect((committedProject as any).enabled).toBe(false);
-    expect('groupId' in (committedProject as any)).toBe(false);
-
-    // Verify draft closed
-    const banner = findNode(runner.current, (p) => p.role === 'status' && p.className?.includes('bg-sky-50'));
-    expect(banner).toBeNull();
-  });
-
-  test('Save Project displays error and preserves draft when duplicate ID is used', () => {
-    let addCalled = false;
-    const runner = createHookRunner(() => {
-      return ConfigFormBuilder({
-        document: sampleDoc,
-        validationErrors: [],
-        isLoading: false,
-        replacementRevision: 0,
-        onAddProject: () => {
-          addCalled = true;
-          return 'added';
-        },
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
-      });
-    });
-
-    // Open clone draft
-    const cloneButton = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    getProps(cloneButton).onClick();
-    runner.rerender();
-
-    // Simulate user editing draft ID to collide with 'jenkins-core' via editor onUpdate
-    const editor = findNode(runner.current, (p) => p.project !== undefined && typeof p.onUpdate === 'function');
-    expect(editor).toBeTruthy();
-    getProps(editor).onUpdate((prev: ProjectConfigInput) => ({ ...prev, id: 'jenkins-core' }));
-    runner.rerender();
-
-    // Click Save Project
-    const saveButton = findNode(runner.current, (p) => p.id === 'btn-save-project');
-    expect(saveButton).toBeTruthy();
-    getProps(saveButton).onClick();
-    runner.rerender();
-
-    // Verify addition was blocked and error banner displayed
-    expect(addCalled).toBe(false);
-    const errorAlert = findNode(runner.current, (p) => p.role === 'alert' && p['aria-label'] === 'Configuration validation errors');
-    expect(errorAlert).toBeTruthy();
-    const errorText = JSON.stringify(getProps(errorAlert));
-    expect(errorText).toContain("must be unique; 'jenkins-core' is already in use");
-
-    // Verify draft is still open
-    const banner = findNode(runner.current, (p) => p.role === 'status' && p.className?.includes('bg-sky-50'));
-    expect(banner).toBeTruthy();
-  });
-
-  test('selecting another project in dropdown cancels the pending clone draft', () => {
-    const twoProjectDoc: ProjectConfigDocumentV1 = {
-      schemaVersion: 1,
-      projects: [
-        sampleProject,
-        {
-          id: 'secondary-p',
-          name: 'Secondary',
-          loginUrl: 'https://ci.example.com/login',
-          jobUrl: 'https://ci.example.com/job/sec',
-          runType: 'report',
-          enabled: true,
-        },
-      ],
-    };
-
-    const runner = createHookRunner(() => {
-      return ConfigFormBuilder({
-        document: twoProjectDoc,
-        validationErrors: [],
-        isLoading: false,
-        replacementRevision: 0,
-        onAddProject: () => 'added',
-        onUpdateProject: () => {},
-        onRemoveProject: () => true,
-        onUpdateDefaults: () => {},
-      });
-    });
-
-    // Open clone draft
-    const cloneButton = findNode(runner.current, (p) => p.id === 'btn-clone-project');
-    getProps(cloneButton).onClick();
-    runner.rerender();
-
-    // Verify draft is open
-    let banner = findNode(runner.current, (p) => p.role === 'status' && p.className?.includes('bg-sky-50'));
-    expect(banner).toBeTruthy();
-
-    // Change selected project to index 1 via Select
-    const select = findNode(runner.current, (p) => p.id === 'project-selection');
-    expect(select).toBeTruthy();
-    getProps(select).onChange({ target: { value: '1' } });
-    runner.rerender();
-
-    // Verify draft is closed
-    banner = findNode(runner.current, (p) => p.role === 'status' && p.className?.includes('bg-sky-50'));
-    expect(banner).toBeNull();
+    expect(runner.current).toBeDefined();
+    const row = findNode(runner.current, (p) => p.project?.id === sampleProject.id);
+    expect(row).toBeTruthy();
+    getProps(row).onClone();
+    expect(updatedDoc).not.toBeNull();
+    expect(updatedDoc!.projects.length).toBe(2);
+    expect(updatedDoc!.projects[1]!.id).toBe('jenkins-core-copy');
   });
 });

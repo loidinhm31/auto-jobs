@@ -1,14 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import type { ProjectCardData } from '../types/component-contracts.js';
+import { useEffect, useMemo } from 'react';
 import { useConfigManager } from '../hooks/useConfigManager.js';
 import { useCredentialsManager } from '../hooks/useCredentialsManager.js';
 import { useBrowserSettings, type BrowserSettingsInput } from '../hooks/useBrowserSettings.js';
 import { useRunPoller } from '../hooks/useRunPoller.js';
 import { StatusBanner } from '../components/atoms/StatusBanner.js';
 import { HeaderBar } from '../components/organisms/HeaderBar.js';
-import { ProjectsGrid } from '../components/organisms/ProjectsGrid.js';
+import { ProjectsJobMatrix } from '../components/organisms/projects-job-matrix.js';
 import { RawJsonSection } from '../components/organisms/RawJsonSection.js';
-import { ConfigFormBuilder } from '../components/organisms/ConfigFormBuilder.js';
 import { ExecutionSection } from '../components/organisms/ExecutionSection.js';
 import { RunStatusCard } from '../components/organisms/RunStatusCard.js';
 import { CredentialsDialog } from '../components/organisms/CredentialsDialog.js';
@@ -27,24 +25,16 @@ export function DashboardPage() {
     banner,
     jsonValidationMsg,
     validationErrors,
-    updateProjectAt,
-    addProject,
-    removeProjectAt,
     updateDefaults,
     updateReportWorkers,
+    updateDocument,
     loadConfigList,
     loadConfig,
     reloadConfig,
     saveConfig,
     applyRawJson,
-    updateProject,
     setRawJsonString,
     showBanner,
-    replacementRevision,
-    createGroup,
-    renameGroup,
-    deleteGroup,
-    setGroupMembership,
   } = useConfigManager();
 
   const {
@@ -70,78 +60,44 @@ export function DashboardPage() {
     clearSetting: clearBrowserSetting,
   } = useBrowserSettings();
 
-  const {
-    runId,
-    runStatus,
-    logs,
-    result,
-    isTriggering,
-    triggerRun,
-  } = useRunPoller();
+  const { runId, runStatus, logs, result, isTriggering, triggerRun } = useRunPoller();
 
-
-  // Initial load
   useEffect(() => {
     void loadConfigList();
   }, [loadConfigList]);
 
-  // Transform projects for UI
-  const projectsData: ProjectCardData[] = useMemo(() => {
+  const { executableTargetCount, skippedBlankCount } = useMemo(() => {
     if (!currentDoc || !Array.isArray(currentDoc.projects)) {
-      return [];
+      return { executableTargetCount: 0, skippedBlankCount: 0 };
     }
-    return currentDoc.projects.map((p) => ({
-      id: p.id,
-      name: p.name || p.id,
-      loginUrl: p.loginUrl,
-      jobUrl: p.jobUrl,
-      runType: (p.runType as 'report' | 'auto-build') || 'report',
-      waitForCompletion: (p.waitForCompletion ?? currentDoc.defaults?.waitForCompletion) !== false,
-      waitTimeoutMs:
-        typeof p.waitTimeoutMs === 'number'
-          ? p.waitTimeoutMs
-          : typeof currentDoc.defaults?.waitTimeoutMs === 'number'
-          ? currentDoc.defaults.waitTimeoutMs
-          : undefined,
-      enabled: p.enabled !== false,
-      groupId: p.groupId,
-    }));
+    let executable = 0;
+    let skipped = 0;
+    for (const project of currentDoc.projects) {
+      if (project.enabled === false) continue;
+      const selections = project.selectedJobColumns ?? [];
+      for (const colId of selections) {
+        const url = project.jobs?.[colId]?.trim();
+        if (url && url.length > 0) executable += 1;
+        else skipped += 1;
+      }
+    }
+    return { executableTargetCount: executable, skippedBlankCount: skipped };
   }, [currentDoc]);
 
-  // Handlers
-  const handleToggleEnabled = (projectId: string, enabled: boolean) => {
-    updateProject(projectId, { enabled });
-  };
-
-  const handleChangeRunType = (projectId: string, runType: 'report' | 'auto-build') => {
-    updateProject(projectId, { runType });
-  };
-
   const handleRunAutoBuild = async () => {
-    if (activeConfigName && etag) {
-      await triggerRun(activeConfigName, etag, 'auto-build');
-    }
+    if (activeConfigName && etag) await triggerRun(activeConfigName, etag, 'auto-build');
   };
-
   const handleRunReports = async () => {
-    if (activeConfigName && etag) {
-      await triggerRun(activeConfigName, etag, 'report');
-    }
+    if (activeConfigName && etag) await triggerRun(activeConfigName, etag, 'report');
   };
-
   const handleSaveCredentials = async (secretsMap: Record<string, string>): Promise<boolean> => {
     const success = await saveCredentials(secretsMap);
-    if (success) {
-      showBanner('success', 'Credentials saved successfully.');
-    }
+    if (success) showBanner('success', 'Credentials saved successfully.');
     return success;
   };
-
   const handleSaveBrowserSettings = async (settings: BrowserSettingsInput): Promise<boolean> => {
     const success = await saveBrowserSettings(settings);
-    if (success) {
-      showBanner('success', 'Browser settings saved successfully.');
-    }
+    if (success) showBanner('success', 'Browser settings saved successfully.');
     return success;
   };
 
@@ -155,9 +111,7 @@ export function DashboardPage() {
           onReload={() => void reloadConfig()}
           onSave={() => void saveConfig()}
           onOpenCredentials={() => {
-            if (currentDoc) {
-              void openCredentialsDialog(currentDoc);
-            }
+            if (currentDoc) void openCredentialsDialog(currentDoc);
           }}
           onOpenBrowserSettings={() => void openBrowserDialog()}
           isDirty={isDirty}
@@ -172,29 +126,12 @@ export function DashboardPage() {
           visible={Boolean(banner)}
         />
       }
-      projectsSection={
-        <ProjectsGrid
-          projects={projectsData}
-          groups={currentDoc?.projectGroups ?? []}
-          disabled={isConfigLoading || !currentDoc}
-          replacementRevision={replacementRevision}
-          onToggleEnabled={handleToggleEnabled}
-          onChangeRunType={handleChangeRunType}
-          onCreateGroup={createGroup}
-          onRenameGroup={renameGroup}
-          onDeleteGroup={deleteGroup}
-          onSetGroupMembership={setGroupMembership}
-        />
-      }
-      formBuilderSection={
-        <ConfigFormBuilder
+      matrixSection={
+        <ProjectsJobMatrix
           document={currentDoc}
           validationErrors={validationErrors}
-          isLoading={isConfigLoading}
-          replacementRevision={replacementRevision}
-          onAddProject={addProject}
-          onUpdateProject={updateProjectAt}
-          onRemoveProject={removeProjectAt}
+          disabled={isConfigLoading || !currentDoc}
+          onUpdateDocument={updateDocument}
           onUpdateDefaults={updateDefaults}
         />
       }
@@ -210,6 +147,9 @@ export function DashboardPage() {
         <ExecutionSection
           isDirty={isDirty}
           isLoading={isTriggering || runStatus === 'running' || runStatus === 'queued'}
+          isInvalid={validationErrors.length > 0}
+          executableTargetCount={executableTargetCount}
+          skippedBlankCount={skippedBlankCount}
           onRunReports={() => void handleRunReports()}
           onRunAutoBuild={() => void handleRunAutoBuild()}
           reportWorkers={typeof currentDoc?.reportWorkers === 'number' ? currentDoc.reportWorkers : 1}
@@ -236,7 +176,6 @@ export function DashboardPage() {
             onSave={handleSaveCredentials}
             onClear={clearCredential}
           />
-
           <BrowserSettingsDialog
             isOpen={isBrowserOpen}
             isLoading={isBrowserLoading}

@@ -1,10 +1,10 @@
 # Current architecture
 
 This document covers schema-v1 configuration, report and Jenkins auto-build
-workflows, Stage View monitoring, the loopback Control Page and control API,
-local SecretStore, credential UI, report management, the Control-only React
-final-report viewer and browser PDF export, and deterministic verification
-boundaries. The report command remains report-only. Control
+workflows, Stage View monitoring, the loopback Control Page/API and flat
+project/job matrix, local SecretStore and credential UI, report management,
+the Control-only React final-report viewer/PDF export, and deterministic
+verification boundaries. The report command remains report-only. Control
 `POST /api/run` accepts either one selected auto-build project or all enabled
 auto-build projects when `projectId` is omitted; mode is never inferred from URL,
 selector, CLI, or env.
@@ -22,11 +22,16 @@ fixtures, aggregate/deletion, and the final-report viewer. [Phase 01](../plans/2
 [PDF export](./report-pipeline.md#client-side-pdf-export) shipped and passed Phase 03 verification on 2026-09-26: browser-side jsPDF/AutoTable composition from the validated React report DOM; persisted static report output remains unchanged.
 See [multi-project configuration](./multi-project-configuration.md) for field contracts and [release gates](./release-gates.md) for validation.
 
-Phase 01 ships schema-v1 matrix fields (`jobColumns`, project `jobs`, and
-`selectedJobColumns`) plus pure `projectLegacyMatrixDocument`; this helper is
-opt-in and non-persistent. The loader normalizes validated documents to scalar
-`jobUrl`, and the report CLI executes that target, not column selections; see
-the [matrix contract](./multi-project-configuration.md#job-matrix-configuration-expanded-schema-v1).
+Phase 01 added schema-v1 matrix fields (`jobColumns`, project `jobs`, and
+`selectedJobColumns`) plus pure `projectLegacyMatrixDocument`; Phase 02 adds
+the flat spreadsheet editor. `useConfigManager` projects legacy documents in
+memory on Control Page load and after save; loading alone does not rewrite the
+file, while explicit Save persists matrix fields. The runtime loader still
+normalizes to scalar `jobUrl`, and the report CLI executes that target, not
+selected columns. The current Control run request carries mode/config identity,
+not row/column coordinates, so matrix selections do not yet drive execution;
+multi-job API/runner work belongs to Phase 04. See the
+[matrix contract](./multi-project-configuration.md#job-matrix-configuration-expanded-schema-v1).
 
 ## Scope and operating modes
 
@@ -134,47 +139,45 @@ flowchart LR
 - `src/reporting/report-server-control-reports-api.ts` handles guarded whole-project and per-run `DELETE` endpoints.
 - `src/reporting/report-server-control.ts` validates Host, preflights final-
   report indexes, and serves a control shell before static report fallback.
-- `src/reporting/control-page/` contains the Control Dashboard frontend sources:
-  server data contracts (`types/index.ts`), shared UI component prop interfaces
-  (`types/component-contracts.ts`), key discovery utilities (`utils/discoverCredentialKeys.ts`),
-  project clone utility (`utils/clone-project-draft.ts`), Tailwind class merge utility ([`utils/cn.ts`](../src/reporting/control-page/utils/cn.ts#L4)),
-  headless React hooks (`hooks/useControlApi.ts`, `hooks/useConfigManager.ts`,
-  `hooks/useConfigDocumentEditor.ts` for document/raw-JSON editing and
-  validation, `hooks/useCredentialsManager.ts`, `hooks/useBrowserSettings.ts`,
-  `hooks/useRunPoller.ts`, `hooks/use-project-report.ts` for validated final reports),
-  Atomic Design atoms exported from `components/atoms/index.ts`: `Button` (Radix
-  `slot`-based Radix `asChild` composition, variants, loading), `Badge` (semantic states, optional dot),
-  `Checkbox`, compound `Card` and its `CardHeader`, `CardTitle`,
-  `CardDescription`, `CardContent`, and `CardFooter`, `IconButton`, `Input`,
-  `Select`, `StatusBanner`, and `LoadingIndicator`;
-  compound molecules ([`components/molecules/`](../src/reporting/control-page/components/molecules/):
-  [`FormField`](../src/reporting/control-page/components/molecules/FormField.tsx),
-  [`PageHeader`](../src/reporting/control-page/components/molecules/PageHeader.tsx),
-  [`CredentialRow`](../src/reporting/control-page/components/molecules/CredentialRow.tsx),
-  [`BrowserSettingRow`](../src/reporting/control-page/components/molecules/BrowserSettingRow.tsx),
-  [`ConfigSelectorBar`](../src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx),
-  `ConfigProjectEditor`, `ConfigDefaultsEditor`, [`LogViewer`](../src/reporting/control-page/components/molecules/LogViewer.tsx),
-  [`RunResultBox`](../src/reporting/control-page/components/molecules/RunResultBox.tsx), [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx),
-  [`ProjectRunsTable`](../src/reporting/control-page/components/molecules/project-runs-table.tsx), [`ProjectReportStatusView`](../src/reporting/control-page/components/molecules/ProjectReportStatusView.tsx), [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx); shared props are in [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts) and exports in [`molecules/index.ts`](../src/reporting/control-page/components/molecules/index.ts); selected actions use `lucide-react`),
-  compound organisms exported by [`organisms/index.ts`](../src/reporting/control-page/components/organisms/index.ts):
-  - [`ProjectCard`](../src/reporting/control-page/components/organisms/ProjectCard.tsx): enabled checkbox, run-type selector, HTTP(S) job link, and stable control IDs.
-  - [`ProjectGroupColumn`](../src/reporting/control-page/components/organisms/project-group-column.tsx): group actions/count and scroll-contained cards; [`ProjectsGrid`](../src/reporting/control-page/components/organisms/ProjectsGrid.tsx): grouped-board toolbar/dialog and horizontal scroller; [`ProjectGroupBoard`](../src/reporting/control-page/components/organisms/project-group-board.tsx) re-exports `ProjectsGrid`.
-  - [`ConfigFormBuilder`](../src/reporting/control-page/components/organisms/ConfigFormBuilder.tsx): project/default editing, validation, add/clone drafts, and removal constraints; [`RawJsonSection`](../src/reporting/control-page/components/organisms/RawJsonSection.tsx): apply JSON and validation feedback.
-  - [`ExecutionSection`](../src/reporting/control-page/components/organisms/ExecutionSection.tsx): all-enabled report/build actions and saved 1–4 Workers selector; [`RunStatusCard`](../src/reporting/control-page/components/organisms/RunStatusCard.tsx): status/ID, result, and logs.
-  [`HeaderBar`](../src/reporting/control-page/components/organisms/HeaderBar.tsx), [`CredentialsDialog`](../src/reporting/control-page/components/organisms/CredentialsDialog.tsx), and [`BrowserSettingsDialog`](../src/reporting/control-page/components/organisms/BrowserSettingsDialog.tsx) complete this tier.
-  Layout templates are exported by [`templates/index.ts`](../src/reporting/control-page/components/templates/index.ts):
-  - [`DashboardLayout`](../src/reporting/control-page/components/templates/DashboardLayout.tsx): skip link, 1200px shell, and project/editor/action/run slots; `DashboardPage` uses it.
-  - [`ReportManagementLayout`](../src/reporting/control-page/components/templates/ReportManagementLayout.tsx): skip link and header/banner/search/content/history/dialog slots; [`FinalReportLayout`](../src/reporting/control-page/components/templates/FinalReportLayout.tsx): report skip link and toolbar/export/status/body slots.
-  Layout slot contracts are in [`component-contracts.ts`](../src/reporting/control-page/types/component-contracts.ts).
-  The five tiers are atoms → molecules → organisms → templates → pages. Page
-  components (`DashboardPage`, `ReportManagementPage`, `FinalProjectReportPage`)
-  coordinate hooks/local state as page-tier coordinators and fill matching
-  template slots; templates own page shells. `ErrorBoundary` wraps the app;
-  `App.tsx` selects routes and uses atom `Card`/`Button` for `NotFoundView`.
-  `styles/globals.css` provides the Modern Refined Light theme and focus/
-  reduced-motion rules. Vite emits the strict-CSP single JS/CSS bundle.
-  Legacy imperative
-  assets (`control-page.js`, `control-page.html`, `control-page.css`) have been removed (Phase 06).
+- `src/reporting/control-page/` contains the Control Dashboard React frontend:
+  `types/index.ts` re-exports schema contracts; `useConfigManager.ts` and
+  `useConfigDocumentEditor.ts` own config I/O, structured/raw-JSON sync,
+  validation, dirty state, and ETag-protected saves. Immutable table edits live
+  in `hooks/matrix-document-transitions.ts`.
+  - [`ProjectsJobMatrix`](../src/reporting/control-page/components/organisms/projects-job-matrix.tsx)
+    renders one row per project with enabled, ID/name, shared job columns, URL
+    cells, fixed per-row target checkboxes, and row actions. Its toolbar adds
+    projects/columns and opens defaults; the table scrolls horizontally inside
+    the matrix.
+  - [`MatrixRow`](../src/reporting/control-page/components/organisms/matrix-row.tsx),
+    [`MatrixToolbar`](../src/reporting/control-page/components/organisms/matrix-toolbar.tsx),
+    and [`AddColumnDialog`](../src/reporting/control-page/components/organisms/add-column-dialog.tsx)
+    compose project and column controls. Column headers rename or confirm
+    removal; removal drops matching cells/selections and recomputes `jobUrl`.
+  - [`JobColumnHeader`](../src/reporting/control-page/components/molecules/job-column-header.tsx),
+    [`ProjectJobCell`](../src/reporting/control-page/components/molecules/project-job-cell.tsx),
+    [`ProjectJobSelection`](../src/reporting/control-page/components/molecules/project-job-selection.tsx),
+    [`MatrixRowSettings`](../src/reporting/control-page/components/molecules/matrix-row-settings.tsx),
+    and [`ConfigDefaultsDialog`](../src/reporting/control-page/components/molecules/config-defaults-dialog.tsx)
+    provide column, URL, target, project-settings, and defaults controls.
+  - `DashboardPage` supplies the matrix, raw JSON, action, and run sections to
+    `DashboardLayout`. `ExecutionSection` exposes report/build actions and the
+    saved 1–4 Workers selector; credentials and browser settings remain in
+    dialogs. `ReportManagementPage` and `FinalProjectReportPage` use their own
+    templates. `App.tsx` routes views; `ErrorBoundary` wraps them.
+  - The clean cutover deleted `ProjectsGrid`, `ProjectCard`, the project-group
+    board/column/dialog components, `ConfigFormBuilder`, and
+    `ConfigProjectEditor`, with no compatibility aliases. Optional
+    `projectGroups`/`groupId` remain schema data, preserved by normal matrix
+    edits, but the Dashboard has no group-management UI.
+  - The five UI tiers remain atoms → molecules → organisms → templates →
+    pages. Shared component/layout contracts live in
+    `types/component-contracts.ts`; Vite emits the strict-CSP single JS/CSS
+    bundle. Legacy imperative assets (`control-page.js`, `control-page.html`,
+    `control-page.css`) were removed in Phase 06.
+  - [`ReportExportButton`](../src/reporting/control-page/components/molecules/ReportExportButton.tsx)
+    and the final-report page expose the client-side PDF flow; report-management
+    tables/dialogs remain separate from the project matrix.
 - `src/reporting/report-server-control-page.ts` reads Vite-built assets from
   `.runner-build/reporting/control-page/`, injects the instance CSRF token into
   `index.html`, and provides cached CSS and JS.
@@ -435,12 +438,22 @@ to `failed`. A timeout includes any observed build number, current result, and
 stage breakdown. Outcomes do not expose form bodies, parameters, crumbs,
 headers, cookies, or response bodies, and auto-build does not persist reports.
 
-The Control Page persists `waitForCompletion` through `ConfigFormBuilder`; its
-action bar exposes **Generate Reports (All Enabled)** (`#btn-run-reports`),
-**Trigger Auto Build (All Enabled)** (`#btn-run-auto-build`), and shared saved
-**Workers** (`#select-workers`, 1–4). Builds start immediately, without a
-per-card trigger or confirmation dialog. `RunResultBox` renders ordered
-per-project rows with scalar fallback for older records.
+The matrix settings dialog persists per-project login URL, browser, timeouts,
+artifact directory, credential references, enabled state, and
+`waitForCompletion`; a separate defaults dialog edits shared defaults.
+`ExecutionSection` exposes **Generate Reports (All Enabled)**
+(`#btn-run-reports`), **Trigger Auto Build (All Enabled)**
+(`#btn-run-auto-build`), and one saved **Workers** selector
+(`#select-workers`, 1–4). Document edits synchronize raw JSON, mark it dirty,
+and require `PUT /api/config` with `If-Match` before runs. The saved count is
+never sent as request-level `workerCount`.
+
+The matrix preview counts selected nonblank cells from enabled rows and selected
+blank cells to skip; it is not mode-specific. Each action still sends only its
+report/auto-build mode and config identity. The server selects projects by
+saved project-level `runType` and executes scalar `jobUrl`; the matrix's
+`selectedJobColumns` do not yet select execution targets. The two controls do
+not expose per-cell mode selection.
 
 Every configured, discovered, redirected, and final URL in either path must be
 credential-free HTTP(S) and inside its allowed canonical origin. Context and
@@ -633,7 +646,7 @@ The server operates on its own origin/port (`4174`) completely separated from th
 
 #### Developer Hub Index Page (`GET /`, `GET /index.html`)
 
-The template server exposes a built-in Developer Hub index page on `GET /` and `GET /index.html` (along with `HEAD`), generated by [`buildDeveloperHubHtml`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server.ts#L78) from [`DeveloperHubEndpoints`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server.ts#L51). It provides a responsive dark-themed dashboard indexing all 9 offline fixture endpoints categorized with service badges, descriptions, and dynamic origin links:
+The template server exposes a built-in Developer Hub index page on `GET /` and `GET /index.html` (along with `HEAD`), generated by [`buildDeveloperHubHtml`](../src/templates/template-server.ts#L78) from [`DeveloperHubEndpoints`](../src/templates/template-server.ts#L51). It provides a responsive dark-themed dashboard indexing all 9 offline fixture endpoints categorized with service badges, descriptions, and dynamic origin links:
 - **Jenkins**:
   - `Jenkins Login`: authentication entrypoint (`/login`)
   - `Jenkins Job Page`: main project page linking reports and builds (`/job/template-fixture-job/`)
@@ -648,89 +661,72 @@ The template server exposes a built-in Developer Hub index page on `GET /` and `
   - `SonarQube Issues`: issue list with severity facets (`/project/issues?id=template-fixture-project&resolved=false`)
 
 Security and delivery specifications:
-- Pre-buffered in UTF-8 memory during [`createTemplateServer`](file:///G:/ws/sharing/auto-jobs/src/templates/template-server.ts#L433) startup for zero per-request render overhead.
+- Pre-buffered in UTF-8 memory during [`createTemplateServer`](../src/templates/template-server.ts#L433) startup for zero per-request render overhead.
 - Strict security headers: `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Cache-Control: no-store, must-revalidate`.
 - Defends against XSS via HTML escaping and safe URL validation (`validateSafeHubUrl`), rejecting non-HTTP/HTTPS schemes such as `javascript:` or `data:`.
 
 #### Template Server Validation & Integration (Phase 05)
 
-The standalone template mock server and its accompanying configuration are validated via [`tests/e2e/template-server-integration.spec.ts`](file:///G:/ws/sharing/auto-jobs/tests/e2e/template-server-integration.spec.ts), executed through [`playwright.template.config.ts`](file:///G:/ws/sharing/auto-jobs/playwright.template.config.ts).
+The standalone template mock server and its accompanying configuration are validated via [`tests/e2e/template-server-integration.spec.ts`](../tests/e2e/template-server-integration.spec.ts), executed through [`playwright.template.config.ts`](../playwright.template.config.ts).
 
 The test harness exercises the following architectural boundaries:
 - **Smoke test automation**: Browser navigation across the Developer Hub and all 9 mock fixture endpoints, verifying HTTP 200/302 status codes, expected HTML/JSON contents, and absence of browser console errors.
 - **Session authentication guarding**: Simulates SonarQube's authentication lifecycle where unauthenticated visits to `/dashboard` serve the login page until a form POST on `/sessions/new` marks the session authenticated.
 - **URL path encoding preservation**: Ensures double-encoded slash sequences (`%252F`) in Jenkins job paths round-trip accurately through Node.js HTTP request parsing without double-decoding defects.
 - **Server process isolation**: Confirms Control Server (`4173`) and Template Server (`4174`) bind and run concurrently on loopback without port collisions or cross-origin interference.
-- **Schema-v1 config validation**: Validates [`config/projects.template.json`](file:///G:/ws/sharing/auto-jobs/config/projects.template.json) parsing and normalization through `loadProjectConfig`, confirming proper mapping of `TEMPLATE_FIXTURE_USERNAME` and `TEMPLATE_FIXTURE_PASSWORD`.
+- **Schema-v1 config validation**: Validates [`config/projects.template.json`](../config/projects.template.json) parsing and normalization through `loadProjectConfig`, confirming proper mapping of `TEMPLATE_FIXTURE_USERNAME` and `TEMPLATE_FIXTURE_PASSWORD`.
 - **End-to-end report collection**: Dispatches `runConfiguredProjects` against the live HTTP template server, confirming creation of compliant `reports/template-fixture-service/{run-id}/` report artifacts (`index.html`, `data.json`) containing parsed Snyk and SonarQube evidence.
 - **Auto-build execution**: Dispatches `runAutoBuildProject` against the live HTTP template server, validating form submission and 302 redirect.
-- **Control Page UI integration**: Mounts `projects.template.json` within the Control Dashboard UI, asserting clean project card rendering with zero cross-origin or CSP security violation console errors.
+- **Control Page UI integration**: Mounts `projects.template.json` within the Control Dashboard UI, asserting clean matrix-row rendering with zero cross-origin or CSP security violation console errors.
 
-### Control Dashboard Atomic Design Components and Contract Fidelity
+### Control Dashboard and flat project/job matrix (Phase 02)
 
-The Control Dashboard frontend refactor implements Atomic Design principles, cleanly separating presentational UI components from stateful hooks while ensuring 100% contract fidelity with existing Playwright E2E tests:
+The Vite-built React app uses atoms → molecules → organisms → templates →
+pages. `DashboardPage` coordinates config/document hooks and supplies one
+`ProjectsJobMatrix`, Raw JSON, execution actions, current run, credentials, and
+browser settings to `DashboardLayout`. Report history and final-report viewing
+use separate page/template pairs.
 
-1. **Styling and class resolution**:
-   - [`globals.css`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/styles/globals.css) binds Tailwind base, components, and utility layers with theme custom properties mapped from legacy control CSS (`--bg-color`, `--card-bg`, `--text-main`, `--text-muted`, `--border-color`, `--primary`, `--secondary`, `--danger`, `--focus-ring`, `--mono-font`). It declares high-contrast `:focus-visible` outlines, accessible skip links (`.skip-link`), hidden utilities (`.visually-hidden`, `.hidden`), and reduced motion overrides (`@media (prefers-reduced-motion: reduce)`).
-   - [`cn`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/utils/cn.ts#L4) (`utils/cn.ts`) integrates `clsx` and `twMerge` to eliminate Tailwind class conflicts while allowing legacy class selectors to pass through unimpeded.
+`ProjectsJobMatrix` renders one horizontally scrollable semantic table with one
+row per project: enable checkbox, editable ID/name, one URL cell per shared
+`jobColumns` entry, selected-column checkboxes, and settings/clone/remove
+actions. The toolbar adds projects and columns or opens defaults. Header actions
+rename columns and require confirmation before removal; adding a column creates
+blank cells for every project, while removal deletes its cells/selections and
+recomputes each scalar `jobUrl` mirror. Row settings expose login URL, browser,
+timeouts, artifact directory, credential references, enabled, and
+`waitForCompletion`; other schema fields remain editable in Raw JSON.
 
-2. **Atomic UI Primitives ([`components/atoms/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/))**:
-   - [`Badge`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Badge.tsx#L31): Renders `<span className="badge badge-{variant}">`. Supports run lifecycle variants (`idle`, `queued`, `running`, `succeeded`, `failed`, `unknown`, `submission-unknown`), credential states (`configured` -> `badge-configured`, `missing` -> `badge-missing`), and browser setting states (`not-set` -> `badge-missing` class with `"Not Set"` label). Supports `forwardRef` and custom children.
-   - [`Button`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Button.tsx#L5): Renders accessible button elements (`type="button"`) with variant classes (`btn-primary`, `btn-secondary`, `btn-danger`, `btn-outline`), compact sizing (`btn-sm`), disabled/loading state handling with accessible spinner, and arbitrary `data-*` attribute pass-through.
-   - [`Input`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Input.tsx#L5): Form input wrapper supporting `text` and `password` types, `htmlFor` label linkage, `role="alert"` error announcements with `aria-invalid="true"`, and secure defaults (`autoComplete="off"`, `spellCheck={false}`).
-   - [`Select`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/Select.tsx#L5): Native `<select>` wrapper supporting options arrays or child nodes, optional field labels, and `aria-label`.
-   - [`StatusBanner`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/StatusBanner.tsx#L5): Displays top-level notification alerts (`<div id="status-banner" role="status" aria-live="polite">`) with `info`, `success`, and `error` styling, hidden via `.hidden` when inactive.
-   - [`LoadingIndicator`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/atoms/LoadingIndicator.tsx#L5): Renders polite status updates (`aria-live="polite"`) with `.credentials-loading` styling and visibility toggling.
+`matrix-document-transitions.ts` applies immutable project, cell, selection,
+and column updates. `useConfigDocumentEditor` validates each document, keeps
+structured edits and Raw JSON synchronized, and tracks dirty state; config
+loads and saves retain the ETag boundary. `useConfigManager` applies
+`projectLegacyMatrixDocument` in memory to loaded/saved responses; loading a
+legacy file does not write it. Explicit Save persists expanded matrix fields.
+Cloning deep-copies a project, carries its job cells/selections into the new
+row, generates a bounded unique identity, disables the clone, and removes its
+`groupId`. Existing `projectGroups` and `groupId` data remain schema-validated
+and preserved during ordinary edits; there are no group controls.
 
-3. **Molecular Compound Components ([`components/molecules/`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/))**:
-   - [`CredentialRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/CredentialRow.tsx#L8): Renders credential configuration rows matching the exact legacy DOM hierarchy: `.credential-row` wrapper, `.credential-field` label with dynamic `for="secret-input-${key}"` and `Badge`, and `.credential-input-group` containing password `<input id="secret-input-${key}" class="credential-input" autocomplete="off">`. When configured, exposes `<button class="btn btn-secondary btn-sm btn-clear-credential" data-key="{key}">Clear</button>`.
-   - [`BrowserSettingRow`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/BrowserSettingRow.tsx#L28): Renders browser setting controls adhering to exact test IDs for headless selection (`#badge-browser-headless`, `#browser-headless-select`, `#btn-clear-browser-headless`) and executable path input (`#badge-browser-executable-path`, `#browser-executable-path-input`, `#btn-clear-browser-executable-path`).
-   - [`ConfigSelectorBar`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/ConfigSelectorBar.tsx#L7): Controls active configuration selection (`<select id="config-select">`), reload action (`#btn-reload`), save action (`#btn-save`, disabled unless `isDirty`), and modal open triggers (`#btn-credentials`, `#btn-browser-settings`).
-   - [`LogViewer`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/LogViewer.tsx#L23): Streaming run log output `<pre id="run-logs" role="log" aria-live="polite" class="log-pre">`, formatting string logs or `RunLogEntry[]` timestamped records and auto-scrolling to the latest log output.
-   - [`RunResultBox`](file:///G:/ws/sharing/auto-jobs/src/reporting/control-page/components/molecules/RunResultBox.tsx#L5): Displays report results, ordered `buildProjects` rows, scalar fallback for older records, and errors in `#run-result-box`.
-   - [`BuildProjectOutcomeRow`](../src/reporting/control-page/components/molecules/build-project-outcome-row.tsx): Displays each project's identity/status, optional build number/link, stages, and error.
+`ExecutionSection` shows counts of selected nonblank cells on enabled rows and
+selected blanks. It disables actions for absent, dirty, invalid, loading, or
+empty configurations and while a run is queued/running. Each button chooses
+report or auto-build mode, but the current request contains no row/column
+coordinates: the server continues to select enabled projects by saved
+`runType` and executes scalar `jobUrl`. Thus matrix selection is saved UI
+metadata/preview, not multi-job dispatch; Phase 04 owns execution/API support.
+No per-cell run-type control remains.
 
-4. **Contract Fidelity Guarantees**:
-   - **DOM contracts**: Retained component IDs/classes stay stable; retired dialog
-     and per-card build controls are removed. Updated component specs cover the
-     action bar and ordered multi-project result rows.
-   - **Raw JSON Editor Preservation**: The configuration editor retains a standard `<textarea id="raw-json-textarea">` to ensure native Playwright `.fill()` and `.textContent` operations succeed without complex DOM interceptors.
-   - **Accessibility**: Includes explicit ARIA roles (`role="status"`, `role="log"`, `role="alert"`), `aria-live="polite"` live regions, and `label[for]` associations.
-   - **Zero Leakage**: Credential inputs enforce `type="password"`, `autoComplete="off"`, and input value clearing on submission, clear, and dialog closure.
+The old grouped board and separate form editor were removed: `ProjectsGrid`,
+`ProjectCard`, `project-group-column`, `project-group-board`,
+`project-group-dialog-*`, `ConfigFormBuilder`, `ConfigProjectEditor`, and
+`project-group-board.ts` have no compatibility aliases. `RawJsonSection`
+remains the escape hatch for all schema fields.
 
-5. **Organisms, templates, and page coordinators (Atomic Design Phases 03–04)**:
-   - Refined `ProjectCard`, `ProjectGroupColumn`, `ProjectsGrid`, `ConfigFormBuilder`, `RawJsonSection`, `ExecutionSection`, and `RunStatusCard`; project-card control IDs remain stable.
-   - `DashboardPage` uses `DashboardLayout`; `ReportManagementPage` and `FinalProjectReportPage` fill matching slots in `ReportManagementLayout` and `FinalReportLayout`. Pages coordinate hooks/view state; templates own the shells.
-   - `App.tsx` selects routes; `NotFoundView` uses `Card`/`Button` atoms, with `ErrorBoundary` around the selected view.
-
-6. **Phase 06 Legacy Cleanup**:
-   - Completely removed legacy imperative files: `src/reporting/control-page/control-page.js`, `control-page.html`, and `control-page.css`.
-   - The loopback dashboard frontend is 100% React, compiled via Vite into `.runner-build/reporting/control-page/` (`index.html`, `assets/control-page.css`, `assets/control-page.js`).
-   - `scripts/copy-report-assets.mjs` stages only `report.css`.
-
-### Control Page execution actions and saved Workers
-
-`ConfigFormBuilder` edits project/default fields. `ExecutionSection` places
-**Generate Reports (All Enabled)** (`#btn-run-reports`), **Trigger Auto Build
-(All Enabled)** (`#btn-run-auto-build`), and one shared **Workers** selector
-(`#select-workers`, 1–4, default 1) in the action bar. `DashboardPage` binds the
-selector to `updateReportWorkers`; edits update the validated document and raw
-JSON, mark it dirty, and require `PUT /api/config` with `If-Match` before runs.
-The saved count is never sent as request-level `workerCount`.
-
-The report action selects all enabled report projects. The build action sends
-`runType: 'auto-build'` without `projectId`, selecting all enabled auto-build
-projects; API callers may still target one ID. The saved count bounds both
-pools, preserves configuration order, and the batch succeeds only if every
-outcome has `exitCode === 0`.
-
-### Project draft cloning design
-
-`ConfigFormBuilder` provides cloning of the selected applied project via pure utility `cloneProjectDraft` (`src/reporting/control-page/utils/clone-project-draft.ts`):
-- **Data independence**: Uses `structuredClone(source)` on the raw `ProjectConfigInput` once on clone action, preserving explicit URLs, selectors, timeouts, credentials env-var references, and omitted overrides without object aliasing or default resolution.
-- **Suffix-aware bounding**: Truncates base source ID to fit within `MAX_PROJECT_ID_LENGTH` (63 characters) before appending `-copy` (or `-copy-${counter}`) to guarantee uniqueness against existing project IDs. Cloned name appends ` (copy)` bounded to `PROJECT_CONFIG_LIMITS.maxNameLength` (200 characters).
-- **Disabled and ungrouped status**: Cloned projects default to `enabled: false` to guard against accidental execution and delete `groupId` so the clone begins in the `Ungrouped` group.
-- **Draft lifecycle and replacementRevision reset**: The clone enters the existing new-project draft form with visible source context and review guidance. Cancelling leaves document and dirty state untouched. Pending drafts, validation errors, and selection index reset only when `replacementRevision` changes on successful document load, config switch, or valid raw-JSON Apply; routine group edits and global Save do not reset the draft.
+Phase 02 review evidence: 73/73 unit checks, 22/22 Chromium E2E checks,
+typecheck, and Vite build passed; review approved at 9.3/10. This is a phase
+snapshot, not the post-integration release gate. See the
+[review](../plans/260930-0250-flat-project-job-matrix/code-review-260930-0941-phase-02-spreadsheet-matrix-ui-components.md).
 
 ## Test and release boundary
 
@@ -777,10 +773,10 @@ empty candidates, storage-safe access, URL parameter/hash preservation,
 collision-free project creation, immutable field/default updates, advanced
 field preservation, deletion invariants, and schema validation.
 
-Control-page E2E coverage verifies selection persistence in localStorage and
-`?config=` across reload, URL deep-link priority, stale-name fallback, project
-edits, and builder/raw-JSON synchronization. Valid Apply updates form controls;
-invalid/schema-invalid Apply preserves the prior model.
+Control-page E2E coverage verifies active-config persistence in localStorage
+and `?config=` across reload, URL deep-link priority, stale-name fallback,
+matrix edits, and matrix/raw-JSON synchronization. Valid Apply updates matrix
+controls; invalid/schema-invalid Apply preserves the prior model.
 
 Two report-worker scenarios cover the default and 1–4 selector, JSON sync,
 dirty/run gating, saved-config persistence, and config switching. They also
@@ -789,8 +785,8 @@ that field return `422 INVALID_WORKER_COUNT`. Credential, browser-settings,
 execution-injection, and zero-leakage scenarios remain covered in Chromium
 and WebKit.
 
-The desktop/mobile test audits the editor with Axe at 1280×800 and 375×667,
-expects zero violations at both sizes, and verifies no horizontal overflow.
+The Active Config Phase 04 desktop/mobile editor audit recorded zero Axe
+violations at 1280×800 and 375×667 and no horizontal page overflow.
 `tests/e2e/template-server-integration.spec.ts` checks concurrent Control and
 Template Servers, template-config loading, production report and auto-build
 flows, and Control Page rendering without CORS/CSP console errors.

@@ -77,7 +77,7 @@
 ## Next steps
 
 - Phase 01 is DONE as of 2026-09-30; review scored 9.2/10. The reported prototype-chain presence check now uses own-property lookup; duplicate column IDs are rejected, though cell diagnostics can repeat.
-- Phase 02 proceeds with building accessible flat spreadsheet matrix UI components (`MatrixTable`, header controls, cell renderers).
+- Phase 02 (spreadsheet matrix UI) is DONE as of 2026-09-30; see its [validation report](../reports/phase02tester-260930-0939-spreadsheet-matrix-validation.md) and [code review](./code-review-260930-0941-phase-02-spreadsheet-matrix-ui-components.md).
 - Phase 03 will integrate `projectLegacyMatrixDocument` into `useConfigManager` / `useConfigDocumentEditor` for edit/save lifecycle and implement pure matrix document transitions.
 
 ## Real remaining decisions

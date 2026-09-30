@@ -50,6 +50,7 @@ export interface ProjectConfigInput {
   browser?: BrowserName;
   artifactDir?: string;
   credentials?: ProjectCredentialReferences;
+  credentialVariables?: ProjectCredentialReferences | readonly string[] | string[];
   selectors?: SelectorOverrides;
   allowedOrigins?: readonly string[];
   sourceOrigins?: ProjectOriginPolicies;
@@ -64,6 +65,7 @@ export interface ProjectConfigDefaults {
   browser?: BrowserName;
   artifactDir?: string;
   credentials?: ProjectCredentialReferences;
+  credentialVariables?: ProjectCredentialReferences | readonly string[] | string[];
   selectors?: SelectorOverrides;
   allowedOrigins?: readonly string[];
   sourceOrigins?: ProjectOriginPolicies;

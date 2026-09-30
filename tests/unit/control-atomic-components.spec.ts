@@ -669,11 +669,11 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
             configs: ['default.json', 'demo.json'],
             activeConfig: 'default.json',
             isDirty: false,
-            onSelectConfig: () => {},
-            onReload: () => {},
-            onSave: () => {},
-            onOpenCredentials: () => {},
-            onOpenBrowserSettings: () => {},
+            onSelectConfig: () => { },
+            onReload: () => { },
+            onSave: () => { },
+            onOpenCredentials: () => { },
+            onOpenBrowserSettings: () => { },
           }),
         );
 
@@ -690,11 +690,11 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
             configs: ['default.json'],
             activeConfig: 'default.json',
             isDirty: true,
-            onSelectConfig: () => {},
-            onReload: () => {},
-            onSave: () => {},
-            onOpenCredentials: () => {},
-            onOpenBrowserSettings: () => {},
+            onSelectConfig: () => { },
+            onReload: () => { },
+            onSave: () => { },
+            onOpenCredentials: () => { },
+            onOpenBrowserSettings: () => { },
           }),
         );
 
@@ -863,16 +863,16 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
       test('renders Generate Reports and Trigger Auto Build buttons and Workers select with options 1-4', () => {
         const html = renderToString(
           React.createElement(ExecutionSection, {
-            onRunReports: () => {},
-            onRunAutoBuild: () => {},
+            onRunReports: () => { },
+            onRunAutoBuild: () => { },
             reportWorkers: 1,
             hasDocument: true,
           }),
         );
         expect(html).toContain('id="btn-run-reports"');
-        expect(html).toContain('Generate Reports (All Enabled)');
+        expect(html).toContain('Generate Reports');
         expect(html).toContain('id="btn-run-auto-build"');
-        expect(html).toContain('Trigger Auto Build (All Enabled)');
+        expect(html).toContain('Trigger Auto Build');
         expect(html).toContain('id="select-workers"');
         expect(html).toContain('Workers');
         expect(html).toContain('value="1"');
@@ -884,8 +884,8 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
       test('disables selector when hasDocument is false or isLoading is true', () => {
         const noDocHtml = renderToString(
           React.createElement(ExecutionSection, {
-            onRunReports: () => {},
-            onRunAutoBuild: () => {},
+            onRunReports: () => { },
+            onRunAutoBuild: () => { },
             hasDocument: false,
           }),
         );
@@ -893,8 +893,8 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
 
         const loadingHtml = renderToString(
           React.createElement(ExecutionSection, {
-            onRunReports: () => {},
-            onRunAutoBuild: () => {},
+            onRunReports: () => { },
+            onRunAutoBuild: () => { },
             hasDocument: true,
             isLoading: true,
           }),
@@ -905,8 +905,8 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
       test('disables both run buttons when isDirty, isLoading, or hasDocument is false', () => {
         const dirtyHtml = renderToString(
           React.createElement(ExecutionSection, {
-            onRunReports: () => {},
-            onRunAutoBuild: () => {},
+            onRunReports: () => { },
+            onRunAutoBuild: () => { },
             isDirty: true,
             hasDocument: true,
           }),
@@ -916,8 +916,8 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
 
         const loadingHtml = renderToString(
           React.createElement(ExecutionSection, {
-            onRunReports: () => {},
-            onRunAutoBuild: () => {},
+            onRunReports: () => { },
+            onRunAutoBuild: () => { },
             isLoading: true,
             hasDocument: true,
           }),
@@ -927,8 +927,8 @@ test.describe('Phase 03: Atomic Design Components (Atoms & Molecules)', () => {
 
         const noDocHtml = renderToString(
           React.createElement(ExecutionSection, {
-            onRunReports: () => {},
-            onRunAutoBuild: () => {},
+            onRunReports: () => { },
+            onRunAutoBuild: () => { },
             hasDocument: false,
           }),
         );

@@ -1,4 +1,4 @@
-# Phase 02 — spreadsheet matrix UI components
+# Phase 02 — spreadsheet matrix UI components (DONE — 2026-09-30)
 
 ## Context links
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-- Priority: P2 · Status: Pending · Estimate: 7h.
+- Priority: P2 · Status: DONE — 2026-09-30 · Status recorded: 2026-09-30T10:01:59+07:00 · Estimate: 7h.
 - Replace **both** `ProjectsGrid`/`ProjectGroupColumn`/`ProjectCard` and `ConfigFormBuilder` with one flat, spreadsheet-style editor. No grouped board, form panel, or extra per-link run-type control remains. Each project appears once, rows map to shared named columns and carry a fixed multiple-selection control.
 
 ## Key insights
@@ -51,11 +51,11 @@
 
 ## Todo list
 
-- [ ] Single shared-heading table with editable row ID/name and URL cells.
-- [ ] Add/rename/remove headings and row-specific multiple-column selector.
-- [ ] Project add/clone/remove and advanced/default editing retained without form panel; no group-management UI.
-- [ ] Two explicit report/build actions, saved worker count, blank skip feedback and outcome identity.
-- [ ] Board/form components and duplicate layout slots fully removed; actual browser inspection.
+- [x] Single shared-heading table with editable row ID/name and URL cells.
+- [x] Add/rename/remove headings and row-specific multiple-column selector.
+- [x] Project add/clone/remove and advanced/default editing retained without form panel; no group-management UI.
+- [x] Two explicit report/build actions, saved worker count, blank skip feedback and outcome identity.
+- [x] Board/form components and duplicate layout slots fully removed; actual browser inspection.
 
 ## Success criteria
 
@@ -73,10 +73,18 @@
 
 - URL input labels and links must never include secret values or credential-bearing URLs. Safe links use existing URL policy and `rel="noopener noreferrer"` for external navigation. React text interpolation, not unsafe HTML. UI validation is advisory; server validates saved cells and selected execution targets. Keep CSRF in shared API client.
 
+
+## Completion record
+
+- **Status:** DONE — 2026-09-30; status recorded at `2026-09-30T10:01:59+07:00`.
+- **Validation report:** 110/110 selected checks passed (98 unit, 12 Chromium Control E2E); `npm run typecheck` and `npm run build` passed. Coverage was not collected. Vite emitted a non-blocking 2,697.08 kB bundle warning (1,083.88 kB gzip).
+- **Code review:** 9.3/10, no critical findings. Review records 73 unit and 22 E2E passes, a different test split from the validation report; Phase 05 should report consolidated release-gate totals. The review's stale-primary-mirror finding is corrected in current transition code, which assigns the computed primary URL directly. Non-blocking suggestions remain: remove redundant Dialog `forceMount` options and consider a narrow-screen scroll cue.
+- **Evidence:** [Validation report](../reports/phase02tester-260930-0939-spreadsheet-matrix-validation.md) · [Code review](./code-review-260930-0941-phase-02-spreadsheet-matrix-ui-components.md).
+
 ## Next steps
 
 - Integrate with Phase 03's immutable transitions and Phase 04's target request/provenance. Phase 05 performs e2e UX and accessibility proof and removes stale snapshots/docs.
 
 ## Real remaining decisions
 
-- No blocking product choice; choose fixed always-visible checkbox group vs compact popover by actual 50-column/keyboard evidence, keeping a fixed per-row selection control either way.
+- Implemented fixed, always-visible checkbox chips per project row (`ProjectJobSelection`); Phase 05 should still prove keyboard use and usability with many columns during the integrated UX/accessibility gate.

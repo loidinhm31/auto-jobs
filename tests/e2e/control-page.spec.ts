@@ -172,16 +172,16 @@ test.describe('Control Page Dashboard E2E', () => {
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     expect(accessibilityScanResults.violations).toEqual([]);
 
-    // Check project cards
-    await expect(page.locator('.project-card')).toHaveCount(2);
-    await expect(page.locator('.project-card').getByRole('heading', { name: 'Demo Report Service', exact: true })).toBeVisible();
-    await expect(page.locator('.project-card').getByRole('heading', { name: 'Demo Build Service', exact: true })).toBeVisible();
+    // Check project matrix rows
+    await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(2);
+    await expect(page.locator('#input-project-name-demo-report-service')).toHaveValue('Demo Report Service');
+    await expect(page.locator('#input-project-name-demo-build-service')).toHaveValue('Demo Build Service');
 
     // Toggle enabled checkbox on first project -> Save button enables
     const saveBtn = page.locator('#btn-save');
     await expect(saveBtn).toBeDisabled();
 
-    const enabledCheckbox = page.locator('.project-card input[type="checkbox"]').first();
+    const enabledCheckbox = page.locator('#checkbox-enabled-demo-report-service');
     await enabledCheckbox.uncheck();
     await expect(saveBtn).toBeEnabled();
 
@@ -515,7 +515,7 @@ test.describe('Control Page Dashboard E2E', () => {
 
     // 1. Select default.json explicitly
     await configSelect.selectOption('default.json');
-    await expect(page.locator('.project-card').getByRole('heading', { name: 'Demo Report Service', exact: true })).toBeVisible();
+    await expect(page.locator('#input-project-name-demo-report-service')).toHaveValue('Demo Report Service');
 
     const storedDefault = await page.evaluate(() => localStorage.getItem('jenkins_control_active_config'));
     expect(storedDefault).toBe('default.json');
@@ -523,7 +523,7 @@ test.describe('Control Page Dashboard E2E', () => {
 
     // 2. Select alternate.json
     await configSelect.selectOption('alternate.json');
-    await expect(page.locator('.project-card').getByRole('heading', { name: 'Alternate Payment Service', exact: true })).toBeVisible();
+    await expect(page.locator('#input-project-name-alt-payment-service')).toHaveValue('Alternate Payment Service');
 
     const storedAlt = await page.evaluate(() => localStorage.getItem('jenkins_control_active_config'));
     expect(storedAlt).toBe('alternate.json');
@@ -534,83 +534,71 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(configSelect).toBeVisible();
     await expect(configSelect).toHaveValue('alternate.json');
     await expect(page).toHaveURL(/config=alternate\.json/);
-    await expect(page.locator('.project-card').getByRole('heading', { name: 'Alternate Payment Service', exact: true })).toBeVisible();
+    await expect(page.locator('#input-project-name-alt-payment-service')).toHaveValue('Alternate Payment Service');
 
     // 4. Deep-link precedence: set localStorage to default.json, but navigate with ?config=alternate.json
     await page.evaluate(() => localStorage.setItem('jenkins_control_active_config', 'default.json'));
     await page.goto(`${serverUrl}?config=alternate.json`);
     await expect(configSelect).toHaveValue('alternate.json');
-    await expect(page.locator('.project-card').getByRole('heading', { name: 'Alternate Payment Service', exact: true })).toBeVisible();
+    await expect(page.locator('#input-project-name-alt-payment-service')).toHaveValue('Alternate Payment Service');
 
     // 5. Stale-name fallback: navigate with nonexistent config parameter
     await page.goto(`${serverUrl}?config=stale-does-not-exist.json`);
     await expect(configSelect).not.toHaveValue('');
     const resolvedValue = await configSelect.inputValue();
     expect(['alternate.json', 'default.json']).toContain(resolvedValue);
-    await expect(page.locator('.project-card')).toHaveCount(2);
+    await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(2);
   });
 
-  test('supports builder add, edit, remove, defaults, and bidirectional raw JSON synchronization', async ({ page }) => {
+  test('supports matrix add, edit, remove, defaults, and bidirectional raw JSON synchronization', async ({ page }) => {
     await page.goto(serverUrl);
     await expect(page).toHaveTitle('Jenkins Control Dashboard');
-    await expect(page.locator('.project-card')).toHaveCount(2);
-    await expect(page.locator('#project-selection')).toBeVisible();
+    await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(2);
 
     const saveBtn = page.locator('#btn-save');
     await expect(saveBtn).toBeDisabled();
 
     const rawJson = page.locator('#raw-json-textarea');
     await expect(rawJson).toBeVisible();
-    // 1. Add project - inits a new draft form without premature validation errors
-    const addProjectBtn = page.getByRole('button', { name: 'Add New Project' });
+
+    // 1. Add project row to matrix
+    const addProjectBtn = page.locator('#btn-add-project');
     await expect(addProjectBtn).toBeVisible();
     await addProjectBtn.click();
 
-    // Form initialized, document not dirty yet, no premature validation errors
-    await expect(saveBtn).toBeDisabled();
-    const saveProjectBtn = page.locator('#btn-save-project');
-    await expect(saveProjectBtn).toBeVisible();
-    const loginUrlError = page.locator('#config-project-login-url-error');
-    await expect(loginUrlError).not.toBeVisible();
-
-    // Clicking Save Project with empty URLs surfaces validation errors on demand
-    await saveProjectBtn.click();
-    await expect(loginUrlError).toBeVisible();
-
-    // Testing Cancel button discards draft and returns cleanly
-    const cancelProjectBtn = page.locator('#btn-cancel-project');
-    await expect(cancelProjectBtn).toBeVisible();
-    await cancelProjectBtn.click();
-    await expect(loginUrlError).not.toBeVisible();
-    await expect(saveProjectBtn).not.toBeVisible();
-
-    // Re-open Add New Project draft
-    await addProjectBtn.click();
-    await expect(saveProjectBtn).toBeVisible();
-    await expect(loginUrlError).not.toBeVisible();
-    // 2. Populate new project fields
-    await page.locator('#config-project-id').fill('service-analytics');
-    await page.locator('#config-project-name').fill('Analytics Service');
-    await page.locator('#config-project-login-url').fill('https://jenkins.example.com/login');
-    await page.locator('#config-project-job-url').fill('https://jenkins.example.com/job/analytics/');
-    await page.locator('#config-project-run-type').selectOption('auto-build');
-
-    // 3. Click Save Project button to apply new project to the list
-    await saveProjectBtn.click();
-
-    // Now project is committed to document and raw JSON updates
+    await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(3);
     await expect(saveBtn).toBeEnabled();
-    const projectSelect = page.locator('#project-selection');
-    await expect(projectSelect).toBeVisible();
+
+    // 2. Populate new project fields in matrix
+    const newIdInput = page.locator('#input-project-id-new-project');
+    await newIdInput.fill('service-analytics');
+
+    const newNameInput = page.locator('#input-project-name-service-analytics');
+    await newNameInput.fill('Analytics Service');
+
+    const newCellInput = page.locator('#cell-service-analytics-default');
+    await newCellInput.fill('https://jenkins.example.com/job/analytics/');
+
+    // Open row settings to fill loginUrl
+    await page.locator('#btn-project-settings-service-analytics').click();
+    const settingsDialog = page.locator('#dialog-project-settings-service-analytics');
+    await expect(settingsDialog).toBeVisible();
+    await page.locator('#settings-login-url-service-analytics').fill('https://jenkins.example.com/login');
+    await page.locator('#btn-apply-settings-service-analytics').click();
+    await expect(settingsDialog).toBeHidden();
     await expect(rawJson).toHaveValue(/service-analytics/);
     await expect(rawJson).toHaveValue(/Analytics Service/);
-    await expect(rawJson).toHaveValue(/"runType":\s*"auto-build"/);
 
-    // 3. Edit defaults
-    const defaultsSummary = page.locator('summary', { hasText: /Edit configuration defaults/i });
-    await defaultsSummary.click();
+    // 3. Edit defaults via compact dialog
+    const openDefaultsBtn = page.locator('#btn-open-defaults');
+    await openDefaultsBtn.click();
+
+    const defaultsDialog = page.locator('#dialog-defaults-settings');
+    await expect(defaultsDialog).toBeVisible();
     await page.locator('#config-default-timeout').fill('50000');
     await page.locator('#config-default-browser').selectOption('firefox');
+    await page.locator('#btn-close-defaults').click();
+    await expect(defaultsDialog).toBeHidden();
 
     await expect(rawJson).toHaveValue(/"timeoutMs":\s*50000/);
     await expect(rawJson).toHaveValue(/"browser":\s*"firefox"/);
@@ -622,32 +610,31 @@ test.describe('Control Page Dashboard E2E', () => {
     await page.locator('#btn-apply-json').click();
 
     await expect(page.locator('#json-validation-msg')).toHaveText(/JSON valid and applied to model/i);
-    await expect(page.locator('#config-project-name')).toHaveValue('Realtime Analytics Service');
+    await expect(page.locator('#input-project-name-service-analytics')).toHaveValue('Realtime Analytics Service');
 
     // 5. Invalid raw JSON apply rejection
     await rawJson.fill('{ malformed json');
     await page.locator('#btn-apply-json').click();
     await expect(page.locator('#json-validation-msg')).toHaveText(/Invalid JSON or configuration/i);
-    // Prior valid builder value preserved
-    await expect(page.locator('#config-project-name')).toHaveValue('Realtime Analytics Service');
+    await expect(page.locator('#input-project-name-service-analytics')).toHaveValue('Realtime Analytics Service');
 
     // 6. Schema-invalid raw JSON apply rejection (empty projects)
     await rawJson.fill(JSON.stringify({ schemaVersion: 1, projects: [] }, null, 2));
     await page.locator('#btn-apply-json').click();
     await expect(page.locator('#json-validation-msg')).toHaveText(/Invalid JSON or configuration/i);
-    // Prior valid builder value preserved
-    await expect(page.locator('#config-project-name')).toHaveValue('Realtime Analytics Service');
+    await expect(page.locator('#input-project-name-service-analytics')).toHaveValue('Realtime Analytics Service');
 
     // Reapply valid JSON before removing
     await rawJson.fill(updatedJson);
     await page.locator('#btn-apply-json').click();
     await expect(page.locator('#json-validation-msg')).toHaveText(/JSON valid and applied to model/i);
 
-    // 7. Remove project
-    const removeProjectBtn = page.getByRole('button', { name: 'Remove Project' });
+    // 7. Remove project row
+    const removeProjectBtn = page.locator('#btn-remove-project-service-analytics');
     await expect(removeProjectBtn).toBeVisible();
     await removeProjectBtn.click();
 
+    await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(2);
     await expect(rawJson).not.toHaveValue(/service-analytics/);
     await expect(saveBtn).toBeEnabled();
 
@@ -662,13 +649,8 @@ test.describe('Control Page Dashboard E2E', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(serverUrl);
     await expect(page).toHaveTitle('Jenkins Control Dashboard');
-    await expect(page.locator('#config-form-title')).toBeVisible();
+    await expect(page.locator('#heading-matrix')).toBeVisible();
     await expect(page.locator('#raw-json-textarea')).toBeVisible();
-
-    // Expand defaults summary so all controls are in the accessibility tree
-    const defaultsSummary = page.locator('summary', { hasText: /Edit configuration defaults/i });
-    await defaultsSummary.click();
-
     const desktopA11y = await new AxeBuilder({ page }).analyze();
     expect(desktopA11y.violations).toEqual([]);
 
@@ -818,7 +800,6 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(page).toHaveTitle('Jenkins Control Dashboard');
 
     // 1. Verify no per-card build button or confirmation modal exists
-    expect(await page.locator('.project-card button:has-text("Build")').count()).toBe(0);
     expect(await page.locator('.btn-auto-build').count()).toBe(0);
     expect(await page.locator('#build-confirm-dialog').count()).toBe(0);
 
@@ -983,61 +964,40 @@ test.describe('Control Page Dashboard E2E', () => {
     expect(await resultBox.locator('text=Report Delta Service').count()).toBe(0);
   });
 
-  test('Phase 02: supports grouped project board, group creation, project assignment, rename, delete, and persistence', async ({ page }) => {
+  test('Phase 02: supports flat project matrix, column CRUD, cell editing, and persistence', async ({ page }) => {
     await page.goto(serverUrl);
     await expect(page).toHaveTitle('Jenkins Control Dashboard');
 
-    // 1. Board structure: Ungrouped column is rendered by default
-    const board = page.locator('#projects-list');
-    await expect(board).toBeVisible();
-    await expect(board).toHaveAttribute('role', 'region');
-    await expect(board).toHaveAttribute('aria-label', 'Project groups board');
+    // 1. Matrix structure: semantic table rendered with 2 project rows
+    const matrix = page.locator('#projects-job-matrix');
+    await expect(matrix).toBeVisible();
+    await expect(matrix.locator('tbody tr')).toHaveCount(2);
 
-    const ungroupedCol = page.locator('#group-column-ungrouped');
-    await expect(ungroupedCol).toBeVisible();
-    await expect(ungroupedCol.locator('.project-card')).toHaveCount(2);
+    // 2. Add Column flow
+    const addColBtn = page.locator('#btn-add-column');
+    await expect(addColBtn).toBeVisible();
+    await addColBtn.click();
 
-    // 2. Compact cards inside column
-    const firstCard = ungroupedCol.locator('.project-card').first();
-    await expect(firstCard.locator('.project-card-header')).toBeVisible();
-    await expect(firstCard.getByLabel(/Project ID:/i)).toBeVisible();
+    const addDialog = page.locator('#dialog-add-column');
+    await expect(addDialog).toBeVisible();
+    await page.locator('#input-new-col-id').fill('build-job');
+    await page.locator('#input-new-col-name').fill('Build Package');
+    await page.locator('#btn-submit-add-col').click();
+    await expect(addDialog).toBeHidden();
 
-    // 3. New Group creation flow
-    const newGroupBtn = page.locator('#btn-new-group');
-    await expect(newGroupBtn).toBeVisible();
-    await newGroupBtn.click();
+    await expect(page.locator('#col-name-build-job')).toHaveText('Build Package');
 
-    const dialog = page.locator('#project-group-dialog');
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'New Project Group' })).toBeVisible();
+    // 3. Edit Cell URL & toggle target selection
+    const cellInput = page.locator('#cell-demo-report-service-build-job');
+    await cellInput.fill('https://jenkins.example.com/job/report-build/');
+    await page.locator('#checkbox-select-demo-report-service-build-job').check();
 
-    const groupNameInput = dialog.locator('input[type="text"]');
-    await groupNameInput.fill('Platform Core');
-    await dialog.locator('#btn-confirm-create-group').click();
-
-    // Immediately transitions to Manage Projects checklist
-    await expect(dialog.getByRole('heading', { name: /Manage Projects: Platform Core/i })).toBeVisible();
-    const firstProjectCheckbox = dialog.locator('input[type="checkbox"]').first();
-    await firstProjectCheckbox.check();
-    await dialog.locator('#btn-apply-manage-projects').click();
-    await expect(dialog).toBeHidden();
-
-    // Verify columns on board
-    const newCol = page.locator('#group-column-group');
-    await expect(newCol).toBeVisible();
-    await expect(newCol.getByRole('heading', { name: 'Platform Core' })).toBeVisible();
-    await expect(newCol.locator('.project-card')).toHaveCount(1);
-    await expect(ungroupedCol.locator('.project-card')).toHaveCount(1);
-
-    // 4. Rename group flow
-    await newCol.locator('.btn-rename-group').click();
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'Rename Group' })).toBeVisible();
-    const renameInput = dialog.locator('input[type="text"]');
-    await renameInput.fill('Platform Services');
-    await dialog.locator('#btn-confirm-rename-group').click();
-    await expect(dialog).toBeHidden();
-    await expect(newCol.getByRole('heading', { name: 'Platform Services' })).toBeVisible();
+    // 4. Rename column flow
+    await page.locator('#btn-rename-col-build-job').click();
+    const renameInput = page.locator('#input-rename-col-build-job');
+    await renameInput.fill('CI Build');
+    await page.locator('#btn-save-rename-col-build-job').click();
+    await expect(page.locator('#col-name-build-job')).toHaveText('CI Build');
 
     // 5. Persistence across Save and Reload
     const saveBtn = page.locator('#btn-save');
@@ -1047,89 +1007,52 @@ test.describe('Control Page Dashboard E2E', () => {
 
     const reloadBtn = page.locator('#btn-reload');
     await reloadBtn.click();
-    await expect(newCol.getByRole('heading', { name: 'Platform Services' })).toBeVisible();
-    await expect(newCol.locator('.project-card')).toHaveCount(1);
+    await expect(page.locator('#col-name-build-job')).toHaveText('CI Build');
+    await expect(page.locator('#cell-demo-report-service-build-job')).toHaveValue('https://jenkins.example.com/job/report-build/');
+    await expect(page.locator('#checkbox-select-demo-report-service-build-job')).toBeChecked();
 
-    // 6. Delete group moves project back to Ungrouped
-    await newCol.locator('.btn-delete-group').click();
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: /Delete Group: Platform Services/i })).toBeVisible();
-    await dialog.locator('#btn-confirm-delete-group').click();
-    await expect(dialog).toBeHidden();
-
-    // Deleted column gone; Ungrouped has both projects again
-    await expect(newCol).toBeHidden();
-    await expect(ungroupedCol.locator('.project-card')).toHaveCount(2);
+    // 6. Remove column flow
+    await page.locator('#btn-remove-col-build-job').click();
+    await page.locator('#btn-confirm-remove-col-build-job').click();
+    await expect(page.locator('#col-name-build-job')).toHaveCount(0);
 
     // Save final state
     await saveBtn.click();
     await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
   });
 
-  test('Phase 03/04: supports project draft cloning, deep copy independence, draft cancellation, and disabled ungrouped persistence', async ({ page }) => {
+  test('Phase 02: supports project cloning in matrix, deep copy, and disabled state persistence', async ({ page }) => {
     await page.goto(serverUrl);
     await expect(page).toHaveTitle('Jenkins Control Dashboard');
+    await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(2);
 
-    const ungroupedCol = page.locator('#group-column-ungrouped');
-    await expect(ungroupedCol).toBeVisible();
-    await expect(ungroupedCol.locator('.project-card')).toHaveCount(2);
-
-    // 1. Open clone draft for selected project
-    const cloneBtn = page.locator('#btn-clone-project');
+    // 1. Click clone button on first project row
+    const cloneBtn = page.locator('#btn-clone-project-demo-report-service');
     await expect(cloneBtn).toBeVisible();
-    await expect(cloneBtn).toBeEnabled();
     await cloneBtn.click();
 
-    // Verify draft status banner appears
-    await expect(page.locator('text=Cloned project draft (from \'demo-report-service\')')).toBeVisible();
+    // 2. Cloned project added to matrix as disabled
+    await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(3);
+    const clonedIdInput = page.locator('#input-project-id-demo-report-service-copy');
+    await expect(clonedIdInput).toHaveValue('demo-report-service-copy');
+    const clonedEnabledCheckbox = page.locator('#checkbox-enabled-demo-report-service-copy');
+    await expect(clonedEnabledCheckbox).not.toBeChecked();
 
-    // Verify ID and Name are populated with copy suffix
-    const idInput = page.locator('#config-project-id');
-    const nameInput = page.locator('#config-project-name');
-    const enabledCheckbox = page.locator('label', { hasText: 'Enabled' }).locator('input[type="checkbox"]');
-
-    await expect(idInput).toHaveValue('demo-report-service-copy');
-    await expect(nameInput).toHaveValue('Demo Report Service (copy)');
-    await expect(enabledCheckbox).not.toBeChecked();
-
-    // 2. Cancel draft leaves original intact
-    const cancelBtn = page.locator('#btn-cancel-project');
-    await expect(cancelBtn).toBeVisible();
-    await cancelBtn.click();
-
-    // Draft banner gone, clone button available again
-    await expect(page.locator('text=Cloned project draft')).toBeHidden();
-    await expect(cloneBtn).toBeEnabled();
-    await expect(ungroupedCol.locator('.project-card')).toHaveCount(2);
-
-    // 3. Clone again and commit draft
-    await cloneBtn.click();
-    await expect(page.locator('text=Cloned project draft (from \'demo-report-service\')')).toBeVisible();
-
-    const saveProjectBtn = page.locator('#btn-save-project');
-    await expect(saveProjectBtn).toBeVisible();
-    await saveProjectBtn.click();
-
-    // Cloned project added to board inside Ungrouped column as disabled
-    await expect(ungroupedCol.locator('.project-card')).toHaveCount(3);
-    const clonedCard = ungroupedCol.locator('.project-card', { hasText: 'demo-report-service-copy' });
-    await expect(clonedCard).toBeVisible();
-    await expect(clonedCard.locator('#checkbox-enabled-demo-report-service-copy')).not.toBeChecked();
-
-    // 4. Global Save persists clone to disk
+    // 3. Global Save persists clone to disk
     const saveBtn = page.locator('#btn-save');
     await expect(saveBtn).toBeEnabled();
     await saveBtn.click();
     await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
 
-    // 5. Reload confirms persistence across sessions
+    // 4. Reload confirms persistence across sessions
     const reloadBtn = page.locator('#btn-reload');
     await reloadBtn.click();
-    await expect(ungroupedCol.locator('.project-card')).toHaveCount(3);
-    await expect(ungroupedCol.locator('.project-card', { hasText: 'demo-report-service-copy' })).toBeVisible();
+    await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(3);
+    await expect(page.locator('#input-project-id-demo-report-service-copy')).toHaveValue('demo-report-service-copy');
+    await expect(page.locator('#checkbox-enabled-demo-report-service-copy')).not.toBeChecked();
 
     // Original project remains untouched and enabled
-    const originalCard = ungroupedCol.locator('.project-card', { hasText: 'demo-report-service' }).first();
-    await expect(originalCard).toBeVisible();
+    await expect(page.locator('#input-project-id-demo-report-service')).toHaveValue('demo-report-service');
+    await expect(page.locator('#checkbox-enabled-demo-report-service')).toBeChecked();
   });
 });

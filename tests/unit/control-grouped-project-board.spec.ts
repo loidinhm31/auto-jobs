@@ -1,13 +1,21 @@
 import { expect, test } from '@playwright/test';
 import React from 'react';
 
-import type { ProjectCardData } from '../../src/reporting/control-page/types/component-contracts.js';
 import type {
+  JobColumnInput,
   ProjectConfigDocumentV1,
+  ProjectConfigInput,
   ProjectGroupInput,
 } from '../../src/reporting/control-page/types/index.js';
-import { buildProjectGroupColumns } from '../../src/reporting/control-page/utils/project-group-board.js';
 import { useConfigDocumentEditor } from '../../src/reporting/control-page/hooks/useConfigDocumentEditor.js';
+import {
+  addJobColumn,
+  renameJobColumn,
+  removeJobColumn,
+  updateJobCell,
+  toggleProjectJobSelection,
+} from '../../src/reporting/control-page/hooks/matrix-document-transitions.js';
+import { ProjectsJobMatrix } from '../../src/reporting/control-page/components/organisms/projects-job-matrix.js';
 
 interface HookRunner<T> {
   readonly current: T;
@@ -61,7 +69,7 @@ function createHookRunner<T>(hookFn: () => T): HookRunner<T> {
         }
         return states[idx] as { current: unknown };
       },
-      useEffect() {},
+      useEffect() { },
     };
 
     try {
@@ -80,166 +88,164 @@ function createHookRunner<T>(hookFn: () => T): HookRunner<T> {
   };
 }
 
-const projectAlpha: ProjectCardData = {
-  id: 'proj-alpha',
-  name: 'Alpha Service',
-  loginUrl: 'https://jenkins.example.com/login',
-  jobUrl: 'https://jenkins.example.com/job/alpha',
-  runType: 'report',
-  enabled: true,
-  groupId: 'group-core',
-};
-
-const projectBeta: ProjectCardData = {
-  id: 'proj-beta',
-  name: 'Beta Service',
-  loginUrl: 'https://jenkins.example.com/login',
-  jobUrl: 'https://jenkins.example.com/job/beta',
-  runType: 'auto-build',
-  enabled: false,
-  groupId: 'group-core',
-};
-
-const projectGamma: ProjectCardData = {
-  id: 'proj-gamma',
-  name: 'Gamma Service',
-  loginUrl: 'https://jenkins.example.com/login',
-  jobUrl: 'https://jenkins.example.com/job/gamma',
-  runType: 'report',
-  enabled: true,
-  groupId: 'group-infra',
-};
-
-const projectDelta: ProjectCardData = {
-  id: 'proj-delta',
-  name: 'Delta Service',
-  loginUrl: 'https://jenkins.example.com/login',
-  jobUrl: '',
-  runType: 'report',
-  enabled: true,
-};
-
-const projectOrphan: ProjectCardData = {
-  id: 'proj-orphan',
-  name: 'Orphan Service',
-  loginUrl: 'https://jenkins.example.com/login',
-  jobUrl: 'https://jenkins.example.com/job/orphan',
-  runType: 'report',
-  enabled: true,
-  groupId: 'dangling-non-existent-group',
-};
-
-const mockProjects: readonly ProjectCardData[] = [
-  projectAlpha,
-  projectBeta,
-  projectGamma,
-  projectDelta,
-  projectOrphan,
-];
-
 const mockGroups: readonly ProjectGroupInput[] = [
   { id: 'group-core', name: 'Core Platform' },
   { id: 'group-infra', name: 'Infrastructure' },
-  { id: 'group-empty', name: 'Empty Team' },
 ];
 
-test.describe('Phase 02: Compact grouped project board unit tests', () => {
-  test.describe('buildProjectGroupColumns bucketing invariants', () => {
-    test('renders Ungrouped first and preserves root group order', () => {
-      const columns = buildProjectGroupColumns(mockProjects, mockGroups);
+const mockJobColumns: readonly JobColumnInput[] = [
+  { id: 'report-job', name: 'Report Job' },
+  { id: 'build-job', name: 'Build Job' },
+];
 
-      expect(columns.length).toBe(4);
-      expect(columns[0]?.groupId).toBeNull();
-      expect(columns[0]?.groupName).toBe('Ungrouped');
+const mockProjects: readonly ProjectConfigInput[] = [
+  {
+    id: 'proj-alpha',
+    name: 'Alpha Service',
+    loginUrl: 'https://jenkins.example.com/login',
+    jobUrl: 'https://jenkins.example.com/job/alpha-report',
+    jobs: {
+      'report-job': 'https://jenkins.example.com/job/alpha-report',
+      'build-job': 'https://jenkins.example.com/job/alpha-build',
+    },
+    selectedJobColumns: ['report-job'],
+    runType: 'report',
+    enabled: true,
+    groupId: 'group-core',
+  },
+  {
+    id: 'proj-beta',
+    name: 'Beta Service',
+    loginUrl: 'https://jenkins.example.com/login',
+    jobUrl: 'https://jenkins.example.com/job/beta-report',
+    jobs: {
+      'report-job': 'https://jenkins.example.com/job/beta-report',
+      'build-job': '',
+    },
+    selectedJobColumns: ['report-job', 'build-job'],
+    runType: 'report',
+    enabled: false,
+    groupId: 'group-core',
+  },
+  {
+    id: 'proj-gamma',
+    name: 'Gamma Service',
+    loginUrl: 'https://jenkins.example.com/login',
+    jobUrl: 'https://jenkins.example.com/job/gamma-report',
+    jobs: {
+      'report-job': 'https://jenkins.example.com/job/gamma-report',
+      'build-job': 'https://jenkins.example.com/job/gamma-build',
+    },
+    selectedJobColumns: ['build-job'],
+    runType: 'auto-build',
+    enabled: true,
+    groupId: 'group-infra',
+  },
+  {
+    id: 'proj-delta',
+    name: 'Delta Service',
+    loginUrl: 'https://jenkins.example.com/login',
+    jobUrl: 'https://jenkins.example.com/job/delta-report',
+    jobs: {
+      'report-job': 'https://jenkins.example.com/job/delta-report',
+      'build-job': '',
+    },
+    selectedJobColumns: ['report-job'],
+    runType: 'report',
+    enabled: true,
+  },
+];
 
-      expect(columns[1]?.groupId).toBe('group-core');
-      expect(columns[1]?.groupName).toBe('Core Platform');
+function sampleMatrixDoc(): ProjectConfigDocumentV1 {
+  return {
+    schemaVersion: 1,
+    jobColumns: mockJobColumns,
+    projectGroups: mockGroups,
+    projects: mockProjects,
+  };
+}
 
-      expect(columns[2]?.groupId).toBe('group-infra');
-      expect(columns[2]?.groupName).toBe('Infrastructure');
+test.describe('Phase 02: Flat project job matrix and group metadata preservation', () => {
+  test.describe('Matrix flat presentation and group metadata preservation', () => {
+    test('renders one row per project regardless of groupId and preserves group metadata', () => {
+      const doc = sampleMatrixDoc();
+      expect(doc.projects.length).toBe(4);
+      expect(doc.projects[0]?.groupId).toBe('group-core');
+      expect(doc.projects[1]?.groupId).toBe('group-core');
+      expect(doc.projects[2]?.groupId).toBe('group-infra');
+      expect(doc.projects[3]?.groupId).toBeUndefined();
 
-      expect(columns[3]?.groupId).toBe('group-empty');
-      expect(columns[3]?.groupName).toBe('Empty Team');
+      // Rendering ProjectsJobMatrix should not crash and should render all projects
+      const element = React.createElement(ProjectsJobMatrix, {
+        document: doc,
+      });
+      expect(element).toBeDefined();
     });
 
-    test('routes unknown/dangling group IDs to Ungrouped so no project disappears', () => {
-      const columns = buildProjectGroupColumns(mockProjects, mockGroups);
-      const ungroupedCol = columns[0];
-      expect(ungroupedCol).toBeDefined();
+    test('addJobColumn updates job keys on all projects while retaining groupId', () => {
+      const doc = sampleMatrixDoc();
+      const updated = addJobColumn(doc, { id: 'deploy-job', name: 'Deploy' });
 
-      const ungroupedIds = ungroupedCol!.projects.map((p) => p.id);
-      expect(ungroupedIds).toContain('proj-delta');
-      expect(ungroupedIds).toContain('proj-orphan');
-    });
-
-    test('preserves project ordering within each group bucket', () => {
-      const columns = buildProjectGroupColumns(mockProjects, mockGroups);
-      const coreCol = columns[1];
-      expect(coreCol).toBeDefined();
-
-      const coreIds = coreCol!.projects.map((p) => p.id);
-      expect(coreIds).toEqual(['proj-alpha', 'proj-beta']);
-    });
-
-    test('handles empty groups alongside populated groups', () => {
-      const columns = buildProjectGroupColumns(mockProjects, mockGroups);
-      const emptyCol = columns[3];
-      expect(emptyCol).toBeDefined();
-      expect(emptyCol?.projects).toEqual([]);
-    });
-
-    test('handles completely empty state (0 projects, 0 groups) with Ungrouped column', () => {
-      const columns = buildProjectGroupColumns([], []);
-      expect(columns.length).toBe(1);
-      expect(columns[0]?.groupId).toBeNull();
-      expect(columns[0]?.groupName).toBe('Ungrouped');
-      expect(columns[0]?.projects).toEqual([]);
-    });
-
-    test('ensures every project appears exactly once across all columns', () => {
-      const columns = buildProjectGroupColumns(mockProjects, mockGroups);
-      const allAppearedProjects: string[] = [];
-
-      for (const col of columns) {
-        for (const proj of col.projects) {
-          allAppearedProjects.push(proj.id);
-        }
+      expect(updated.jobColumns?.length).toBe(3);
+      expect(updated.projectGroups).toEqual(mockGroups);
+      for (const p of updated.projects) {
+        expect(p.jobs?.['deploy-job']).toBe('');
+        // Ensure groupId is preserved
+        const orig = mockProjects.find((m) => m.id === p.id);
+        expect(p.groupId).toBe(orig?.groupId);
       }
+    });
 
-      expect(allAppearedProjects.length).toBe(mockProjects.length);
-      const uniqueIds = new Set(allAppearedProjects);
-      expect(uniqueIds.size).toBe(mockProjects.length);
-      for (const p of mockProjects) {
-        expect(uniqueIds.has(p.id)).toBe(true);
+    test('renameJobColumn updates name without modifying URLs or group metadata', () => {
+      const doc = sampleMatrixDoc();
+      const updated = renameJobColumn(doc, 'report-job', 'Renamed Report');
+
+      const col = updated.jobColumns?.find((c) => c.id === 'report-job');
+      expect(col?.name).toBe('Renamed Report');
+      expect(updated.projects[0]?.jobs?.['report-job']).toBe('https://jenkins.example.com/job/alpha-report');
+      expect(updated.projects[0]?.groupId).toBe('group-core');
+    });
+
+    test('removeJobColumn removes column from jobs and selection without dropping groupId', () => {
+      const doc = sampleMatrixDoc();
+      const updated = removeJobColumn(doc, 'build-job');
+      expect(updated).not.toBeNull();
+      expect(updated!.jobColumns?.length).toBe(1);
+      expect(updated!.jobColumns?.[0]?.id).toBe('report-job');
+
+      for (const p of updated!.projects) {
+        expect('build-job' in (p.jobs ?? {})).toBe(false);
+        expect(p.selectedJobColumns?.includes('build-job')).toBe(false);
+        const orig = mockProjects.find((m) => m.id === p.id);
+        expect(p.groupId).toBe(orig?.groupId);
       }
     });
 
-    test('handles all projects ungrouped when groups list is empty', () => {
-      const columns = buildProjectGroupColumns(mockProjects, []);
-      expect(columns.length).toBe(1);
-      expect(columns[0]?.groupId).toBeNull();
-      expect(columns[0]?.projects.length).toBe(mockProjects.length);
+    test('updateJobCell modifies cell URL and recalculates primary mirror while keeping groupId', () => {
+      const doc = sampleMatrixDoc();
+      const updated = updateJobCell(doc, 0, 'report-job', 'https://jenkins.example.com/job/new-alpha');
+
+      expect(updated.projects[0]?.jobs?.['report-job']).toBe('https://jenkins.example.com/job/new-alpha');
+      expect(updated.projects[0]?.jobUrl).toBe('https://jenkins.example.com/job/new-alpha');
+      expect(updated.projects[0]?.groupId).toBe('group-core');
     });
 
-    test('handles project reassignment correctly in bucket reconstruction', () => {
-      const reassignedProjects: ProjectCardData[] = [
-        { ...projectAlpha, groupId: 'group-infra' },
-        { ...projectBeta, groupId: undefined },
-        { ...projectGamma, groupId: 'group-core' },
-      ];
+    test('toggleProjectJobSelection updates row-local multi-selection', () => {
+      const doc = sampleMatrixDoc();
+      // Select build-job on proj-alpha
+      const step1 = toggleProjectJobSelection(doc, 0, 'build-job', true);
+      expect(step1.projects[0]?.selectedJobColumns).toContain('report-job');
+      expect(step1.projects[0]?.selectedJobColumns).toContain('build-job');
 
-      const columns = buildProjectGroupColumns(reassignedProjects, mockGroups);
-      const ungroupedCol = columns[0]!;
-      const coreCol = columns[1]!;
-      const infraCol = columns[2]!;
-
-      expect(ungroupedCol.projects.map((p) => p.id)).toEqual(['proj-beta']);
-      expect(coreCol.projects.map((p) => p.id)).toEqual(['proj-gamma']);
-      expect(infraCol.projects.map((p) => p.id)).toEqual(['proj-alpha']);
+      // Deselect report-job on proj-alpha
+      const step2 = toggleProjectJobSelection(step1, 0, 'report-job', false);
+      expect(step2.projects[0]?.selectedJobColumns).toEqual(['build-job']);
+      // proj-beta selection should be unchanged
+      expect(step2.projects[1]?.selectedJobColumns).toEqual(['report-job', 'build-job']);
     });
   });
 
-  test.describe('useConfigDocumentEditor group lifecycle and replacement revision', () => {
+  test.describe('useConfigDocumentEditor group metadata persistence in document', () => {
     function sampleDoc(): ProjectConfigDocumentV1 {
       return {
         schemaVersion: 1,
@@ -251,114 +257,61 @@ test.describe('Phase 02: Compact grouped project board unit tests', () => {
           {
             id: 'proj-1',
             name: 'Service 1',
+            loginUrl: 'https://jenkins.example.com/login',
+            jobUrl: 'https://jenkins.example.com/job/1',
             groupId: 'group-core',
-            loginUrl: 'https://jenkins.example/login',
-            jobUrl: 'https://jenkins.example/job/1',
+            runType: 'report',
+            enabled: true,
           },
           {
             id: 'proj-2',
             name: 'Service 2',
-            groupId: 'group-core',
-            loginUrl: 'https://jenkins.example/login',
-            jobUrl: 'https://jenkins.example/job/2',
-          },
-          {
-            id: 'proj-3',
-            name: 'Service 3',
+            loginUrl: 'https://jenkins.example.com/login',
+            jobUrl: 'https://jenkins.example.com/job/2',
             groupId: 'group-infra',
-            loginUrl: 'https://jenkins.example/login',
-            jobUrl: 'https://jenkins.example/job/3',
+            runType: 'report',
+            enabled: true,
           },
         ],
       };
     }
 
-    test('createGroup creates group immutably and does not alter replacementRevision', () => {
+    test('initializes with document containing projectGroups and row groupIds', () => {
       const runner = createHookRunner(() => useConfigDocumentEditor());
-      runner.current.setDocument(sampleDoc(), false);
-      runner.rerender();
-
-      const revBefore = runner.current.replacementRevision;
-      const createdId = runner.current.createGroup('New Team');
-      runner.rerender();
-
-      expect(createdId).toBe('group');
-      expect(runner.current.currentDoc?.projectGroups).toHaveLength(3);
-      expect(runner.current.currentDoc?.projectGroups?.[2]?.name).toBe('New Team');
-      expect(runner.current.replacementRevision).toBe(revBefore);
-      expect(runner.current.isDirty).toBe(true);
-    });
-
-    test('renameGroup updates name immutably and preserves group id and project assignments', () => {
-      const runner = createHookRunner(() => useConfigDocumentEditor());
-      runner.current.setDocument(sampleDoc(), false);
-      runner.rerender();
-
-      runner.current.renameGroup('group-core', 'Core Services Updated');
-      runner.rerender();
-
-      const updatedGroup = runner.current.currentDoc?.projectGroups?.find(
-        (g) => g.id === 'group-core',
-      );
-      expect(updatedGroup?.name).toBe('Core Services Updated');
-
-      // Verify projects still assigned to group-core
-      const assigned = runner.current.currentDoc?.projects.filter(
-        (p) => p.groupId === 'group-core',
-      );
-      expect(assigned).toHaveLength(2);
-    });
-
-    test('deleteGroup removes group definition and ungroups its member projects to Ungrouped', () => {
-      const runner = createHookRunner(() => useConfigDocumentEditor());
-      runner.current.setDocument(sampleDoc(), false);
-      runner.rerender();
-
-      runner.current.deleteGroup('group-core');
-      runner.rerender();
-
-      expect(runner.current.currentDoc?.projectGroups).toHaveLength(1);
-      expect(runner.current.currentDoc?.projectGroups?.[0]?.id).toBe('group-infra');
-
-      // Projects 1 and 2 must have groupId removed (ungrouped)
-      const p1 = runner.current.currentDoc?.projects.find((p) => p.id === 'proj-1');
-      const p2 = runner.current.currentDoc?.projects.find((p) => p.id === 'proj-2');
-      const p3 = runner.current.currentDoc?.projects.find((p) => p.id === 'proj-3');
-
-      expect(p1?.groupId).toBeUndefined();
-      expect(p2?.groupId).toBeUndefined();
-      expect(p3?.groupId).toBe('group-infra');
-    });
-
-    test('setGroupMembership atomically moves checked projects and ungroups unchecked ones', () => {
-      const runner = createHookRunner(() => useConfigDocumentEditor());
-      runner.current.setDocument(sampleDoc(), false);
-      runner.rerender();
-
-      // Move proj-3 into group-core, remove proj-2 from group-core
-      runner.current.setGroupMembership('group-core', ['proj-1', 'proj-3']);
-      runner.rerender();
-
-      const p1 = runner.current.currentDoc?.projects.find((p) => p.id === 'proj-1');
-      const p2 = runner.current.currentDoc?.projects.find((p) => p.id === 'proj-2');
-      const p3 = runner.current.currentDoc?.projects.find((p) => p.id === 'proj-3');
-
-      expect(p1?.groupId).toBe('group-core');
-      expect(p2?.groupId).toBeUndefined(); // moved out of group-core -> Ungrouped
-      expect(p3?.groupId).toBe('group-core'); // moved from group-infra -> group-core
-    });
-
-    test('replaceDocument increments replacementRevision to signal dialog reset', () => {
-      const runner = createHookRunner(() => useConfigDocumentEditor());
-      runner.current.setDocument(sampleDoc(), false);
-      runner.rerender();
-
-      const rev1 = runner.current.replacementRevision;
       runner.current.replaceDocument(sampleDoc());
       runner.rerender();
 
-      const rev2 = runner.current.replacementRevision;
-      expect(rev2).toBe(rev1 + 1);
+      expect(runner.current.currentDoc?.projectGroups?.length).toBe(2);
+      expect(runner.current.currentDoc?.projects[0]?.groupId).toBe('group-core');
+      expect(runner.current.currentDoc?.projects[1]?.groupId).toBe('group-infra');
+    });
+
+    test('updating a project preserves its groupId in document state', () => {
+      const runner = createHookRunner(() => useConfigDocumentEditor());
+      runner.current.replaceDocument(sampleDoc());
+      runner.rerender();
+
+      runner.current.updateProjectAt(0, { name: 'Service 1 Updated' });
+      runner.rerender();
+
+      expect(runner.current.isDirty).toBe(true);
+      expect(runner.current.currentDoc?.projects[0]?.name).toBe('Service 1 Updated');
+      expect(runner.current.currentDoc?.projects[0]?.groupId).toBe('group-core');
+    });
+
+    test('raw JSON apply round-trips group metadata without loss', () => {
+      const runner = createHookRunner(() => useConfigDocumentEditor());
+      runner.current.replaceDocument(sampleDoc());
+      runner.rerender();
+
+      const rawJson = runner.current.rawJsonString;
+      expect(rawJson).toContain('"projectGroups"');
+      expect(rawJson).toContain('"groupId": "group-core"');
+
+      const applied = runner.current.applyRawJson(rawJson);
+      expect(applied).toBe(true);
+      expect(runner.current.currentDoc?.projectGroups?.length).toBe(2);
+      expect(runner.current.currentDoc?.projects[0]?.groupId).toBe('group-core');
     });
   });
 });

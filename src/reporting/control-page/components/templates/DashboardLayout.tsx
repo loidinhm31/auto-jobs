@@ -1,11 +1,12 @@
 import React from 'react';
-
 import type { DashboardLayoutProps } from '../../types/component-contracts.js';
+
 export type { DashboardLayoutProps };
 
 export function DashboardLayout({
   header,
   banner,
+  matrixSection,
   projectsSection,
   formBuilderSection,
   rawJsonSection,
@@ -19,90 +20,109 @@ export function DashboardLayout({
     'Skip to main content',
   );
 
-  const projectsHeader = React.createElement(
-    'h2',
-    {
-      id: 'section-projects-title',
-      className: 'text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200',
-    },
-    'Projects',
+  const mainSections: React.ReactNode[] = [];
+  if (banner) mainSections.push(banner);
+
+  if (matrixSection) {
+    mainSections.push(
+      React.createElement(
+        'section',
+        {
+          key: 'matrix',
+          id: 'section-matrix',
+          'aria-labelledby': 'heading-matrix',
+          className: 'max-w-[1200px] mx-auto px-4 sm:px-6',
+        },
+        React.createElement(
+          'h2',
+          { id: 'heading-matrix', className: 'text-xl font-bold text-slate-900 mb-4' },
+          'Projects Job Matrix',
+        ),
+        matrixSection,
+      ),
+    );
+  }
+
+  if (projectsSection && !matrixSection) {
+    mainSections.push(
+      React.createElement(
+        'section',
+        {
+          key: 'projects',
+          id: 'section-projects',
+          'aria-labelledby': 'heading-projects',
+          className: 'max-w-[1200px] mx-auto px-4 sm:px-6',
+        },
+        React.createElement(
+          'h2',
+          { id: 'heading-projects', className: 'text-xl font-bold text-slate-900 mb-4' },
+          'Projects',
+        ),
+        projectsSection,
+      ),
+    );
+  }
+
+  if (formBuilderSection || rawJsonSection) {
+    mainSections.push(
+      React.createElement(
+        'section',
+        {
+          key: 'editor',
+          id: 'section-editor',
+          'aria-labelledby': 'heading-editor',
+          className: 'max-w-[1200px] mx-auto px-4 sm:px-6',
+        },
+        React.createElement(
+          'div',
+          { className: formBuilderSection ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'w-full' },
+          formBuilderSection,
+          rawJsonSection,
+        ),
+      ),
+    );
+  }
+
+  mainSections.push(
+    React.createElement(
+      'section',
+      {
+        key: 'actions',
+        id: 'section-actions',
+        'aria-labelledby': 'heading-actions',
+        className: 'max-w-[1200px] mx-auto px-4 sm:px-6',
+      },
+      React.createElement(
+        'h2',
+        { id: 'heading-actions', className: 'text-xl font-bold text-slate-900 mb-4' },
+        'Execute Actions',
+      ),
+      actionsSection,
+    ),
   );
 
-  const projectsContainer = React.createElement(
-    'section',
-    {
-      'aria-labelledby': 'section-projects-title',
-      className: 'dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm',
-    },
-    projectsHeader,
-    projectsSection,
-  );
-
-  const editorGrid = React.createElement(
-    'div',
-    { className: 'grid grid-cols-1 lg:grid-cols-2 gap-6' },
-    formBuilderSection,
-    rawJsonSection,
-  );
-
-  const editorContainer = React.createElement(
-    'section',
-    {
-      'aria-labelledby': 'section-editor-title',
-      className: 'dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm',
-    },
-    editorGrid,
-  );
-
-  const actionsHeader = React.createElement(
-    'h2',
-    {
-      id: 'section-actions-title',
-      className: 'text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200',
-    },
-    'Execute Actions',
-  );
-
-  const actionsContainer = React.createElement(
-    'section',
-    {
-      'aria-labelledby': 'section-actions-title',
-      className: 'dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm',
-    },
-    actionsHeader,
-    actionsSection,
-  );
-
-  const runHeader = React.createElement(
-    'h2',
-    {
-      id: 'section-run-title',
-      className: 'text-lg font-bold text-slate-900 mt-0 mb-4 pb-2 border-b border-slate-200',
-    },
-    'Current / Recent Run',
-  );
-
-  const runContainer = React.createElement(
-    'section',
-    {
-      'aria-labelledby': 'section-run-title',
-      className: 'dashboard-section bg-white border border-slate-300 rounded-lg p-5 mb-6 shadow-sm',
-    },
-    runHeader,
-    runSection,
+  mainSections.push(
+    React.createElement(
+      'section',
+      {
+        key: 'run',
+        id: 'section-run',
+        'aria-labelledby': 'heading-run',
+        className: 'max-w-[1200px] mx-auto px-4 sm:px-6',
+      },
+      React.createElement(
+        'h2',
+        { id: 'heading-run', className: 'text-xl font-bold text-slate-900 mb-4' },
+        'Current / Recent Run',
+      ),
+      runSection,
+    ),
   );
 
   const mainContent = React.createElement(
     'main',
-    {
-      id: 'main-content',
-      className: 'main-container max-w-[1200px] mx-auto py-6 px-4',
-    },
-    banner,
-    projectsContainer,
-    editorContainer,
-    actionsContainer,
-    runContainer,
+    { id: 'main-content', className: 'pb-16 space-y-6' },
+    ...mainSections,
   );
 
   return React.createElement(

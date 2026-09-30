@@ -8,62 +8,29 @@ import type {
 
 export type { BrowserName, RunType, SelectorConfig, SelectorOverrides, SourceName };
 
-export interface ProjectCredentialReferences {
-  usernameVariable: string;
-  passwordVariable: string;
-}
+import type {
+  JobColumnInput,
+  ProjectConfigDefaults,
+  ProjectConfigDocumentV1,
+  ProjectConfigInput,
+  ProjectCredentialReferences,
+  ProjectGroupInput,
+  ProjectOriginPolicies,
+  ProjectOriginSourceName,
+  ProjectSourceInput,
+} from '../../../config/config-types.js';
 
-export interface ProjectGroupInput {
-  id: string;
-  name: string;
-}
-export interface JobColumnInput {
-  id: string;
-  name: string;
-}
-
-
-export interface ProjectConfigInput {
-  id: string;
-  name: string;
-  groupId?: string;
-  loginUrl: string;
-  jobUrl: string;
-  jobs?: Record<string, string>;
-  selectedJobColumns?: string[];
-  runType?: RunType;
-  waitForCompletion?: boolean;
-  waitTimeoutMs?: number;
-  enabled?: boolean;
-  timeoutMs?: number;
-  browser?: BrowserName;
-  artifactDir?: string;
-  credentials?: ProjectCredentialReferences;
-  credentialVariables?: ProjectCredentialReferences | readonly string[] | string[];
-  selectors?: SelectorOverrides;
-  allowedOrigins?: readonly string[];
-  [key: string]: unknown;
-}
-
-export interface ProjectConfigDefaults {
-  timeoutMs?: number;
-  browser?: BrowserName;
-  artifactDir?: string;
-  credentials?: ProjectCredentialReferences;
-  credentialVariables?: ProjectCredentialReferences | readonly string[] | string[];
-  selectors?: SelectorOverrides;
-  allowedOrigins?: readonly string[];
-  [key: string]: unknown;
-}
-
-export interface ProjectConfigDocumentV1 {
-  schemaVersion: 1;
-  jobColumns?: JobColumnInput[];
-  projects: readonly ProjectConfigInput[];
-  projectGroups?: readonly ProjectGroupInput[];
-  defaults?: ProjectConfigDefaults;
-  [key: string]: unknown;
-}
+export type {
+  JobColumnInput,
+  ProjectConfigDefaults,
+  ProjectConfigDocumentV1,
+  ProjectConfigInput,
+  ProjectCredentialReferences,
+  ProjectGroupInput,
+  ProjectOriginPolicies,
+  ProjectOriginSourceName,
+  ProjectSourceInput,
+};
 
 export interface ConfigSummary {
   name: string;
