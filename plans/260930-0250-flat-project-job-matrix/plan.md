@@ -15,7 +15,7 @@ created: 2026-09-30
 
 Replace **both** the grouped project board (`ProjectsGrid` → `ProjectGroupColumn` → `ProjectCard`) **and** project form (`ConfigFormBuilder`) in `src/reporting/control-page` with one spreadsheet-style project editor. Shared add/rename/remove job-link headings; row ID/name, independent URL cells, multi-column execution selection; two explicit actions, Generate Reports and Trigger Auto Build, against the selected nonblank cells. Extend the existing validated schema-v1 document without erasing old `jobUrl`, groups, defaults, login settings or advanced fields. Resolve a saved ETag-matched selection into bounded, distinct build/report targets and report artifact identities. [Full proposed architecture](./architecture-design.md); [short command entry](./cmd-plan.md).
 
-**Boundary:** Implementation remains in progress. Phases 01–03 (schema/data model/migration, spreadsheet matrix UI, and integrated state/document lifecycle) are DONE; Phases 04–05 remain pending. Phase 02 replaced the grouped Control Page board and separate project form with one matrix; Phase 03 completed the document transition/save/reload lifecycle. Follow [code standards](../../docs/code-standards.md), [architecture](../../docs/architecture.md), [system architecture](../../docs/system-architecture.md), [backend research](./research/researcher-01-backend-schema-exec.md), and [frontend research](./research/researcher-02-frontend-matrix-ui.md); `docs/development-rules.md` is absent in this checkout.
+**Boundary:** Overall implementation remains in progress. Phases 01–04 (schema/data model/migration, spreadsheet matrix UI, document lifecycle, and multi-job execution engine/API) are DONE; Phase 05 remains pending. Phase 02 replaced the grouped Control Page board and separate project form with one matrix; Phase 03 completed the document transition/save/reload lifecycle. Follow [code standards](../../docs/code-standards.md), [architecture](../../docs/architecture.md), [system architecture](../../docs/system-architecture.md), [backend research](./research/researcher-01-backend-schema-exec.md), and [frontend research](./research/researcher-02-frontend-matrix-ui.md); `docs/development-rules.md` is absent in this checkout.
 
 ## Phases
 
@@ -24,7 +24,7 @@ Replace **both** the grouped project board (`ProjectsGrid` → `ProjectGroupColu
 | 01 | Extend schema-v1, lossless V1 projection/mirror validation and CLI compatibility | DONE — 2026-09-30 | 6h | [Schema, data model, migration](./phase-01-schema-data-model-and-migration.md) |
 | 02 | Replace grouped board and form with one accessible flat matrix | DONE — 2026-09-30 | 7h | [Matrix UI](./phase-02-spreadsheet-matrix-ui-components.md) |
 | 03 | Pure immutable transitions and editor/save/reload/selection lifecycle | DONE — 2026-09-30 | 6h | [State and document transitions](./phase-03-state-management-and-document-transitions.md) |
-| 04 | Validated batch run API, two bounded execution paths, provenance/artifact isolation | Pending | 8h | [Multi-job execution engine and API](./phase-04-multi-job-execution-engine-and-api.md) |
+| 04 | Validated batch run API, two bounded execution paths, provenance/artifact isolation | DONE — 2026-09-30 | 8h | [Multi-job execution engine and API](./phase-04-multi-job-execution-engine-and-api.md) |
 | 05 | Contract/e2e proof, compatibility and security audit, docs/release gate | Pending | 5h | [Verification and release](./phase-05-testing-verification-and-release-audit.md) |
 
 ## Phase 02 completion
@@ -41,7 +41,14 @@ Replace **both** the grouped project board (`ProjectsGrid` → `ProjectGroupColu
 
 **Evidence:** 212/212 targeted tests passed (190 unit, 22 Chromium E2E). Code review scored 9.8/10, with 0 critical issues and 0 warnings. The review also records passing typecheck and build ([phase](./phase-03-state-management-and-document-transitions.md), [review](./code-review-260930-1130-phase-03-state-management-and-document-transitions.md), [completion report](../reports/Phase03PM-260930-1154-flat-project-job-matrix-phase-03-completion.md)).
 
-**Next:** Phase 04 — Multi-job execution engine and API.
+
+## Phase 04 completion
+
+**Status:** DONE — 2026-09-30.
+
+**Evidence:** 101/101 targeted tests passed (79 unit, 22 Chromium E2E). Typecheck (`tsc --noEmit`) and production build passed. Code review scored 9.6/10 with no critical issues or warnings. Safe batch target execution, server-side ETag coordinate resolution, bounded auto-build and report dispatch, virtual target collision preflight, and per-target typed provenance are verified ([validation](../reports/phase04tester-260930-1313-phase-04-multi-job-execution-engine-and-api.md), [review](./code-review-260930-1317-phase-04-multi-job-execution-engine-and-api.md)).
+
+**Next:** Phase 05 — Testing, verification, and release audit.
 
 ## Dependencies
 

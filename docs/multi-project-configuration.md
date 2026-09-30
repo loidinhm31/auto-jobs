@@ -188,12 +188,10 @@ are in [`project-job-matrix.spec.ts`](../tests/unit/project-job-matrix.spec.ts).
 
 ### CLI compatibility and rollback caveat
 
-The current repository report CLI accepts and validates a complete matrix
-document, but normalization and report execution still use each project's
-scalar `jobUrl`; `selectedJobColumns` is not a CLI target list. The validated
-mirror therefore preserves the existing single-target CLI contract.
-`selectedJobColumns: []` likewise does not suppress CLI execution of the
-mirrored `jobUrl`.
+The report CLI accepts and validates complete matrix documents but continues to
+execute each project's scalar `jobUrl`; `selectedJobColumns` is not a CLI target
+list, and an empty selection does not suppress the mirrored URL. Control batch
+runs use the separate coordinate API below.
 
 Older binaries or external tools with strict unknown-key validation reject
 saved matrix documents containing `jobColumns`, `jobs`, or
@@ -201,6 +199,76 @@ saved matrix documents containing `jobColumns`, `jobs`, or
 scalar `jobUrl` mirror does not make those versions compatible. Keep a
 pre-matrix backup before saving matrix configuration where older strict
 executables may need rollback.
+
+## Control batch matrix runs (Phase 04)
+
+Control `POST /api/run` accepts one selected-cell batch per run; a valid POST
+returns `202 { id, status }`, and `GET /api/run?id=<id>` polls that run. The body
+contains coordinates, never job URLs:
+
+```json
+{
+  "configName": "projects.json",
+  "configEtag": "<current-etag>",
+  "runType": "report",
+  "targets": [
+    { "projectId": "service-a", "columnId": "deploy" },
+    { "projectId": "service-a", "columnId": "smoke" }
+  ]
+}
+```
+
+`runType` is one run-level choice (`report` or `auto-build`) applied to every
+cell. `targets` must contain 1–2,500 unique coordinate objects with exactly
+`projectId` and `columnId`; IDs must use the project (1–63) and column
+(1–16) safe lowercase forms. Matrix requests reject unknown fields and
+`projectId`; they accept no URL, environment, or worker-count override.
+`workerCount` is rejected with `422 INVALID_WORKER_COUNT`; use saved
+`reportWorkers` (1–4, default 1). Optional `waitForCompletion` and
+`waitTimeoutMs` retain the auto-build wait controls. The shared 1 MiB JSON body
+limit and Control Host/Origin/Fetch Metadata/CSRF/content-type gates apply.
+
+The Dashboard builds `targets` from selected columns on enabled project rows
+and requires a valid, saved document before enabling execution. The server
+checks the config ETag, resolves every coordinate against that document, and
+checks enabled projects, declared columns, URL policy, and virtual IDs before
+opening a browser; report runs also reject collisions with retained artifacts.
+Project-level `runType` does not gate a matrix cell; `enabled: false` still does.
+The scalar `jobUrl` mirror is not a matrix request target. Direct `targets`
+values are authoritative; the server does not trust client-supplied URLs.
+
+Results follow saved project order, then shared column order, regardless of
+request order or worker completion. Blank/whitespace selected cells are
+skipped and logged; an all-blank selection fails instead of creating a no-op.
+Each executable cell becomes a normalized virtual project with ID
+`${projectId}--${columnId}`, selected cell URL, saved project settings, and
+source-project/column provenance. IDs remain within the artifact ID limit.
+
+Both modes reuse existing bounded workers, with concurrency from the saved
+`reportWorkers`; one active Control run remains enforced. Reports publish
+separate `<reportRoot>/<projectId>--<columnId>/<runId>/` trees and return
+ordered `reportProjects` outcomes with source IDs/names, column IDs/names, URL,
+status, and local report link. Auto-build returns ordered `buildProjects` rows
+with equivalent source/column identity, build details, and `exitCode`; one
+failed target makes the run fail while sibling targets continue. Existing
+single-submit and no-retry-after-possible-POST rules remain in force.
+
+Report manifests, data, and aggregate rows may carry optional schema-v3
+`provenance` (`sourceProjectId`, `sourceProjectName`, `columnId`, `columnName`,
+`jobUrl`). Historical schema-v3 records without it remain valid. A virtual
+target colliding with a real project ID or, for reports, retained unrelated or
+legacy history fails closed rather than merging or overwriting artifacts.
+Stored SecretStore values use the normal per-run snapshot and redaction path.
+Matrix contracts are covered by [`control-run-targets.spec.ts`](../tests/unit/control-run-targets.spec.ts),
+[`control-matrix-run-api.spec.ts`](../tests/unit/control-matrix-run-api.spec.ts),
+and [`control-matrix-components.spec.ts`](../tests/unit/control-matrix-components.spec.ts);
+the browser flow is in [`control-page.spec.ts`](../tests/e2e/control-page.spec.ts).
+
+
+Requests without `targets` retain the existing API contract: report selection
+uses enabled `report` projects; auto-build selects one optional `projectId` or
+all enabled `auto-build` projects. The report CLI remains scalar and has no
+matrix dispatch.
 
 
 ## Project cloning in the matrix editor
@@ -246,11 +314,10 @@ normalizing the document:
 | `selectAutoBuildProjects(projects)` | Returns a frozen, configuration-ordered list of enabled normalized `auto-build` projects; excludes disabled and `report` entries and throws a configuration error when none remain. |
 | `selectAutoBuildProject(projects, projectId)` | Matches one project by exact, non-empty `id`; returns it only when enabled and normalized as `auto-build`. Missing, disabled, and `report` projects are rejected. |
 
-All three helpers are exported from `src/config.ts` and are side-effect free.
-The list selectors only identify eligible projects; they do not run or queue
-builds. None rewrites a project's mode, infers a target from `jobUrl`, or
-submits a Jenkins request. Report collection and auto-build execution remain
-separate.
+The selectors are exported from `src/config.ts` and remain pure. Legacy
+project-based callers use them; the Control matrix branch resolves coordinates
+and applies the request's one run mode instead. Direct CLI selection remains
+`selectReportProjects(...)`.
 
 ## Selector configuration
 
@@ -443,27 +510,24 @@ observed.
 
 ### Control-run environment injection (Phase 03)
 
-`createReportServer` passes the control-mode `SecretStore` to
-`createRunManager` through the optional `RunManagerOptions.secretStore`
-dependency. When `POST /api/run` starts execution,
-`report-server-run-executor.ts` reads one snapshot and creates:
+`createReportServer` passes the control-mode `SecretStore` to the run manager.
+When `POST /api/run` starts execution, `report-server-run-executor.ts` reads
+one snapshot and creates:
 
 ```ts
 const runEnv = { ...env, ...storedSecrets };
 ```
 
-The merged `runEnv` is used for config normalization and passed as
-`runtimeEnvironment` to `runConfiguredProjects` for report mode or
-`runAutoBuildProject` for auto-build mode. This keeps SecretStore values out of
-project JSON and avoids process-global environment mutation. A control run
-uses the store values present at its execution snapshot; later API mutations
-apply to later runs.
+The merged environment normalizes the saved document and reaches report or
+bounded auto-build execution, including matrix virtual projects. SecretStore
+values stay out of project JSON; the caller environment and `process.env` remain
+unchanged. Later updates apply to later runs.
 
-The executor collects all non-empty stored values as a redaction set. It
-redacts `addLog` messages, report warnings, caught errors and stacks, and
-auto-build `jobUrl`/`buildPageUrl` result fields before recording the run.
-The report URL is derived from a validated local relative path. The direct
-`npm run report` path remains environment-driven.
+
+The executor redacts logs, report warnings, caught errors and stacks, and
+auto-build result URLs before recording the run. Local report links come only
+from validated relative paths; the direct `npm run report` path remains
+environment-driven.
 
 ## Source settings and validation
 
@@ -561,23 +625,20 @@ executes an auto-build project in a mixed document. It reads the config once
 through `loadProjectConfigWithDocument`; CLI and Dashboard validation share
 `assertProjectConfigDocument`.
 
-The Dashboard's `ExecutionSection` action bar contains **Generate Reports (All
-Enabled)** (`#btn-run-reports`), **Trigger Auto Build (All Enabled)**
-(`#btn-run-auto-build`), and one shared **Workers** selector
-(`#select-workers`, 1–4, default 1) backed by the document's top-level
-`reportWorkers`. Changing the count updates raw JSON and marks the document
-dirty; both actions require a successful ETag-protected Save before execution.
-The report action selects all enabled report projects; the build action
-immediately selects all enabled `auto-build` projects without `projectId`.
-Project cards retain Enabled and Run Type editing but have no build trigger;
-there is no per-build confirmation dialog. The same saved count bounds both
-worker pools.
+The Dashboard shows **Generate Reports** and **Trigger Auto Build** actions,
+plus one shared **Workers** selector (`#select-workers`, 1–4) backed by saved
+`reportWorkers`. It derives request coordinates from each enabled row's
+`selectedJobColumns`; selected nonblank and blank cell counts are previewed.
+The actions require a valid, clean, saved document and at least one nonblank
+target. They send one `POST /api/run` with the chosen mode and coordinate list,
+not one request per cell. The worker setting is never sent as `workerCount`.
 
-A report `POST /api/run` carries `configName`, `configEtag`, and `runType`.
-Auto-build requests may omit `projectId` to select every enabled auto-build project or
-supply one ID to select a single project. Neither mode accepts a request-level
-`workerCount`; the API returns `422 INVALID_WORKER_COUNT`. After ETag validation,
-the saved count goes to report execution and bounds control auto-build workers.
+For backward compatibility, a request with no `targets` retains project-based
+selection: report mode runs enabled report projects; auto-build may omit
+`projectId` for all enabled build projects or provide one ID. Matrix requests
+instead use the chosen coordinates regardless of project-level `runType`, but
+still reject disabled projects. Both branches use the ETag-matched saved
+`reportWorkers` value.
 
 
 ### Control auto-build batch API
@@ -623,10 +684,10 @@ result is one of `submitted`, `rejected`, `submission-unknown`, or
 `failed-before-submit`. It never changes parameters, searches jobs, polls a
 queue/build, retries after an observed POST, or writes report artifacts.
 Control-mode auto-build uses the same runner through its bounded worker pool
-and supplies the merged `runtimeEnvironment`; direct integrations supply their
-own environment. The report CLI still has no auto-build command. The Control
-API supports one selected project or the enabled batch when `projectId` is
-omitted.
+and merged `runtimeEnvironment`; direct integrations supply their own
+environment. The report CLI has no auto-build command. Legacy Control requests
+without `targets` support one or all project selection; matrix requests select
+the submitted project/column pairs.
 
 The schema has no source switch, existing-build mode, job-page override, build
 identity, or polling environment inputs. These are intentionally absent from

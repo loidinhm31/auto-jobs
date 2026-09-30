@@ -6,7 +6,7 @@
 
 ## Overview
 
-- Priority: P2 · Status: Pending · Estimate: 8h.
+- Priority: P2 · Status: DONE — 2026-09-30 · Estimate: 8h.
 - One ETag-guarded batch run accepts selected project/column IDs and one mode (`report` or `auto-build`); resolve URLs from saved config, skip blank/whitespace cells, run distinct bounded targets, and report project/column/URL provenance. Report IDs isolate artifact trees and aggregate entries.
 
 ## Key insights
@@ -53,11 +53,17 @@
 
 ## Todo list
 
-- [ ] Guarded bounded batch target API; no request URLs or worker override.
-- [ ] Saved ETag-matched resolver and safe virtual target generation with collision preflight.
-- [ ] Ordered bounded build and report dispatch with existing lock/cleanup and failure semantics.
-- [ ] Typed per-target provenance across reports/builds/viewer/aggregate without breaking old manifests.
-- [ ] Control polling, UI rendering, redaction and old no-target caller tests.
+- [x] Guarded bounded batch target API; no request URLs or worker override.
+- [x] Saved ETag-matched resolver and safe virtual target generation with collision preflight.
+- [x] Ordered bounded build and report dispatch with existing lock/cleanup and failure semantics.
+- [x] Typed per-target provenance across reports/builds/viewer/aggregate without breaking old manifests.
+- [x] Control polling, UI rendering, redaction and old no-target caller tests.
+
+## Completion
+
+**Status:** DONE — 2026-09-30.
+
+**Evidence:** 101/101 targeted tests passed (79 unit, 22 Chromium E2E); typecheck and production build passed. Code review scored 9.6/10 with no critical issues or warnings ([validation](../reports/phase04tester-260930-1313-phase-04-multi-job-execution-engine-and-api.md), [review](./code-review-260930-1317-phase-04-multi-job-execution-engine-and-api.md)). Build reported a non-blocking 2,700.42 kB minified Control Page bundle warning.
 
 ## Success criteria
 

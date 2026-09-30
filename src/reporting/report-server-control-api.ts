@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { validateMutationRequest } from './report-server-control-security.js';
 import { sendError, sendJson, readBoundedJsonBody } from './report-server-json.js';
+import { parseRunApiTargets } from './control-run-targets.js';
 import type { ControlRouterContext } from './report-server-control.js';
 
 export { handleSecretsApi } from './report-server-control-secrets-api.js';
@@ -116,25 +117,24 @@ export async function handleRunApi(
       return;
     }
     const waitTimeoutMs = typeof data['waitTimeoutMs'] === 'number' ? data['waitTimeoutMs'] : undefined;
-    let projectId: string | undefined;
-    if (runType === 'auto-build') {
-      if (Object.hasOwn(data, 'projectId')) {
-        if (typeof data['projectId'] !== 'string' || data['projectId'].trim().length === 0) {
-          sendError(response, 422, 'INVALID_PROJECT_ID', 'projectId must be a non-empty string when provided');
-          return;
-        }
-        projectId = data['projectId'].trim();
-      }
-    } else {
-      projectId = typeof data['projectId'] === 'string' ? data['projectId'] : undefined;
+    const targetsResolution = parseRunApiTargets(data, runType);
+    if (!targetsResolution.ok) {
+      sendError(
+        response,
+        targetsResolution.status ?? 422,
+        targetsResolution.code ?? 'INVALID_TARGETS',
+        targetsResolution.message ?? 'Invalid targets',
+      );
+      return;
     }
-
+    const { targets, projectId } = targetsResolution;
     try {
       const record = await context.runManager.startRun({
         configName: data['configName'],
         configEtag: data['configEtag'],
         runType: runType as 'report' | 'auto-build',
         projectId,
+        targets,
         waitForCompletion,
         waitTimeoutMs,
       });

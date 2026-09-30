@@ -5,9 +5,10 @@ workflows, Stage View monitoring, the loopback Control Page/API and flat
 project/job matrix, local SecretStore and credential UI, report management,
 the Control-only React final-report viewer/PDF export, and deterministic
 verification boundaries. The report command remains report-only. Control
-`POST /api/run` accepts either one selected auto-build project or all enabled
-auto-build projects when `projectId` is omitted; mode is never inferred from URL,
-selector, CLI, or env.
+`POST /api/run` accepts legacy project selection or one bounded `targets` batch
+of `{ projectId, columnId }` coordinates for either explicit mode. Matrix URLs
+come only from the ETag-matched saved configuration; mode is never inferred
+from URL, selector, CLI, or environment.
 
 With wait enabled, each build returns an in-memory outcome carrying identity,
 terminal result, and stage details when available.
@@ -30,8 +31,9 @@ and ungrouped; edits sync raw JSON, validation, and dirty state.
 schema errors are extracted to `utils/config-document-validation.ts`.
 `replacementRevision` increments on successful load/switch or valid raw Apply,
 not normal edits or Save acknowledgement. Loads use sequence guards; complete
-Saves use `If-Match`; 409/412 preserve unsaved edits. Runtime/report CLI still
-execute scalar `jobUrl`; matrix execution remains Phase 04 (see [contract](./multi-project-configuration.md#job-matrix-configuration-expanded-schema-v1)).
+Saves use `If-Match`; 409/412 preserve unsaved edits. The report CLI still
+executes scalar `jobUrl`; the Control matrix API resolves selected coordinates
+to distinct virtual targets (see [batch contract](./multi-project-configuration.md#control-batch-matrix-runs-phase-04)).
 
 ## Scope and operating modes
 
@@ -46,13 +48,14 @@ Project execution mode is independent of source mode:
 
 | Execution mode | Selection boundary | Side effect |
 | --- | --- | --- |
-| `report` | all enabled projects normalized as `report` | capture publisher evidence and publish immutable reports |
-| `auto-build` | one exact enabled project or all enabled auto-build projects when `projectId` is omitted | submit validated parameterized Jenkins form(s); do not capture reports |
+| `report` | Legacy: enabled projects normalized as `report`; matrix: selected coordinates in this request | capture publisher evidence and publish immutable reports |
+| `auto-build` | Legacy: one exact or all enabled auto-build projects; matrix: selected coordinates in this request | submit validated parameterized Jenkins form(s); do not capture reports |
 
-`runType` is an explicit project-only discriminator. An omitted value
-normalizes to `report`; it is never inferred and does not itself trigger a
-build. The report CLI selects report projects only. A caller that intentionally
-selects an auto-build project must invoke the separate auto-build runner.
+In legacy project selection, `runType` is an explicit project-only discriminator.
+An omitted project value normalizes to `report`; it is never inferred and does
+not itself trigger a build. Matrix runs instead use the request's single
+`runType` for every selected cell while still requiring each source project to
+be enabled. The report CLI selects report projects only.
 
 The project JSON supplies exact Jenkins `loginUrl` and `jobUrl`, a project
 `runType`, credential environment-variable names, selectors, source-origin
@@ -70,23 +73,24 @@ Each auto-build project gets a dedicated browser and context.
 
 ```mermaid
 flowchart LR
-  Config[Schema-v1 project JSON] --> Normalize[Validate and normalize]
-  Normalize --> Dispatch{Explicit caller selection}
-  Dispatch -- report --> ReportRunner[Report runner]
-  ReportRunner --> Browser[One Playwright browser]
-  Browser --> WorkerPool[At most four report workers] --> Login[Exact Jenkins login]
-  Login --> Job[Exact Jenkins job page]
-  Job --> Discover[Discover Snyk and SonarQube links]
-  Discover --> Capture[Capture and normalize evidence]
-  Capture --> Reports[Per-run reports and aggregate index]
-  Dispatch -- auto-build with optional projectId --> BuildSelect[Select one or all]
-  BuildSelect --> BuildPool[Bounded workers; saved reportWorkers]
-  BuildPool --> BuildBrowser[One browser/context per project]
-  BuildBrowser --> BuildLogin[Exact Jenkins login]
-  BuildLogin --> BuildJob[Exact Jenkins job page]
-  BuildJob --> Trigger[Validate controls and submit once]
-  Trigger --> BuildResult[Per-project outcome and optional Stage View details]
-  BuildResult --> Aggregate[buildProjects; succeeded iff every exitCode is zero]
+  Config[Schema-v1 project JSON] --> Validate[Validate and normalize]
+  Config --> API[Control POST /api/run]
+  API --> Request{Targets present?}
+  Request -- no: legacy --> Legacy[Select projects by existing mode/projectId rules]
+  Request -- yes --> Resolve[Match config ETag; resolve IDs to saved cells]
+  Resolve --> Order[Saved project/column order; skip blank cells; validate URLs and collisions]
+  Legacy --> Mode{report or auto-build}
+  Order --> Mode
+  CLI[Report CLI] --> ReportPool[Report worker pool]
+  Mode -- report --> ReportPool
+  ReportPool --> Browser[One Playwright browser; fresh context per target]
+  Browser --> Login[Exact Jenkins login] --> Job[Exact selected Jenkins job]
+  Job --> Capture[Capture and normalize evidence]
+  Capture --> Artifact[Virtual target artifacts and aggregate; provenance]
+  Mode -- auto-build --> BuildPool[Saved reportWorkers-bounded build pool]
+  BuildPool --> BuildBrowser[Browser/context per target]
+  BuildBrowser --> Submit[Validate controls; submit once]
+  Submit --> BuildResult[Ordered per-target outcomes and optional Stage View]
   TestRoutes[Test-only exact URL routes] -. tests only .-> Browser
 ```
 
@@ -187,20 +191,20 @@ flowchart LR
   `index.html`, and provides cached CSS and JS.
 - `scripts/copy-report-assets.mjs` stages `report.css` to
   `.runner-build/reporting/report.css` without overwriting Vite outputs.
-- `src/reporting/report-server-control-api.ts` handles config/run APIs, including
-  `POST /api/run` auto-build selection (`projectId` omitted selects all enabled);
-  it rejects request-level `workerCount` and re-exports `handleSecretsApi`.
-- `src/reporting/report-server-control-secrets-api.ts` implements the
-  presence-only `/api/secrets` GET/PUT/DELETE contract, bounded JSON parsing,
-  key/value validation, and SecretStore updates.
-- `src/reporting/report-server-control-security.ts` centralizes control
-  security headers plus Host, Origin, Fetch Metadata, timing-safe CSRF, and
-  mutation content-type gates.
-- `src/reporting/report-server-run-manager.ts` owns one active run and carries
-  optional `SecretStore`; `src/reporting/report-server-run-executor.ts` snapshots
-  secrets, selects one/all build projects, and runs the pool with saved
-  `reportWorkers`. It stores ordered `buildProjects` outcomes and redacts output;
-  batch status succeeds only when every outcome has `exitCode === 0`.
+- `src/reporting/report-server-control-api.ts` parses legacy or strict matrix
+  run requests; it rejects request `workerCount` and re-exports `handleSecretsApi`.
+- `src/reporting/report-server-control-secrets-api.ts` handles guarded
+  presence-only secret operations; `report-server-control-security.ts` centralizes
+  Host, Origin, Fetch Metadata, CSRF, and content-type gates.
+- `src/reporting/report-server-run-manager.ts` enforces one active run and stores
+  target coordinates; `report-server-run-executor.ts` snapshots secrets and
+  dispatches legacy or matrix execution.
+- `src/reporting/control-run-targets.ts` resolves saved coordinates in order,
+  skips blank cells, validates URLs, and creates virtual projects;
+  `control-run-targets-validation.ts` parses bounded IDs, while
+  `control-run-targets-collision.ts` rejects retained report-history collisions.
+- `src/reporting/control-run-matrix-executor.ts` reuses report/build pools with
+  saved `reportWorkers` and records ordered per-target outcomes/provenance.
 - `src/templates/template-report-fixture.ts` is the public template facade; it
   re-exports the supported loader, response, route, types, and size-boundary API.
 - `src/templates/template-fixture-types.ts` defines the fixture, response, route
@@ -270,11 +274,12 @@ Selection happens on normalized projects:
 | `selectAutoBuildProject(projects, projectId)` | Requires an exact, non-empty project ID and returns one project only when it is enabled and `runType === 'auto-build'`; missing, disabled, and report projects fail closed. |
 | `selectAutoBuildProjects(projects)` | Returns a frozen, configuration-ordered list of enabled `auto-build` projects; fails when none remain. |
 
-The helpers are exported by `src/config.ts` and are side-effect free. Control
-`POST /api/run` uses `selectAutoBuildProject` when an ID is present and
-`selectAutoBuildProjects` when omitted, then routes each selected project through
-`executeAutoBuildWorkerPool` to `runAutoBuildProject`. `runFromConfig` still
-dispatches only `selectReportProjects(...)`.
+These helpers are exported by `src/config.ts` and are side-effect free. A legacy
+Control `POST /api/run` without `targets` uses them: report selects report
+projects; auto-build selects one `projectId` or all enabled auto-build projects.
+With `targets`, `control-run-targets.ts` resolves coordinates instead and
+applies the request mode to each virtual project. `runFromConfig` still dispatches
+only `selectReportProjects(...)`.
 
 All selector fields are available under `defaults.selectors` and
 `projects[*].selectors`; project values override defaults. The normalized
@@ -445,19 +450,20 @@ headers, cookies, or response bodies, and auto-build does not persist reports.
 The matrix settings dialog persists per-project login URL, browser, timeouts,
 artifact directory, credential references, enabled state, and
 `waitForCompletion`; a separate defaults dialog edits shared defaults.
-`ExecutionSection` exposes **Generate Reports (All Enabled)**
-(`#btn-run-reports`), **Trigger Auto Build (All Enabled)**
-(`#btn-run-auto-build`), and one saved **Workers** selector
-(`#select-workers`, 1–4). Document edits synchronize raw JSON, mark it dirty,
-and require `PUT /api/config` with `If-Match` before runs. The saved count is
-never sent as request-level `workerCount`.
+`ExecutionSection` exposes report/build actions and a saved **Workers** selector
+(`reportWorkers`, 1–4). Edits require a valid, clean, ETag-saved document before
+execution; the saved count is never sent as request-level `workerCount`.
 
-The matrix preview counts selected nonblank cells from enabled rows and selected
-blank cells to skip; it is not mode-specific. Each action still sends only its
-report/auto-build mode and config identity. The server selects projects by
-saved project-level `runType` and executes scalar `jobUrl`; the matrix's
-`selectedJobColumns` do not yet select execution targets. The two controls do
-not expose per-cell mode selection.
+The Dashboard sends one `POST /api/run` with `targets: [{ projectId, columnId }]`
+from selected columns on enabled rows and one `runType`. The API rejects
+malformed/duplicate/oversized coordinates, unknown matrix fields, and a
+simultaneous `projectId`; URL fields are unsupported and request-level
+`workerCount` is rejected.
+
+The executor resolves targets from the saved document in project/column order,
+skips blank cells, and rejects an all-blank batch. Each cell becomes virtual
+`${projectId}--${columnId}` with source/column provenance. The report CLI stays
+scalar-`jobUrl`; matrix targets apply only to Control. No per-cell mode control.
 
 Every configured, discovered, redirected, and final URL in either path must be
 credential-free HTTP(S) and inside its allowed canonical origin. Context and
@@ -492,14 +498,14 @@ dashboard (`127.0.0.1:4173`). It exposes:
 
 - Safe config discovery (`GET /api/configs`) and atomic updates
   (`PUT /api/config`) with ETag and schema validation;
-- Single-mode execution (`POST /api/run`) for `report` or `auto-build` runs;
-- Run status and live logs (`GET /api/run`);
-- Local immutable report links (`GET /reports/...`); and
+- One active report or auto-build run (`POST /api/run`), either legacy project
+  selection or a matrix coordinate batch; status and live logs via `GET /api/run`;
+- Ordered per-target report/build outcomes, local report links, and safe
+  `GET /reports/...` access;
 - Presence-only credential status and guarded updates/deletes under
   `GET`/`PUT`/`DELETE /api/secrets`;
-- Direct navigation from the dashboard header to the persistent report index
-  (`GET /reports/index.html`); and
-- Safe whole-project and individual-run report deletion under `DELETE /api/reports/projects/:projectId` and `DELETE /api/reports/projects/:projectId/runs/:runId`.
+- Direct navigation to the persistent report index (`GET /reports/index.html`);
+  and safe whole-project/run report deletion under the guarded DELETE routes.
 
 ### Persistent report management and deletion
 
@@ -683,54 +689,44 @@ The test harness exercises the following architectural boundaries:
 - **Auto-build execution**: Dispatches `runAutoBuildProject` against the live HTTP template server, validating form submission and 302 redirect.
 - **Control Page UI integration**: Mounts `projects.template.json` within the Control Dashboard UI, asserting clean matrix-row rendering with zero cross-origin or CSP security violation console errors.
 
-### Control Dashboard and flat project/job matrix (Phase 02)
+### Control Dashboard and flat project/job matrix (Phases 02–04)
 
 The Vite-built React app uses atoms → molecules → organisms → templates →
-pages. `DashboardPage` coordinates config/document hooks and supplies one
-`ProjectsJobMatrix`, Raw JSON, execution actions, current run, credentials, and
-browser settings to `DashboardLayout`. Report history and final-report viewing
-use separate page/template pairs.
+pages. `DashboardPage` coordinates config state, matrix, Raw JSON, execution,
+credentials, and browser settings; history and final reports have separate pages.
 
-`ProjectsJobMatrix` renders one horizontally scrollable semantic table with one
-row per project: enable checkbox, editable ID/name, one URL cell per shared
-`jobColumns` entry, selected-column checkboxes, and settings/clone/remove
-actions. The toolbar adds projects and columns or opens defaults. Header actions
-rename columns and require confirmation before removal; adding a column creates
-blank cells for every project, while removal deletes its cells/selections and
-recomputes each scalar `jobUrl` mirror. Row settings expose login URL, browser,
-timeouts, artifact directory, credential references, enabled, and
-`waitForCompletion`; other schema fields remain editable in Raw JSON.
+`ProjectsJobMatrix` renders enabled project rows, shared job URL columns,
+selected-column controls, and row/column actions. The shared editor validates
+and synchronizes structured edits with Raw JSON, saves through ETag, and
+projects legacy documents in memory until explicit Save. Clones copy URL cells,
+start disabled/ungrouped, and clear selected columns.
 
-`matrix-document-transitions.ts` applies immutable project, cell, selection,
-and column updates. `useConfigDocumentEditor` validates each document, keeps
-structured edits and Raw JSON synchronized, and tracks dirty state; config
-loads and saves retain the ETag boundary. `useConfigManager` applies
-`projectLegacyMatrixDocument` in memory to loaded/saved responses; loading a
-legacy file does not write it. Explicit Save persists expanded matrix fields.
-Cloning deep-copies a project, carries its job cells/selections into the new
-row, generates a bounded unique identity, disables the clone, and removes its
-`groupId`. Existing `projectGroups` and `groupId` data remain schema-validated
-and preserved during ordinary edits; there are no group controls.
+For either mode, the Dashboard sends one `POST /api/run` with
+`targets: [{ projectId, columnId }]` derived from enabled rows'
+`selectedJobColumns`. It requires valid, saved config, a nonblank target, and no
+active run. The API resolves against the ETag-matched document, orders by saved
+project/column order, skips blank cells, and rejects invalid coordinates,
+disabled projects, unsafe Jenkins URLs, and target ID collisions before browser
+launch. Report runs also fail closed on retained artifact-history collisions.
+Legacy requests without `targets` preserve project-based selection.
 
-`ExecutionSection` shows counts of selected nonblank cells on enabled rows and
-selected blanks. It disables actions for absent, dirty, invalid, loading, or
-empty configurations and while a run is queued/running. Each button chooses
-report or auto-build mode, but the current request contains no row/column
-coordinates: the server continues to select enabled projects by saved
-`runType` and executes scalar `jobUrl`. Thus matrix selection is saved UI
-metadata/preview, not multi-job dispatch; Phase 04 owns execution/API support.
-No per-cell run-type control remains.
+Each cell becomes a virtual `${projectId}--${columnId}` project with saved
+settings, selected URL, and request mode. Existing report/build pools use saved
+`reportWorkers`; reports receive separate artifact trees and per-target local
+links, builds receive per-target build/stage outcomes. Optional schema-v3
+provenance records source project, column, and URL; old manifests without it
+remain valid. Batch status fails when any target fails. Secrets are redacted.
 
-The old grouped board and separate form editor were removed: `ProjectsGrid`,
-`ProjectCard`, `project-group-column`, `project-group-board`,
-`project-group-dialog-*`, `ConfigFormBuilder`, `ConfigProjectEditor`, and
-`project-group-board.ts` have no compatibility aliases. `RawJsonSection`
-remains the escape hatch for all schema fields.
+The report CLI remains scalar-`jobUrl`; `selectedJobColumns` drives Control UI
+selection only. No per-cell mode control exists. The old grouped board and
+separate form editor were removed without aliases; Raw JSON remains the escape
+hatch for other fields.
 
-Phase 02 review evidence: 73/73 unit checks, 22/22 Chromium E2E checks,
-typecheck, and Vite build passed; review approved at 9.3/10. This is a phase
-snapshot, not the post-integration release gate. See the
+Phase 02 review passed 73/73 unit and 22/22 Chromium E2E checks; see the
 [review](../plans/260930-0250-flat-project-job-matrix/code-review-260930-0941-phase-02-spreadsheet-matrix-ui-components.md).
+Phase 04 passed 79 unit and 22 Chromium E2E checks (101/101); typecheck and
+build passed, review approved 9.6/10. See the
+[Phase 04 review](../plans/260930-0250-flat-project-job-matrix/code-review-260930-1317-phase-04-multi-job-execution-engine-and-api.md).
 
 ## Test and release boundary
 

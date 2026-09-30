@@ -136,6 +136,14 @@ export interface SnykSourceEvidence extends SourceEvidence {
   findings?: SnykFinding[];
 }
 
+export interface TargetProvenance {
+  readonly sourceProjectId: string;
+  readonly sourceProjectName: string;
+  readonly columnId: string;
+  readonly columnName: string;
+  readonly jobUrl?: string;
+}
+
 export interface VulnerabilityReportResultV3 {
   schemaVersion: 3;
   state: 'success' | 'partial';
@@ -147,6 +155,7 @@ export interface VulnerabilityReportResultV3 {
   navigation: NavigationTargets;
   reports: { sonarqube: SonarSourceEvidence; snyk: SnykSourceEvidence };
   warnings: string[];
+  provenance?: TargetProvenance;
 }
 
 export interface AggregateProjectSummary {
@@ -157,6 +166,7 @@ export interface AggregateProjectSummary {
   reportPath?: string;
   runs: AggregateRunSummary[];
   warnings: string[];
+  provenance?: TargetProvenance;
 }
 
 export interface AggregateRunSummary {
@@ -167,6 +177,7 @@ export interface AggregateRunSummary {
   manifestPath: string;
   reportPath?: string;
   warnings: string[];
+  provenance?: TargetProvenance;
 }
 
 export interface AggregateReportResult {

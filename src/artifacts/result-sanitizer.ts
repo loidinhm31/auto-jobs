@@ -136,6 +136,7 @@ export function safeManifest(value: ProjectRunManifest): ProjectRunManifest {
     warnings: safeWarnings(value.warnings),
     ...(value.diagnostic === undefined ? {} : { diagnostic: redactText(value.diagnostic).slice(0, MAX_PERSISTED_DIAGNOSTIC_LENGTH) }),
     ...(value.diagnostics === undefined ? {} : { diagnostics: safeDiagnostics(value.diagnostics) }),
+    ...(value.provenance === undefined ? {} : { provenance: value.provenance }),
   };
 }
 
@@ -158,6 +159,7 @@ export function safeResult(value: VulnerabilityReportResultV3): VulnerabilityRep
       sonarqube: safeSonarSource(value.reports.sonarqube),
     },
     warnings: safeWarnings(value.warnings),
+    ...(value.provenance === undefined ? {} : { provenance: value.provenance }),
   };
 }
 
@@ -171,6 +173,7 @@ export function safeFailure(value: ProjectFailureResultV3): ProjectFailureResult
     diagnostic: redactText(value.diagnostic).slice(0, MAX_PERSISTED_DIAGNOSTIC_LENGTH),
     warnings: safeWarnings(value.warnings),
     ...(value.diagnostics === undefined ? {} : { diagnostics: safeDiagnostics(value.diagnostics) }),
+    ...(value.provenance === undefined ? {} : { provenance: value.provenance }),
   };
 }
 

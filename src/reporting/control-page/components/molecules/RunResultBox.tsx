@@ -2,6 +2,7 @@ import React, { forwardRef } from 'react';
 import type { RunResultBoxProps } from '../../types/component-contracts.js';
 import { cn } from '../../utils/cn.js';
 import { BuildProjectOutcomeRow } from './build-project-outcome-row.js';
+import { ReportProjectOutcomeRow } from './report-project-outcome-row.js';
 
 export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
   function RunResultBox(
@@ -25,14 +26,14 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
       explicitVisible !== undefined
         ? explicitVisible
         : Boolean(
-            result &&
-              (hasReportUrl ||
-                hasBuildProjects ||
-                hasBuildPageUrl ||
-                hasBuildResult ||
-                hasError ||
-                hasSummary),
-          );
+          result &&
+          (hasReportUrl ||
+            hasBuildProjects ||
+            hasBuildPageUrl ||
+            hasBuildResult ||
+            hasError ||
+            hasSummary),
+        );
     const children: React.ReactNode[] = [];
 
     if (result?.reportUrl) {
@@ -53,6 +54,20 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
           ),
         ),
       );
+      if (Array.isArray(result.reportProjects) && result.reportProjects.length > 0) {
+        children.push(
+          React.createElement(
+            'div',
+            { key: 'report-projects-list', className: 'report-projects-container flex flex-col gap-1 mt-2' },
+            result.reportProjects.map((proj, idx) =>
+              React.createElement(ReportProjectOutcomeRow, {
+                key: `rep-proj-${proj.targetId || idx}`,
+                project: proj,
+              }),
+            ),
+          ),
+        );
+      }
     } else if (hasBuildProjects) {
       children.push(
         React.createElement(
@@ -72,8 +87,8 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
         result?.buildResult === 'SUCCESS'
           ? 'Auto-build completed successfully. '
           : result?.buildResult && result.buildResult !== 'SUCCESS'
-          ? 'Auto-build finished with issues. '
-          : 'Auto-build triggered. ';
+            ? 'Auto-build finished with issues. '
+            : 'Auto-build triggered. ';
 
       children.push(
         React.createElement(
@@ -85,18 +100,18 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
             : null,
           result?.buildResult
             ? React.createElement(
-                'span',
-                {
-                  key: 'b-res',
-                  className: cn(
-                    'px-2 py-0.5 rounded text-xs font-semibold',
-                    result.buildResult === 'SUCCESS'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-red-100 text-red-800',
-                  ),
-                },
-                result.buildResult,
-              )
+              'span',
+              {
+                key: 'b-res',
+                className: cn(
+                  'px-2 py-0.5 rounded text-xs font-semibold',
+                  result.buildResult === 'SUCCESS'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-red-100 text-red-800',
+                ),
+              },
+              result.buildResult,
+            )
             : null,
           React.createElement(
             'a',
@@ -125,8 +140,8 @@ export const RunResultBox = forwardRef<HTMLDivElement, RunResultBoxProps>(
                     st.status === 'SUCCESS'
                       ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                       : st.status === 'FAILED'
-                      ? 'border-red-200 bg-red-50 text-red-700'
-                      : 'border-slate-200 bg-slate-100 text-slate-600',
+                        ? 'border-red-200 bg-red-50 text-red-700'
+                        : 'border-slate-200 bg-slate-100 text-slate-600',
                   ),
                 },
                 `${st.name}: ${st.status}${st.duration ? ` (${st.duration})` : ''}`,

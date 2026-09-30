@@ -65,12 +65,34 @@ export interface RunStageResult {
   readonly status: string;
   readonly duration?: string;
 }
+export interface RunTargetCoordinate {
+  readonly projectId: string;
+  readonly columnId: string;
+}
+
+export interface ReportProjectResult {
+  readonly targetId: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly columnId?: string | undefined;
+  readonly columnName?: string | undefined;
+  readonly jobUrl: string;
+  readonly runId?: string | undefined;
+  readonly status: string;
+  readonly reportUrl?: string | undefined;
+  readonly error?: string | undefined;
+  readonly warnings?: readonly string[] | undefined;
+}
 
 export interface AutoBuildProjectResult {
   readonly projectId: string;
   readonly projectName: string;
   readonly state: string;
   readonly jobUrl: string;
+  readonly columnId?: string | undefined;
+  readonly columnName?: string | undefined;
+  readonly sourceProjectId?: string | undefined;
+  readonly sourceProjectName?: string | undefined;
   readonly buildPageUrl?: string | undefined;
   readonly buildNumber?: string | undefined;
   readonly buildResult?: string | undefined;
@@ -91,6 +113,8 @@ export interface RunResult {
   buildPageUrl?: string;
   error?: string;
   buildProjects?: readonly AutoBuildProjectResult[];
+  reportProjects?: readonly ReportProjectResult[];
+  warnings?: readonly string[];
   [key: string]: unknown;
 }
 
@@ -103,6 +127,7 @@ export interface RunRecord {
   configEtag?: string;
   runType?: RunType;
   projectId?: string;
+  targets?: readonly RunTargetCoordinate[];
   queuedAt?: string;
   startedAt?: string;
   finishedAt?: string;
@@ -119,6 +144,7 @@ export interface RunTriggerRequest {
   configEtag: string;
   runType: RunType;
   projectId?: string;
+  targets?: readonly RunTargetCoordinate[];
   waitForCompletion?: boolean;
   waitTimeoutMs?: number;
 }

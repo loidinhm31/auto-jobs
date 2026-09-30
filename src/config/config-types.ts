@@ -109,6 +109,13 @@ export interface NormalizedProjectConfig {
     readonly sonarqube: NormalizedSourceConfig;
   };
   readonly selectors: SelectorConfig;
+  readonly provenance?: {
+    readonly sourceProjectId: string;
+    readonly sourceProjectName: string;
+    readonly columnId: string;
+    readonly columnName: string;
+    readonly jobUrl?: string;
+  } | undefined;
 }
 
 export interface ProjectSecrets {

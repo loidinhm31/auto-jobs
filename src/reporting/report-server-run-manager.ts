@@ -9,8 +9,8 @@ import type { NormalizedProjectConfig } from '../config/config-types.js';
 import type { RunnerExecutionResult } from '../project/project-types.js';
 import type { AutoBuildRunOutcome } from '../project/auto-build-runner.js';
 import type { StageViewStage } from '../jenkins/stage-view-types.js';
+import type { RunTargetCoordinate, ReportProjectRunOutcome } from './control-run-targets.js';
 import { executeControlRun } from './report-server-run-executor.js';
-
 export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'submission-unknown';
 
 export interface RunLogEntry {
@@ -24,6 +24,7 @@ export interface ControlRunRecord {
   readonly configEtag: string;
   readonly runType: 'report' | 'auto-build';
   readonly projectId?: string | undefined;
+  readonly targets?: readonly RunTargetCoordinate[] | undefined;
   readonly waitForCompletion?: boolean | undefined;
   readonly waitTimeoutMs?: number | undefined;
   status: RunStatus;
@@ -44,6 +45,7 @@ export interface ControlRunRecord {
     readonly warnings?: readonly string[] | undefined;
     readonly error?: string | undefined;
     readonly buildProjects?: readonly AutoBuildRunOutcome[] | undefined;
+    readonly reportProjects?: readonly ReportProjectRunOutcome[] | undefined;
   } | undefined;
 }
 
@@ -63,6 +65,7 @@ export interface StartRunParams {
   readonly configEtag: string;
   readonly runType: 'report' | 'auto-build';
   readonly projectId?: string | undefined;
+  readonly targets?: readonly RunTargetCoordinate[] | undefined;
   readonly waitForCompletion?: boolean | undefined;
   readonly waitTimeoutMs?: number | undefined;
 }
@@ -146,6 +149,7 @@ export function createRunManager(options: RunManagerOptions): RunManager {
       configEtag: params.configEtag,
       runType: params.runType,
       projectId: params.projectId,
+      targets: params.targets,
       waitForCompletion: params.waitForCompletion,
       waitTimeoutMs: params.waitTimeoutMs,
       status: 'queued',

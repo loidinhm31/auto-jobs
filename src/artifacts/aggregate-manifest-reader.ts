@@ -98,7 +98,7 @@ async function readManifest(
     await handle.close();
   }
 }
- 
+
 interface ManifestReadResult {
   readonly present: boolean;
   readonly value?: unknown;
@@ -182,6 +182,7 @@ function normalizedManifest(value: ProjectRunManifest): ProjectRunManifest {
         observationErrors: value.diagnostics.observationErrors.map((item) => redactText(item).slice(0, MAX_DIAGNOSTIC_LENGTH)),
       },
     }),
+    ...(value.provenance === undefined ? {} : { provenance: value.provenance }),
   };
 }
 

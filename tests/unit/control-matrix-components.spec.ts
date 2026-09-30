@@ -12,7 +12,9 @@ import { ProjectJobCell } from '../../src/reporting/control-page/components/mole
 import { ProjectJobSelection } from '../../src/reporting/control-page/components/molecules/project-job-selection.js';
 import { MatrixRowSettings } from '../../src/reporting/control-page/components/molecules/matrix-row-settings.js';
 import { ProjectsJobMatrix } from '../../src/reporting/control-page/components/organisms/projects-job-matrix.js';
-
+import { RunResultBox } from '../../src/reporting/control-page/components/molecules/RunResultBox.js';
+import { BuildProjectOutcomeRow } from '../../src/reporting/control-page/components/molecules/build-project-outcome-row.js';
+import { ReportProjectOutcomeRow } from '../../src/reporting/control-page/components/molecules/report-project-outcome-row.js';
 const sampleColumn: JobColumnInput = {
   id: 'build-job',
   name: 'Build Job',
@@ -215,6 +217,72 @@ test.describe('Matrix UI Molecules & Organisms Unit Tests', () => {
       );
 
       expect(html).toContain('No configuration loaded');
+    });
+  });
+
+  test.describe('Outcome Rows & RunResultBox', () => {
+    test('BuildProjectOutcomeRow renders column tag when present', () => {
+      const html = renderToString(
+        React.createElement(BuildProjectOutcomeRow, {
+          project: {
+            projectId: 'proj-1--col-main',
+            projectName: 'Project One',
+            columnId: 'col-main',
+            columnName: 'Main Job',
+            state: 'submitted',
+            jobUrl: 'https://jenkins.example.com/job/1/',
+            exitCode: 0,
+          },
+        }),
+      );
+      expect(html).toContain('Main Job');
+      expect(html).toContain('Project One');
+    });
+
+    test('ReportProjectOutcomeRow renders column name, status, and report link', () => {
+      const html = renderToString(
+        React.createElement(ReportProjectOutcomeRow, {
+          project: {
+            targetId: 'proj-1--col-main',
+            projectId: 'proj-1',
+            projectName: 'Project One',
+            columnId: 'col-main',
+            columnName: 'Main Job',
+            jobUrl: 'https://jenkins.example.com/job/1/',
+            status: 'success',
+            reportUrl: '/reports/proj-1--col-main/run-1/index.html',
+          },
+        }),
+      );
+      expect(html).toContain('Project One');
+      expect(html).toContain('Main Job');
+      expect(html).toContain('success');
+      expect(html).toContain('href="/reports/proj-1--col-main/run-1/index.html"');
+    });
+
+    test('RunResultBox renders reportProjects outcome list under report link', () => {
+      const html = renderToString(
+        React.createElement(RunResultBox, {
+          result: {
+            reportUrl: '/reports/index.html',
+            reportProjects: [
+              {
+                targetId: 'p1--c1',
+                projectId: 'p1',
+                projectName: 'Alpha',
+                columnName: 'Main',
+                jobUrl: 'https://jenkins.example.com/1',
+                status: 'success',
+                reportUrl: '/reports/p1--c1/r1/index.html',
+              },
+            ],
+          },
+        }),
+      );
+      expect(html).toContain('Open Generated Report');
+      expect(html).toContain('Alpha');
+      expect(html).toContain('Main');
+      expect(html).toContain('href="/reports/p1--c1/r1/index.html"');
     });
   });
 });

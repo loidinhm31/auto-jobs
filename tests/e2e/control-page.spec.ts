@@ -202,7 +202,7 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(page.locator('#run-status-badge')).toHaveText(/running|succeeded/i);
     await expect(page.locator('#run-status-badge')).toHaveText('succeeded', { timeout: 10_000 });
     await expect(page.locator('#run-logs')).toContainText('Report run finished');
-    const openReportLink = page.locator('#run-result-box a');
+    const openReportLink = page.getByRole('link', { name: 'Open Generated Report' });
     await expect(openReportLink).toBeVisible();
     expect(await openReportLink.getAttribute('href')).toContain('/reports/');
 
@@ -959,9 +959,10 @@ test.describe('Control Page Dashboard E2E', () => {
     // Both enabled auto-build projects should be rendered
     await expect(resultBox).toContainText('Build Alpha Service');
     await expect(resultBox).toContainText('Build Beta Service');
-    // Disabled auto-build and enabled report project should NOT be rendered in build outcomes
+    // Disabled project should NOT be rendered in build outcomes
     expect(await resultBox.locator('text=Build Gamma Disabled').count()).toBe(0);
-    expect(await resultBox.locator('text=Report Delta Service').count()).toBe(0);
+    // In Phase 04 matrix mode, all enabled selected cells execute in the triggered mode
+    await expect(resultBox).toContainText('Report Delta Service');
   });
 
   test('Phase 02: supports flat project matrix, column CRUD, cell editing, and persistence', async ({ page }) => {

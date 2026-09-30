@@ -3,14 +3,12 @@ import { useConfigManager } from '../hooks/useConfigManager.js';
 import { useCredentialsManager } from '../hooks/useCredentialsManager.js';
 import { useBrowserSettings, type BrowserSettingsInput } from '../hooks/useBrowserSettings.js';
 import { useRunPoller } from '../hooks/useRunPoller.js';
+import type { RunTargetCoordinate } from '../types/index.js';
 import { StatusBanner } from '../components/atoms/StatusBanner.js';
-import { HeaderBar } from '../components/organisms/HeaderBar.js';
-import { ProjectsJobMatrix } from '../components/organisms/projects-job-matrix.js';
-import { RawJsonSection } from '../components/organisms/RawJsonSection.js';
-import { ExecutionSection } from '../components/organisms/ExecutionSection.js';
-import { RunStatusCard } from '../components/organisms/RunStatusCard.js';
-import { CredentialsDialog } from '../components/organisms/CredentialsDialog.js';
-import { BrowserSettingsDialog } from '../components/organisms/BrowserSettingsDialog.js';
+import {
+  HeaderBar, ProjectsJobMatrix, RawJsonSection, ExecutionSection,
+  RunStatusCard, CredentialsDialog, BrowserSettingsDialog,
+} from '../components/organisms/index.js';
 import { DashboardLayout } from '../components/templates/DashboardLayout.js';
 
 export function DashboardPage() {
@@ -66,32 +64,33 @@ export function DashboardPage() {
     void loadConfigList();
   }, [loadConfigList]);
 
-  const { executableTargetCount, skippedBlankCount } = useMemo(() => {
+  const { executableTargetCount, skippedBlankCount, selectedTargets } = useMemo(() => {
     if (!currentDoc || !Array.isArray(currentDoc.projects)) {
-      return { executableTargetCount: 0, skippedBlankCount: 0 };
+      return { executableTargetCount: 0, skippedBlankCount: 0, selectedTargets: [] as RunTargetCoordinate[] };
     }
     let executable = 0;
     let skipped = 0;
+    const targets: RunTargetCoordinate[] = [];
     for (const project of currentDoc.projects) {
       if (project.enabled === false) continue;
-      const selections = project.selectedJobColumns ?? [];
-      for (const colId of selections) {
+      for (const colId of project.selectedJobColumns ?? []) {
+        targets.push({ projectId: project.id, columnId: colId });
         const url = project.jobs?.[colId]?.trim();
         if (url && url.length > 0) executable += 1;
         else skipped += 1;
       }
     }
-    return { executableTargetCount: executable, skippedBlankCount: skipped };
+    return { executableTargetCount: executable, skippedBlankCount: skipped, selectedTargets: targets };
   }, [currentDoc]);
 
   const handleRunAutoBuild = async () => {
     if (activeConfigName && etag && !isDirty && validationErrors.length === 0 && executableTargetCount > 0) {
-      await triggerRun(activeConfigName, etag, 'auto-build');
+      await triggerRun(activeConfigName, etag, 'auto-build', undefined, undefined, undefined, selectedTargets);
     }
   };
   const handleRunReports = async () => {
     if (activeConfigName && etag && !isDirty && validationErrors.length === 0 && executableTargetCount > 0) {
-      await triggerRun(activeConfigName, etag, 'report');
+      await triggerRun(activeConfigName, etag, 'report', undefined, undefined, undefined, selectedTargets);
     }
   };
   const handleSaveCredentials = async (secretsMap: Record<string, string>): Promise<boolean> => {

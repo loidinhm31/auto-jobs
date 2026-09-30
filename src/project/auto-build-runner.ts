@@ -22,6 +22,10 @@ export interface AutoBuildRunOutcome {
   readonly projectName: string;
   readonly state: AutoBuildOutcomeState;
   readonly jobUrl: string;
+  readonly columnId?: string | undefined;
+  readonly columnName?: string | undefined;
+  readonly sourceProjectId?: string | undefined;
+  readonly sourceProjectName?: string | undefined;
   readonly buildPageUrl?: string | undefined;
   readonly buildNumber?: string | undefined;
   readonly buildResult?: string | undefined;

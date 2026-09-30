@@ -15,6 +15,7 @@ interface ProjectedHistoricalRun {
   readonly summary: AggregateRunSummary;
   readonly observedAt: string;
   readonly projectName: string;
+  readonly provenance?: AggregateRunSummary['provenance'];
 }
 
 function projectRun(item: DiscoveredRunManifest): ProjectedHistoricalRun {
@@ -35,9 +36,11 @@ function projectRun(item: DiscoveredRunManifest): ProjectedHistoricalRun {
       manifestPath: `${item.relativeDirectory}/manifest.json`,
       ...(item.reportPath === undefined ? {} : { reportPath: item.reportPath }),
       warnings: sanitizePersistedWarnings(item.manifest.warnings),
+      ...(item.manifest.provenance === undefined ? {} : { provenance: item.manifest.provenance }),
     },
     observedAt: item.manifest.run.observedAt,
     projectName: item.manifest.project.name,
+    ...(item.manifest.provenance === undefined ? {} : { provenance: item.manifest.provenance }),
   };
 }
 
@@ -85,6 +88,7 @@ export function buildAggregateIndex(options: BuildAggregateIndexOptions): Aggreg
       const historicalRuns = history.get(outcome.projectId) ?? [];
       const matchingRun = historicalRuns.find((r) => r.summary.runId === outcome.runId);
       const reportPath = matchingRun?.summary.reportPath;
+      const prov = matchingRun?.provenance ?? historicalRuns[0]?.provenance;
       projects.push({
         projectId: outcome.projectId,
         name: outcome.name,
@@ -96,6 +100,7 @@ export function buildAggregateIndex(options: BuildAggregateIndexOptions): Aggreg
           ...outcome.warnings,
           ...(outcome.error === undefined ? [] : [outcome.error]),
         ]),
+        ...(prov !== undefined ? { provenance: prov } : {}),
       });
     }
   }
@@ -116,6 +121,7 @@ export function buildAggregateIndex(options: BuildAggregateIndexOptions): Aggreg
       ...(latest.summary.reportPath === undefined ? {} : { reportPath: latest.summary.reportPath }),
       runs: historicalRuns.map((r) => r.summary),
       warnings: [],
+      ...(latest.provenance === undefined ? {} : { provenance: latest.provenance }),
     });
   }
 

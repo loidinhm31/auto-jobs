@@ -3,18 +3,14 @@ import * as path from 'node:path';
 import { redactText } from '../config-errors.js';
 import type { ConfigStore } from './report-server-config-store.js';
 import { normalizeProjectConfigDocument } from '../config/project-config-loader.js';
-import {
-  selectAutoBuildProject,
-  selectAutoBuildProjects,
-  selectReportProjects,
-} from '../config/project-run-selection.js';
+import { selectAutoBuildProject, selectAutoBuildProjects, selectReportProjects } from '../config/project-run-selection.js';
 import { normalizeReportWorkerCount } from '../config/report-worker-count.js';
 import { executeAutoBuildWorkerPool } from '../project/auto-build-worker-pool.js';
 import { runAutoBuildProject, type AutoBuildRunOutcome } from '../project/auto-build-runner.js';
 import type { StageViewStage } from '../jenkins/stage-view-types.js';
 import { localReportHref } from './report-links.js';
 import type { ControlRunRecord, RunManagerOptions } from './report-server-run-manager.js';
-
+import { executeMatrixRun } from './control-run-matrix-executor.js';
 function sanitizeStage(stage: StageViewStage, secretValues: readonly string[]): StageViewStage {
   return {
     index: stage.index,
@@ -40,6 +36,9 @@ function sanitizeAutoBuildOutcome(
     submittedAt: outcome.submittedAt,
     responseStatus: outcome.responseStatus,
     error: outcome.error ? redactText(outcome.error, secretValues) : undefined,
+    columnId: outcome.columnId,
+    columnName: outcome.columnName ? redactText(outcome.columnName, secretValues) : undefined,
+    sourceProjectId: outcome.sourceProjectId, sourceProjectName: outcome.sourceProjectName ? redactText(outcome.sourceProjectName, secretValues) : undefined,
     exitCode: outcome.exitCode,
   };
 }
@@ -68,8 +67,20 @@ export async function executeControlRun(
       ...storedSecrets,
     };
 
-    const normalized = normalizeProjectConfigDocument(configEntry.document, runEnv);
+    if (record.targets !== undefined) {
+      await executeMatrixRun(
+        record,
+        options,
+        secretValues,
+        safeAddLog,
+        configEntry,
+        runEnv,
+        sanitizeAutoBuildOutcome,
+      );
+      return;
+    }
 
+    const normalized = normalizeProjectConfigDocument(configEntry.document, runEnv);
     if (record.runType === 'report') {
       const reportProjects = selectReportProjects(normalized);
       const resolvedReportRoot = path.resolve(reportRoot);

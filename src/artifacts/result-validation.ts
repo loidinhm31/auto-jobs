@@ -55,25 +55,25 @@ const SUMMARY_COUNTS_KEYS = ['critical', 'high', 'medium', 'low'] as const;
 const SUMMARY_DETAIL_KEYS = ['totalObserved', 'retainedCount', 'truncated', 'omittedCount'] as const;
 const SUMMARY_METADATA_KEYS = ['scannedPath', 'packageManager', 'project', 'dependencyCount', 'dependencyPathCount'] as const;
 const FINDING_KEYS = ['id', 'title', 'severity', 'module', 'description', 'remediation', 'paths', 'references'] as const;
-const PROJECT_RESULT_KEYS = ['schemaVersion', 'state', 'project', 'run', 'jenkins', 'navigation', 'reports', 'warnings'] as const;
+const PROJECT_RESULT_KEYS = ['schemaVersion', 'state', 'project', 'run', 'jenkins', 'navigation', 'reports', 'warnings', 'provenance'] as const;
 const REPORTS_KEYS = ['snyk', 'sonarqube'] as const;
 const AGGREGATE_KEYS = ['schemaVersion', 'generatedAt', 'projects', 'warnings'] as const;
-const AGGREGATE_PROJECT_KEYS = ['projectId', 'name', 'state', 'runId', 'reportPath', 'runs', 'warnings'] as const;
-const AGGREGATE_RUN_KEYS = ['runId', 'state', 'jobId', 'branch', 'manifestPath', 'reportPath', 'warnings'] as const;
+const AGGREGATE_PROJECT_KEYS = ['projectId', 'name', 'state', 'runId', 'reportPath', 'runs', 'warnings', 'provenance'] as const;
+const AGGREGATE_RUN_KEYS = ['runId', 'state', 'jobId', 'branch', 'manifestPath', 'reportPath', 'warnings', 'provenance'] as const;
 export const MAX_AGGREGATE_PROJECTS = 5_050;
 const MAX_AGGREGATE_RUNS_PER_PROJECT = 5_000;
 const MAX_AGGREGATE_TOTAL_RUNS = 5_000;
 const MAX_AGGREGATE_PATH_LENGTH = 512;
 const ISO_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
-const MANIFEST_KEYS = ['kind', 'schemaVersion', 'project', 'run', 'state', 'jenkins', 'artifacts', 'warnings', 'diagnostic', 'diagnostics'] as const;
+const MANIFEST_KEYS = ['kind', 'schemaVersion', 'project', 'run', 'state', 'jenkins', 'artifacts', 'warnings', 'diagnostic', 'diagnostics', 'provenance'] as const;
 const MANIFEST_PROJECT_KEYS = ['id', 'name'] as const;
 const MANIFEST_RUN_KEYS = ['runId', 'observedAt'] as const;
 const MANIFEST_JENKINS_KEYS = ['jobUrl'] as const;
 const MANIFEST_ARTIFACT_KEYS = ['manifest', 'data', 'screenshots', 'trace'] as const;
 const MANIFEST_DIAGNOSTICS_KEYS = ['lastSafeUrl', 'observationErrors'] as const;
+const PROVENANCE_KEYS = ['sourceProjectId', 'sourceProjectName', 'columnId', 'columnName', 'jobUrl'] as const;
 
-const FAILURE_RESULT_KEYS = ['schemaVersion', 'project', 'run', 'state', 'jenkins', 'diagnostic', 'warnings', 'diagnostics'] as const;
-
+const FAILURE_RESULT_KEYS = ['schemaVersion', 'project', 'run', 'state', 'jenkins', 'diagnostic', 'warnings', 'diagnostics', 'provenance'] as const;
 
 export function hasOnlyKeys(value: unknown, allowed: readonly string[]): value is Record<string, unknown> {
   return isRecord(value) && Object.keys(value).every((key) => allowed.includes(key));
@@ -162,6 +162,7 @@ export function isValidManifestContract(
     (value.artifacts.trace !== undefined && value.artifacts.trace !== 'trace.zip' ||
       !value.artifacts.screenshots.every((item) => typeof item === 'string' && isSafeScreenshotReference(item)) ||
       new Set(value.artifacts.screenshots).size !== value.artifacts.screenshots.length)) return false;
+  if (!validProvenance((value as Record<string, unknown>).provenance)) return false;
   if (value.diagnostics === undefined) return true;
   return hasOnlyKeys(value.diagnostics, MANIFEST_DIAGNOSTICS_KEYS) &&
     Array.isArray(value.diagnostics.observationErrors) &&
@@ -278,8 +279,24 @@ function validDiagnostics(value: unknown): boolean {
   return value.lastSafeUrl === undefined || isSafePersistedUrl(value.lastSafeUrl);
 }
 
+function validProvenance(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value) || !hasOnlyKeys(value, PROVENANCE_KEYS)) return false;
+  return (
+    boundedSafeId(value.sourceProjectId, 63) &&
+    boundedString(value.sourceProjectName, 256) &&
+    typeof value.columnId === 'string' &&
+    value.columnId.length > 0 &&
+    value.columnId.length <= 16 &&
+    /^[a-z0-9][a-z0-9-]{0,15}$/u.test(value.columnId) &&
+    boundedString(value.columnName, 256) &&
+    (value.jobUrl === undefined || isSafeJenkinsJobUrl(value.jobUrl))
+  );
+}
+
 function validCommon(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
   return hasOnlyKeys(value, allowedKeys) && value.schemaVersion === 3 && validProject(value.project) && validRun(value.run) && validWarnings(value.warnings) &&
+    validProvenance(value.provenance) &&
     (value.diagnostic === undefined || boundedString(value.diagnostic, MAX_PERSISTED_DIAGNOSTIC_LENGTH)) &&
     (value.diagnostics === undefined || validDiagnostics(value.diagnostics));
 }
@@ -359,7 +376,8 @@ function validAggregateRun(value: unknown, projectId: string): value is Aggregat
     (branch !== undefined && !boundedString(branch, 256)) ||
     manifestPath !== aggregateArtifactPath(projectId, runId, 'manifest.json') ||
     (reportPath !== undefined && reportPath !== aggregateArtifactPath(projectId, runId, 'index.html')) ||
-    !validWarnings(value.warnings)) return false;
+    !validWarnings(value.warnings) ||
+    !validProvenance(value.provenance)) return false;
   return manifestPath.length <= MAX_AGGREGATE_PATH_LENGTH &&
     (reportPath === undefined || reportPath.length <= MAX_AGGREGATE_PATH_LENGTH);
 }
@@ -376,7 +394,8 @@ function validAggregateProject(value: unknown): value is AggregateProjectSummary
     !validAggregateState(state) || !Array.isArray(runs) || runs.length > MAX_AGGREGATE_RUNS_PER_PROJECT ||
     !validWarnings(value.warnings) || (runId !== undefined && (!boundedString(runId, 96) || !SAFE_ID.test(runId))) ||
     (reportPath !== undefined && (runId === undefined || reportPath !== aggregateArtifactPath(projectId, runId, 'index.html') ||
-      reportPath.length > MAX_AGGREGATE_PATH_LENGTH))) return false;
+      reportPath.length > MAX_AGGREGATE_PATH_LENGTH)) ||
+    !validProvenance(value.provenance)) return false;
   const runIds = new Set<string>();
   for (const run of runs) {
     if (!validAggregateRun(run, projectId) || runIds.has(run.runId)) return false;

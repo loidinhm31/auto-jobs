@@ -1,5 +1,5 @@
 import type { ProjectOutcomeState } from '../project/project-types.js';
-
+import type { TargetProvenance } from '../result-types.js';
 export interface ProjectRunManifest {
   readonly kind: 'project-run';
   readonly schemaVersion: 3;
@@ -21,6 +21,7 @@ export interface ProjectRunManifest {
     readonly lastSafeUrl?: string;
     readonly observationErrors: readonly string[];
   };
+  readonly provenance?: TargetProvenance;
 }
 
 export interface ProjectFailureResultV3 {
@@ -34,6 +35,7 @@ export interface ProjectFailureResultV3 {
   readonly diagnostic: string;
   readonly warnings: readonly string[];
   readonly diagnostics?: ProjectRunManifest['diagnostics'];
+  readonly provenance?: TargetProvenance;
 }
 
 export interface DiscoveredRunManifest {

@@ -44,5 +44,6 @@ export function createProjectManifest(
         observationErrors: boundedDiagnostics(options.diagnostics.observationErrors),
       },
     }),
+    ...(project.provenance === undefined ? {} : { provenance: project.provenance }),
   };
 }
