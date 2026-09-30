@@ -263,6 +263,7 @@ Matrix contracts are covered by [`control-run-targets.spec.ts`](../tests/unit/co
 [`control-matrix-run-api.spec.ts`](../tests/unit/control-matrix-run-api.spec.ts),
 and [`control-matrix-components.spec.ts`](../tests/unit/control-matrix-components.spec.ts);
 the browser flow is in [`control-page.spec.ts`](../tests/e2e/control-page.spec.ts).
+The Phase 05 template-server integration smoke also loads the saved template config in a local Control Server and asserts a project row in `#projects-job-matrix` (rather than the removed card UI). The [release audit](../plans/reports/phase05tester-260930-1524-testing-verification-release-audit.md) records the environment-specific WebKit skips, Xvfb requirement, and non-blocking findings.
 
 
 Requests without `targets` retain the existing API contract: report selection
@@ -735,7 +736,7 @@ Phase 05 validates this integration end-to-end in
 - Verifies schema-v1 loading and normalization of `config/projects.template.json`.
 - Executes production report collection against the live template server, generating verified report artifacts (`data.json`, `index.html`) with exact Snyk (6 findings) and SonarQube facet evidence.
 - Executes production auto-build workflow against the live template server, verifying `submitted` state with 302 redirect.
-- Verifies Control Page UI renders the template project card from `projects.template.json` without cross-origin or CSP violations.
+- Verifies Control Page UI renders the template project row from `projects.template.json` in the flat matrix without cross-origin or CSP violations.
 
 ## Artifact and trace distinction
 

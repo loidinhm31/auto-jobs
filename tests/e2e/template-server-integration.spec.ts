@@ -387,7 +387,7 @@ test.describe('Template Server Validation & Integration (Phase 05)', () => {
       expect(outcome.submittedAt).toBeDefined();
     });
 
-    test('Control Page UI loads template config and renders project card without cross-origin errors', async ({ page }) => {
+    test('Control Page UI loads template config and renders project matrix without cross-origin errors', async ({ page }) => {
       // Copy projects.template.json into configRoot for Control Server
       const templateConfigSrc = path.resolve('config/projects.template.json');
       fs.copyFileSync(templateConfigSrc, path.join(configRoot, 'default.json'));
@@ -410,9 +410,9 @@ test.describe('Template Server Validation & Integration (Phase 05)', () => {
         await page.goto(controlServer.url);
         await expect(page).toHaveTitle('Jenkins Control Dashboard');
 
-        // Verify project card renders with Template Fixture Service
-        await expect(page.locator('.project-card')).toHaveCount(1);
-        await expect(page.locator('.project-card').getByRole('heading', { name: 'Template Fixture Service', exact: true })).toBeVisible();
+        // Verify project matrix renders with Template Fixture Service
+        await expect(page.locator('#projects-job-matrix tbody tr')).toHaveCount(1);
+        await expect(page.locator('#input-project-name-template-fixture-service')).toHaveValue('Template Fixture Service');
 
         // Check for absence of cross-origin or CSP security violation errors
         const corsViolations = consoleErrors.filter(

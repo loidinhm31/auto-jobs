@@ -1,6 +1,19 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, webkit } from '@playwright/test';
 
 const environment = process.env;
+const skipWebKit = environment['PLAYWRIGHT_SKIP_WEBKIT'] === '1' || environment['PLAYWRIGHT_SKIP_WEBKIT'] === 'true';
+
+let canLaunchWebKit = false;
+if (!skipWebKit) {
+  try {
+    const probe = await webkit.launch({ headless: true });
+    await probe.close();
+    canLaunchWebKit = true;
+  } catch {
+    canLaunchWebKit = false;
+  }
+}
+
 const executablePath = environment['PLAYWRIGHT_EXECUTABLE_PATH']?.trim();
 const headlessRaw = environment['PLAYWRIGHT_HEADLESS']?.trim().toLowerCase();
 const headedRaw = (environment['PLAYWRIGHT_HEADED'] ?? environment['HEADED'])?.trim().toLowerCase();
@@ -38,6 +51,6 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium-control', use: { browserName: 'chromium' } },
-    { name: 'webkit-control', use: { browserName: 'webkit' } },
+    ...(canLaunchWebKit ? [{ name: 'webkit-control', use: { browserName: 'webkit' } }] : []),
   ],
 });

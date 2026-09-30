@@ -53,23 +53,29 @@ test('parses only the bounded process-inspection protocol', () => {
 });
 
 test('reclaims an expired lock when a Windows PID was reused', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-reused-pid-'));
+  const originalPlatform = process.platform;
   try {
-    const reportRoot = path.join(root, 'reports');
-    fs.mkdirSync(reportRoot);
-    const owner = createOwner(STARTED_AT);
-    const directory = createLock(reportRoot, owner);
-    const reclaimed = await reclaimStaleLock(
-      reportRoot,
-      owner,
-      NOW.getTime(),
-      owner.hostname,
-      async () => ({ state: 'live', startedAt: REUSED_AT }),
-    );
-    expect(reclaimed).toBe(true);
-    expect(fs.existsSync(directory)).toBe(false);
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-reused-pid-'));
+    try {
+      const reportRoot = path.join(root, 'reports');
+      fs.mkdirSync(reportRoot);
+      const owner = createOwner(STARTED_AT);
+      const directory = createLock(reportRoot, owner);
+      const reclaimed = await reclaimStaleLock(
+        reportRoot,
+        owner,
+        NOW.getTime(),
+        owner.hostname,
+        async () => ({ state: 'live', startedAt: REUSED_AT }),
+      );
+      expect(reclaimed).toBe(true);
+      expect(fs.existsSync(directory)).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
   }
 });
 
@@ -95,20 +101,26 @@ test('preserves expired locks for matching, legacy, and unknown owners', async (
 });
 
 test('reclaims an incomplete claim when its recorded PID was reused', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-reused-claim-'));
+  const originalPlatform = process.platform;
   try {
-    const reportRoot = path.join(root, 'reports');
-    fs.mkdirSync(reportRoot);
-    const directory = createLock(reportRoot);
-    const claim = { schemaVersion: 1, pid: 2552, hostname: os.hostname(), acquiredAt: OLD.toISOString(), expiresAt: OLD.getTime(), processStartedAt: STARTED_AT };
-    const claimPath = path.join(directory, '.claim.json');
-    fs.writeFileSync(claimPath, JSON.stringify(claim));
-    markOld(directory);
-    markOld(claimPath);
-    expect(await reclaimIncompleteLock(reportRoot, NOW.getTime(), 1_000, os.hostname(), async () => ({ state: 'live', startedAt: REUSED_AT }))).toBe(true);
-    expect(fs.existsSync(directory)).toBe(false);
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'report-lock-reused-claim-'));
+    try {
+      const reportRoot = path.join(root, 'reports');
+      fs.mkdirSync(reportRoot);
+      const directory = createLock(reportRoot);
+      const claim = { schemaVersion: 1, pid: 2552, hostname: os.hostname(), acquiredAt: OLD.toISOString(), expiresAt: OLD.getTime(), processStartedAt: STARTED_AT };
+      const claimPath = path.join(directory, '.claim.json');
+      fs.writeFileSync(claimPath, JSON.stringify(claim));
+      markOld(directory);
+      markOld(claimPath);
+      expect(await reclaimIncompleteLock(reportRoot, NOW.getTime(), 1_000, os.hostname(), async () => ({ state: 'live', startedAt: REUSED_AT }))).toBe(true);
+      expect(fs.existsSync(directory)).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
   }
 });
 test('reclaims an empty abandoned lock directory when expired', async () => {

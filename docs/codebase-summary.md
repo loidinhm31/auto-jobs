@@ -149,6 +149,9 @@ history/PDF export, offline fixtures, and verification boundaries.
   compatible. Saved `reportWorkers` bounds both paths; legacy no-target API and
   scalar report CLI behavior remain unchanged. Phase 04 review passed 101/101
   checks (79 unit, 22 Chromium E2E); typecheck/build passed, review 9.6/10.
+- Flat project/job matrix Phase 05 release audit (2026-09-30): 730 tests passed across 695 unit, 22 Control, and 13 template checks; typecheck and build passed.
+  WebKit-dependent checks skipped when host libraries were unavailable, and headed template E2E required Xvfb. No coverage was generated.
+  Non-blocking findings: the existing template integration spec remains 427 LOC; the Control Page bundle warning is 2,700.48 kB minified (1,084.21 kB gzip). See the [verification report](../plans/reports/phase05tester-260930-1524-testing-verification-release-audit.md).
 - Persistent aggregate index builder: pure projection of current report
   outcomes and validated history. Incomplete discovery blocks publication;
   aggregate data allows zero projects, up to 5,050 project rows, and staged
@@ -172,7 +175,7 @@ history/PDF export, offline fixtures, and verification boundaries.
   (505 unit, 40 Control, 5 report visual, 7 WebKit PDF); typecheck/build passed.
   Focused PDF scenarios passed 7/7 in Chromium and WebKit; see the
   [review](../plans/260925-1729-final-report-pdf-export/code-review-260926-1707-phase-03-verification-and-documentation.md).
-- Refreshed `repomix-output.xml`: 442 files and 3,146,720 tokens packed; Repomix reported no suspicious files.
+- Refreshed `repomix-output.xml`: 444 files and 3,152,349 tokens packed; Repomix reported no suspicious files.
 
 ## Entry points and scripts
 

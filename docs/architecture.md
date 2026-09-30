@@ -792,4 +792,7 @@ Template Servers, template-config loading, production report and auto-build
 flows, and Control Page rendering without CORS/CSP console errors.
 
 The Active Config Phase 04 audit passed `npm run test:release` (371/371, 10/10 review). Phase 05 additions in `tests/unit/control-secret-store.spec.ts` (7 checks) and `control-secrets-api.spec.ts` (10 checks) cover SecretStore lifecycle, API operations, and security gates (redaction, Host/Origin/CSRF, bounded JSON). Phase 06 legacy cleanup removed all legacy control page files (`control-page.js`, `control-page.html`, `control-page.css`). Compact project groups and cloning Phase 04 additions in `tests/unit/control-project-transitions.spec.ts` (15 checks) and `control-config-api.spec.ts` (12 checks) verify group transitions, clone identity bounds, nested data independence, Config API roundtrip/validation, and full browser smoke across Chromium and WebKit. Deterministic suites contact no live Jenkins or vendor services.
+The flat project/job matrix Phase 05 audit (2026-09-30) reports 730 passing tests (695 unit, 22 Control, 13 template), with typecheck and build passing.
+WebKit dependency skips and the Xvfb requirement for headed template tests are environment limitations; no coverage or live Jenkins/vendor run was claimed.
+Non-blocking findings: the pre-existing template integration spec remains 427 LOC and the Control Page bundle is 2,700.48 kB minified (1,084.21 kB gzip); see [verification report](../plans/reports/phase05tester-260930-1524-testing-verification-release-audit.md).
 

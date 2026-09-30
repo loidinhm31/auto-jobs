@@ -1,7 +1,7 @@
 ---
 title: "Flat project job matrix refactor"
 description: "Replace both Control project surfaces with one editable job matrix and execute selected project-column targets safely in report or build mode."
-status: in-progress
+status: completed
 priority: P2
 effort: 32h
 branch: main
@@ -15,7 +15,7 @@ created: 2026-09-30
 
 Replace **both** the grouped project board (`ProjectsGrid` → `ProjectGroupColumn` → `ProjectCard`) **and** project form (`ConfigFormBuilder`) in `src/reporting/control-page` with one spreadsheet-style project editor. Shared add/rename/remove job-link headings; row ID/name, independent URL cells, multi-column execution selection; two explicit actions, Generate Reports and Trigger Auto Build, against the selected nonblank cells. Extend the existing validated schema-v1 document without erasing old `jobUrl`, groups, defaults, login settings or advanced fields. Resolve a saved ETag-matched selection into bounded, distinct build/report targets and report artifact identities. [Full proposed architecture](./architecture-design.md); [short command entry](./cmd-plan.md).
 
-**Boundary:** Overall implementation remains in progress. Phases 01–04 (schema/data model/migration, spreadsheet matrix UI, document lifecycle, and multi-job execution engine/API) are DONE; Phase 05 remains pending. Phase 02 replaced the grouped Control Page board and separate project form with one matrix; Phase 03 completed the document transition/save/reload lifecycle. Follow [code standards](../../docs/code-standards.md), [architecture](../../docs/architecture.md), [system architecture](../../docs/system-architecture.md), [backend research](./research/researcher-01-backend-schema-exec.md), and [frontend research](./research/researcher-02-frontend-matrix-ui.md); `docs/development-rules.md` is absent in this checkout.
+**Boundary:** Overall implementation is COMPLETE. All phases 01–05 (schema/data model/migration, spreadsheet matrix UI, document lifecycle, multi-job execution engine/API, and testing/verification/release audit) are DONE. Follow [code standards](../../docs/code-standards.md), [architecture](../../docs/architecture.md), [system architecture](../../docs/system-architecture.md), [backend research](./research/researcher-01-backend-schema-exec.md), and [frontend research](./research/researcher-02-frontend-matrix-ui.md); `docs/development-rules.md` is absent in this checkout.
 
 ## Phases
 
@@ -25,13 +25,13 @@ Replace **both** the grouped project board (`ProjectsGrid` → `ProjectGroupColu
 | 02 | Replace grouped board and form with one accessible flat matrix | DONE — 2026-09-30 | 7h | [Matrix UI](./phase-02-spreadsheet-matrix-ui-components.md) |
 | 03 | Pure immutable transitions and editor/save/reload/selection lifecycle | DONE — 2026-09-30 | 6h | [State and document transitions](./phase-03-state-management-and-document-transitions.md) |
 | 04 | Validated batch run API, two bounded execution paths, provenance/artifact isolation | DONE — 2026-09-30 | 8h | [Multi-job execution engine and API](./phase-04-multi-job-execution-engine-and-api.md) |
-| 05 | Contract/e2e proof, compatibility and security audit, docs/release gate | Pending | 5h | [Verification and release](./phase-05-testing-verification-and-release-audit.md) |
+| 05 | Contract/e2e proof, compatibility and security audit, docs/release gate | DONE — 2026-09-30 | 5h | [Verification and release](./phase-05-testing-verification-and-release-audit.md) |
 
 ## Phase 02 completion
 
 **Status:** DONE — 2026-09-30; status finalized at `2026-09-30T10:01:59+07:00`.
 
-**Evidence:** The Phase 02 validation report records 110/110 selected checks (98 unit, 12 Chromium Control E2E), typecheck and build passed. The code review scored 9.3/10 with no critical findings. Its summary reports a different test split (73 unit, 22 E2E); Phase 05 must establish consolidated release-gate totals. Current matrix transitions assign the computed primary URL directly to `jobUrl`, addressing the review's stale-mirror finding. Remaining review suggestions: remove redundant Dialog `forceMount` options and consider a narrow-screen scroll cue. Vite emitted a non-blocking bundle warning (2,697.08 kB; 1,083.88 kB gzip). See [validation](../reports/phase02tester-260930-0939-spreadsheet-matrix-validation.md) and [review](./code-review-260930-0941-phase-02-spreadsheet-matrix-ui-components.md).
+**Evidence:** The Phase 02 validation report records 110/110 selected checks (98 unit, 12 Chromium Control E2E), typecheck and build passed. The code review scored 9.3/10 with no critical findings. The review and validation used different test splits; Phase 05 later recorded consolidated release-gate totals of 730 passed, 0 failed, and 3 skipped. Current matrix transitions assign the computed primary URL directly to `jobUrl`, addressing the review's stale-mirror finding. Remaining non-blocking review suggestions: remove redundant Dialog `forceMount` options and consider a narrow-screen scroll cue. Vite emitted a non-blocking bundle warning (2,697.08 kB; 1,083.88 kB gzip). See [validation](../reports/phase02tester-260930-0939-spreadsheet-matrix-validation.md) and [review](./code-review-260930-0941-phase-02-spreadsheet-matrix-ui-components.md).
 
 **Handoff:** Phase 03 completed the integrated document transitions and is marked DONE below.
 
@@ -48,7 +48,13 @@ Replace **both** the grouped project board (`ProjectsGrid` → `ProjectGroupColu
 
 **Evidence:** 101/101 targeted tests passed (79 unit, 22 Chromium E2E). Typecheck (`tsc --noEmit`) and production build passed. Code review scored 9.6/10 with no critical issues or warnings. Safe batch target execution, server-side ETag coordinate resolution, bounded auto-build and report dispatch, virtual target collision preflight, and per-target typed provenance are verified ([validation](../reports/phase04tester-260930-1313-phase-04-multi-job-execution-engine-and-api.md), [review](./code-review-260930-1317-phase-04-multi-job-execution-engine-and-api.md)).
 
-**Next:** Phase 05 — Testing, verification, and release audit.
+## Phase 05 completion
+
+**Status:** DONE — 2026-09-30; finalized at `2026-09-30T16:01:11+07:00`.
+
+**Evidence:** Consolidated release gates: **730 passed, 0 failed, 3 skipped** (695 unit, 22 Chromium Control E2E, 13 template E2E; one unit WebKit-dependent check and two WebKit release-gate checks skipped because host libraries were unavailable). Typecheck (`tsc --noEmit`) and production build passed; the build emitted a non-blocking Vite chunk-size warning (2,700.48 kB minified; 1,084.21 kB gzip). Cycle 2 code review scored **9.8/10** with no critical findings; it verified safe error guards, `process.platform` restoration inside outer `try...finally`, graceful WebKit dependency skips, and matrix selector alignment ([validation](../reports/phase05tester-260930-1524-testing-verification-release-audit.md), [debugger](../reports/debugger-260930-1513-matrix-selector-and-webkit-host-adaptation.md), [Cycle 2 review](../reports/code-review-260930-1543-phase-05-testing-verification-cycle-2.md)).
+
+**Next:** Release cutover complete. All 5 phases delivered.
 
 ## Dependencies
 

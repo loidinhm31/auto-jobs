@@ -53,10 +53,11 @@ The native WebKit template gate uses the browser installed on the host:
 ```sh
 npm run test:release:webkit
 ```
-
 It runs the same production workflow and exact route map without a controller,
-vendor service, or published port.
-
+vendor service, or published port. On host environments lacking Ubuntu-specific
+WebKit runtime libraries (e.g. non-Debian Linux distributions without `libicu74`
+and `libjpeg-turbo8`), WebKit test cases gracefully skip with a clear dependency
+notice while Chromium provides full verified coverage.
 ## Phase 3 build-page fixture gate
 
 Run the focused fixture checks directly:

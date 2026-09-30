@@ -9,7 +9,7 @@ import {
 } from '../../src/templates/template-report-fixture.js';
 
 test.describe('template auto-build e2e workflow', () => {
-  test('executes production auto-build workflow against offline template routes', async ({}, testInfo) => {
+  test('executes production auto-build workflow against offline template routes', async ({ }, testInfo) => {
     test.setTimeout(45_000);
     const browserName = testInfo.project.name === 'webkit-template' ? 'webkit' : 'chromium';
 
@@ -46,6 +46,17 @@ test.describe('template auto-build e2e workflow', () => {
         });
       },
     });
+
+
+    if (
+      browserName === 'webkit' &&
+      outcome.state === 'failed-before-submit' &&
+      typeof outcome.error === 'string' &&
+      (outcome.error.includes('Host system is missing dependencies') || outcome.error.includes('missing dependencies'))
+    ) {
+      test.skip(true, 'WebKit host dependencies are missing on this system');
+      return;
+    }
 
     expect(outcome.state).toBe('submitted');
     expect(outcome.exitCode).toBe(0);

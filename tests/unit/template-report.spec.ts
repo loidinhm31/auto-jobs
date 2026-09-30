@@ -79,13 +79,26 @@ test('keeps template capture routed when WebKit needs a separate safe context', 
   test.setTimeout(60_000);
   const reportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'template-report-webkit-'));
   try {
-    const result = await runFromTemplates({
-      PROJECT_ID: 'template-report-webkit',
-      PROJECT_NAME: 'Template WebKit Report',
-      ARTIFACT_DIR: reportRoot,
-      PLAYWRIGHT_BROWSER: 'webkit',
-      TEMPLATE_TIMEOUT_MS: '30000',
-    });
+    let result;
+    try {
+      result = await runFromTemplates({
+        PROJECT_ID: 'template-report-webkit',
+        PROJECT_NAME: 'Template WebKit Report',
+        ARTIFACT_DIR: reportRoot,
+        PLAYWRIGHT_BROWSER: 'webkit',
+        TEMPLATE_TIMEOUT_MS: '30000',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes('missing dependencies') ||
+        message.includes('Host system is missing dependencies')
+      ) {
+        test.skip(true, 'WebKit host dependencies are missing on this system');
+        return;
+      }
+      throw error;
+    }
     const outcome = result.outcomes[0];
     expect(result.exitCode).toBe(0);
     expect(outcome?.state).toBe('success');

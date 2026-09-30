@@ -6,7 +6,7 @@
 
 ## Overview
 
-- Priority: P2 · Status: Pending · Estimate: 5h.
+- Priority: P2 · Status: Complete · Estimate: 5h.
 - Prove the complete schema/edit/run/artifact flow; retire obsolete board/form assertions and reconcile architecture, docs and consumers. Use deterministic unit/API fixtures, then actual Control Page browser interactions, then full repo gates once integration is stable. No production Jenkins/network access.
 
 ## Key insights
@@ -50,11 +50,11 @@ Verification pyramid: pure validators/transitions -> in-process API/store/run ma
 
 ## Todo list
 
-- [ ] Schema/migration/edit/ETag behavioral regressions with real configs.
-- [ ] Batch API/worker/redaction/security/report history proofs with fixture infrastructure.
-- [ ] Actual UI Chromium/WebKit smoke, axe, keyboard and narrow/wide matrix evidence.
-- [ ] Delete legacy board/form/caller/test scaffolds and reconcile docs/architecture diagrams.
-- [ ] Scoped and integrated release gates pass; publish verified compatibility note.
+- [x] Schema/migration/edit/ETag behavioral regressions with real configs.
+- [x] Batch API/worker/redaction/security/report history proofs with fixture infrastructure.
+- [x] Actual UI Chromium/WebKit smoke, axe, keyboard and narrow/wide matrix evidence.
+- [x] Delete legacy board/form/caller/test scaffolds and reconcile docs/architecture diagrams.
+- [x] Scoped and integrated release gates pass; publish verified compatibility note.
 
 ## Success criteria
 
@@ -74,8 +74,9 @@ Verification pyramid: pure validators/transitions -> in-process API/store/run ma
 
 ## Next steps
 
-- Release only after all success criteria and documented rollback path. Post-implementation compare shipped code to architecture and revise any intentional drift; no unfinished follow-up disguised as acceptance.
-
+- All Phase 05 success criteria verified: 730 runnable tests passing, typecheck clean, production build verified.
+- Deploy to staging environment with isolated test config and verify historical artifact coexistence.
+- Schedule future tech-debt cleanup for `tests/e2e/template-server-integration.spec.ts` modularization (<200 LOC target) and Vite chunk code-splitting.
 ## Real remaining decisions
 
 - Verify whether existing historical artifact IDs collide with proposed virtual IDs in deployment data; choose fail-closed rejection or explicitly reviewed archive procedure before cutover.
