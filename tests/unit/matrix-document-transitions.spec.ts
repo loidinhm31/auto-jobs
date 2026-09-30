@@ -7,6 +7,8 @@ import {
   generateJobColumnId,
   removeJobColumn,
   renameJobColumn,
+  setAllProjectsEnabled,
+  setProjectJobSelections,
   toggleProjectJobSelection,
   updateJobCell,
 } from '../../src/reporting/control-page/hooks/matrix-document-transitions.js';
@@ -299,6 +301,69 @@ test.describe('Phase 03: Pure Matrix Transitions & Immutability', () => {
       }));
       const fullDoc = { ...createSampleMatrixDoc(), projects: fiftyProjects };
       expect(cloneProjectMatrixDraft(fullDoc, fiftyProjects[0]!)).toBeNull();
+    });
+  });
+  test.describe('setProjectJobSelections', () => {
+    test('sets selectedJobColumns filtered to declared columns in document order', () => {
+      const doc = createSampleMatrixDoc();
+      // Original proj-beta has selectedJobColumns: ['report']
+      // Request selection with unknown col, duplicate, and reverse order: ['build', 'unknown', 'report', 'build']
+      const updated = setProjectJobSelections(doc, 1, ['build', 'unknown', 'report', 'build']);
+      expect(updated).not.toBe(doc);
+      // Declared columns order in doc: ['report', 'build']
+      expect(updated.projects[1]?.selectedJobColumns).toEqual(['report', 'build']);
+    });
+
+    test('clears selection when given empty array', () => {
+      const doc = createSampleMatrixDoc();
+      const updated = setProjectJobSelections(doc, 0, []);
+      expect(updated).not.toBe(doc);
+      expect(updated.projects[0]?.selectedJobColumns).toEqual([]);
+    });
+
+    test('returns original doc reference when selection is unchanged (no-op)', () => {
+      const doc = createSampleMatrixDoc();
+      // Original proj-alpha has ['report', 'build']
+      const updated = setProjectJobSelections(doc, 0, ['report', 'build']);
+      expect(updated).toBe(doc);
+    });
+
+    test('returns original doc reference when projectIndex is out of bounds', () => {
+      const doc = createSampleMatrixDoc();
+      const updated = setProjectJobSelections(doc, 99, ['report']);
+      expect(updated).toBe(doc);
+    });
+  });
+
+  test.describe('setAllProjectsEnabled', () => {
+    test('enables all projects when enabled is true, preserving other fields', () => {
+      const doc = createSampleMatrixDoc();
+      // proj-beta has enabled: false
+      expect(doc.projects[1]?.enabled).toBe(false);
+      const updated = setAllProjectsEnabled(doc, true);
+      expect(updated).not.toBe(doc);
+      expect(updated.projects[0]?.enabled).toBe(true);
+      expect(updated.projects[1]?.enabled).toBe(true);
+      // Unchanged fields preserved
+      expect(updated.projects[1]?.id).toBe('proj-beta');
+      expect(updated.projects[1]?.selectedJobColumns).toEqual(['report']);
+    });
+
+    test('disables all projects when enabled is false', () => {
+      const doc = createSampleMatrixDoc();
+      const updated = setAllProjectsEnabled(doc, false);
+      expect(updated).not.toBe(doc);
+      expect(updated.projects[0]?.enabled).toBe(false);
+      expect(updated.projects[1]?.enabled).toBe(false);
+    });
+
+    test('returns original doc reference when all projects already have target enabled state', () => {
+      const doc = createSampleMatrixDoc();
+      // Set all to true first
+      const allEnabled = setAllProjectsEnabled(doc, true);
+      // Calling again with true should be no-op
+      const noop = setAllProjectsEnabled(allEnabled, true);
+      expect(noop).toBe(allEnabled);
     });
   });
 });

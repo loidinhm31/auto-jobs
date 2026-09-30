@@ -387,7 +387,7 @@ test.describe('useConfigManager - lifecycle and replacement revision', () => {
     return { api, getSavedDoc: () => currentSavedDoc };
   }
 
-  test('loadConfig increments replacementRevision; saveConfig does NOT increment replacementRevision', async () => {
+  test('loadConfig increments replacementRevision; saveConfig automatically reloads and increments replacementRevision', async () => {
     const { api } = createMockApi();
     const runner = createHookRunner(() => useConfigManager(api));
     expect(runner.current.replacementRevision).toBe(0);
@@ -411,12 +411,12 @@ test.describe('useConfigManager - lifecycle and replacement revision', () => {
     expect(saved).toBe(true);
     expect(runner.current.isDirty).toBe(false);
     expect(runner.current.etag).toBe('"etag-2"');
-    expect(runner.current.replacementRevision).toBe(1);
+    expect(runner.current.replacementRevision).toBe(2);
 
     await runner.current.reloadConfig();
     runner.rerender();
 
-    expect(runner.current.replacementRevision).toBe(2);
+    expect(runner.current.replacementRevision).toBe(3);
     expect(runner.current.isDirty).toBe(false);
   });
 

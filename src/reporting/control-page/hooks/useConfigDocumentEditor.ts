@@ -47,6 +47,8 @@ export interface UseConfigDocumentEditorResult {
   removeJobColumn: (columnId: string) => boolean;
   updateJobCell: (projectIndex: number, columnId: string, url: string) => void;
   toggleProjectJobSelection: (projectIndex: number, columnId: string, selected: boolean) => void;
+  setProjectJobSelections: (projectIndex: number, columnIds: readonly string[]) => void;
+  setAllProjectsEnabled: (enabled: boolean) => void;
   addProjectMatrixDraft: () => string | null;
   cloneProjectMatrixDraft: (sourceProject: ProjectConfigInput) => string | null;
   createGroup: (name?: string) => string | null;

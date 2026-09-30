@@ -1056,4 +1056,82 @@ test.describe('Control Page Dashboard E2E', () => {
     await expect(page.locator('#input-project-id-demo-report-service')).toHaveValue('demo-report-service');
     await expect(page.locator('#checkbox-enabled-demo-report-service')).toBeChecked();
   });
+
+  test('Matrix UX controls: ID toggle, row All/None, master Enabled, top-right Execute Actions, and Save & Reload', async ({ page }) => {
+    await page.goto(serverUrl);
+    await expect(page.locator('#projects-job-matrix')).toBeVisible();
+
+    // 1. Task 4: Execute Actions is positioned top-right above Projects Job Matrix
+    const actionsSection = page.locator('#section-actions');
+    const matrixElement = page.locator('#projects-job-matrix');
+    await expect(actionsSection).toBeVisible();
+    await expect(matrixElement).toBeVisible();
+
+    const actionsBox = await actionsSection.boundingBox();
+    const matrixBox = await matrixElement.boundingBox();
+    expect(actionsBox).not.toBeNull();
+    expect(matrixBox).not.toBeNull();
+    expect(actionsBox!.y).toBeLessThan(matrixBox!.y);
+
+    // 2. Task 1: Hide ID column option
+    const showIdCheckbox = page.locator('#checkbox-show-id-column');
+    await expect(showIdCheckbox).toBeVisible();
+    await expect(showIdCheckbox).toBeChecked();
+    await expect(page.locator('#input-project-id-demo-report-service')).toBeVisible();
+
+    // Uncheck Show ID
+    await showIdCheckbox.uncheck();
+    await expect(showIdCheckbox).not.toBeChecked();
+    await expect(page.locator('#input-project-id-demo-report-service')).toBeHidden();
+
+    // Re-check Show ID
+    await showIdCheckbox.check();
+    await expect(showIdCheckbox).toBeChecked();
+    await expect(page.locator('#input-project-id-demo-report-service')).toBeVisible();
+
+    // 3. Task 2: Row Targets Select All / Deselect All
+    const selectAllBtn = page.locator('#btn-select-all-targets-demo-report-service');
+    const deselectAllBtn = page.locator('#btn-deselect-all-targets-demo-report-service');
+    await expect(selectAllBtn).toBeVisible();
+    await expect(deselectAllBtn).toBeVisible();
+
+    // Deselect all targets for demo-report-service
+    await deselectAllBtn.click();
+    await expect(page.locator('#checkbox-select-demo-report-service-default')).not.toBeChecked();
+
+    // Select all targets for demo-report-service
+    await selectAllBtn.click();
+    await expect(page.locator('#checkbox-select-demo-report-service-default')).toBeChecked();
+    // 4. Task 3: Master Enabled checkbox in header
+    const masterEnabledCheckbox = page.locator('#checkbox-enabled-all');
+    await expect(masterEnabledCheckbox).toBeVisible();
+    await expect(masterEnabledCheckbox).toBeChecked();
+
+    // Click master -> disables all projects
+    await masterEnabledCheckbox.click();
+    await expect(page.locator('#checkbox-enabled-demo-report-service')).not.toBeChecked();
+    await expect(page.locator('#checkbox-enabled-demo-build-service')).not.toBeChecked();
+    await expect(masterEnabledCheckbox).not.toBeChecked();
+
+    // Click master again -> enables all projects
+    await masterEnabledCheckbox.click();
+    await expect(page.locator('#checkbox-enabled-demo-report-service')).toBeChecked();
+    await expect(page.locator('#checkbox-enabled-demo-build-service')).toBeChecked();
+    await expect(masterEnabledCheckbox).toBeChecked();
+
+    // 5. Task 5: One-click Save & Reload button
+    const saveBtn = page.locator('#btn-save');
+    await expect(saveBtn).toContainText('Save & Reload');
+    await page.locator('#checkbox-enabled-demo-build-service').uncheck();
+    await expect(saveBtn).toBeEnabled();
+
+    // Click Save & Reload: saves and reloads in one step
+    await saveBtn.click();
+    await expect(page.locator('#status-banner')).toHaveText(/Configuration saved successfully/i);
+    await expect(saveBtn).toBeDisabled();
+
+    // Master checkbox is now indeterminate
+    const isIndeterminate = await masterEnabledCheckbox.evaluate((el: HTMLInputElement) => el.indeterminate);
+    expect(isIndeterminate).toBe(true);
+  });
 });

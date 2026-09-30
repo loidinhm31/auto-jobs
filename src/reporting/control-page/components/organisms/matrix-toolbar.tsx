@@ -8,17 +8,20 @@ export interface MatrixToolbarProps {
   disabled?: boolean;
   isAtProjectCapacity?: boolean;
   isAtColumnCapacity?: boolean;
+  showIdColumn?: boolean;
+  onToggleShowIdColumn?: (show: boolean) => void;
   onAddProject: () => void;
   onOpenAddColumn: () => void;
   onOpenDefaults: () => void;
 }
-
 export function MatrixToolbar({
   projectCount,
   columnCount,
   disabled = false,
   isAtProjectCapacity = false,
   isAtColumnCapacity = false,
+  showIdColumn = true,
+  onToggleShowIdColumn,
   onAddProject,
   onOpenAddColumn,
   onOpenDefaults,
@@ -91,9 +94,28 @@ export function MatrixToolbar({
     `${columnCount} ${columnCount === 1 ? 'Column' : 'Columns'}`,
   );
 
+  const showIdCheckbox = React.createElement('input', {
+    type: 'checkbox',
+    id: 'checkbox-show-id-column',
+    checked: showIdColumn,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => onToggleShowIdColumn?.(e.target.checked),
+    className: 'h-3.5 w-3.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500 accent-sky-700',
+  });
+
+  const showIdLabel = React.createElement(
+    'label',
+    {
+      htmlFor: 'checkbox-show-id-column',
+      className: 'inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none',
+    },
+    showIdCheckbox,
+    React.createElement('span', null, 'Show ID'),
+  );
+
   const rightGroup = React.createElement(
     'div',
-    { className: 'flex items-center gap-2 text-xs text-slate-500 font-medium' },
+    { className: 'flex items-center gap-3 text-xs text-slate-500 font-medium' },
+    showIdLabel,
     projectBadge,
     columnBadge,
   );

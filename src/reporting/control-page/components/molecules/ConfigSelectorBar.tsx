@@ -73,7 +73,7 @@ export const ConfigSelectorBar = forwardRef<HTMLDivElement, ConfigSelectorBarPro
         className: 'inline-flex items-center gap-1.5',
       },
       React.createElement(Save, { className: 'w-3.5 h-3.5', 'aria-hidden': true }),
-      React.createElement('span', null, 'Save Config'),
+      React.createElement('span', null, 'Save & Reload'),
     );
 
     const divider = React.createElement('div', {

@@ -138,6 +138,8 @@ test.describe('Matrix UI Molecules & Organisms Unit Tests', () => {
       // Col 2 is empty and selected -> skip indicator should appear
       expect(html).toContain('id="skip-hint-proj-1-col-2"');
       expect(html).toContain('empty');
+      expect(html).toContain('id="btn-select-all-targets-proj-1"');
+      expect(html).toContain('id="btn-deselect-all-targets-proj-1"');
     });
   });
 
@@ -194,8 +196,9 @@ test.describe('Matrix UI Molecules & Organisms Unit Tests', () => {
       expect(html).toContain('2 Projects');
       expect(html).toContain('id="badge-column-count"');
       expect(html).toContain('2 Columns');
+      expect(html).toContain('id="checkbox-show-id-column"');
+      expect(html).toContain('id="checkbox-enabled-all"');
 
-      // Table elements
       expect(html).toContain('<table');
       expect(html).toContain('<thead');
       expect(html).toContain('<tbody');

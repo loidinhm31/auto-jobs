@@ -141,52 +141,52 @@ export function toggleProjectJobSelection(
   projects[projectIndex] = { ...previous, selectedJobColumns: nextSelections };
   return { ...document, projects };
 }
+export {
+  addProjectMatrixDraft,
+  cloneProjectMatrixDraft,
+} from './matrix-project-draft-transitions.js';
 
-export function addProjectMatrixDraft(document: ProjectConfigDocumentV1): {
-  document: ProjectConfigDocumentV1;
-  projectId: string;
-} | null {
-  if (document.projects.length >= PROJECT_CONFIG_LIMITS.maxProjects) return null;
-  const ids = new Set(document.projects.map((p) => p.id));
-  let projectId = 'new-project';
-  for (let suffix = 2; ids.has(projectId); suffix += 1) projectId = `new-project-${suffix}`;
+export function setProjectJobSelections(
+  document: ProjectConfigDocumentV1,
+  projectIndex: number,
+  columnIds: readonly string[],
+): ProjectConfigDocumentV1 {
+  const previous = document.projects[projectIndex];
+  if (!previous) return document;
 
-  const columns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
-  const initialJobs: Record<string, string> = {};
-  for (const col of columns) initialJobs[col.id] = '';
+  const declaredColumns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
+  const validSet = new Set(columnIds);
+  const nextSelections = declaredColumns
+    .filter((col) => validSet.has(col.id))
+    .map((col) => col.id);
 
-  const newProject: ProjectConfigInput = {
-    id: projectId,
-    name: 'New Project',
-    loginUrl: '',
-    jobUrl: '',
-    jobs: initialJobs,
-    selectedJobColumns: [],
-    runType: 'report',
-    enabled: true,
-  };
+  const current = previous.selectedJobColumns ?? [];
+  if (
+    current.length === nextSelections.length &&
+    current.every((id, idx) => id === nextSelections[idx])
+  ) {
+    return document;
+  }
 
-  return {
-    document: { ...document, projects: [...document.projects, newProject] },
-    projectId,
-  };
+  const projects = [...document.projects];
+  projects[projectIndex] = { ...previous, selectedJobColumns: nextSelections };
+  return { ...document, projects };
 }
 
-export function cloneProjectMatrixDraft(
+export function setAllProjectsEnabled(
   document: ProjectConfigDocumentV1,
-  sourceProject: ProjectConfigInput,
-): { document: ProjectConfigDocumentV1; projectId: string } | null {
-  if (document.projects.length >= PROJECT_CONFIG_LIMITS.maxProjects) return null;
-  const cloned = cloneProjectDraft(sourceProject, document.projects);
-  const columns = document.jobColumns ?? [DEFAULT_JOB_COLUMN];
-  const jobs: Record<string, string> = {};
-  for (const col of columns) jobs[col.id] = sourceProject.jobs?.[col.id] ?? '';
-  cloned.jobs = jobs;
-  cloned.jobUrl = computePrimaryJobUrl(jobs, columns);
-  cloned.selectedJobColumns = [];
+  enabled: boolean,
+): ProjectConfigDocumentV1 {
+  let changed = false;
+  const nextProjects = document.projects.map((p) => {
+    const isCurrentlyEnabled = p.enabled !== false;
+    if (isCurrentlyEnabled === enabled) {
+      return p;
+    }
+    changed = true;
+    return { ...p, enabled };
+  });
 
-  return {
-    document: { ...document, projects: [...document.projects, cloned] },
-    projectId: cloned.id,
-  };
+  if (!changed) return document;
+  return { ...document, projects: nextProjects };
 }

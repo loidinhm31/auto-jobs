@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { ConfigFileListResponse, ConfigResponse, ConfigSummary } from '../types/index.js';
 import type { BannerMessage, BannerVariant } from '../types/component-contracts.js';
 import { useControlApi, type UseControlApiResult } from './useControlApi.js';
+import { fetchConfigDocument, saveConfigDocument } from './config-document-io.js';
 import {
  clearStoredActiveConfig,
  readStoredActiveConfig,
@@ -60,21 +61,23 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
   setBanner(null);
  }, []);
 
+ const adoptConfig = useCallback((data: ConfigResponse) => {
+  setActiveConfigName(data.name);
+  setEtag(data.etag);
+  replaceDocument(projectLegacyMatrixDocument(data.document));
+  writeStoredActiveConfig(data.name);
+  syncUrlActiveConfig(data.name);
+ }, [replaceDocument]);
+
  const loadConfig = useCallback(async (name: string): Promise<void> => {
   if (!name) return;
   hideBanner();
   setIsLoading(true);
   const seq = ++loadSequenceRef.current;
   try {
-   const { data } = await api.requestJson<ConfigResponse>(
-    `/api/config?name=${encodeURIComponent(name)}`,
-   );
+   const data = await fetchConfigDocument(api, name);
    if (seq !== loadSequenceRef.current) return;
-   setActiveConfigName(data.name);
-   setEtag(data.etag);
-   replaceDocument(projectLegacyMatrixDocument(data.document));
-   writeStoredActiveConfig(data.name);
-   syncUrlActiveConfig(data.name);
+   adoptConfig(data);
   } catch (err) {
    if (seq !== loadSequenceRef.current) return;
    const message = err instanceof Error ? err.message : String(err);
@@ -84,7 +87,7 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
     setIsLoading(false);
    }
   }
- }, [api, hideBanner, replaceDocument, showBanner]);
+ }, [adoptConfig, api, hideBanner, showBanner]);
 
  const loadConfigList = useCallback(async (): Promise<void> => {
   setIsLoading(true);
@@ -126,49 +129,37 @@ export function useConfigManager(apiOverride?: UseControlApiResult): UseConfigMa
    return false;
   }
   setIsLoading(true);
+  const seq = ++loadSequenceRef.current;
+  const targetName = activeConfigName;
   try {
-   const resp = await api.apiFetch(
-    `/api/config?name=${encodeURIComponent(activeConfigName)}`,
-    {
-     method: 'PUT',
-     headers: {
-      'Content-Type': 'application/json',
-      'If-Match': etag,
-     },
-     body: JSON.stringify(publicEditor.currentDoc),
-    },
-   );
-
-   if (resp.status === 409 || resp.status === 412) {
-    showBanner('error', 'Conflict: Config was modified elsewhere. Please reload.');
+   const saveRes = await saveConfigDocument(api, targetName, etag, publicEditor.currentDoc);
+   if (!saveRes.ok) {
+    showBanner('error', saveRes.error);
     return false;
    }
+   if (seq !== loadSequenceRef.current) return false;
 
-   if (!resp.ok) {
-    let errText = `HTTP ${resp.status}`;
-    try {
-     const errJson = (await resp.json()) as { error?: { message?: string } };
-     if (errJson?.error?.message) errText = errJson.error.message;
-    } catch {
-     // Ignore json parse error on response
-    }
-    showBanner('error', `Save failed: ${errText}`);
+   try {
+    const getData = await fetchConfigDocument(api, targetName);
+    if (seq !== loadSequenceRef.current) return false;
+    adoptConfig(getData);
+    showBanner('success', 'Configuration saved successfully.');
+    return true;
+   } catch {
+    setEtag(saveRes.data.etag);
+    showBanner('error', 'Configuration saved, but reload failed. Click Reload to synchronize.');
     return false;
    }
-
-   const data = (await resp.json()) as ConfigResponse;
-   setEtag(data.etag);
-   setDocument(projectLegacyMatrixDocument(data.document));
-   showBanner('success', 'Configuration saved successfully.');
-   return true;
   } catch (err) {
    const message = err instanceof Error ? err.message : String(err);
    showBanner('error', `Save failed: ${message}`);
    return false;
   } finally {
-   setIsLoading(false);
+   if (seq === loadSequenceRef.current) {
+    setIsLoading(false);
+   }
   }
- }, [activeConfigName, api, etag, hideBanner, publicEditor.currentDoc, setDocument, showBanner, validateCurrentDocument]);
+ }, [activeConfigName, adoptConfig, api, etag, hideBanner, publicEditor.currentDoc, showBanner, validateCurrentDocument]);
 
  const updateDocument = useCallback((nextDoc: ProjectConfigDocumentV1) => {
   if (nextDoc !== publicEditor.currentDoc) {

@@ -10,6 +10,8 @@ import {
  removeJobColumn as removeJobColumnTransition,
  updateJobCell as updateJobCellTransition,
  toggleProjectJobSelection as toggleProjectJobSelectionTransition,
+ setProjectJobSelections as setProjectJobSelectionsTransition,
+ setAllProjectsEnabled as setAllProjectsEnabledTransition,
  addProjectMatrixDraft as addProjectMatrixDraftTransition,
  cloneProjectMatrixDraft as cloneProjectMatrixDraftTransition,
 } from './matrix-document-transitions.js';
@@ -20,6 +22,8 @@ export interface MatrixEditorHandlers {
  removeJobColumn: (columnId: string) => boolean;
  updateJobCell: (projectIndex: number, columnId: string, url: string) => void;
  toggleProjectJobSelection: (projectIndex: number, columnId: string, selected: boolean) => void;
+ setProjectJobSelections: (projectIndex: number, columnIds: readonly string[]) => void;
+ setAllProjectsEnabled: (enabled: boolean) => void;
  addProjectMatrixDraft: () => string | null;
  cloneProjectMatrixDraft: (sourceProject: ProjectConfigInput) => string | null;
 }
@@ -62,6 +66,18 @@ export function useMatrixEditorHandlers(
   const updated = toggleProjectJobSelectionTransition(currentDoc, projectIndex, columnId, selected);
   if (updated !== currentDoc) setDocument(updated, true);
  }, [currentDoc, setDocument]);
+ const setProjectJobSelections = useCallback((projectIndex: number, columnIds: readonly string[]): void => {
+  if (!currentDoc) return;
+  const updated = setProjectJobSelectionsTransition(currentDoc, projectIndex, columnIds);
+  if (updated !== currentDoc) setDocument(updated, true);
+ }, [currentDoc, setDocument]);
+
+ const setAllProjectsEnabled = useCallback((enabled: boolean): void => {
+  if (!currentDoc) return;
+  const updated = setAllProjectsEnabledTransition(currentDoc, enabled);
+  if (updated !== currentDoc) setDocument(updated, true);
+ }, [currentDoc, setDocument]);
+
 
  const addProjectMatrixDraft = useCallback((): string | null => {
   if (!currentDoc) return null;
@@ -85,6 +101,8 @@ export function useMatrixEditorHandlers(
   removeJobColumn,
   updateJobCell,
   toggleProjectJobSelection,
+  setProjectJobSelections,
+  setAllProjectsEnabled,
   addProjectMatrixDraft,
   cloneProjectMatrixDraft,
  };

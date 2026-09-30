@@ -13,25 +13,28 @@ export interface MatrixRowProps {
   columns: readonly JobColumnInput[];
   disabled?: boolean;
   canRemove?: boolean;
-  validationErrors?: readonly string[];
+  isIdColumnHidden?: boolean | undefined;
+  validationErrors?: readonly string[] | undefined;
   onUpdateField: (field: 'id' | 'name' | 'enabled', value: string | boolean) => void;
   onUpdateCell: (columnId: string, url: string) => void;
   onToggleSelection: (columnId: string, selected: boolean) => void;
+  onSetSelections?: ((columnIds: readonly string[]) => void) | undefined;
   onOpenSettings: () => void;
   onClone: () => void;
   onRemove: () => void;
 }
-
 export function MatrixRow({
   project,
   projectIndex,
   columns,
   disabled = false,
   canRemove = true,
+  isIdColumnHidden = false,
   validationErrors = [],
   onUpdateField,
   onUpdateCell,
   onToggleSelection,
+  onSetSelections,
   onOpenSettings,
   onClone,
   onRemove,
@@ -109,6 +112,7 @@ export function MatrixRow({
       selectedColumnIds: project.selectedJobColumns ?? [],
       disabled,
       onToggleColumn: onToggleSelection,
+      onSetSelections,
     }),
   );
 
@@ -168,6 +172,10 @@ export function MatrixRow({
     React.createElement('div', { className: 'flex items-center justify-end gap-1' }, ...rowActionButtons),
   );
 
+  const cells: React.ReactNode[] = [enabledCell];
+  if (!isIdColumnHidden) cells.push(idCell);
+  cells.push(nameCell, ...jobCells, selectionCell, actionsCell);
+
   return React.createElement(
     'tr',
     {
@@ -175,11 +183,6 @@ export function MatrixRow({
       className: `border-b border-slate-200 transition-colors ${isEnabled ? 'hover:bg-slate-50/70' : 'bg-slate-50/40 opacity-75'
         }`,
     },
-    enabledCell,
-    idCell,
-    nameCell,
-    ...jobCells,
-    selectionCell,
-    actionsCell,
+    ...cells,
   );
 }

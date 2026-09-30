@@ -1,30 +1,18 @@
 import React, { useState } from 'react';
 import { DEFAULT_JOB_COLUMN } from '../../../../config/project-job-matrix-upgrade.js';
 import { PROJECT_CONFIG_LIMITS } from '../../../../config/project-config-schema.js';
-import type {
-  JobColumnInput,
-  ProjectConfigDefaults,
-  ProjectConfigDocumentV1,
-} from '../../types/index.js';
+import type { JobColumnInput, ProjectConfigDefaults, ProjectConfigDocumentV1 } from '../../types/index.js';
 import {
-  addJobColumn,
-  addProjectMatrixDraft,
-  cloneProjectMatrixDraft,
-  removeJobColumn,
-  renameJobColumn,
-  toggleProjectJobSelection,
-  updateJobCell,
+  addJobColumn, addProjectMatrixDraft, cloneProjectMatrixDraft, removeJobColumn,
+  renameJobColumn, setAllProjectsEnabled, setProjectJobSelections,
+  toggleProjectJobSelection, updateJobCell,
 } from '../../hooks/matrix-document-transitions.js';
-import {
-  removeProjectDocumentAt,
-  updateProjectDocumentAt,
-} from '../../hooks/config-document-transitions.js';
+import { MatrixEnabledHeader } from '../molecules/matrix-enabled-header.js';
+import { removeProjectDocumentAt, updateProjectDocumentAt } from '../../hooks/config-document-transitions.js';
 import { JobColumnHeader } from '../molecules/job-column-header.js';
-import { MatrixRowSettings } from '../molecules/matrix-row-settings.js';
-import { ConfigDefaultsDialog } from '../molecules/config-defaults-dialog.js';
 import { MatrixToolbar } from './matrix-toolbar.js';
-import { AddColumnDialog } from './add-column-dialog.js';
 import { MatrixRow } from './matrix-row.js';
+import { MatrixDialogs } from './matrix-dialogs.js';
 
 export interface ProjectsJobMatrixProps {
   document: ProjectConfigDocumentV1 | null;
@@ -46,7 +34,7 @@ export function ProjectsJobMatrix({
   const [isAddColumnOpen, setIsAddColumnOpen] = useState(false);
   const [isDefaultsOpen, setIsDefaultsOpen] = useState(false);
   const [activeSettingsIndex, setActiveSettingsIndex] = useState<number | null>(null);
-
+  const [isIdColumnHidden, setIsIdColumnHidden] = useState(false);
   if (!document) {
     return React.createElement(
       'div',
@@ -70,6 +58,8 @@ export function ProjectsJobMatrix({
     disabled,
     isAtProjectCapacity: projects.length >= PROJECT_CONFIG_LIMITS.maxProjects,
     isAtColumnCapacity: columns.length >= 50,
+    showIdColumn: !isIdColumnHidden,
+    onToggleShowIdColumn: (show) => setIsIdColumnHidden(!show),
     onAddProject: () => {
       const res = addProjectMatrixDraft(document);
       if (res) emitUpdate(res.document);
@@ -98,21 +88,41 @@ export function ProjectsJobMatrix({
     );
   });
 
+  const enabledCount = projects.filter((p) => p.enabled !== false).length;
+  const allEnabled = projects.length > 0 && enabledCount === projects.length;
+  const isIndeterminate = enabledCount > 0 && enabledCount < projects.length;
+
+  const enabledHeader = React.createElement(MatrixEnabledHeader, {
+    key: 'th-enabled',
+    allEnabled,
+    isIndeterminate,
+    disabled: disabled || projects.length === 0,
+    onToggleAll: () => {
+      const next = allEnabled ? false : true;
+      emitUpdate(setAllProjectsEnabled(document, next));
+    },
+  });
+
+  const headerCells: React.ReactNode[] = [enabledHeader];
+  if (!isIdColumnHidden) {
+    headerCells.push(React.createElement('th', { scope: 'col', key: 'th-id', className: 'p-2.5 min-w-36' }, 'ID'));
+  }
+  headerCells.push(
+    React.createElement('th', { scope: 'col', key: 'th-name', className: 'p-2.5 min-w-44' }, 'Name'),
+    ...columnHeaders,
+    React.createElement('th', { scope: 'col', key: 'th-targets', className: 'p-2.5 min-w-48 border-l border-slate-200/80' }, 'Targets'),
+    React.createElement('th', { scope: 'col', key: 'th-actions', className: 'p-2.5 text-right w-24' }, 'Actions'),
+  );
+
   const tableHeader = React.createElement(
     'thead',
     null,
     React.createElement(
       'tr',
       { className: 'border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-500 uppercase tracking-wider' },
-      React.createElement('th', { scope: 'col', className: 'p-2.5 text-center w-10' }, 'Enabled'),
-      React.createElement('th', { scope: 'col', className: 'p-2.5 min-w-36' }, 'ID'),
-      React.createElement('th', { scope: 'col', className: 'p-2.5 min-w-44' }, 'Name'),
-      ...columnHeaders,
-      React.createElement('th', { scope: 'col', className: 'p-2.5 min-w-48 border-l border-slate-200/80' }, 'Targets'),
-      React.createElement('th', { scope: 'col', className: 'p-2.5 text-right w-24' }, 'Actions'),
+      ...headerCells,
     ),
   );
-
   const tableRows = projects.map((project, idx) =>
     React.createElement(MatrixRow, {
       key: project.id || `idx-${idx}`,
@@ -124,6 +134,8 @@ export function ProjectsJobMatrix({
       validationErrors,
       onUpdateField: (field, val) => handleUpdateField(idx, field, val),
       onUpdateCell: (colId, url) => emitUpdate(updateJobCell(document, idx, colId, url)),
+      isIdColumnHidden,
+      onSetSelections: (colIds) => emitUpdate(setProjectJobSelections(document, idx, colIds)),
       onToggleSelection: (colId, sel) => emitUpdate(toggleProjectJobSelection(document, idx, colId, sel)),
       onOpenSettings: () => setActiveSettingsIndex(idx),
       onClone: () => {
@@ -148,49 +160,30 @@ export function ProjectsJobMatrix({
 
   const scrollWrapper = React.createElement('div', { className: 'overflow-x-auto max-w-full' }, table);
 
-  const addColDialog = React.createElement(AddColumnDialog, {
-    isOpen: isAddColumnOpen,
-    existingColumns: columns,
-    onClose: () => setIsAddColumnOpen(false),
-    onAdd: (col) => emitUpdate(addJobColumn(document, col)),
-  });
-
-  const defaultsDialog = React.createElement(ConfigDefaultsDialog, {
-    isOpen: isDefaultsOpen,
-    defaults: document.defaults,
+  const dialogs = React.createElement(MatrixDialogs, {
+    document,
+    columns,
+    isAddColumnOpen,
+    isDefaultsOpen,
+    activeSettingsIndex,
+    activeSettingsProject,
     validationErrors,
-    onClose: () => setIsDefaultsOpen(false),
-    onUpdate: (updater) => {
-      if (onUpdateDefaults) onUpdateDefaults(updater);
-      else {
-        const nextDefaults = updater(document.defaults ?? {});
-        emitUpdate({ ...document, defaults: nextDefaults });
-      }
+    onCloseAddColumn: () => setIsAddColumnOpen(false),
+    onCloseDefaults: () => setIsDefaultsOpen(false),
+    onCloseSettings: () => setActiveSettingsIndex(null),
+    onAddColumn: (col) => emitUpdate(addJobColumn(document, col)),
+    onUpdateDefaults,
+    onSaveProjectSettings: (idx, updated) => {
+      emitUpdate(updateProjectDocumentAt(document, idx, updated));
+      setActiveSettingsIndex(null);
     },
   });
-
-  const settingsDialog = activeSettingsProject && activeSettingsIndex != null
-    ? React.createElement(MatrixRowSettings, {
-      isOpen: true,
-      project: activeSettingsProject,
-      projectIndex: activeSettingsIndex,
-      defaultsCredentials: document.defaults?.credentials,
-      validationErrors,
-      onClose: () => setActiveSettingsIndex(null),
-      onSave: (updated) => {
-        emitUpdate(updateProjectDocumentAt(document, activeSettingsIndex, updated));
-        setActiveSettingsIndex(null);
-      },
-    })
-    : null;
 
   return React.createElement(
     'div',
     { id: 'projects-job-matrix', className: `flex flex-col bg-white border border-slate-200 rounded-lg shadow-xs ${className}` },
     toolbar,
     scrollWrapper,
-    addColDialog,
-    defaultsDialog,
-    settingsDialog,
+    dialogs,
   );
 }
